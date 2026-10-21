@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Legacy reaction provenance is bounded explicit opt-in metadata
 description: Legacy manager writes may record bounded intended-dispatch evidence while default-off writes retain existing metadata, identities and database work.
-timestamp: 2026-10-21T01:53:43Z
+timestamp: 2026-10-21T13:47:46Z
 docId: ADR-55
 status: Accepted
 date: 2026-10-20
@@ -63,6 +63,22 @@ read performs a claim, cleanup, heartbeat or other mutation. No timer index is
 introduced: candidate indexes that narrow valid writer keys are rejected, and
 response cardinality is not a query-cost guarantee. Automatic consumers must
 respect measured workloads and inspection budgets.
+
+Reaction state inspection does not imply reaction provenance. The accepted witness is a
+one-way deterministic identity; it does not recover the original source UUID, decoded input,
+input-selected target list or occurrence within a target. Only the first event of an accepted
+batch gets that witness ID, and silent reactions create no new saga receipt. A descriptor
+must not infer those missing inputs from current state or reuse legacy-family metadata as
+modern dispatch evidence.
+
+[Plan 319](../plans/319-inspect-reaction-process-managers-and-label-legacy-inspection-before-1-0.md)
+therefore selects an explicit inspector provenance mode: legacy descriptors read bounded
+legacy capture, while the planned reaction constructor reports unavailable provenance and
+performs no target witness probes. It may expose state, live input candidates, timers and the
+last persisted saga event. That event is not proof of the latest source delivery. Any future
+modern provenance design needs an explicit persisted-evidence or source-resolution contract
+with its own bounds and disabled-path cost evidence. The constructor remains implementation
+work; this decision does not claim it already exists.
 
 ## Consequences
 

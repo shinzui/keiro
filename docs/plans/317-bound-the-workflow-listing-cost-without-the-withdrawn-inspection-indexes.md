@@ -11,6 +11,18 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-10-21T12:21:07Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-21T13:24:48Z
+      verdict: "changes-requested"
+      note: "Primary-key order cannot bound work for sparse or absent filters; evidence driver must be adapted to removed SQL prefix/error and changed cursor parameters."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-21T13:49:51Z
+      mode: "update"
+      note: "Bound only unfiltered key traversal; specify wf-key2, filtered-query envelopes and evidence-driver migration."
 ---
 
 # Bound the workflow listing cost without the withdrawn inspection indexes
@@ -22,52 +34,60 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 
 ## Purpose / Big Picture
 
-After this plan, an operator who runs `keiro-ops wf inspect list` (or fetches the matching HTTP
-page) on a ledger of a million workflows gets the first page, and every continuation page, in
-the time it takes PostgreSQL to walk a few dozen index entries, instead of the time it takes to
-scan the whole table three times. The unreleased listing becomes public contract with the next
-tag, so this plan settles its cost model before that happens: the default order follows the
-primary key so the read is an index range scan; the "wide key" machinery that was built for
-inspection indexes which were later withdrawn is removed; the one ordering that still needs a
-full scan (`created_desc`) is documented as a manual, deadline-bound read; and the retained
-query-plan evidence says what the reads actually do.
+
+After this plan, unfiltered `keiro-ops wf inspect list` traverses the existing primary key
+in `(workflow_id, workflow_name)` order, without the obsolete wide-key union or a ledger sort.
+Its first and continuation pages examine approximately the requested number of rows. A query
+with status, name, creation-time or update-time filters may examine many more rows; creation
+ordering may scan and sort the ledger. Those reads retain host deadlines and publish a measured
+operating envelope, rather than a page-sized-work promise. No inspection index or writer SQL
+change is introduced, and the published legacy `listWorkflowInstances` API keeps its order.
 
 
 ## Progress
 
-- [ ] M1: The default `wf inspect list` page is an index range scan. With a 100,000-row
-      fixture, `EXPLAIN (ANALYZE, BUFFERS)` of the prepared statement that
-      `listWorkflowInstancesPage` installs shows an `Index Scan` on `keiro_workflows_pkey`
-      with rows removed by filter no larger than the page size, for the first page and for a
-      deep cursor, with and without a status-class filter.
-- [ ] M2: The wide-key split is gone. `maxIndexedWorkflowKeyBytes`, `maxWideWorkflowCandidates`,
-      `maxWideWorkflowKeyBytes`, and `InspectionWorkLimitExceeded` no longer exist, or they are
-      retained only for the `created_desc` ordering with a Decision Log entry saying why; the
-      `WorkflowInspectionSpec` tests pass; `keiro-ops-test` and `keiro-ops-http-test` pass.
-- [ ] M3: The remaining linear reads are documented as an operating envelope. The
-      `created_desc` ordering, the pending-timer listing without filters, and `pm show`'s
-      timer filter are described in `docs/user/durable-workflows.md` and
-      `docs/user/process-managers-and-timers.md` with the measured 100,000-row costs and the
-      rule that automatic refresh stays at the measured cadence.
-- [ ] M4: The evidence is honest. `keiro/bench/results/inspection/query-readside/README.md` and
-      `keiro/bench/results/inspection/README.md` describe the new plans, and a regenerated
-      plan set from `scripts/inspection-query-evidence.hs` is retained beside the old one.
+
+- [ ] M1: Unfiltered default first/deep pages use primary-key range scans on the 100,000-row
+      fixture, without a ledger sort. Sparse and absent filters are measured separately and
+      are not accepted by pretending their rows-examined bound equals page size.
+- [ ] M2: Remove the obsolete wide-key split, its three constants and `InspectionWorkLimitExceeded`;
+      preserve response/cursor byte caps, valid wide keys, and passing library/CLI/HTTP tests.
+      Old default-order tokens fail closed under a new `wf-key2` cursor kind.
+- [ ] M3: User documentation distinguishes unfiltered range traversal from filtered and
+      creation-order search, with measured costs and deadline/cadence guidance for workflow
+      and timer reads. Documentation and relevant ADR validation pass.
+- [ ] M4: Adapt the evidence driver to the new SQL, parameters, cursor kind and errors, then
+      retain normal-planner custom/generic plans at 10,000 and 100,000 rows in
+      `keiro/bench/results/inspection/query-readside-v2/`. Historical artifacts remain intact.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+
+Review identified that ordering by the primary key cannot bound sparse-filter work. The
+existing evidence fixture has one failed row per thousand and no retrying rows: a key-order
+scan for either class may discard most or all of the ledger. The existing driver also finds
+the old statement by `WITH inspection_wide%`, uses old cursor tuples, always supplies a class
+array, and pattern-matches the error this plan removes. Regenerating evidence requires editing
+that driver, not merely rerunning its existing command.
 
 
 ## Decision Log
 
-- Decision: Change the default listing order to the primary key's column order
-  `(workflow_id, workflow_name)` instead of adding an index for `(workflow_name, workflow_id)`.
-  Rationale: ADR-40 forbids writer cost for inspection, the stored-class candidate was withdrawn
-  after a measured 9.22% writer-capacity loss, and the listing is unreleased so its cursor
-  payload can change without a compatibility edge. The legacy `listWorkflowInstances` API keeps
-  its order and remains published.
+
+- Decision: Use `(workflow_id, workflow_name)` and a new `wf-key2` cursor for unfiltered
+  default browsing; retain the legacy API and `wf-created` contract.
+  Rationale: The primary key already serves that order without inspection writer cost.
+  A new cursor kind prevents an old two-text token being interpreted with reversed meaning.
   Date: 2026-10-21
+- Decision: Remove the withdrawn-index wide split for both orderings, retaining cursor and
+  response limits. Promise page-proportional traversal only for unfiltered key ranges.
+  Rationale: Wide candidates no longer have their former index; arbitrary filters and
+  creation sorting still need measured envelopes and host deadlines. No new index is authorized.
+  Date: 2026-10-21
+
+Revision note (2026-10-21): Corrected filtered-cost acceptance, fixed cursor-version choice,
+and made evidence-driver adaptation an explicit implementation deliverable.
 
 
 ## Outcomes & Retrospective
@@ -127,47 +147,55 @@ No cross-repository ADR applies.
 
 ## Plan of Work
 
-Milestone 1 reorders the default listing. In `Keiro.Workflow.Inspection.Query`, make `ByKey`
-mean the primary key's order: `ORDER BY workflow_id, workflow_name`, with the cursor predicate
-`(workflow_id, workflow_name) > ($n, $n+1)` and the `wf-key` cursor payload carrying
-`(workflowId, workflowName)` in that order. Keep `ByCreatedDesc` as it is. Rewrite
-`inspectionInstanceStatement` so the default page is one `SELECT ... WHERE <filters> ORDER BY
-workflow_id, workflow_name LIMIT $n`, and the status-class filter is a plain predicate over
-`status`, `attempts`, and `wake_after` (the same expressions `classPredicate` emits today) rather
-than a `UNION ALL` of per-class branches; PostgreSQL applies the predicate while walking the
-index and stops after the page. Update `WorkflowInspectionSpec` in `keiro/test/` so its cursor
-expectations follow the new order, and add a test that a cursor minted by the old order is
-rejected as `MalformedCursor` only if the payload shape changed (if the shape is the same pair
-in a different order, add a version to the cursor kind, for example `wf-key2`, so an old token
-cannot silently page in the wrong order).
 
-Milestone 2 removes the wide-key split. Delete `inspection_wide`, `wide_budget`, the
-`narrowKey`/`wideKey` predicates, the three constants, and `InspectionWorkLimitExceeded` from
-the library, the `keiro-ops` renderer (`inspectionError` in `keiro-ops/src/Keiro/Ops/Workflow.hs`),
-and the HTTP error table (`keiro-ops-http/src/Keiro/Ops/Http/Application.hs`); remove the
-`query-wide-key-budget` fixture tests or convert them into a test that a 2,700-byte key simply
-appears in its index position. If the owner prefers to keep a candidate budget for
-`created_desc`, record that in the Decision Log and keep only what that ordering needs.
+M1 changes `Keiro.Workflow.Inspection.Query` and `Keiro.Workflow.Inspection` so `ByKey`
+means `(workflow_id, workflow_name)` and its cursor kind is `wf-key2`, carrying that tuple.
+Change the key continuation predicate and order in `inspectionInstanceStatement` in
+`keiro/src/Keiro/Workflow/Instance.hs` together. Preserve `ByCreatedDesc` and its
+`wf-created` token semantics, plus the published `listWorkflowInstances` query. A first or
+deep unfiltered page should seek the primary key and return at most `pageSize + 1` candidates.
+Keep status classification semantics unchanged. Apply optional filters as predicates, but
+never assert that `LIMIT` bounds the candidates they discard. Test cursor continuity with
+IDs/names whose lexical orders disagree, old `wf-key` refusal, and every class predicate.
 
-Milestone 3 documents the envelope. In `docs/user/durable-workflows.md`, the inspection
-section (around the `wf inspect` examples near line 318) states that the default order is a
-primary-key range scan whose cost follows the page size, that `--ordering created_desc` scans
-and sorts the ledger (26.9 ms at 100,000 rows in the retained plans) and is for manual use
-under the host's statement deadline, and that the HTTP and feed hosts enforce that deadline.
-In `docs/user/process-managers-and-timers.md`, state the pending-timer listing's measured
-envelope (0.038 to 15.8 ms at 100,000 rows, `keiro/bench/results/inspection/pending-timer-read/README.md`)
-and the five-second automatic refresh floor. Both bundles validate with
-`just user-documentation-validate`.
+M2 removes `inspection_wide`, `wide_budget`, narrow/wide predicates, the three wide-key
+constants and `InspectionWorkLimitExceeded` from the library and the CLI error mapping.
+Remove its HTTP documentation/mapping if present, coordinating only this error handling in
+`Application.hs` with plan 318's admission changes. Convert wide-key tests into correctness
+and cursor-size tests: valid 2,700-byte keys appear in order; a continuation exceeding the
+existing 4,096-byte codec cap still returns the supported result-size error. Do not relax
+writer key validity, drop unrelated byte caps, or require historical plan/review text to
+stop mentioning the removed error.
 
-Milestone 4 regenerates the evidence. Build and run `scripts/inspection-query-evidence.hs`
-against a fresh 10,000-row and 100,000-row fixture the way its header comment describes, write
-the plans to `keiro/bench/results/inspection/query-readside-v2/`, and update the two READMEs so
-the claim "existing key/status indexes serve the reads" is true of the default order. Then
-update ADR-40's rationale paragraph or add a short ADR that records the cost model: inspection
-browses in primary-key order, adds no index, and documents any ordering that needs a scan.
+M3 writes the workflow envelope in `docs/user/durable-workflows.md`: unfiltered key order
+uses a range scan, while sparse/absent class, name and time filters can search the ledger,
+and `created_desc` can scan/sort it. Library callers must provide deadlines; HTTP/feed hosts
+retain admission and SQL/read deadlines. Filtered automatic views remain subject to measured
+cadence and workload limits, not the unfiltered complexity claim. Update the pending-timer
+cost section in `docs/user/process-managers-and-timers.md`, retaining the five-second minimum
+automatic timer cadence. Plan 319 owns that page's manager/API wording, and plan 320 owns
+changelogs. ADR-40 records the guarantee boundary; amend ADR-28 if its obsolete wide-index
+paragraph still describes the pre-withdrawal design when the implementation lands.
+
+M4 adapts `scripts/inspection-query-evidence.hs`. Add a stable SQL comment marker such as
+`/* keiro-inspection-page-v2 */` to the new inspection statement and have the driver select
+that marker in `pg_prepared_statements` on the same single-connection pool that installed it.
+Keep the driver explaining the actual library-prepared statement. Replace old `wf-key` tokens
+with `wf-key2` and `(id,name)` tuples. Rebuild each case's EXECUTE arguments to match the
+new statement's actual parameter order; remove unconditional class-array arguments if the
+new query no longer binds them. Remove the deleted-error branch and report success versus
+supported size errors explicitly. Do not make a new SQL query in the driver and explain that
+instead of the library statement.
+
+Retain first/deep unfiltered, running/rare/absent class, absent/small name, time-window,
+creation-order and wide-key cases under custom and generic plans at both sizes. Record
+rows returned, rows removed, buffers and elapsed time. The sparse/absent cases are required
+to demonstrate the limit of the guarantee, not to satisfy a false page-size scan criterion.
+Keep old evidence untouched and update its README with a dated link to the replacement.
 
 
 ## Concrete Steps
+
 
 From the repository root inside `nix develop`:
 
@@ -175,44 +203,42 @@ From the repository root inside `nix develop`:
 cabal build keiro keiro-ops keiro-ops-http
 cabal test keiro-test --test-options='-m "WorkflowInspection"'
 cabal test keiro-ops-test keiro-ops-http-test
-```
-
-To look at the plan the library installs, start the project database (`just postgres-start`),
-seed 100,000 workflow rows with the fixture builder in
-`scripts/inspection-query-evidence.hs`, then from `psql`:
-
-```sql
-SELECT name, statement FROM pg_prepared_statements;   -- after one listWorkflowInstancesPage call
-EXPLAIN (ANALYZE, BUFFERS) EXECUTE <name>('{...}', ...); -- with the parameters the driver prints
-```
-
-Expected shape for the first default page:
-
-```text
-Limit (actual rows=101)
-  -> Index Scan using keiro_workflows_pkey on keiro_workflows
-       Rows Removed by Filter: 0
-```
-
-Documentation validation:
-
-```bash
+cabal exec -- runghc -XGHC2024 -package=keiro -package=keiro-test-support scripts/inspection-query-evidence.hs keiro/bench/results/inspection/query-readside-v2
+cabal exec -- runghc -XGHC2024 -package=keiro -package=keiro-test-support scripts/inspection-query-evidence.hs keiro/bench/results/inspection/query-readside-v2/wide wide
 just user-documentation-validate
 just adr-validate
 ```
 
+The driver creates disposable fixtures and executes EXPLAIN in the connection that installed
+the prepared statement. A separate psql session cannot inspect another connection's prepared
+statements. Adapt the driver as M4 specifies before running it. The expected unfiltered
+20-row page has a Limit over a primary-key index scan returning up to 21 rows, no ledger sort,
+and no residual-filter rejections. Filtered cases may use different indexes or scans.
+
+Check removal only in live source/test trees:
+
+```bash
+rg -n 'InspectionWorkLimitExceeded|maxIndexedWorkflowKeyBytes|maxWideWorkflowCandidates|maxWideWorkflowKeyBytes' keiro/src keiro/test keiro-ops/src keiro-ops/test keiro-ops-http/src keiro-ops-http/test scripts/inspection-query-evidence.hs
+```
+
+That search should return no matches after M2/M4. Historical plans and evidence are excluded.
+
 
 ## Validation and Acceptance
 
-M1 is accepted by the `Index Scan` plans for first page, deep cursor, with and without a
-class filter, each with rows removed by filter at most the page size, plus a passing
-`WorkflowInspectionSpec`. M2 is accepted when the constants and error are gone from `keiro`,
-`keiro-ops`, and `keiro-ops-http`, the three suites pass, and `grep -rn InspectionWorkLimitExceeded
-keiro keiro-ops keiro-ops-http docs` finds nothing (or only the Decision Log entry that kept
-it for `created_desc`). M3 is accepted by the validator passing and the two documents stating
-the envelope. M4 is accepted by the v2 evidence directory and the corrected README sentences.
-The writer-capacity gate does not need rerunning because no writer statement or index changes;
-say so in the evidence README.
+
+M1 requires actual custom/generic EXPLAIN plans for first/deep unfiltered ranges without a
+ledger sort, and passing cursor/class correctness tests. For this fixture the range scan
+returns at most pageSize + 1 rows and has zero rows removed by residual filtering. Do not
+require that shape for filtered queries: rare/absent class, name and time cases must instead
+retain honest cost evidence and matching deadline/cadence guidance.
+
+M2 requires live-source removal of the obsolete split/error plus successful wide-key,
+result-size, library, CLI and HTTP tests. M3 requires accurate owner-authored envelope text
+and validators passing. M4 requires a runnable adapted driver and retained v2 artifacts for
+all named cases at both fixture sizes and plan modes. The existing writer-capacity evidence
+remains applicable only while writer statements and indexes are unchanged; any proposed DDL
+change must be treated as a new design decision with matched writer evidence.
 
 
 ## Idempotence and Recovery
@@ -225,10 +251,14 @@ behaviour for an unreleased contract.
 
 ## Interfaces and Dependencies
 
-`keiro/src/Keiro/Workflow/Inspection.hs`, `keiro/src/Keiro/Workflow/Inspection/Query.hs`,
-`keiro/src/Keiro/Workflow/Instance.hs` (`inspectionInstanceStatement`, `inspectionInstanceRows`),
-`keiro/src/Keiro/Inspection/Cursor.hs`; `keiro-ops/src/Keiro/Ops/Workflow.hs`;
-`keiro-ops-http/src/Keiro/Ops/Http/Application.hs` and `Views.hs` (the workflow feed reads the
-same first page); `hasql` statements and `tasty`/`hspec` tests. The cursor payload for `wf-key`
-is the interface other work consumes, and this plan owns it. Plan 320 describes the shipped
-result in the changelogs. No parent milestone must be accepted before this plan begins.
+
+This plan owns `keiro/src/Keiro/Workflow/Inspection.hs`, `Inspection/Query.hs`, the inspection
+statement in `Workflow/Instance.hs`, workflow error rendering in `keiro-ops`, and the evidence
+driver. The cursor producer, CLI/HTTP consumers and workflow feed must agree through their
+existing owner-read tests. In `keiro-ops-http/src/Keiro/Ops/Http/Application.hs`, this plan owns
+only the removed workflow-error mapping; plan 318 owns admission/delivery.
+
+This plan owns workflow/timer cost-envelope paragraphs in the user guides. Plan 319 owns
+manager and legacy wording in the shared manager/timer page; plan 320 consumes both for
+changelogs. No prerequisite blocks implementation. Plan 320 final M1/M4 and plan 303's tag
+require this plan Complete.

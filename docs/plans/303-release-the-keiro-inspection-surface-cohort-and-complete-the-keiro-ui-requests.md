@@ -28,6 +28,11 @@ provenance:
       at: 2026-10-20T17:10:21Z
       mode: "implement"
       note: "Record EP-1 DLQ reservation classification as a required release and upgrade handoff"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-21T13:49:51Z
+      mode: "update"
+      note: "Require all mandatory MasterPlan 46 fixes and final-candidate release-gate evidence at preflight."
 ---
 
 # Release the keiro inspection surface cohort and complete the keiro-ui requests
@@ -334,6 +339,28 @@ Keiro's current tree is 0.20.0.0 with `kiroku-store ^>=0.11.0.0`; released `list
 
 ### Milestone 1: preflight
 
+MasterPlan 46 adds mandatory pre-tag prerequisites beyond this plan's existing MasterPlan 45
+gates. Require plans
+`docs/plans/315-attribute-the-command-path-append-slowdown-and-restore-trustworthy-benchmark-guards.md`,
+`docs/plans/316-run-the-benchmark-regression-guards-in-the-release-gate.md`,
+`docs/plans/317-bound-the-workflow-listing-cost-without-the-withdrawn-inspection-indexes.md`,
+`docs/plans/318-harden-the-http-operational-surface-against-cross-site-mutations-and-permit-exhaustion.md`,
+`docs/plans/320-reconcile-the-0-22-0-0-release-surface-and-the-0-21-0-0-edge-with-the-rev-20-findings.md`,
+and `docs/plans/321-isolate-the-keiro-bench-harness-so-each-guard-measures-only-its-own-fixture.md`
+to be Complete, and M3 of
+`docs/plans/319-inspect-reaction-process-managers-and-label-legacy-inspection-before-1-0.md`
+to be accepted. Only plan 319 M1/M2 (reaction state inspection) may follow this tag; legacy-only
+provenance wording remains mandatory whether or not that extension lands. Do not treat
+changelog completion or a green benchmark as a substitute for the workflow and HTTP fixes.
+
+Run `nix develop -c just release-gate` on the final candidate on a quiet machine and retain
+its log under `keiro/bench/results/release-gates/`, including VERIFY_EXIT=0, BENCH_EXIT=0,
+all six successful guard statuses and BENCH_REGRESSION=PASSED. Record the tested source
+revision/tree and rerun after implementation changes; committing only the retained evidence
+must not obscure which source tree was measured. The release procedure in
+`agents/skills/release/SKILL.md` owns the log/publication steps. This gate supplements all
+existing interference, compatibility and publication prerequisites below.
+
 Both listings are required: released `kiroku-store` 0.11.0.0 already exposes the API and the workspace already depends on it. Every implementation child must be fully complete, including real kiroku composition and Keiro WebSocket-through-prefix tests; `pendingWith`, stubs, absent routes, or an unchecked performance gate are not release-completion evidence. Keep unfinished plans and requests in progress rather than approving an exception by marking them complete.
 
 Inspection is accepted only with measured interference bounds, not from the fact that an API is read-only. Capture a baseline at the pre-implementation commit with the same GHC optimization, RTS capabilities, database size, connection limits, PostgreSQL settings, and workload seed as the candidate. Run inside `nix develop`, with normal autovacuum and durable settings (`fsync`, `synchronous_commit`, and `full_page_writes` on); record settings and raw samples. Compare at least five alternating baseline/candidate runs after warm-up. At a fixed offered load below baseline saturation, a reproducible median throughput loss over 5%, p95 command/worker latency increase over 5%, or core-path allocated bytes per completed runtime operation increase over 5% blocks the milestone. These thresholds protect ordinary commands and workers, including contention caused by active inspection; they are not blanket targets for inspection request latency, inspection allocations, total-process allocation divided by writer completions, or WAL volume. Combined process allocation and WAL remain attribution diagnostics. Unmounted/default-off paths must add no inspection work, and inspection-only code stays outside those paths. Use focused behavior checks and measurements that resolve an actual core-path risk, rather than expanding the test matrix for its own sake. No extra database statements, event reads, metadata serialization, or background tasks are allowed on ordinary commands or provenance-disabled reactions. An inconclusive/noisy comparison is not a pass: extend matched runs and report uncertainty. Keep the existing 25% historical benchmark check as a coarse smoke test only.
@@ -625,3 +652,7 @@ migrations and the exported verifier session. The consumer proof's cabal file de
 
 
 2026-10-13: Applied the correctness and hot-path review. Added explicit performance acceptance and ownership, refreshed released dependency facts, and corrected the affected implementation and wire contracts. Earlier dated decisions remain historical; the current milestones and review constraints govern implementation. No runtime changes or benchmark results are claimed.
+
+Revision note (2026-10-21, MasterPlan 46 review remediation): Added explicit mandatory
+review-fix and final-candidate release-gate prerequisites at preflight. Existing release
+approval boundaries and MasterPlan 45 acceptance remain in force.

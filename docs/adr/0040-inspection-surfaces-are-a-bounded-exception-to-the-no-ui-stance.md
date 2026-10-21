@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Inspection surfaces are a bounded exception to the no-UI stance
 description: Keiro sanctions state browsing and safe operator actions over supported library APIs in opt-in sister packages, while metrics and traces stay in OpenTelemetry and no keiro package grows a dashboard, a server process, or a parallel observability stack.
-timestamp: 2026-10-21T04:46:30Z
+timestamp: 2026-10-21T13:47:46Z
 docId: ADR-40
 status: Accepted
 date: 2026-09-10
@@ -155,6 +155,15 @@ and its children define concrete limits and matched baseline/candidate gates for
 unmounted, mounted-idle, and active inspection under writer load, including retained
 heap after churn. Those measurements are required before release. This decision is
 a design constraint, not a claim that the unimplemented surface has passed them.
+
+The key-order redesign selected by
+[Plan 317](../plans/317-bound-the-workflow-listing-cost-without-the-withdrawn-inspection-indexes.md)
+promises page-proportional traversal only for an unfiltered primary-key range. Class, name
+and time filters may examine the remaining ledger even in primary-key order; creation order
+may require scanning and sorting. Sparse and absent-filter evidence is mandatory, and those
+reads remain governed by measured workload/cadence envelopes and host deadlines. No additional
+writer index is authorized by that design decision. Implementation and query-plan acceptance
+remain open in the plan.
 
 ## Consequences
 

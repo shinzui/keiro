@@ -17,6 +17,17 @@ provenance:
       at: 2026-10-21T13:02:16Z
       mode: "implement"
       note: "M1 and M2: tag sweep and no-preparation experiment attribute the fan-out slowdown to the benchmark harness"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-21T13:49:51Z
+      mode: "update"
+      note: "Reconcile completed observations and EP-7 handoff; correct fresh producer/history mechanisms and baseline acceptance."
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-21T13:24:48Z
+      verdict: "changes-requested"
+      note: "Fresh producer inserts have no second lookup statement; completed attribution and EP-7 split are not reflected in Plan of Work or acceptance; claimed eager 100k history is already env-scoped."
 ---
 
 # Attribute the command-path append slowdown and restore trustworthy benchmark guards
@@ -28,202 +39,118 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 
 ## Purpose / Big Picture
 
-After this plan, a maintainer who runs `nix develop -c just bench-regression` on a quiet
-machine sees all six benchmark guards pass, and the committed baselines each carry evidence of
-what they measure and why their numbers are what they are. The owner knows which release and
-which change in the event-store substrate made every append-heavy command scenario 25% to 239%
-slower than its August 2026 baseline, and has either removed that cost or accepted it in a
-retained evidence directory that a later reader can audit. The two other red guards, the
-producer-identity ratio ceiling and the first fresh inbox scenario, pass for a reason that is
-written down rather than because their numbers were re-recorded.
 
-The user-visible behaviour is the gate itself: `just bench-regression` prints
-`BENCH_REGRESSION=PASSED`, and `just release-gate` (see
-`docs/plans/316-run-the-benchmark-regression-guards-in-the-release-gate.md`) can therefore go
-green for the next release.
+After this plan, `nix develop -c just bench-regression` passes on a quiet machine using
+baselines with reproducible workload and environment evidence. The existing sweep establishes
+that the August command CSV cannot be reproduced at its own commit on this machine, and that
+shared benchmark preparation materially changes HEAD's command timings. Those observations
+justify repairing the harness before recording baselines; they do not establish the cost of
+every production path. Plan `docs/plans/321-isolate-the-keiro-bench-harness-so-each-guard-measures-only-its-own-fixture.md`
+owns that repair and the remaining order-effect investigation.
+
+This plan owns the five CSV baselines, the producer ratio policy, and retained green guard
+runs. Plan `docs/plans/316-run-the-benchmark-regression-guards-in-the-release-gate.md` owns
+the runner and release policy ADR. Success is three serial all-guard passes ending in
+`BENCH_REGRESSION=PASSED`, followed by that plan's passing release-gate demonstration.
 
 
 ## Progress
 
-- [x] M1 (2026-10-21): The attribution curve is recorded in Surprises & Discoveries. The
-      control at the baseline commit `2477a5aa` failed (ten of fifteen rows outside the
-      ceiling against its own CSV), so the August rows are not reproducible on this machine
-      and the plan records that. The first release carrying the fan-out step is
-      `keiro-0.17.0.0`: 0.16.0.0 measures 670 ms and 804 ms at 1,000 targets, 0.17.0.0 and
-      every later point measure about 1.9 s. The tags 0.13.0.0 to 0.15.0.0 were deliberately
-      not measured once the step was located above 0.16.0.0.
-- [x] M2 (2026-10-21): The mechanism is isolated without the three-way micro-measurement:
-      the two commits that changed the benchmark's startup in the 0.17.0.0 window seed the
-      delegated-inbox fixture into the store the command group uses, and HEAD with that
-      preparation skipped returns to the 0.16.0.0 level (662 ms and 777 ms at 1,000 targets)
-      and runs the single-command scenarios eight to nine times faster. No Kiroku change
-      needs naming; Kiroku 0.7's hard-delete guards add a bounded per-delete cost that only the
-      harness's fixture reset pays. Two systematic anomalies in the no-preparation run
-      (`no-op` at 21 ms, router fan-out slower at 10 and 100 targets than at 1,000) are
-      recorded for M3.
-- [ ] M3: The command baseline is re-recorded on the isolated harness. After plan 321
-      (`docs/plans/321-isolate-the-keiro-bench-harness-so-each-guard-measures-only-its-own-fixture.md`)
-      is Complete, `keiro/bench/baseline-command.csv` is recorded from five serial runs on
-      this environment with a README under `keiro/bench/results/command-v2/` that states the
-      attribution, the control protocol (the recording commit must reproduce its own rows
-      within the ceiling) and the machine, GHC, PostgreSQL and commit. No Keiro serving path
-      and no Kiroku change is involved.
-- [ ] M4: The producer-identity guard passes for a stated reason. The same-process 1.10
-      ceiling in `keiro/bench/ProducerIdentityBench.hs` is either met after a measured change
-      or replaced by a guard whose rationale is recorded (for example an absolute per-row budget
-      for the deterministic path's second statement), with the evidence directory
-      `keiro/bench/results/producer-identity-v1/` extended rather than rewritten.
-- [ ] M5: The inbox baseline is re-recorded on the isolated harness once plan 321's warm-up
-      rows have removed the first-run cost from `table-downstream-single.fresh.metrics-off`
-      (the harness change itself is plan 321's M3); acceptance is three consecutive passes of
-      `just bench-regression inbox` on a quiet machine against the new rows.
-- [ ] M6: `nix develop -c just bench-regression` prints `BENCH_REGRESSION=PASSED` three times
-      in a row on a quiet machine, and the three logs are retained under
-      `keiro/bench/results/release-gates/` or a plan-named directory.
+
+- [x] M1 (2026-10-21): Recorded the non-reproducing control and the release-window sweep.
+      Ten of fifteen rows fail against the control's own CSV; the fan-out step lies after
+      0.16.0.0, and the shared-preparation commits first appear in 0.17.0.0. The noisy 0.17 run
+      is inconclusive timing evidence, not a passing comparison.
+- [x] M2 (2026-10-21): Recorded the HEAD preparation-sensitivity experiment: removing the
+      unconditional delegated preparation reduced 1,000-target rows to 662/777 ms and
+      accepted-large to 4.69 ms. The specific eager-100k-history explanation is withdrawn;
+      scenario counters and remaining order anomalies are plan 321 acceptance work.
+- [ ] M3: After plan 321 is Complete, record and reproduce the command baseline from five
+      serial runs with retained raw CSVs and a README naming harness revision and environment.
+      Audit all five CSV guards for workload changes caused by isolation, and re-record any
+      affected baseline with its own attributed evidence, even if it previously passed.
+- [ ] M4: Measure the producer fresh-path overhead and resolve its 1.10 ratio guard with
+      attributable evidence. Fresh inserts execute one statement; conflict lookup cost is
+      measured separately and cannot justify changing the fresh guard.
+- [ ] M5: Record the inbox baseline on the accepted isolated/warmed harness, then retain
+      three consecutive inbox-guard passes. No further warm-up implementation belongs here.
+- [ ] M6: Retain three consecutive full `just bench-regression` passes on a quiet machine.
+
+M3–M6 require plan 321 Complete. M1/M2 completion means the observations below are recorded;
+it does not require the abandoned micro-driver, a passing August control, or a named upstream
+regression. Review corrections do not constitute a fresh benchmark run.
 
 
 ## Surprises & Discoveries
 
-The control point fails. Built and run at the baseline commit `2477a5aa` on 2026-10-21
-(load average 2.3, no other compiler or benchmark), the guard reports ten of fifteen
-scenarios outside the 25% ceiling against the CSV that this very commit recorded:
-`accepted-1` 6.01 / 6.43 / 6.62 ms (+96% to +111%), `accepted-large` 76.3 / 98.8 ms (+196% /
-+230%), `no-op` and `rejected` 1.23 to 1.28 ms (+57% to +61%), `router-fanout.10` 66.6 ms
-(+104%). The same commit measures `router-fanout` 100 / 1000 at 40.2 ms / 400 ms and
-`process-manager-fanout` 10 / 100 / 1000 at 3.97 / 37.9 / 416 ms, all faster than the CSV.
-So the August rows are not reproducible on this machine for the single-command scenarios,
-and the comparison that REV-20 reported for `accepted-1` and `accepted-large` (HEAD at 3.7 to
-3.9 ms and 41.6 to 44.2 ms) is not a regression: on the same machine, HEAD is faster than the
-baseline commit on every single-command scenario, and sixteen times faster on `no-op`.
 
-The fan-out scenarios are a different story. On the same machine the baseline commit runs
-`router-fanout.1000` in 400 ms and `process-manager-fanout.1000` in 416 ms, while HEAD runs
-them in 2.01 s and 1.96 s and `keiro-0.19.0.1` in 1.86 s and 2.04 s. That five-fold slowdown
-per dispatched target is real and lies between `2477a5aa` and `keiro-0.19.0.1`; the sweep
-continues through the release tags to find the first one that carries it.
+The control `2477a5aa`, measured on 2026-10-21, failed ten of fifteen rows against its
+August CSV. This makes that CSV unsuitable for directly attributing changes on today's
+environment. The historical observations are retained here; recording a new baseline still
+requires the accepted isolated harness and control reruns in M3.
 
 ```text
 scenario                        CSV (Aug)   2477a5aa today   0.19.0.1   HEAD
-domain.accepted-1               3.13 ms     6.62 ms          3.88 ms    3.92 ms
-domain.accepted-large           29.9 ms     98.8 ms          39.4 ms    44.2 ms
-domain.no-op                    0.80 ms     1.26 ms          73 µs      75 µs
-router-fanout.1000              629 ms      400 ms           1.86 s     2.01 s
-process-manager-fanout.1000     579 ms      416 ms           2.04 s     1.96 s
+ domain.accepted-1              3.13 ms     6.62 ms          3.88 ms    3.92 ms
+ domain.accepted-large          29.9 ms     98.8 ms          39.4 ms    44.2 ms
+ domain.no-op                   0.80 ms     1.26 ms          73 us      75 us
+ router-fanout.1000             629 ms      400 ms           1.86 s     2.01 s
+ process-manager-fanout.1000     579 ms      416 ms           2.04 s     1.96 s
 ```
 
-A hypothesis for M2, formed before the remaining sweep points arrived. Both fan-out scenarios
-call `resetFanoutTargets` inside the timed action (`keiro/bench/Main.hs`), which issues one
-`Lifecycle.hardDeleteStream` per target before the router or manager dispatches to it, so a
-1,000-target iteration performs 1,000 hard deletes. `keiro-0.19.0.0` (sweep point, 12:32Z)
-measures `router-fanout.1000` at 1.945 s and `process-manager-fanout.1000` at 1.885 s, the
-same as 0.19.0.1 and HEAD, so the slowdown entered at or before 0.19.0.0. Between the baseline
-commit (`kiroku-store >=0.4 && <0.5`) and `keiro-0.13.0.0`, commit `33c557ab` (2026-08-16)
-adopted `kiroku-store` 0.8.0.0, and Kiroku's 0.7.0.0 release notes (2026-08-13,
-`kiroku-store/CHANGELOG.md` in `mori://shinzui/kiroku`) say: "Supported hard delete checks
-retention before mutation and locks every affected stream in ascending ID order, including
-streams containing links to target-originated events", and that append, link, lifecycle
-mutation and every supported hard delete serialize behind a transaction-scoped stream guard.
-If the follow-up points `33c557ab~1` and `33c557ab` differ by the fan-out cost, the slowdown
-is the price of Kiroku's replay-history protection paid by the benchmark's fixture reset, not
-by any serving path, and M3's answer is to move the reset outside the timed action and
-re-record, not to change Keiro or Kiroku. The dispatch path itself issues one identity probe
-per target for an ASCII seed (`Keiro.DeterministicId.deterministicIdProbes` adds the legacy
-probe only when the seed moved across encodings) and then one command run, at the baseline
-commit and at HEAD alike.
+The sweep measured router/process-manager fan-out at 670/804 ms for 0.16.0.0,
+1.80/2.03 s for 0.18.0.0, and 1.945/1.885 s for 0.19.0.0. The 0.17.0.0 run's
+21.7/21.6 s means had about 48 s spread and cannot support a precise ratio. Commits
+`73231189` and `af37b955` introduced unconditional delegated preparation and its warm-up
+in that release window. The sweep stopped there; tags 0.13–0.15 were not measured.
 
-The `keiro-0.16.0.0` point (12:39Z) weakens that hypothesis: `router-fanout.1000` 670 ms and
-`process-manager-fanout.1000` 804 ms, near the baseline commit rather than the 1.9 s of
-0.19.0.0, so the step lies between 0.16.0.0 and 0.19.0.0, after the Kiroku 0.7 guards were
-adopted. The strongest candidate in that window is the benchmark process itself: since
-0.17.0.0, `keiro/bench/Main.hs` calls `prepareInboxDelegatedBenchmarks store metrics` before
-`defaultMain`, on the same `store` the command group uses and regardless of the `-p`
-filter. `keiro/bench/InboxDelegatedBench.hs` shows what that does: it creates the business
-table, prepares every delegated-inbox scenario including a 100,000-event history
-(`prepareHistoryRun store 100000`), and runs every fresh scenario once as a warm-up. Every
-command scenario since 0.17.0.0 therefore appends to and hard-deletes from a store that
-already holds that fixture's events, junction rows and inbox tables, while the August
-baseline was recorded against a store holding only the rebuild fixture. An experiment is
-queued behind the follow-up points: HEAD with that preparation replaced by `pure []`, same
-guard, same baseline. If the fan-out rows return to the 0.16.0.0 range, the slowdown is the
-harness, not any serving path, and M3 isolates the command group's store before
-re-recording.
-
-The remaining points settled it. `keiro-0.18.0.0` (12:46Z) measures the fan-out rows at
-1.80 s and 2.03 s, the same level as 0.19.0.0, 0.19.0.1 and HEAD. `keiro-0.17.0.0` (12:53Z)
-measures them at 21.7 s ± 48 s and 21.6 s ± 48 s, a spread larger than the mean, which
-`tasty-bench` reports as "same as baseline" because it cannot compare; that run is an outlier
-of the same harness, not a different code state. Both commits that changed the benchmark's
-startup, `73231189` (the delegated-inbox evidence and its preparation on the shared store)
-and `af37b955` (the fresh-scenario warm-up inside that preparation), are first contained in
-`keiro-0.17.0.0`; nothing in `keiro/bench/InboxDelegatedBench.hs` changed between 0.17.0.0 and
-0.18.0.0. The sweep was stopped after 0.17.0.0 and the August-window points were not run,
-because the step is above 0.16.0.0 and the August changes cannot be its cause.
-
-The experiment then ran at HEAD (`03161924`) with `prepareInboxDelegatedBenchmarks store
-metrics` replaced by `pure []` and nothing else changed (12:55Z to 13:00Z, load average 1.5):
+At HEAD `03161924`, replacing `prepareInboxDelegatedBenchmarks store metrics` with `pure []`
+without other changes gave:
 
 ```text
-scenario                        HEAD with preparation   HEAD without preparation   0.16.0.0
-domain.accepted-1               3.92 ms                 0.467 ms                   (n/a)
-domain.accepted-large           44.2 ms                 4.69 ms                    25.6 ms
-router-fanout.1000              2.01 s                  662 ms                     670 ms
-process-manager-fanout.1000     1.96 s                  777 ms                     804 ms
-domain.no-op                    75 µs                   21.4 ms                    121 µs
-router-fanout.10 / 100          108 ms / 678 ms         229 ms / 3.50 s            54 ms / 555 ms
+scenario                        with preparation   without preparation
+ domain.accepted-1              3.92 ms            0.467 ms
+ domain.accepted-large          44.2 ms             4.69 ms
+ router-fanout.1000              2.01 s             662 ms
+ process-manager-fanout.1000     1.96 s             777 ms
+ domain.no-op                   75 us              21.4 ms
+ router-fanout.10 / 100          108 / 678 ms        229 / 3500 ms
 ```
 
-The 1,000-target rows return exactly to the 0.16.0.0 level and the single-command rows become
-eight to nine times faster than with the preparation (and four to six times faster than the
-committed August rows). The command guard has therefore measured, since 0.17.0.0, a store that
-another group's fixture had already filled with a 100,000-event history, inbox tables and the
-warm-up traffic of every fresh delegated-inbox scenario; no serving path of Keiro or Kiroku
-got slower. Two rows in the no-preparation run are anomalous and systematic (tight spreads):
-`no-op` and `rejected` at about 21 ms where every other configuration measures them under
-130 µs, and `router-fanout` at 10 and 100 targets slower than at 1,000. They show that the
-command group's cost also depends on store state and on run order within the process, which
-is M3's problem to remove before any row is re-recorded; they do not change the attribution,
-which rests on the 1,000-target and single-command rows.
+This supports shared-preparation interference, with unexplained systematic no-op and small
+fan-out anomalies. It does not prove every serving path unchanged. Review corrected the
+claimed mechanism: `historyBenchmark` already uses `env (prepareHistoryRun store historySize)`;
+the 100,000-event history is not built by a command-only selection unless the explicit explain
+hook is enabled. Unconditional preparation creates the business table, seeds duplicate traffic,
+and executes fresh-scenario warm-up. Plan 321 must count those actions and measure isolation.
+
+The producer benchmark truncates the outbox and requires `ProducerInserted` for every fresh
+row. `keiro/src/Keiro/Outbox/Schema.hs:enqueueProducerOutboxTx` returns immediately on insert
+success; only a conflict performs the locked lookup. ADR-42 describes that distinction and
+contains no absolute millisecond budget. Earlier claims of two statements per fresh row and
+an ADR-backed absolute allowance were incorrect.
 
 
 ## Decision Log
 
-- Decision: The baseline commit `2477a5aa` is the control for the sweep and must pass before
-  any later point is interpreted.
-  Rationale: The August baseline was recorded on a machine and PostgreSQL version that may not
-  match today's; a sweep that cannot reproduce the baseline at its own commit says nothing
-  about later commits.
+
+- Decision: Keep M1/M2 as completed observation milestones and replace their obsolete
+  control-pass/micro-driver criteria with the evidence actually obtained.
+  Rationale: A failed historical control and preparation sensitivity are useful results;
+  they are not proof of a particular upstream defect. Residual anomalies block plan 321.
   Date: 2026-10-21
-- Decision: Because the control failed, M3 re-records the single-command rows of
-  `keiro/bench/baseline-command.csv` on the current environment regardless of the fan-out
-  outcome, and the fan-out rows only after M2 attributes their five-fold slowdown.
-  Rationale: A baseline that its own commit cannot reproduce guards nothing. The
-  single-command rows moved with the environment, not the code (HEAD beats the baseline
-  commit on the same machine); the fan-out rows moved with the code and must not be
-  re-recorded until the cause is known and either fixed or accepted.
+- Decision: Plan 321 owns all setup, reset, and warm-up changes; M3–M6 begin after it is Complete.
+  Rationale: Recording on a changing fixture would preserve its distortion in the CSV.
   Date: 2026-10-21
-- Decision: Attribute the fan-out slowdown to the benchmark harness (the delegated-inbox
-  preparation seeding the shared store since 0.17.0.0), fix the harness, and file no
-  improvement request against Kiroku.
-  Rationale: The no-preparation experiment at HEAD reproduces the 0.16.0.0 numbers exactly;
-  the serving paths did not change cost. Kiroku 0.7's hard-delete guards are real but are paid
-  only by the fixture reset, which M3 moves out of the timed action. This replaces the M2
-  micro-measurement and the M3 "fix or accept" fork that the plan originally described.
+- Decision: Retain the producer ratio ceiling until measured fresh-path evidence justifies
+  a correction; a replacement must still fail for a deliberately excessive fresh-path cost.
+  Rationale: Conflict-only SQL cannot explain a successful fresh insert. No existing ADR
+  promises an absolute millisecond allowance.
   Date: 2026-10-21
 
-- Decision: Split the harness work out of this plan into plan 321 and make M3 to M6 depend on
-  it.
-  Rationale: Fixing the harness (per-group stores, resets outside timed actions, warm-ups)
-  changes every group's numbers and is verified by its own isolation test, while this plan's
-  remaining work is recording baselines and proving the gate green; keeping them apart lets
-  the harness be reviewed on its own and prevents a baseline from being recorded on a
-  half-isolated harness.
-  Date: 2026-10-21
-
-Revision note (2026-10-21): M1 and M2 were completed by a tag sweep (control, 0.16.0.0,
-0.17.0.0, 0.18.0.0, 0.19.0.0, 0.19.0.1, HEAD) and one controlled experiment rather than by the
-three-way micro-measurement first planned, because the sweep placed the step in the 0.17.0.0
-window where only the benchmark's own startup changed. M3 now means isolating the command
-group's store and re-recording; the "improvement request in Kiroku" branch is withdrawn.
+Revision note (2026-10-21): Reconciled completed observations with acceptance and the EP-7
+split, corrected history/producer mechanisms, and retained measurements without asserting a
+universal runtime conclusion. No raw results or baseline numbers were changed by this review.
 
 
 ## Outcomes & Retrospective
@@ -233,211 +160,132 @@ group's store and re-recording; the "improvement request in Kiroku" branch is wi
 
 ## Context and Orientation
 
-Keiro is an event-sourcing framework over the Kiroku PostgreSQL event store. A command runner
-(`keiro/src/Keiro/Command.hs`) loads a stream's events, decides, and appends new events; the
-benchmark `keiro-bench` (`keiro/bench/Main.hs`, built by `cabal build keiro:bench:keiro-bench`)
-measures that cycle in a `command` group and compares each scenario with a committed baseline
-row using `tasty-bench`'s `--baseline` and `--fail-if-slower 25` options. A "guard" in this
-plan means one such comparison; `just bench-regression` runs six of them (see
-`scripts/bench-regression.sh`), and `keiro/bench/baseline-command.csv` holds the fifteen
-command rows, recorded on 2026-08-11 at commit `2477a5aa` (`git log -1 2477a5aa`).
 
-Each command scenario's timed action is in `keiro/bench/Main.hs`, functions
-`commandScenarioBench` and `domainCommandScenarioBench` (around line 618): it hard-deletes the
-target stream with `Lifecycle.hardDeleteStream`, then runs `runCommand` or `runDomainCommand`,
-which creates the stream again and appends. The `router-fanout` and `process-manager-fanout`
-scenarios dispatch to 10, 100, or 1,000 target streams per iteration. The `no-op` and
-`rejected` scenarios hydrate and decide without appending.
+`keiro/bench/Main.hs` owns `keiro-bench`, a tasty-bench program comparing command, outbox,
+inbox, projection, and read-model groups with `keiro/bench/baseline-*.csv`. The sixth guard,
+producer-identity, compares fresh deterministic and legacy enqueue in the same process.
+`scripts/bench-regression.sh` selects the groups and emits per-guard exit status plus an
+aggregate result. The current command actions time hard deletes as well as dispatch; the
+shared-store fixture also prepares unselected groups. Plan 321 changes those workload boundaries.
 
-REV-20 (`docs/reviews/keiro-0-20-0-21-unreleased-review.md`, section "Hot-path performance")
-ran the guard twice at commit `a62850d3` and once from a worktree at `keiro-0.19.0.1`. At HEAD,
-ten of fifteen scenarios fail: `control.accepted-1` +27%, `domain.accepted-1` +25%,
-`legacy.accepted-large` +61%, `domain.accepted-large` +48%, `router-fanout` 10/100/1000
-+231%/+99%/+219%, `process-manager-fanout` 10/100/1000 +192%/+194%/+239%; the no-append
-scenarios are 90% faster. At `keiro-0.19.0.1`, nine of fifteen fail with the same shape. So the
-regression against the August baseline predates the 0.20.0.0 window, and a paired comparison
-between 0.19.0.1 and HEAD found at most a small, order-sensitive difference on router fan-out.
-The releases between the baseline and 0.19.0.1 are `keiro-0.13.0.0` (the baseline commit is
-contained in 0.12.0.0 and 0.13.0.0), 0.14.0.0 (2026-08-21), 0.15.0.0 (08-30), 0.16.0.0
-(09-07), 0.17.0.0 (09-17), 0.18.0.0 (09-20), and 0.19.0.0 (09-25). Of these, 0.19.0.0 adopted
-Kiroku 0.9 with migration `0012`, which backfilled the category on every `$all` junction row
-and added the index category reads use (see the root `CHANGELOG.md`, section 0.19.0.0), and
-0.17.0.0 adopted the pgmq 0.6 family and shibuya-pgmq-adapter 0.16. The Kiroku checkout is
-registered in Mori as `mori://shinzui/kiroku` at
-`/Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku`; its store changelog is
-`kiroku-store/CHANGELOG.md` and its migrations are under `kiroku-store-migrations/migrations/`.
+The original review is `docs/reviews/keiro-0-20-0-21-unreleased-review.md`. The control CSV was
+recorded at `2477a5aa`; the existing sweep and HEAD experiment are summarized above. Relevant
+source for the producer investigation is `keiro/bench/ProducerIdentityBench.hs`,
+`keiro/src/Keiro/Outbox.hs`, `keiro/src/Keiro/Outbox/Identity.hs`, and
+`keiro/src/Keiro/Outbox/Schema.hs`. Measure fresh success separately from duplicate and conflict
+handling. Existing producer and inbox evidence is under `keiro/bench/results/producer-identity-v1/`
+and `keiro/bench/results/delegated-inbox-v1/`; extend it without replacing historical samples.
 
-The other two red guards are documented in the same review section. The producer-identity
-guard (`keiro/bench/ProducerIdentityBench.hs`) compares `deterministic-fresh-1000` with
-`legacy-fresh-1000` in the same process under `bcompareWithin 0 1.10`; it measured 1.11x and
-1.12x where the retained evidence (`keiro/bench/results/producer-identity-v1/precision.csv`)
-recorded +3.22%, with both absolute times halved since then. The deterministic path issues two
-statements per row, an `ON CONFLICT DO NOTHING` insert and a locked read through both unique
-keys (ADR-42, `docs/adr/0042-producer-outbox-identity-is-a-versioned-source-event-contract.md`),
-so a substrate whose per-transaction cost fell faster than its per-statement cost moves the
-ratio without any code change. The inbox guard's `table-downstream-single.fresh.metrics-off`
-scenario, the first fresh downstream scenario the process executes, measured 5.82 s ± 1.72 s
-against a 719 ms baseline while its `metrics-on` twin, run second, measured 418 ms; REV-17
-recorded the same position effect, and commit `af37b955` added a warm-up outside the timed
-action and re-recorded the baseline from five serial runs (`keiro/bench/results/delegated-inbox-v1/README.md`,
-"fresh-warmup" paragraphs) without removing it.
-
-Relevant local ADRs: ADR-48
-(`docs/adr/0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md`)
-describes the retention suite's gate thresholds and warm-up discard; its "regression gates,
-not proof" stance applies here. ADR-42 explains the producer path. No ADR records how benchmark
-baselines are recorded or when they may move; M3 and the companion plan 316 should produce one.
-No cross-repository ADR was found relevant beyond Kiroku's own release notes.
+Relevant ADRs are [ADR-42](../adr/0042-producer-outbox-identity-is-a-versioned-source-event-contract.md)
+(fresh insert versus conflict lookup) and
+[ADR-48](../adr/0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md)
+(isolated workloads and measured warm-up). Plan 316 owns [ADR-58](../adr/0058-benchmark-release-gates-require-isolated-fixed-workloads-and-attributed-baselines.md) and consumes this plan's evidence. No cross-repository ADR is required. Any further upstream investigation
+must discover sources through Mori and cite the owning project, `mori://shinzui/kiroku`, with
+an exact artifact URI when available; no dependency change is pre-authorized by these measurements.
 
 
 ## Plan of Work
 
-Milestone 1 completes the attribution curve. The sweep script below creates a detached worktree
-per reference, builds `keiro-bench` from the normal Cabal store, runs the command guard against
-HEAD's baseline file, and removes the worktree. Run it on a quiet machine (no other compiler,
-test, or benchmark) and record the per-scenario numbers for every point in Surprises &
-Discoveries as a table in prose or a short `text` block. The control point `2477a5aa` must pass
-within the 25% ceiling on every scenario except the known-noisy `legacy.accepted-1` row (its
-baseline spread is 1.8 ms on a 2.0 ms mean); if it does not, stop and record that the baseline
-is not reproducible on this machine, which changes M3's options.
 
-Milestone 2 isolates the mechanism at the first failing tag. Write a small driver next to the
-retained inspection drivers (`scripts/inspection-*.hs` are the precedent) or extend
-`keiro/bench/Main.hs` behind a new `-p` group that times, separately and on a fresh stream each
-iteration, (a) `Lifecycle.hardDeleteStream` of a 1-event stream, (b) `appendToStream` with
-`NoStream` creating a new stream with one event, and (c) `appendToStream` of one event to an
-existing 1,000-event stream. Run it at the last passing tag and the first failing tag from the
-same worktree procedure. The one whose ratio moves is the mechanism; then read that tag's
-Kiroku migration or store change (`git -C /Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku log`
-between the two kiroku-store versions the Keiro tags bound) and name it. Also check whether the
-slowdown exists in production terms, that is, whether (b) or (c) moved and not only (a), because
-a hard delete never happens on a serving path.
+M1 and M2 are already recorded observation milestones. Do not repeat the tag sweep or create
+the abandoned three-way micro-driver merely to satisfy old wording. If new evidence contradicts
+the preparation attribution, reopen the relevant conclusion and record why. Plan 321 must
+resolve fixture interference and remaining order effects before this plan continues.
 
-Milestone 3 decides. If (b) or (c) moved and the cause is a Kiroku index or statement, file an
-improvement request in the Kiroku repository with the two-tag measurement attached, and record
-the request's `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-N` handle here; the
-Keiro bound moves when a fix ships. If only (a) moved, the benchmark measures a lifecycle cost
-no serving path pays: move the hard delete outside the timed action (tasty-bench has no
-per-sample setup hook, so use the pattern `keiro/bench/InboxDelegatedBench.hs` uses for fresh
-scenarios, pre-creating a pool of distinct target names and consuming one per iteration) and
-re-record the baseline from five serial runs with a README that explains the change. If the
-cost is accepted as the price of the substrate, re-record the baseline the same way and say so
-in the README. In every case the README lives under `keiro/bench/results/command-v2/` (or a
-later version) and names the machine, GHC, PostgreSQL version, and the commit.
+M3 records the command baseline after plan 321 Complete. Run five serial, baseline-free
+samples using identical compiler, RTS, durable PostgreSQL settings and scenario selection.
+Retain the raw CSVs under `keiro/bench/results/command-v2/` with the exact commands, source
+revision, machine, GHC and PostgreSQL versions, settings, fixture bounds, and any patch needed
+to reproduce the recording tree. Take each row's median mean and median spread using the
+existing CSV format. Then rerun the same revision against its new CSV and require every
+row to satisfy the 25% guard. Inspect all five CSV guards for changed workload semantics;
+record affected outbox/projection/read-model baselines with equivalent evidence instead of
+leaving incomparable historical rows solely because they are green.
 
-Milestone 4 settles the producer guard. Measure the absolute per-row cost of the deterministic
-path's second statement at HEAD and at `keiro-0.19.0.1` with the same filter
-(`-p '/producer-identity/'`). If the absolute overhead per 1,000 rows is unchanged while the
-ratio moved, replace `bcompareWithin 0 1.10` with a guard on the quantity the plan actually
-promised (ADR-42's rationale was "about 3% on a 1,000-row enqueue", which is an absolute
-budget of a few milliseconds, not a ratio) and record the change in the evidence README. If the
-overhead itself grew, treat it like M2 and M3.
+M4 measures the actual producer fresh path. Retain paired legacy/deterministic measurements
+with the same transaction size and isolated fixture; verify all rows are inserted and count
+statements through a benchmark-only probe. Attribute any difference using identity/envelope
+preparation and insert costs; separately measure replay so conflict reads cannot be confused
+with fresh work. Fix a measured regression if found. A changed threshold or absolute guard
+requires a stated quantity, measured allowance and headroom, retained rationale, and a
+negative control that adds cost beyond the allowance and makes the guard fail. Do not
+reinterpret ADR-42 as a timing budget or relax the guard solely to make a run green.
 
-Milestone 5 makes the first fresh inbox scenario robust. The warm-up added by `af37b955` runs
-once per scenario outside the timed action, yet the first fresh scenario still absorbs a
-multi-second cost with a standard deviation near its mean. Add a throwaway fresh scenario that
-runs first and is excluded from the baseline comparison (tasty-bench matches baseline rows by
-name, so an unmatched row is reported but never fails), or move the cold cost into an explicit
-setup phase, and prove it with three consecutive passes.
+M5 records the inbox rows after plan 321 has accepted representative warm-up and removal of
+order anomalies. Use five serial recording samples and retain three consecutive inbox passes.
+If order effects return, reopen plan 321 rather than implementing another warm-up here.
 
-Milestone 6 is the acceptance run: three consecutive `just bench-regression` passes on a quiet
-machine, logs retained.
+M6 retains three consecutive all-guard passes. Give plan 316 the recording and threshold
+policy for its ADR and passing release-gate run. No upstream improvement request is required
+unless new measurements actually identify an upstream serving-path regression.
 
 
 ## Concrete Steps
 
-All commands run from the repository root `/Users/shinzui/Keikaku/bokuno/keiro` inside
-`nix develop`. The sweep script, written to a scratch location of your choice:
+
+From the repository root, after plan 321 is Complete, enter `nix develop` and run:
 
 ```bash
-#!/usr/bin/env bash
-# Sweep the command guard across references; each is built in a detached worktree.
-set -u
-H=/Users/shinzui/Keikaku/bokuno/keiro
-S=/tmp/keiro-command-sweep           # any scratch directory
-LOG=$S/bisect.log
-BASELINE=$H/keiro/bench/baseline-command.csv
-mkdir -p "$S/bisect"
-for ref in 2477a5aa keiro-0.19.0.0 keiro-0.16.0.0 keiro-0.18.0.0 keiro-0.17.0.0 keiro-0.14.0.0 keiro-0.15.0.0 keiro-0.13.0.0; do
-  W="$S/bisect/$ref"
-  echo "##### $ref $(date -u +%FT%TZ)" >> "$LOG"
-  git -C "$H" worktree add --detach "$W" "$ref" >> "$LOG" 2>&1 || continue
-  ( cd "$W" && nix develop -c cabal build keiro:bench:keiro-bench ) >> "$LOG" 2>&1
-  echo "EXIT($ref:build)=$?" >> "$LOG"
-  ( cd "$W" && nix develop -c cabal bench keiro-bench --benchmark-options="-p command --time-mode wall --hide-progress --baseline $BASELINE --fail-if-slower 25" ) >> "$LOG" 2>&1
-  echo "EXIT($ref:bench)=$?" >> "$LOG"
-  git -C "$H" worktree remove --force "$W"; git -C "$H" worktree prune
+cabal build keiro:bench:keiro-bench
+mkdir -p keiro/bench/results/command-v2
+for sample in 1 2 3 4 5; do
+  cabal bench keiro-bench --benchmark-options="-p command --time-mode wall --hide-progress --csv $PWD/keiro/bench/results/command-v2/sample-$sample.csv"
 done
-echo "SWEEP_DONE" >> "$LOG"
+just bench-regression command
+just bench-regression producer-identity
+just bench-regression inbox
+just bench-regression
 ```
 
-Entering `nix develop` from a worktree initializes a PostgreSQL cluster under `<worktree>/db`
-through the dev-shell hook (`nix/haskell.nix`, lines 124 to 136); the worktree removal deletes
-it. Expect each reference to take three to eight minutes once the store has the dependency
-cohort. Read the per-scenario lines with:
+The final four commands compare against committed/updated baselines; they must not be used
+to overwrite a CSV automatically. Record and aggregate the samples as M3 specifies, then
+repeat the inbox and full runs to meet M5/M6. Retain each run's output and process exit code.
+For additional baseline groups copy their runner options from `scripts/bench-regression.sh`,
+remove `--baseline`/`--fail-if-slower`, and add a unique absolute `--csv` path.
 
-```bash
-awk '/^##### /{ref=$2} /: *(OK|FAIL)/{name=$1} /ms ±|s ±|μs ±/{print ref, name, $0}' /tmp/keiro-command-sweep/bisect.log
-```
-
-For a single guard rerun at HEAD:
-
-```bash
-nix develop -c just bench-regression command
-```
-
-Expected tail of a passing run:
+Expected passing summary:
 
 ```text
-##### guard summary 2026-10-21T13:00:00Z
 GUARD(command)=0
 BENCH_REGRESSION=PASSED
 ```
 
-To re-record a baseline after M3 approves it, run the guard five times serially without
-`--baseline`, writing each to a CSV with `--csv`, take the median mean and median two-standard-
-deviation per row, and write them to `keiro/bench/baseline-command.csv` in the same column
-order; `keiro/bench/results/delegated-inbox-v1/README.md` describes the identical procedure for
-the inbox rows.
+A full run must contain all six guard names; a named subset is not full-gate evidence.
 
 
 ## Validation and Acceptance
 
-M1 is accepted when Surprises & Discoveries holds the sweep table and names the first failing
-tag, and the control point passed. M2 is accepted when the three-way micro-measurement at the
-two adjacent tags is recorded with its driver source checked in and the Kiroku change is named.
-M3 is accepted when either the improvement request handle is recorded or the new baseline and
-README are committed, and `just bench-regression command` passes. M4 is accepted when
-`just bench-regression producer-identity` passes and the evidence README explains the guard.
-M5 is accepted by three consecutive passes of `just bench-regression inbox`. M6 is accepted by
-three consecutive passes of the full `just bench-regression`, each log ending in
-`BENCH_REGRESSION=PASSED` and retained in the repository.
 
-Re-recording a baseline because it fails, without an attributed cause, is explicitly not
-acceptance.
+M1/M2 are accepted by the retained observations and explicitly limited interpretation above.
+M3 requires plan 321 acceptance, five raw samples, their documented aggregation, the workload
+comparison for every affected CSV, and a same-recording-revision control that passes its rows.
+M4 requires fresh-path statement/cost evidence and a passing producer guard; any replacement
+must fail the negative control. M5 requires three consecutive inbox passes. M6 requires three
+consecutive complete six-guard passes, each retained with exit status zero.
+
+No baseline moves solely because it is red. A noisy or timed-out comparison is inconclusive,
+not a pass. Routine source builds or the historical sweep do not substitute for these remaining
+acceptance runs. Plan 316 remains responsible for the release-gate red/green demonstrations.
 
 
 ## Idempotence and Recovery
 
-The sweep is idempotent: worktrees are created and removed per reference, and a failed build
-leaves its `EXIT(ref:build)` line and moves on. If a worktree is left behind (`git worktree
-list`), remove it with `git worktree remove --force <path>` and `git worktree prune`. Baseline
-files are only replaced under M3 or M4 with a committed README; `git checkout --
-keiro/bench/baseline-command.csv` restores the August rows. The micro-measurement driver must
-use a fresh database clone per run (`withMigratedSuite` from `keiro-test-support`) so repeated
-runs do not accumulate state.
+
+All benchmark runs use disposable migrated fixtures. Use distinct evidence directories or
+sample names when rerunning; retain any sample used for a decision. Do not discard a poor
+sample without recording its invalidating condition. Restore only this task's baseline edits
+if an attribution is withdrawn, and reopen plan 321 for fixture defects. Upstream repositories
+are read-only in this plan. No release, dependency change, or production mutation is part of
+baseline recording.
 
 
 ## Interfaces and Dependencies
 
-`keiro/bench/Main.hs`, `keiro/bench/ProducerIdentityBench.hs`, and
-`keiro/bench/InboxDelegatedBench.hs` define the scenarios; `tasty-bench` supplies `--baseline`,
-`--fail-if-slower`, `--csv`, `bcompareWithin`. `scripts/bench-regression.sh` and the
-`bench-regression` recipe are owned by plan 316 and must keep printing `GUARD(name)=status` and
-`BENCH_REGRESSION=PASSED|FAILED`. `Keiro.Workflow.Lifecycle.hardDeleteStream` and Kiroku's
-`appendToStream` are the operations M2 separates. The Kiroku checkout at
-`/Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku` is read-only for this plan; changes
-there go through an improvement request. M1 and M2 needed no prerequisite; M3 to M6 require
-plan 321 (`docs/plans/321-isolate-the-keiro-bench-harness-so-each-guard-measures-only-its-own-fixture.md`)
-to be Complete, because a baseline recorded on the shared-store harness would freeze the
-distortion this plan found.
+
+Plan `docs/plans/321-isolate-the-keiro-bench-harness-so-each-guard-measures-only-its-own-fixture.md`
+is a hard prerequisite for M3–M6. It owns `keiro/bench/Main.hs`, `InboxDelegatedBench.hs`,
+`ReadModelBench.hs`, and fixture/warm-up changes to `ProducerIdentityBench.hs`. This plan owns
+baseline CSVs, recording evidence, and measured producer guard thresholds after that handoff.
+Plan `docs/plans/316-run-the-benchmark-regression-guards-in-the-release-gate.md` owns the
+runner, recipes and benchmark ADR. Preserve scenario names and its
+`GUARD(name)=status` / `BENCH_REGRESSION=PASSED|FAILED` output contract.

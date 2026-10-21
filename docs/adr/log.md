@@ -1,6 +1,11 @@
 # Bundle Update Log
 
 ## 2026-10-21
+* **Addition**: ADR-58: require isolated fixed benchmark workloads and attributed reproducible baselines for release gates; implementation evidence remains open.
+* **Update**: ADR-56: preserve fresh per-refresh schema verification and clock-bearing snapshot presentation (plan 318).
+* **Update**: ADR-55: reaction state inspection cannot reconstruct source or dispatch evidence; preserve explicit unavailable provenance (plan 319).
+* **Update**: ADR-53: record planned bounded delivery and shared-health admission recovery, pending implementation evidence (plan 318).
+* **Update**: ADR-40: limit the planned primary-key scan guarantee to unfiltered ranges; retain measured filtered-query envelopes (MasterPlan 46).
 * **Addition**: ADR-56 records shared bounded feed drivers, active-only wake cursor ownership, strict queue/in-flight accounting and scoped shutdown under the shared inspection budget.
 * **Update**: Extend ADR-35 with bounded group-key-first projection-status reads through the unchanged v1 owner relation, preserving writer indexes.
 * **Update**: Extend ADR-55 and ADR-28 with source-reporting manager views, owner API adapters, raw cursor continuation and database-clock timer/shard observations without writer-side indexes.

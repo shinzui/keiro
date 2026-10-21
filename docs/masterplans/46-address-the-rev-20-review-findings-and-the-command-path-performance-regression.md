@@ -16,6 +16,17 @@ provenance:
       at: 2026-10-21T13:02:16Z
       mode: "implement"
       note: "Record EP-1 attribution outcome and EP-2 gate wiring in progress"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-21T13:49:50Z
+      mode: "update"
+      note: "Apply review findings: explicit release prerequisites, milestone dependencies, shared ownership, evidence limits and ADR-58 policy."
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-21T13:24:48Z
+      verdict: "changes-requested"
+      note: "Release prerequisites omit EP-3/EP-4 completion; EP-1/EP-7 ownership and stale acceptance need reconciliation; child feasibility findings block readiness."
 ---
 
 # Address the REV-20 review findings and the command-path performance regression
@@ -47,11 +58,11 @@ initial transitions regenerate, so consumers are told less than they will see.
 
 When this initiative is complete, a maintainer can run `just release-gate` on a quiet machine
 and watch both halves pass: the correctness gate and all six benchmark regression guards, with
-the log committed beside the release. The owner knows which release and which substrate change
-made append-heavy commands slower and has either fixed it or accepted it with evidence that a
-later reader can audit. The default workflow listing is an index range scan whose cost grows
-with the page, not the ledger. A browser on a foreign origin cannot execute a confirmed
-mutation, and a slow client cannot take `/health` down. Reaction process managers can be
+the log committed beside the release. The owner can distinguish benchmark fixture interference from runtime cost using retained,
+reproducible measurements. Unfiltered default workflow browsing follows the primary-key range;
+filtered and creation-order reads have measured, deadline-bound operating envelopes. A browser on a foreign origin cannot execute a confirmed
+mutation, and stalled deliveries release their permits within a configured deadline; `/health` recovers
+after those permits return. Shared admission may still refuse it while all slots are occupied. Reaction process managers can be
 inspected through the same `pm show` and `pm list` commands as legacy ones, and the legacy-only
 surfaces say so where a consumer reads. The changelogs, the release skill, the `mori.dhall`
 registry, and the 0.20.0.0 to 0.21.0.0 edge say exactly what shipped.
@@ -85,7 +96,7 @@ dependency scan, `mori.dhall`, and the 0.20.0.0 to 0.21.0.0 edge. It is separate
 because plan 303 owns the irreversible actions (tags and uploads) and should consume a finished
 release surface rather than produce one.
 
-Phase 1 holds the plans the next tag waits on: EP-1, EP-2, EP-3, EP-4, and EP-6. EP-5 is also
+Phase 1 holds the plans the next tag waits on: EP-1, EP-2, EP-3, EP-4, EP-6, and EP-7. EP-5 is also
 Phase 1 for its labelling outcome; if its inspector extension is not ready when plan 303 wants
 to tag, EP-6 carries the legacy-only wording and EP-5's extension ships in the following
 release. Two alternatives were rejected. Folding EP-2 into EP-1 would have left the release
@@ -93,6 +104,9 @@ gate unprotected until the attribution finished. Folding EP-3 and EP-4 into one 
 cohort fixes" plan would have mixed a query-plan decision that changes a cursor contract with
 a security fix that changes request admission; they share a package but not reviewers,
 evidence, or risk.
+
+EP-7 owns harness isolation and fixed-workload preparation; EP-1 owns attribution, thresholds,
+and baseline recording after that harness is accepted. EP-2 owns ADR-58 and its implementation evidence.
 
 Relevant local ADRs, read for this decomposition: ADR-40
 (`docs/adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md`) fixes
@@ -104,33 +118,33 @@ gate. ADR-53 (`docs/adr/0053-the-http-operational-surface-is-a-transport-over-th
 defines the mutation protocol, the admission budget, and the deadline scope that EP-4 amends,
 so EP-4 revises it. ADR-55
 (`docs/adr/0055-legacy-reaction-provenance-is-bounded-explicit-opt-in-metadata.md`) states
-that the modern reaction runner has no provenance "in this cohort"; EP-5 either ends that
-exclusion or makes it a labelled, consumer-visible fact, and revises the ADR either way.
+that the modern reaction runner has no provenance "in this cohort"; EP-5 adds state inspection while keeping reaction provenance explicitly unavailable.
+Deterministic witness IDs cannot recover source input, source identity, or dispatch targets.
 ADR-56 (`docs/adr/0056-inspection-feeds-own-bounded-shared-drivers-and-an-active-only-wake-cursor.md`)
-requires that schema verification runs inside the feed admission deadline; EP-4's change to
-verify once per handle tick must keep that property. ADR-49
+requires schema verification within every refresh deadline and fresh snapshot presentation;
+EP-4 preserves these properties and rejects a TTL cache or semantic-equality-only frame reuse. ADR-49
 (`docs/adr/0049-language-6-is-the-sole-pre-1-0-coverage-and-data-support-baseline.md`) is the
 frame for EP-5 and for EP-6's wording. ADR-42
 (`docs/adr/0042-producer-outbox-identity-is-a-versioned-source-event-contract.md`) explains
-why the deterministic producer path issues two statements per row, which is the ratio EP-1's
-producer guard compares. No ADR records how benchmark baselines are recorded or when they may
-move; EP-1 and EP-2 should produce one.
+that fresh deterministic inserts use one statement and only conflicts need a locked read.
+EP-1 must measure the fresh path before changing its ratio guard. ADR-58 (`docs/adr/0058-benchmark-release-gates-require-isolated-fixed-workloads-and-attributed-baselines.md`) now records that policy; EP-2 owns its
+implementation evidence, with contributions from EP-1 and EP-7.
 
 
 ## Exec-Plan Registry
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Attribute the command-path append slowdown and restore trustworthy benchmark guards | docs/plans/315-attribute-the-command-path-append-slowdown-and-restore-trustworthy-benchmark-guards.md | None | None | In Progress |
-| 2 | Run the benchmark regression guards in the release gate | docs/plans/316-run-the-benchmark-regression-guards-in-the-release-gate.md | None | EP-1 | In Progress |
+| 1 | Attribute the command-path append slowdown and restore trustworthy benchmark guards | docs/plans/315-attribute-the-command-path-append-slowdown-and-restore-trustworthy-benchmark-guards.md | M3–M6: EP-7 Complete | None | In Progress |
+| 2 | Run the benchmark regression guards in the release gate | docs/plans/316-run-the-benchmark-regression-guards-in-the-release-gate.md | M2 passing run: EP-1 Complete | EP-1 during investigation | In Progress |
 | 3 | Bound the workflow listing cost without the withdrawn inspection indexes | docs/plans/317-bound-the-workflow-listing-cost-without-the-withdrawn-inspection-indexes.md | None | None | Not Started |
 | 4 | Harden the HTTP operational surface against cross-site mutations and permit exhaustion | docs/plans/318-harden-the-http-operational-surface-against-cross-site-mutations-and-permit-exhaustion.md | None | None | Not Started |
 | 5 | Inspect reaction process managers and label legacy inspection before 1.0 | docs/plans/319-inspect-reaction-process-managers-and-label-legacy-inspection-before-1-0.md | None | None | Not Started |
-| 6 | Reconcile the 0.22.0.0 release surface and the 0.21.0.0 edge with the REV-20 findings | docs/plans/320-reconcile-the-0-22-0-0-release-surface-and-the-0-21-0-0-edge-with-the-rev-20-findings.md | None | EP-3, EP-4, EP-5 | Not Started |
+| 6 | Reconcile the 0.22.0.0 release surface and the 0.21.0.0 edge with the REV-20 findings | docs/plans/320-reconcile-the-0-22-0-0-release-surface-and-the-0-21-0-0-edge-with-the-rev-20-findings.md | M1/M4 final acceptance: EP-3 Complete, EP-4 Complete, EP-5 M3 | EP-5 M1/M2 | Not Started |
 | 7 | Isolate the keiro-bench harness so each guard measures only its own fixture | docs/plans/321-isolate-the-keiro-bench-harness-so-each-guard-measures-only-its-own-fixture.md | None | None | Not Started |
 
 EP-1's M3 to M6 (re-recording the baselines and proving the gate green) require EP-7 to be
-Complete; EP-1's M1 and M2 (the attribution) are already done and had no prerequisite.
+Complete; EP-1's M1/M2 observations are already recorded and had no prerequisite.
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -140,40 +154,49 @@ accepted output is needed, name it explicitly (e.g., EP-1 M1) and explain it bel
 
 ## Dependency Graph
 
-One hard dependency exists at milestone granularity: EP-1's M3 to M6 require EP-7 Complete,
-because a baseline recorded on the shared-store harness would freeze the distortion EP-1's
-attribution found. EP-7, EP-3, EP-4, and EP-5 can proceed in parallel from the start; they
-touch different modules (`keiro/bench`, `keiro/src/Keiro/Workflow`, `keiro-ops-http/src`, and
-`keiro/src/Keiro/ProcessManager`) and are verified by different evidence. EP-2 can also start immediately and has in fact started: the `release-gate` recipe,
-the `scripts/bench-regression.sh` runner, and the release skill wording were committed with
-this MasterPlan. EP-2 soft-depends on EP-1 only in the sense that the gate stays red until
-EP-1 makes the guards green; the wiring itself is complete and verifiable regardless.
 
-EP-6 soft-depends on EP-3, EP-4, and EP-5 because its changelog, user-documentation, and
-edge text describe what those plans ship. It should be the last Phase 1 plan to close, and it
-must describe the shipped state rather than the planned one: if EP-5's inspector extension
-has not landed when plan 303 tags, EP-6 writes the legacy-only labelling instead. Plan 303
-(outside this initiative) hard-depends on EP-2 and EP-6 being Complete and on EP-1's guards
-being green at the release commit.
+EP-7 must be Complete before EP-1 M3–M6 begin. EP-1 M1/M2 record the existing
+sweep and preparation-sensitivity experiment; they do not prove absence of every runtime
+regression. EP-7 is the next implementation plan. EP-3, EP-4, and EP-5 may proceed
+independently, subject to the shared-file ownership below. EP-5 executes M3 (labelling)
+first, then M1/M2 (state inspection with explicitly unavailable reaction provenance).
+
+EP-2 wiring and its failing-gate demonstration can proceed immediately. Its M2 passing-run
+acceptance requires EP-1 Complete, and EP-2 remains In Progress until both demonstrations
+and its other milestones are accepted. EP-1 consumes the already committed runner; it does
+not wait for EP-2 Complete. There is no dependency cycle.
+
+EP-6 can draft changelogs and complete M2/M3 now. Its M1/M4 final acceptance requires
+EP-3 Complete, EP-4 Complete, and EP-5 M3 accepted. EP-5's state-inspector extension is
+optional for this release; EP-6 records whether it landed, while legacy provenance remains
+labelled in either case. This permits early documentation work without waiving release fixes.
+
+Plan `docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md`
+must not tag until EP-1, EP-2, EP-3, EP-4, EP-6, and EP-7 are Complete and EP-5 M3 is
+accepted. The final release candidate must also pass `just release-gate`; an earlier green
+run does not cover subsequent code changes. Plan 303 retains the independent MasterPlan 45
+integration/interference gates. Its preflight is updated in this revision so the obligation
+exists at the release entry point, rather than waiting for EP-2 implementation.
 
 
 ## Integration Points
 
-The six benchmark baselines `keiro/bench/baseline-*.csv` and the retained evidence under
+The five CSV benchmark baselines `keiro/bench/baseline-*.csv` and the retained evidence under
 `keiro/bench/results/` are owned by EP-1. EP-2 reads them through `scripts/bench-regression.sh`
 and never edits them. A baseline moves only with an evidence directory and a README that EP-1
 defines; EP-2's release skill text points at that rule.
 
 The benchmark harness structure (`keiro/bench/Main.hs`, `InboxDelegatedBench.hs`,
 `ProducerIdentityBench.hs`, `ReadModelBench.hs`: which store each group uses, where
-preparations run, what the timed actions reset, the `warm-up` rows) is owned by EP-7. EP-1
+preparations run, what the timed actions reset, selection-aware setup and warm-up) is owned by EP-7. EP-1
 records baselines only on EP-7's harness and must keep every existing scenario name, because
-`scripts/bench-regression.sh`'s `-p` patterns and the baseline CSVs match on names; EP-7 adds
-rows (`warm-up`) and never renames one.
+`scripts/bench-regression.sh`'s `-p` patterns and the baseline CSVs match on names.
+EP-7 keeps a static benchmark tree and performs representative warm-up in selected setup,
+not in an adaptively repeated throwaway benchmark.
 
 `scripts/bench-regression.sh` and the `bench-regression` and `release-gate` recipes in
-`justfile` are owned by EP-2. EP-1 runs them for its acceptance and may add guard-level
-robustness (a warm-up scenario, a changed ceiling) inside `keiro/bench/*.hs`, but the runner's
+`justfile` are owned by EP-2. EP-1 runs them for its acceptance and owns measured threshold changes inside `keiro/bench/ProducerIdentityBench.hs`
+after EP-7 acceptance; warm-up and fixture changes remain EP-7 work, but the runner's
 per-guard summary format (`GUARD(name)=status`, `BENCH_REGRESSION=PASSED|FAILED`) is EP-2's
 contract and the release skill depends on it.
 
@@ -182,10 +205,14 @@ the internal-dependency scan regex). The sections do not overlap; each plan edit
 section.
 
 The inspection cursor contract in `keiro/src/Keiro/Workflow/Inspection/Query.hs` and
-`keiro/src/Keiro/Workflow/Inspection.hs` (the `wf-key` and `wf-created` cursor kinds, the
+`keiro/src/Keiro/Workflow/Inspection.hs` (the transition from `wf-key` to `wf-key2`, the unchanged `wf-created` kind, the
 `InspectionWorkLimitExceeded` error, and the constants `maxIndexedWorkflowKeyBytes`,
 `maxWideWorkflowCandidates`, `maxWideWorkflowKeyBytes`) is owned by EP-3. EP-6 describes
-whatever EP-3 ships in the changelogs and the `docs/user/durable-workflows.md` envelope text.
+whatever EP-3 ships in the changelogs. EP-3 owns the workflow envelope text in
+`docs/user/durable-workflows.md`, the pending-timer envelope in
+`docs/user/process-managers-and-timers.md`, and `scripts/inspection-query-evidence.hs`.
+EP-3 owns removal of the workflow error mapping in `Application.hs`; EP-4 owns request
+admission/delivery in that same file and consumes the final mapping in shared HTTP tests.
 The HTTP routes in `keiro-ops-http/src/Keiro/Ops/Http/Route.hs` consume the cursor as an opaque
 string and need no change.
 
@@ -193,53 +220,57 @@ The HTTP admission and mutation policy in `keiro-ops-http/src/Keiro/Ops/Http/App
 `Budget.hs`, `Cors.hs`, and `WebSocket.hs` is owned by EP-4, together with the three guides
 `docs/guides/serve-keiro-ops-over-http.md`, `docs/guides/stream-keiro-inspection-views.md`,
 and `docs/guides/compose-runtime-inspection-surfaces.md`. EP-6 does not edit those guides; it
-edits `docs/user/operations.md`, `docs/user/durable-workflows.md`, and the changelogs.
+edits `docs/user/operations.md` and the changelogs, and audits the owner-authored guides.
 
 The process-manager inspector constructors in `keiro/src/Keiro/ProcessManager/Inspect.hs` and
-the `pm` command family in `keiro-ops/src/Keiro/Ops/ProcessManager.hs` are owned by EP-5. The
-legacy-only wording for `inspectionProvenance`, `pm show`, and `pm list` is produced by EP-5
-and placed by EP-6; if EP-5 extends the inspector before the tag, EP-6 drops the wording.
+the `pm` command family in `keiro-ops/src/Keiro/Ops/ProcessManager.hs` are owned by EP-5. EP-5 owns API/legacy wording in `docs/user/api-reference.md` and the manager section of
+`docs/user/process-managers-and-timers.md`; EP-3 owns only that page's timer-cost section.
+EP-6 copies the accepted wording into changelogs and audits the shipped command coverage.
+The reaction constructor selects an explicit descriptor provenance mode and reports
+unavailable evidence; it must not reinterpret legacy metadata or invent a dispatch list. Legacy-only provenance
+wording remains even if reaction state inspection lands before the tag.
 
-Cross-plan decisions that deserve ADRs: how benchmark baselines are recorded, when they may
-move, and that the guards are a release gate (EP-1 and EP-2 together, a new ADR); the
+Cross-plan ADR ownership: how benchmark baselines are recorded, when they may
+move, and that the guards are a release gate (EP-2 owns ADR-58, consuming EP-1 recording rules and EP-7 fixture evidence); the
 mutation origin policy and the delivery bound (EP-4, a revision of ADR-53); the reaction
 provenance decision (EP-5, a revision of ADR-55); and the listing cost model without inspection
-indexes (EP-3, a revision of ADR-40's rationale or a new ADR if the default order changes).
+indexes (EP-3, ADR-40 and the corresponding owner-read wording in ADR-28).
+This revision records the selected policy in ADR-40/53/55/56/58. Children update the
+implementation/evidence wording when their behavior is accepted, rather than claiming the
+planned changes already ship.
 
 
 ## Progress
 
-Phase 1 is open. EP-1 is In Progress with M1 and M2 complete: the command-guard slowdown is
-attributed to the benchmark harness; M3 to M6 (re-record, green runs) wait for EP-7. EP-7 is
-Not Started and is the next plan to implement, since EP-1 and the release gate's green state
-depend on it. EP-2 is In Progress: the runner, the recipes, and the release skill text are
-committed; its acceptance run waits for a quiet machine. EP-3, EP-4, EP-5, and
-EP-6 are Not Started. The only cross-plan gate is plan 303's tag, which needs EP-2 and EP-6
-Complete and EP-1's guards green at the release commit.
+
+Phase 1 remains open; this revision changes plans, not implementation status. EP-1 is
+In Progress with M1/M2's existing observations retained and M3–M6 blocked by EP-7. EP-7 is
+Not Started and next to implement. EP-2 wiring exists, but red/green acceptance and ADR-58 implementation evidence remain open; its passing run waits for EP-1 Complete. EP-3 to EP-6 are Not
+Started. EP-6 final acceptance waits for EP-3/EP-4 Complete and EP-5 M3. The release entry
+point now lists those mandatory prerequisites explicitly. EP-5 M1/M2 may follow the next
+tag, but must finish before this entire MasterPlan is Complete.
 
 
 ## Surprises & Discoveries
 
-EP-1's control point failed on 2026-10-21: the command guard, built at the baseline commit
-`2477a5aa` itself, measures the single-command scenarios at about twice the committed August
-rows on this machine, while HEAD measures them faster than that commit. The committed
-`baseline-command.csv` therefore cannot be reproduced in the current environment, and the
-"25% to 239%" headline in REV-20 splits into two facts: the single-command rows are an
-environment drift that a re-recorded baseline resolves, and the fan-out rows are a real
-five-fold slowdown per dispatched target that entered between `2477a5aa` and `keiro-0.19.0.1`.
-This affects EP-2 as well: the release gate's ADR must say that a baseline is tied to a
-recorded environment and must be re-recorded, with the control rerun, when that environment
-changes. Details and the numbers are in EP-1's Surprises & Discoveries.
 
-Later the same day the sweep and a controlled experiment attributed the fan-out slowdown to
-the benchmark harness, not to Keiro or Kiroku: since 0.17.0.0 the benchmark main seeds the
-delegated-inbox fixture (a 100,000-event history and warm-up traffic) into the store the
-command group uses, before `defaultMain` and regardless of the `-p` filter; HEAD with that
-preparation skipped measures the fan-out rows at the 0.16.0.0 level and the single-command
-rows eight to nine times faster. No serving path got slower, so EP-1 files no Kiroku
-improvement request and its remaining work is harness isolation and re-recording. For EP-2
-the lesson is durable: a guard's baseline is only meaningful for an isolated fixture, and the
-ADR must say that each benchmark group owns its store.
+The historical control `2477a5aa` did not reproduce its own August baseline on this machine.
+EP-1 retains the measured rows, tag window, and the HEAD experiment replacing delegated
+preparation with `pure []`. That experiment demonstrates sensitivity to shared preparation;
+it does not identify every statement cost or prove a universal absence of serving regressions.
+
+Review found two incorrect mechanisms in the original narrative. `prepareHistoryRun store
+100000` is already scoped to the selected history benchmark's `env` (or the explicit explain
+hook). The unconditional work is business-table setup, duplicate seeding, and fresh-scenario
+warm-up. Filtered-run isolation must be proved with preparation counters, not inferred from
+absence of a history build that was already skipped. Also, `enqueueProducerOutboxTx` returns
+after a successful fresh insert; the second locked statement is conflict-only. EP-1 now
+measures the actual fresh path before any threshold decision.
+
+The query primary key bounds unfiltered range traversal, not sparse-filter search. Reaction
+accepted witnesses identify acceptance, not their source event or dynamic follow-ups. Feed
+semantic equality excludes clock presentation fields. These constraints drive the corrected
+acceptance in EP-3, EP-4, and EP-5.
 
 
 ## Decision Log
@@ -266,6 +297,18 @@ ADR must say that each benchmark group owns its store.
   in 0.22 would announce a contract the retirement release removes. The extension is the better
   outcome and EP-5 should attempt it, but the tag must not wait on it.
   Date: 2026-10-21
+
+
+- Decision: Make mandatory inspection fixes explicit release prerequisites, preserve fresh
+  schema/presentation observations, and expose reaction state without inferred provenance.
+  Rationale: The review found missing release edges and evidence that cannot be reconstructed
+  from current storage. EP-3 limits its scan guarantee to unfiltered ranges; EP-7 fixes replay
+  workload size before EP-1 records new baselines. ADR-40/53/55/56 carry the durable boundaries.
+  Date: 2026-10-21
+
+Revision note (2026-10-21): Applied the review across the graph, shared-file ownership,
+release preflight, benchmark attribution/acceptance, query envelope, and HTTP/reaction
+contracts. Earlier review entries remain historical records; no implementation is marked done.
 
 
 ## Outcomes & Retrospective

@@ -11,6 +11,18 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-10-21T12:21:07Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-21T13:24:48Z
+      verdict: "changes-requested"
+      note: "Heading acceptance scans historical releases outside authorized Unreleased edits; release closure must require mandatory inspection fixes."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-21T13:49:51Z
+      mode: "update"
+      note: "Scope heading checks to Unreleased; reconcile owner-authored guides, local manifest bounds and hard release-closure prerequisites."
 ---
 
 # Reconcile the 0.22.0.0 release surface and the 0.21.0.0 edge with the REV-20 findings
@@ -49,9 +61,8 @@ Plan 303 then cuts 0.22.0.0 from a reconciled surface.
       an erratum under `[Unreleased]` for the 0.21.0.0 section; `seihou validate-blueprint
       blueprints/keiro-upgrade` passes.
 - [ ] M4: User documentation lines are fixed. `docs/user/operations.md` describes `pgmq dlq
-      read` as a reservation that needs `--force`; `docs/user/durable-workflows.md` and
-      `docs/user/process-managers-and-timers.md` carry the legacy-only wording from plan 319
-      if its extension did not land; `just user-documentation-validate` passes.
+      read` as a reservation that needs `--force`; the workflow/timer guides carry the accepted cost envelopes from plan 317;
+      the manager/API guides carry plan 319 M3 labelling and the actual constructor coverage; `just user-documentation-validate` passes.
 
 
 ## Surprises & Discoveries
@@ -68,6 +79,11 @@ Plan 303 then cuts 0.22.0.0 from a reconciled surface.
   0.21.0.0 changelog section is immutable on Hackage, so the erratum goes under `[Unreleased]`
   and ships with 0.22.0.0.
   Date: 2026-10-21
+
+
+Revision note (2026-10-21): Scoped heading validation to Unreleased, expanded dependency-scan
+coverage to jitsurei, used local manifest verification, clarified documentation ownership and
+made required inspection fixes explicit final-acceptance prerequisites.
 
 
 ## Outcomes & Retrospective
@@ -100,9 +116,11 @@ text, `shard status` gains `observed_at`, `heartbeat_at`, `updated_at`, and
 `lease_age_seconds`; `Keiro.Migrations.SchemaCheck.verifyExpectedSchemaSession` is only in the
 package changelog. `RunCommandOptions.inspectionProvenance` and the `AppHooks` fields
 `aggregates` and `processManagers` are record-construction breaks listed under New Features.
-Plans 317, 318, and 319 add their own entries (cursor order and removed error, the new
-`deliveryDeadlineSeconds` limit and the 403/415 refusals, the reaction inspector and the
-legacy-only wording); this plan writes them once those plans have shipped, describing what is
+Plans 317, 318, and 319 add their own entries (wf-key2 order and removed error, filtered
+query limitations, the new deliveryDeadlineSeconds limit and 403/415 refusals, view_retiring,
+and the reaction state inspector if it lands). Reaction provenance remains unavailable;
+legacy capture remains positional-only even when the new constructor ships. Direct inspector
+construction gains provenanceMode if plan 319 M1 ships; this plan writes them once those plans have shipped, describing what is
 in the tree.
 
 The release skill's step 3 regex `keiro-core|keiro-migrations|keiro-pgmq|keiro-test-support|(^|[ ,])keiro([ ,]|$)`
@@ -153,9 +171,11 @@ against the root section and confirm every shipped surface is represented, inclu
 
 Milestone 2 edits the skill regex to
 `keiro-core|keiro-migrations|keiro-pgmq|keiro-test-support|keiro-ops-http|keiro-ops|(^|[ ,])keiro([ ,]|$)`
-with a sentence explaining why `keiro-ops` needs its own alternative, and updates the five
-`effectful` constraints in `mori.dhall` to the cabal bounds; verify with
-`mori registry show shinzui/keiro --full`.
+with a sentence explaining why `keiro-ops` needs its own alternative, and reconciles each package-specific effectful/effectful-core constraint in `mori.dhall`
+with its own cabal declaration. Preserve disjoint effectful-core ranges and intentionally
+unbounded test-support declarations; do not copy one package bound everywhere. Verify the
+local manifest with `mori show --full`; registry output is secondary and may be stale. This
+is metadata reconciliation, not selection of a new dependency version.
 
 Milestone 3 corrects the edge and the changelog. In `0.20.0.0-to-0.21.0.0.md`, replace the
 scope sentence with one that says every aggregate's `BehaviorContract.hs` is rewritten on
@@ -165,36 +185,76 @@ changes above. Add a `0.21.0.0 erratum` paragraph under `keiro-dsl/CHANGELOG.md`
 with the same content. Validate the blueprint with `seihou validate-blueprint
 blueprints/keiro-upgrade`; the blueprint version does not change because no edge was added.
 
-Milestone 4 fixes the user documentation lines, carries the legacy-only wording from plan 319
-if needed, and runs the validator.
+Milestone 4 fixes the operations reservation wording and audits owner-authored guides after
+plan 317 and plan 318 are Complete and plan 319 M3 is accepted. Plan 317 owns workflow and timer
+cost envelopes; plan 318 owns HTTP/feed/composition guides; plan 319 owns manager/API legacy
+wording. Do not overwrite these sections independently. Record shipped state-inspector coverage
+and always retain the legacy-only capture boundary. If the state extension is absent, describe
+inspection as legacy-only; if present, describe reaction state inspection with unavailable
+provenance. Run the validator. M1 final reconciliation has the same prerequisites.
 
 
 ## Concrete Steps
+
 
 From the repository root inside `nix develop`:
 
 ```bash
 git log --oneline keiro-0.21.0.0..HEAD
-git diff keiro-0.21.0.0..HEAD -- CHANGELOG.md keiro/CHANGELOG.md keiro-ops/CHANGELOG.md keiro-ops-http/CHANGELOG.md keiro-migrations/CHANGELOG.md
-grep -n '^###' CHANGELOG.md keiro/CHANGELOG.md keiro-migrations/CHANGELOG.md keiro-ops/CHANGELOG.md keiro-ops-http/CHANGELOG.md | awk -F: '$3 !~ /Breaking Changes|New Features|Bug Fixes|Other Changes/'
-rg -n -g '*.cabal' 'keiro-core|keiro-migrations|keiro-pgmq|keiro-test-support|keiro-ops-http|keiro-ops|(^|[ ,])keiro([ ,]|$)' keiro-core keiro keiro-pgmq keiro-migrations keiro-test-support keiro-dsl keiro-ops keiro-ops-http | grep -c 'keiro-ops '
+git diff keiro-0.21.0.0..HEAD -- CHANGELOG.md keiro/CHANGELOG.md keiro-dsl/CHANGELOG.md keiro-ops/CHANGELOG.md keiro-ops-http/CHANGELOG.md keiro-migrations/CHANGELOG.md
+python3 - <<'PY_CHECK'
+from pathlib import Path
+import re
+allowed = {'Breaking Changes', 'New Features', 'Bug Fixes', 'Other Changes'}
+files = ['CHANGELOG.md', 'keiro/CHANGELOG.md', 'keiro-migrations/CHANGELOG.md',
+         'keiro-ops/CHANGELOG.md', 'keiro-ops-http/CHANGELOG.md', 'keiro-dsl/CHANGELOG.md']
+errors = []
+for name in files:
+    text = Path(name).read_text()
+    match = re.search(r'^## \[Unreleased\][^\n]*\n(.*?)(?=^## |\Z)', text, re.M | re.S)
+    if not match:
+        errors.append(f'{name}: missing Unreleased section')
+        continue
+    heading = None
+    for line in match[1].splitlines():
+        if line.startswith('### '):
+            heading = line[4:].strip()
+            if heading not in allowed:
+                errors.append(f'{name}: invalid Unreleased heading {heading}')
+        elif re.match(r'^\s*[-*] ', line) and heading is None:
+            errors.append(f'{name}: Unreleased bullet before heading')
+print('\n'.join(errors) if errors else 'UNRELEASED_HEADINGS=PASSED')
+raise SystemExit(bool(errors))
+PY_CHECK
+rg -n -g '*.cabal' 'keiro-core|keiro-migrations|keiro-pgmq|keiro-test-support|keiro-ops-http|keiro-ops|(^|[ ,])keiro([ ,]|$)' keiro-core keiro keiro-pgmq keiro-migrations keiro-test-support keiro-dsl keiro-ops keiro-ops-http jitsurei
+mori show --full
 seihou validate-blueprint blueprints/keiro-upgrade
 just user-documentation-validate
 ```
 
-Expected: the `awk` line prints nothing once M1 is done (no heading outside the four); the
-`grep -c` prints `5`; the blueprint validation and the documentation validator exit 0.
+The heading check prints `UNRELEASED_HEADINGS=PASSED` after normalization. It deliberately
+ignores historical sections, whose headings remain unchanged. The dependency scan must expose
+all sibling declarations, including the five current keiro-ops bounds in keiro-ops-http and
+the one in jitsurei; inspect each match rather than treating a fixed count as complete coverage.
+Blueprint and documentation validation must exit zero.
 
 
 ## Validation and Acceptance
 
-M1: the heading check prints nothing and every entry named in Context is present in the root
-changelog. M2: the regex check counts the five `keiro-ops` bounds and `mori registry show
-shinzui/keiro --full` reports the `effectful` constraints as `>=2.6 && <2.8`. M3: the edge
-text names the regeneration scope and the API changes and the blueprint validates. M4: the
-validator passes and `grep -n 'read-only' docs/user/operations.md` finds nothing about `dlq
-read`. The behavioural proof is plan 303's release rehearsal reading a surface it does not
-have to correct.
+
+M1 requires the scoped Unreleased check to pass and every shipped consumer-visible change
+named in Context to appear under the right headings. Preserve all historical sections byte
+for byte; the 0.21 erratum belongs under Unreleased. M2 requires the scan to include all
+current sibling dependencies and the local Mori manifest's per-package bounds to match the
+cabal files, including the effectful-core gap. Registry availability is not acceptance for
+unwritten local metadata. M3 requires the corrected upgrade edge and Unreleased erratum plus
+blueprint validation. M4 requires the corrected reservation text, owner-authored envelopes
+and manager/API labelling, with documentation validation passing.
+
+M1/M4 final acceptance requires plans 317 and 318 Complete and plan 319 M3 accepted. Drafting
+and M2/M3 can proceed earlier. Plan 319 M1/M2 are optional for this tag, not for that child's
+completion. Plan 303 consumes this reconciliation together with all other mandatory
+MasterPlan 46 prerequisites and its final-candidate release-gate log.
 
 
 ## Idempotence and Recovery
@@ -205,10 +265,13 @@ published `## 0.21.0.0` changelog sections themselves; the erratum goes under `[
 
 ## Interfaces and Dependencies
 
-`CHANGELOG.md` and the five package changelogs; `agents/skills/release/SKILL.md` step 3 (step
-4 is owned by plan 316); `mori.dhall`; `blueprints/keiro-upgrade/migrations/0.20.0.0-to-0.21.0.0.md`;
-`docs/user/operations.md`, `docs/user/durable-workflows.md`,
-`docs/user/process-managers-and-timers.md`; the `seihou` and `okf` validators. Soft
-dependencies: plans 317, 318, and 319 (this plan describes what they ship). Plan 303 consumes
-the result. No parent milestone must be accepted before this plan begins, but its M1 should
-close after those three plans.
+
+This plan owns root/package changelogs, release-skill step 3 (step 4 belongs to plan 316),
+`mori.dhall`, the 0.20-to-0.21 upgrade edge, and the reservation wording in
+`docs/user/operations.md`. It audits rather than independently rewrites plan 317's workflow/timer
+envelopes, plan 318's HTTP guides, and plan 319's manager/API wording. This prevents conflicting
+edits to shared documentation. The blueprint/doc validators consume the final state.
+
+M1/M4 final acceptance hard-depends on plan 317 Complete, plan 318 Complete and plan 319 M3.
+All other work may start now. Plan 303 must also require plans 315, 316 and 321 Complete and
+a fresh passing release gate; this plan's completion alone does not authorize tagging.

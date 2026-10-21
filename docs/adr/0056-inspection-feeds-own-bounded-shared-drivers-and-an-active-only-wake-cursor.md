@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Inspection feeds own bounded shared drivers and an active-only wake cursor
 description: Inspection sockets share bounded owner-API reads per canonical view and release their wake cursor and tasks when no view remains.
-timestamp: 2026-10-21T03:07:07Z
+timestamp: 2026-10-21T13:47:46Z
 docId: ADR-56
 status: Accepted
 date: 2026-10-20
@@ -62,6 +62,20 @@ so a visible-head change publishes an update without changed rows. Timer views
 refresh no more often than every five seconds within the measured 100k-row
 ledger envelope. Other cadences remain subject to the shared budget. Fallback
 is a scheduling interval, not a worst-case freshness promise under saturation.
+
+Schema agreement remains fresh for each refresh and upgrade. A timestamped success cache
+shared by views is not equivalent to that contract: drift or privilege changes between
+refreshes must not be admitted merely because a TTL has not expired. Plan 318 retains
+per-refresh verification and does not introduce a global handle tick or successful-result
+cache. Any future shared-check design must specify observation ordering, cancellation,
+failure propagation and bounded ownership before changing this rule.
+
+Semantic equality controls delta publication, not presentation freshness. Even when a timer
+has no semantic change, each successful refresh retains its new observation time and current
+countdown for subscribers joining afterward. Encoded snapshot reuse based only on unchanged
+semantic items is disallowed; the complete presentation must remain current to the latest
+successful read. Plan 318 preserves fresh snapshot preparation and tests resubscription
+separately from suppression of clock-only deltas.
 
 ## Consequences
 

@@ -11,6 +11,18 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-10-21T13:07:00Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-21T13:24:48Z
+      verdict: "changes-requested"
+      note: "Fresh rebuild stream names retain old category events and grow replay work; 100k history is already lazy and cannot prove filtered-run isolation; static benchmark tree must be preserved."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-21T13:49:51Z
+      mode: "update"
+      note: "Use static selected setup, fixed 600-event rebuild sources, representative warm-up, explicit growth bounds and preparation traces."
 ---
 
 # Isolate the keiro-bench harness so each guard measures only its own fixture
@@ -22,81 +34,80 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 
 ## Purpose / Big Picture
 
-After this plan, a benchmark guard in `keiro-bench` measures only the work its own scenario
-does, on a database that only its own group has touched, in a process whose other groups
-cannot change its numbers. Today that is not true: since 0.17.0.0 the benchmark's `main`
-prepares the delegated-inbox fixture (a 100,000-event history, inbox tables, and one warm-up
-run of every fresh scenario) in the same store the command group uses, before any benchmark
-runs and whether or not the `-p` filter selects that group. Plan 315
-(`docs/plans/315-attribute-the-command-path-append-slowdown-and-restore-trustworthy-benchmark-guards.md`)
-showed the effect: with that preparation skipped, HEAD runs the command fan-out scenarios
-three times faster and the single-command scenarios eight to nine times faster, and the
-numbers return to what the harness measured at 0.16.0.0. The command scenarios also hard-delete
-their target streams inside the timed action, so they pay Kiroku's replay-history guards on
-every iteration although no serving path does, and the first scenario of several groups
-absorbs a one-time cost that the committed baselines cannot see.
 
-When this plan is complete, running `cabal bench keiro-bench --benchmark-options='-p command'`
-alone and running the whole benchmark give the same command numbers within run-to-run noise,
-no group's preparation runs unless a benchmark of that group is selected, no scenario deletes
-or truncates inside its timed action unless the plan records why it must, and every group
-starts with a throwaway warm-up benchmark whose row no baseline matches. Plan 315 then
-re-records the baselines on the isolated harness.
+After this plan, each benchmark group uses its own migrated database clone, expensive
+preparation runs only for selected scenarios, and a filtered command run agrees with command
+rows in a full run within measured noise. Command actions stop paying hard-delete fixture
+costs, and projection rebuild samples always replay the same 600 source events. Preparation
+and representative warm-up are outside timed actions; real rebuild target reset remains part
+of the supported rebuild operation.
+
+Plan 315's HEAD experiment demonstrates shared-preparation sensitivity, not an unconditional
+100,000-event history build: that history already has selected `env` setup. The unconditional
+work to remove is business-table setup, duplicate seeding and fresh delegated warm-up. This
+plan proves isolation with explicit preparation counters and source counts before plan 315
+records new baselines.
 
 
 ## Progress
 
-- [ ] M1: Each benchmark group owns its store and its preparation. `ordinaryMain` in
-      `keiro/bench/Main.hs` opens one fresh migrated clone per group (`command`, `outbox`,
-      `inbox`, the delegated-inbox `downstream` group, `producer-identity`, `projection`;
-      `read-model` already has its own), every preparation runs on its own group's store
-      inside `tasty-bench`'s `env` so it is evaluated only when a benchmark of that group is
-      selected, and the acceptance below holds: the command rows from a filtered run and from
-      a full run agree within noise, and a filtered `-p command` run prepares no inbox fixture
-      (visible as the absence of the 100,000-event history build in the run's wall time).
-- [ ] M2: No timed action resets state that a serving path never resets. The command and
-      fan-out scenarios use a fresh target name per iteration (an `IORef` counter folded into
-      the stream name) instead of `hardDeleteStream`; the fan-out scenarios likewise mint
-      fresh target names per iteration instead of `resetFanoutTargets`; the outbox and inbox
-      `TRUNCATE` resets stay only if the Decision Log records that a growing table would
-      change the drain cost more than the truncate does, with a measurement. The growth bound
-      per benchmark (iterations times streams) is stated in the evidence README.
-- [ ] M3: First-run and order effects are outside the guarded rows. Every group begins with a
-      throwaway warm-up benchmark named so that no baseline row matches it (for example
-      `warm-up` under each group), the inbox group's first fresh downstream scenario no
-      longer measures a multi-second first-run cost, the router fan-out rows at 10 and 100
-      targets are no longer slower than at 1,000, and the `no-op` and `rejected` rows measure
-      under 200 µs on an isolated store; whatever explained the 21 ms observed in plan 315's
-      experiment is recorded in Surprises & Discoveries.
-- [ ] M4: The evidence is recorded and the old READMEs corrected. A README under
-      `keiro/bench/results/harness-isolation-v1/` holds the before and after numbers (shared
-      store versus isolated, filtered versus full run, deletes versus fresh names), the
-      machine, GHC, PostgreSQL and commit; `keiro/bench/results/delegated-inbox-v1/README.md`
-      and `keiro/bench/results/producer-identity-v1/README.md` say that their fixtures now
-      live in their own stores. Plan 315 is told it can re-record.
+
+- [ ] M1: Separate clones and static benchmark trees keep selected setup isolated. A command
+      filter executes no delegated setup/duplicate seeding/warm-up; listing benchmark names
+      executes no workload preparation. Filtered/full command measurements agree within noise.
+- [ ] M2: Command/fan-out actions use unique iteration identities without timed hard deletes.
+      Projection setup seeds exactly 600 category events once; every repeated rebuild scans
+      those same 600 events. Other reset choices and growth bounds have measured rationale.
+- [ ] M3: Representative setup warm-up resolves first-run/order effects. First inbox fresh
+      rows stay within 25% of their metrics twin, fan-out scales with target count, and command
+      no-op/rejected rows meet the under-200-us target on the recorded environment. The
+      previously observed 21-ms and small-fan-out anomalies have attributed evidence.
+- [ ] M4: Retain setup traces, source/workload counts, paired timing samples, environment and
+      revision under `keiro/bench/results/harness-isolation-v1/`; annotate old evidence READMEs
+      with the new fixture boundary and hand accepted evidence to plan 315.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+
+`prepareInboxDelegatedBenchmarks` creates the business table, seeds duplicate scenarios and
+executes each fresh scenario once before defaultMain. Its history nodes instead use
+`env (prepareHistoryRun store historySize)` and are already selection-aware; the explain hook
+can also explicitly build a history. The former plan confused these paths. Absence of a
+100,000-event history in a command-only run is therefore not new isolation evidence.
+
+The rebuild fixture declares CategorySource orders/customers/billing and starts replay at
+GlobalPosition 0. New stream names within those categories retain prior events, and changing
+the rebuild group ID does not narrow source selection. Repeating that proposal would make
+sample n replay roughly n times 600 events. A fixed seeded source avoids that distortion.
+
+Fresh-name command iterations still grow database relations and can affect planning, cache
+state and vacuum. Isolation alone does not prove stationary samples; the evidence must record
+operation counts and demonstrate that measured cost is stable across the permitted run size.
 
 
 ## Decision Log
 
-- Decision: Isolate by database clone per group, not by schema or by running groups in
-  separate processes.
-  Rationale: `keiro-test-support` already clones a migrated template database in well under a
-  second (`withFreshResourceStore`), the read-model group has used a second clone since it was
-  written, and one process keeps `tasty-bench`'s `--baseline` comparison and CSV output in
-  one place for the release gate.
+
+- Decision: Keep existing bracketed fixture lifetimes and open one clone per group eagerly;
+  make workload preparation selection-aware inside the static benchmark tree.
+  Rationale: Clones are cheap and existing withFreshResourceStore owns safe cleanup. This
+  avoids inventing acquire/release APIs or an MVar handoff merely to defer clone creation.
   Date: 2026-10-21
-- Decision: Replace per-iteration hard deletes with fresh names rather than keeping deletes
-  and excluding them from timing.
-  Rationale: `tasty-bench` has no per-run setup hook (its `env` runs once per benchmark, not
-  once per sample), so a reset inside the action is always timed. A serving path never hard
-  deletes, so the guard should not pay for it; a bounded growth of distinct streams across
-  iterations is the smaller distortion, and its bound is recorded.
+- Decision: Mint unique command/fan-out identities per iteration, but seed rebuild source
+  categories once and reuse them with fresh rebuild run IDs.
+  Rationale: Commands must not time irrelevant hard deletes; a rebuild must not accumulate
+  a growing replay input. Rebuild's own target clearing is actual measured behavior.
   Date: 2026-10-21
+- Decision: Warm representative database actions in selected setup rather than adding a
+  throwaway benchmark expected to run once.
+  Rationale: A benchmark action is sampled repeatedly, and the cheapest producer scenario
+  derives an ID without warming SQL. Setup order and workload must be explicit.
+  Date: 2026-10-21
+
+Revision note (2026-10-21): Corrected the lazy-history attribution, chose static-tree setup
+with existing bracketed resources, fixed projection replay size and replaced inferred wall-time
+isolation with preparation/workload counters. Plan 315 retains baseline/threshold ownership.
 
 
 ## Outcomes & Retrospective
@@ -106,160 +117,174 @@ re-records the baselines on the isolated harness.
 
 ## Context and Orientation
 
-`keiro-bench` is the benchmark component of the `keiro` package (`cabal build
-keiro:bench:keiro-bench`; stanza `benchmark keiro-bench` in `keiro/keiro.cabal`). It is a
-`tasty-bench` program: `defaultMain` runs a tree of `bench` nodes, each timing an `IO` action
-with `nfIO`, and the `--baseline <csv> --fail-if-slower 25` options compare each row with a
-committed CSV by its full name (`All.command.domain.accepted-1`). A "guard" is one such
-invocation of a group against its baseline; `scripts/bench-regression.sh` (owned by plan 316,
-`docs/plans/316-run-the-benchmark-regression-guards-in-the-release-gate.md`) runs six of them.
-`tasty-bench` exports `env`, which attaches a lazily evaluated setup value to a subtree so
-the setup runs only if a benchmark in that subtree is selected by the `-p` pattern; it has no
-per-sample hook, so anything inside the `nfIO` action is timed on every sample.
 
-The program's entry point is `ordinaryMain` in `keiro/bench/Main.hs`. It calls
-`withMigratedSuite` from `keiro-test-support` (`keiro-test-support/src/Keiro/Test/Postgres.hs`),
-which starts one ephemeral PostgreSQL server with a migrated template database, then opens
-two clones with `withFreshResourceStore`: `store`, used by the outbox, inbox, delegated-inbox,
-command, projection and producer-identity groups, and `readModelStore`, used by the read-model
-group. Before `defaultMain` it runs, unconditionally: `rebuildBenchSql` on `store`,
-`setupReadModelBench` on `readModelStore`, and `prepareInboxDelegatedBenchmarks store metrics`
-(`keiro/bench/InboxDelegatedBench.hs`), which creates the business table, prepares every
-delegated-inbox scenario including `prepareHistoryRun store 100000`, and runs every fresh
-scenario once. `producerIdentityBenchmarks store rebuildRunCounter`
-(`keiro/bench/ProducerIdentityBench.hs`) truncates `keiro.keiro_outbox` inside its timed
-action, as do the outbox scenarios (`runScenario`, `TRUNCATE keiro.keiro_outbox`) and the inbox
-scenarios (`runInboxScenario`, `TRUNCATE keiro.keiro_inbox`). The command scenarios
-(`commandScenarioBench`, `domainCommandScenarioBench`, around line 618) call
-`Lifecycle.hardDeleteStream` on their target inside the timed action; the fan-out scenarios
-(`domainRouterFanoutBench`, `domainProcessManagerFanoutBench`, around line 914) call
-`resetFanoutTargets`, one hard delete per target, and the process-manager variant also deletes
-its saga stream. The rebuild scenario deletes and reseeds three streams per iteration. A hard
-delete in Kiroku 0.7 and later is a transaction of about eleven statements with a coordinator
-lock and per-stream locks (`mori://shinzui/kiroku`, `kiroku-store/src/Kiroku/Store/Effect.hs`,
-the `HardDeleteStream` branch), which is why a thousand of them dominate the fan-out rows.
+`keiro/bench/Main.hs:ordinaryMain` runs `withMigratedSuite` and two
+`withFreshResourceStore` brackets. One store is shared by command, outbox, inbox/downstream,
+projection and producer-identity; read-model already uses a second. Before `defaultMain`,
+rebuild SQL, read-model setup, delegated preparation and optional evidence hooks run.
+`keiro-test-support/src/Keiro/Test/Postgres.hs` owns these disposable fixtures.
 
-The measurements that motivate this plan are in plan 315's Surprises & Discoveries: at HEAD
-`03161924`, `router-fanout.1000` measures 2.01 s with the shared store and 662 ms with the
-delegated-inbox preparation replaced by `pure []`; `domain.accepted-large` 44.2 ms versus
-4.69 ms; and on the isolated run two rows were anomalous and systematic, `no-op` at about
-21 ms (every other configuration measures it under 130 µs) and `router-fanout` slower at 10
-and 100 targets (229 ms, 3.5 s) than at 1,000 (662 ms). The inbox group's first fresh
-downstream scenario, `table-downstream-single.fresh.metrics-off`, measures 5.8 s ± 1.7 s in
-a full run while its twin run second measures 418 ms (REV-20,
-`docs/reviews/keiro-0-20-0-21-unreleased-review.md`, and REV-17 before it); the warm-up added
-by `af37b955` runs once per scenario outside the action but did not remove the effect.
+The benchmark tree and names are public guard inputs. `scripts/bench-regression.sh` runs six
+guards; five match `keiro/bench/baseline-*.csv`, while producer-identity compares two rows in
+one process. Preserve names including All.inbox.downstream.* when splitting its store.
+`InboxDelegatedBench.hs` currently returns IO [Benchmark]; separate its pure scenario/name
+specifications from acquired fixture data so selecting or listing the tree never forces IO
+to discover names. Read the installed tasty-bench API through Mori before changing resource
+combinators. Use its existing env pattern only for data/setup, not dynamic tree discovery.
 
-Relevant local ADRs: ADR-48
-(`docs/adr/0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md`)
-gives every retention leg a fresh migrated database and discards the first block as warm-up,
-which is the pattern this plan brings to the benchmarks. No ADR covers benchmark baselines;
-plans 315 and 316 produce one, and this plan's isolation rule (each group owns its store)
-belongs in it. No cross-repository ADR applies.
+`commandScenarioBench`, `domainCommandScenarioBench`, `domainRouterFanoutBench` and
+`domainProcessManagerFanoutBench` currently time target hard deletes. The fan-out identity
+also includes correlation/source inputs; fresh target spelling alone must not accidentally
+reuse a command identity and measure deduplication. The producer benchmark truncates its
+outbox before each fresh batch, requiring every enqueue to return ProducerInserted.
+
+`rebuildScenarioBench` currently deletes/reseeds three streams, registers the catalog and
+rebuilds. `rebuildCatalogDeclaration` sources are whole categories, and the request replays
+from zero. `keiro/src/Keiro/ReadModel/Rebuild/Runner.hs` reads CategorySource with readCategory;
+new group IDs cannot exclude old category events. Move its three-stream seed and catalog
+registration into selected setup, retaining the supported repeated rebuild operation.
+
+Plan `docs/plans/315-attribute-the-command-path-append-slowdown-and-restore-trustworthy-benchmark-guards.md`
+records HEAD router/process-manager fan-out at 2.01/1.96 s with preparation versus 662/777 ms
+without it; accepted-large was 44.2 versus 4.69 ms. The same experiment gave anomalous no-op
+21.4 ms and fan-out 10/100 at 229/3500 ms. These are investigation inputs, not target values
+after removing deletes. [ADR-48](../adr/0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md)
+provides the isolated-leg and discarded warm-up precedent. Plan 316 owns [ADR-58](../adr/0058-benchmark-release-gates-require-isolated-fixed-workloads-and-attributed-baselines.md)
+and consumes this plan's fixture evidence; no cross-repository ADR is required.
 
 
 ## Plan of Work
 
-Milestone 1 restructures `ordinaryMain`. Replace the two clones with one clone per group,
-opened lazily: wrap each group's `bgroup` in `env` whose setup opens the group's
-`withFreshResourceStore` clone and runs that group's preparation (the rebuild SQL for the
-projection group, `prepareInboxDelegatedBenchmarks` for the delegated-inbox group, the
-read-model fixture for its group), and whose value is the store and whatever the group needs.
-`withFreshResourceStore` is bracket-shaped; `tasty-bench` 0.5.1 exports `envWithCleanup ::
-NFData env => IO env -> (env -> IO a) -> (env -> Benchmark) -> Benchmark` for exactly that
-shape, so a group's clone can be created in the acquire action and dropped in the cleanup
-action, with `keiro-test-support`'s `withFreshDatabase` split into its create and drop halves
-or wrapped through an `MVar` hand-off. The simpler form, opening all clones eagerly at the top
-of `ordinaryMain` (cloning is cheap) and putting only the preparation inside `env`, is also
-acceptable; the acceptance is behavioural. Keep `runGuardedCatalogEvidence` and the
-explain-evidence hooks where they are.
 
-Milestone 2 removes the in-action resets. Give `commandScenarioBench`,
-`domainCommandScenarioBench`, `domainRouterFanoutBench` and `domainProcessManagerFanoutBench`
-an `IORef Int` from the group's `env` value and fold its next value into the target stream
-names (and the saga stream name) each iteration; delete the `hardDeleteStream` and
-`resetFanoutTargets` calls from the actions. For the rebuild scenario, mint a fresh set of
-three stream names and a fresh group id per iteration the same way. For the outbox and inbox
-scenarios, measure both forms (truncate inside the action, versus fresh message ids and no
-truncate) on the isolated store and keep the one the Decision Log justifies; the drain reads
-the whole table, so a growing table changes the measured cost and the truncate may be the
-right call. The producer-identity scenarios truncate the outbox and then enqueue 1,000 rows;
-the truncate is one statement against 1,000 inserts and the same-process ratio cancels it,
-so leave it and say so.
+M1 keeps `withMigratedSuite` and opens separate bracket-owned clones for command, outbox,
+ordinary inbox, delegated inbox/downstream, producer-identity, projection and read-model.
+Keep store handles in closures with the same lifetime as defaultMain. Move table/fixture
+preparation into selected env setup, preserving a pure list of group/scenario names. In
+InboxDelegatedBench.hs split scenario specification from acquisition; build names from the
+pure specification and access prepared data only inside benchmark actions. Do not obtain the
+Benchmark list itself from an env value. Preserve read-model and explicit explain/evidence
+entry points without running their preparation on ordinary unrelated selections.
 
-Milestone 3 adds warm-ups and explains the anomalies. Put a `warm-up` benchmark first in every
-group that runs the group's cheapest scenario once; because no baseline row matches the name,
-`tasty-bench` reports it without comparing. Then run the command group alone on the isolated
-store and look at the `no-op` row: compare `EXPLAIN (ANALYZE)` of the statements the path
-issues on the fresh clone with and without `ANALYZE` having run on `kiroku.streams` and
-`kiroku.stream_events` (an unanalyzed empty table can draw a plan that is fine at ten rows and
-not at ten thousand), and look at whether the first hard-delete-free iteration pays Kiroku's
-coordinator lock. Record the cause; if it is planner statistics, run `ANALYZE` at the end of
-each group's preparation and record that in the README.
+Add an opt-in `KEIRO_BENCH_SETUP_TRACE=1` diagnostic to setup actions that emits group,
+scenario and preparation kind (schema, duplicate-seed, warm-up, history), plus operation/source
+counts. It must not expose credentials. A command-only selection must show no delegated
+preparation; an all-tests listing must show no workload preparation. A selected history run
+must show its own history setup once. This distinguishes new isolation from the already-lazy
+100k history. Keep every existing benchmark name and baseline-match pattern unchanged.
 
-Milestone 4 writes the evidence README and corrects the two older READMEs, then hands over to
-plan 315 by recording in its Progress that the harness is isolated and re-recording may start.
+M2 gives command/fan-out scenarios per-scenario counters acquired in setup. Include the next
+counter in target names, correlation/saga names and any identity seed necessary to produce
+fresh commands. Assert the accepted rows append the expected event counts and no-op/rejected
+rows append none. The work must remain command execution, not accidental duplicate probes.
+Record iterations, resulting stream/event counts and relation growth for each sample.
+
+For projection, setup creates app tables, seeds the existing three category streams with
+200 events each and registers the catalog once. Each timed action generates a new RebuildRunId
+and invokes the same supported rebuild group with replayFrom zero. It does not append, delete,
+or rename sources. The rebuild's own ClearBeforeReplay target reset remains timed. Verify at
+least three consecutive rebuilds each traverse exactly 600 input events, including after
+warm-up; count source reads/events in a diagnostic run and preserve production timing without
+that probe. Record bounded growth in rebuild-run bookkeeping as well as fixed source count.
+
+Measure outbox and inbox reset alternatives on their isolated stores. Keep their existing
+TRUNCATE when it is required to hold the workload fixed, documenting timed reset cost and
+why growing retained rows would change the operation. For producer-identity keep equal reset
+boundaries, but do not claim a common additive cost cancels from a ratio: measure/reset-report
+it separately and pass that evidence to plan 315 before any threshold change.
+
+M3 warms representative database actions in selected setup, with a bounded, recorded number
+of invocations and distinct identities. For producer fresh rows, warm SQL enqueue rather than
+only pure derive-v1. Do not add an adaptive throwaway benchmark and call it one invocation.
+Measure the first fresh inbox scenario and its metrics twin, and run no-op/fan-out comparisons
+in both orders. Use statement plans/counters on disposable fixtures to attribute the 21-ms
+and inverted fan-out anomalies. If statistics matter, record the exact ANALYZE schedule and
+show it matches the admitted workload, rather than hiding a cost by arbitrary tuning.
+
+Fresh-name samples must have an explicit finite growth budget enforced by the harness; a
+budget overrun aborts the sample with a diagnostic, never reports a truncated successful
+measurement. --timeout/--stdev are measurement controls, not a deterministic row-count bound.
+Establish stationary cost across early/late blocks within the chosen budget. If that fails,
+revise the fixture design with evidence before accepting M2/M3 or recording baselines.
+
+M4 retains at least three alternating filtered/full command pairs on a quiet machine using
+identical settings and serial execution. Compare matching names with a CSV parser, excluding
+setup from timing and retaining setup traces separately. Require median relative differences
+within 10% for each command row and report sample spreads; investigate larger or inconclusive
+differences, not silently accept noise. Preserve the old before/after measurements as historical
+observations and document the accepted fixed-workload protocol for plan 315.
 
 
 ## Concrete Steps
 
-From the repository root inside `nix develop`:
+
+From the repository root inside `nix develop`, after implementing setup tracing:
 
 ```bash
 cabal build keiro:bench:keiro-bench
-# filtered run: the command group alone
-cabal bench keiro-bench --benchmark-options='-p command --time-mode wall --hide-progress --csv /tmp/command-alone.csv'
-# full run: every group, same baseline-free mode
-cabal bench keiro-bench --benchmark-options='--time-mode wall --hide-progress --csv /tmp/all.csv'
-# compare the command rows
-join -t, <(grep '^All.command' /tmp/command-alone.csv | sort) <(grep '^All.command' /tmp/all.csv | sort) | awk -F, '{printf "%-55s %12.1f ms %12.1f ms\n", $1, $2/1e9, $4/1e9}'
+KEIRO_BENCH_SETUP_TRACE=1 cabal bench keiro-bench --benchmark-options='--list-tests'
+KEIRO_BENCH_SETUP_TRACE=1 cabal bench keiro-bench --benchmark-options='-p command -j1 --time-mode wall --hide-progress --csv /tmp/command-alone.csv'
+KEIRO_BENCH_SETUP_TRACE=1 cabal bench keiro-bench --benchmark-options='-j1 --time-mode wall --hide-progress --csv /tmp/all.csv'
+python3 - <<'PY_COMPARE'
+import csv
+
+def rows(path):
+    with open(path, newline='') as handle:
+        return {row[0]: float(row[1]) for row in csv.reader(handle)
+                if row and row[0].startswith('All.command.')}
+
+alone, full = rows('/tmp/command-alone.csv'), rows('/tmp/all.csv')
+assert alone and alone.keys() == full.keys(), 'missing or changed command names'
+for name in sorted(alone):
+    assert alone[name] > 0
+    print(f'{name}: filtered={alone[name]/1e6:.3f} ms full={full[name]/1e6:.3f} ms difference={100*(full[name]/alone[name]-1):+.1f}%')
+PY_COMPARE
 ```
 
-Expected: every command row within run-to-run noise (about 10%) between the two columns, with
-`router-fanout.1000` and `process-manager-fanout.1000` near 0.7 s and `no-op` under 0.2 ms.
-The full run's wall time no longer includes a 100,000-event history build when the
-delegated-inbox group is excluded:
+These are one paired sample, not M4's full acceptance. Use distinct CSV/log names for the
+three alternating pairs and record the runner/RTS options. The first command listing must not
+emit preparation events. The command filter must emit no delegated-inbox setup events. The
+CSV parser handles quoted names correctly and converts nanoseconds to milliseconds with 1e6.
 
-```bash
-time cabal bench keiro-bench --benchmark-options='-p command --time-mode wall --hide-progress'
-```
-
-For M3's anomaly, from `psql` against the clone the group used (the fixture prints its
-connection string when `KEIRO_BENCH_KEEP=1` is set, or add that switch):
-
-```sql
-EXPLAIN (ANALYZE, BUFFERS) SELECT ... ;   -- the statements the no-op path issues, from pg_stat_statements or the log
-ANALYZE kiroku.streams; ANALYZE kiroku.stream_events;
-```
+Exercise the fixed projection fixture and verify three diagnostic iterations each traverse
+600 events before measuring it normally. Implement the count probe as a benchmark-only option
+and document its exact invocation in the evidence README; no production API is added for it.
 
 
 ## Validation and Acceptance
 
-M1: the `join` comparison above agrees within noise and the filtered run's wall time shows no
-inbox preparation. M2: `grep -n "hardDeleteStream\|resetFanoutTargets" keiro/bench/Main.hs`
-finds no call inside a `bench` action, and the README records the growth bound. M3: a full run
-on the isolated harness shows the first fresh inbox scenario within 25% of its twin, the
-fan-out rows monotone in target count, and `no-op` under 200 µs, with the cause of the 21 ms
-written down. M4: the README exists with the before and after table and the two older READMEs
-are corrected. The behavioural proof is plan 315's subsequent re-recording producing a
-baseline that the control protocol reproduces.
+
+M1 requires static-name listing and preparation traces proving unselected setup is absent,
+and M4's paired measurement evidence. M2 requires command outcome/event-count checks,
+no timed command hard deletes, three exact 600-event rebuild iterations, measured reset
+exceptions and enforced growth budgets. A new rebuild group ID alone is not isolation.
+
+M3 requires the stated inbox/fan-out/no-op targets and evidence explaining the previous
+anomalies under controlled order; a noisy/inconclusive run remains open work. M4 requires
+three serial alternating filtered/full pairs, matching command rows within the 10% median
+comparison, raw evidence and corrected README annotations. Fixed-source and growth-count
+checks run with probes; timed acceptance runs disable them. No baseline or producer ceiling
+is changed here. Plan 315's recording milestones may start only after this plan is Complete.
 
 
 ## Idempotence and Recovery
 
-Benchmark source edits only; `git checkout` restores them. Every run uses disposable clones
-from the ephemeral template and never touches a persistent database. Scratch CSVs under
-`/tmp` are not committed. If the fresh-name approach makes a scenario's store grow beyond
-what the README's bound states, reduce the iteration budget with `--timeout` or `--stdev`
-rather than reintroducing deletes.
+
+Runs use disposable bracket-owned clones and leave production stores untouched. Preserve
+scratch samples used for decisions before cleanup; do not overwrite historical evidence.
+A fixture-budget overrun or nonstationary workload fails acceptance and requires a fixture
+revision, not a looser statistical option. Cancelled selected setup must unwind through the
+existing fixture brackets. No new acquire/drop resource implementation is required.
 
 
 ## Interfaces and Dependencies
 
-`keiro/bench/Main.hs`, `keiro/bench/InboxDelegatedBench.hs`, `keiro/bench/ProducerIdentityBench.hs`,
-`keiro/bench/ReadModelBench.hs`; `keiro-test-support`'s `withMigratedSuite` and
-`withFreshResourceStore`; `tasty-bench`'s `env`, `bench`, `nfIO`, `bcompareWithin`,
-`--baseline`, `--csv`. The scenario names are an interface: plan 315's re-recorded baselines
-and `scripts/bench-regression.sh`'s `-p` patterns depend on them, so keep every existing row
-name and add only the `warm-up` rows. Plan 315's M3 to M6 hard-depend on this plan being
-Complete. No parent milestone must be accepted before this plan begins.
+
+This plan owns fixture/setup/action boundaries in `keiro/bench/Main.hs`,
+`InboxDelegatedBench.hs`, `ProducerIdentityBench.hs`, and `ReadModelBench.hs`. Preserve all
+scenario names and public benchmark entry points. It uses existing bracketed fixtures from
+`keiro-test-support`; no guessed tasty-bench cleanup API or package change is required.
+
+Plan 315 owns recording, all affected baseline CSVs and measured producer threshold policy;
+its M3–M6 require this plan Complete. Plan 316 owns runner commands and the durable benchmark
+ADR, consuming this plan's isolation/fixed-workload evidence. No prerequisite blocks this
+plan, and it is the next implementation work under MasterPlan 46.

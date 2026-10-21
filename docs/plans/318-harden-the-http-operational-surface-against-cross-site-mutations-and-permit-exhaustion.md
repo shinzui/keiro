@@ -11,6 +11,18 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-10-21T12:21:07Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-21T13:24:48Z
+      verdict: "changes-requested"
+      note: "Schema TTL weakens fail-closed drift policy; unchanged-frame reuse loses fresh timer presentation; 30-second delivery bound cannot satisfy one-second health acceptance under full admission."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-21T13:49:51Z
+      mode: "update"
+      note: "Preserve fresh schema/snapshot observations; specify bounded delivery recovery and honest retirement refusals."
 ---
 
 # Harden the HTTP operational surface against cross-site mutations and permit exhaustion
@@ -22,64 +34,73 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 
 ## Purpose / Big Picture
 
-After this plan, a Keiro operator can mount `keiro-ops-http` with mutations enabled behind a
-proxy that authenticates with cookies and know that a page on another origin cannot make the
-operator's browser execute a confirmed mutation, because the surface refuses a mutation whose
-`Origin` is foreign or whose body is not declared as JSON. A few slow or stalled clients can
-no longer hold every inspection permit and take `/health`, every read, every websocket upgrade,
-and every feed refresh down with `inspection_busy`, because response delivery has its own
-bound. Feeds verify the schema once per handle tick rather than once per view per refresh, and
-they stop re-encoding an unchanged snapshot every second. The three HTTP guides describe every
-error code the surface emits and the TLS caveat for same-origin websockets.
+
+After this plan, HTTP mutations reject foreign origins and non-JSON confirmation bodies,
+and stalled delivery cannot retain an inspection permit indefinitely. `/health` shares the
+same admission pool: it may return `inspection_busy` while every slot is occupied, then
+succeeds after stalled deliveries are cancelled and slots return. The default delivery
+bound is 30 seconds, separately configurable from computation deadlines.
+
+Feed refreshes continue to verify current schema agreement inside their admission/deadline.
+Clock-only refreshes do not broadcast false changes, but new subscribers receive the latest
+successful read's timestamp and timer presentation. The proposed TTL cache and semantic-only
+snapshot reuse are withdrawn because they weaken these existing contracts. The guides record
+that choice, all refusal codes, and the TLS origin requirement.
 
 
 ## Progress
 
-- [ ] M1: Confirmed mutations are origin-gated. A `POST` with an `Origin` header that is
-      neither allow-listed nor same-origin is refused with HTTP 403 and code `origin_not_allowed`
-      before the body is read; a `POST` whose non-empty body is not `Content-Type:
-      application/json` is refused with 415 and code `unsupported_media_type`; the existing
-      preview and confirm tests still pass; new tests in `keiro-ops-http/test/` cover both
-      refusals and the allowed cases (no `Origin`, allow-listed origin, same-origin).
-- [ ] M2: Delivery is bounded. A new `deliveryDeadlineSeconds` limit (default 30) wraps
-      response delivery; a client that stops reading loses its permit when it expires, and a
-      test with a deliberately slow consumer shows `/health` answering 200 while the slow
-      consumer is still draining. ADR-53 is revised to say that admission spans computation
-      and bounded delivery.
-- [ ] M3: Feed schema verification runs once per handle tick. `readView` no longer calls
-      `checkFeedSchema` per view per refresh; the handle verifies once per fallback interval
-      inside the same admission deadline (ADR-56 requires it inside the deadline) and every
-      driver consults that result; drift still stops publication; a test with two views and a
-      counting pool shows one verification per tick. The unchanged-snapshot re-encode in
-      `refresh` is skipped and the retiring-view refusal uses a distinct code
-      (`view_retiring`) or waits for retirement.
-- [ ] M4: The guides are complete. `docs/guides/stream-keiro-inspection-views.md` lists every
-      error code in `keiro-ops-http/src/Keiro/Ops/Http/Protocol.hs` and the TLS same-origin
-      caveat; `docs/guides/serve-keiro-ops-over-http.md` lists `exit_code`, 409
-      `cursor_generation_mismatch`, the 400 codes `invalid_cursor`, `invalid_page_size`,
-      `inspection_header_inconsistent`, and the new 403 and 415 codes;
-      `just user-documentation-validate` passes.
+
+- [ ] M1: Mutation origins are checked before body reads. Foreign origins yield 403
+      `origin_not_allowed`; nonempty non-JSON bodies yield 415 `unsupported_media_type`.
+      Same-origin, allow-listed, no-Origin JSON and empty-body preview cases pass.
+- [ ] M2: `deliveryDeadlineSeconds` (default 30) bounds respond/delivery and releases permits
+      after cancellation without a second response. Tests establish admission refusal before
+      expiry and recovery afterward, plus actual stalled-socket termination under Warp.
+- [ ] M3: Fresh schema verification and presentation remain correct across multiple views,
+      drift/failure/recovery, and clock-only refreshes. Retiring subscriptions return
+      `view_retiring` rather than `inspection_busy`; no TTL or stale snapshot reuse is added.
+- [ ] M4: HTTP/feed/composition guides and ADR-53/56 describe the resulting origin, delivery,
+      freshness and retirement behavior; documentation and ADR validators pass.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+
+The review found that a timestamped schema result would let a refresh proceed after drift
+until the cache expired; shared admission alone does not prevent that. It also found that
+`Views.stableItemBody Timers` omits `due_in_seconds`, while `subscribeOnQueue` sends the
+retained snapshot. Reusing that snapshot solely when `different` is false would retain old
+countdowns and `observed_at`. Both proposed optimizations are removed from the plan.
+
+All HTTP reads, including `/health`, use the same permits. A 30-second delivery limit cannot
+promise one-second health availability while four deliveries still own all four permits.
+The observable promise is bounded cancellation and recovery; one-byte reads of a 1 MiB
+response alone do not prove blocking because the kernel may buffer the entire response.
 
 
 ## Decision Log
 
-- Decision: Gate by `Origin` presence plus allow-list or same-origin, and by `Content-Type`,
-  rather than adding a CSRF token or nonce to the confirmation.
-  Rationale: The confirmation is a fixed JSON body by design (ADR-53); browsers send `Origin`
-  on every cross-site `POST`, and a non-JSON content type is exactly what a no-preflight
-  cross-site request looks like. A nonce would change the documented protocol for every client
-  and is listed as a later option, not a requirement.
+
+- Decision: Check the request Origin against the configured allow-list or request origin,
+  and accept confirmation bodies only as application/json (media-type parameters permitted).
+  Rationale: This preserves the explicit confirmation protocol while rejecting cross-origin
+  browser requests before execution; empty-body preview remains supported.
   Date: 2026-10-21
-- Decision: Bound delivery with a deadline rather than releasing the permit after encoding.
-  Rationale: The permit is held through delivery so that slow clients cannot retain an
-  unbounded number of encoded bodies (`Budget.hs` comment); a deadline keeps that property and
-  adds an upper bound on how long one client can hold a slot.
+- Decision: Retain shared admission through bounded delivery; do not reserve a separate
+  health slot. Propagate a delivery-expired exception after unwinding the response callback.
+  Rationale: A retained permit bounds encoded-body memory. Expiry bounds occupation without
+  claiming availability while the shared pool is saturated or attempting a second response.
   Date: 2026-10-21
+- Decision: Keep per-refresh schema verification and fresh snapshot preparation.
+  Rationale: There is no schema-generation invalidation mechanism or shared atomic refresh
+  protocol in this plan. A TTL silently weakens refusal, and semantic equality does not imply
+  identical presentation. Measure these costs and document the decision; any future shared
+  verification/encoding design must preserve freshness and bounded cancellation first.
+  Date: 2026-10-21
+
+Revision note (2026-10-21): Corrected health acceptance, specified timeout termination,
+withdrew stale schema/frame caching, and made retirement refusal deterministic.
 
 
 ## Outcomes & Retrospective
@@ -143,48 +164,77 @@ by the composer). No cross-repository ADR applies.
 
 ## Plan of Work
 
-Milestone 1 adds origin and content-type gating in `Application.hs` before `readConfirmation`:
-if the request is a mutation and carries an `Origin` header, the origin must be in
-`config.allowedOrigins` (compared case-insensitively on scheme and host, the way
-`WebSocket.hs` does) or equal the request's own origin (`Host` with the scheme from `isSecure`
-or a configured public origin, see M4's TLS caveat); otherwise answer 403 `origin_not_allowed`
-without reading the body. If the body is non-empty and `Content-Type` is not
-`application/json` (parameters such as `charset` allowed), answer 415 `unsupported_media_type`.
-Move the HTTP origin comparison into a shared helper so CORS and websocket agree on case
-handling. Add the two codes to the error table and tests: a `POST` with `Origin:
-https://evil.example` to a mutation route returns 403 and runs nothing (assert the mutation's
-preview counter did not move); a `POST` with `Content-Type: text/plain` and the confirmation
-body returns 415; the existing allow-listed and header-less cases keep returning preview or
-execution.
 
-Milestone 2 bounds delivery. Add `deliveryDeadlineSeconds` to `InspectionLimits` (default 30)
-and wrap the `respond` call inside `withInspectionAdmission` with `timeout`; on expiry the
-permit is released by the existing `bracket`, the connection is closed by Warp when the
-response body is abandoned, and nothing else is written (a second response is never attempted;
-the existing comment "Network exceptions must propagate; never attempt a second response"
-holds). Test it with a real socket: start the server on a loopback port in a test (the HTTP
-test suite already has the pattern), open a client that reads one byte of a 1 MiB page and
-stops, do that four times, and assert `/health` still answers 200 within a second; then assert
-the stalled clients are disconnected after the deadline. Revise ADR-53's admission paragraph.
+M1 checks mutation admission in `Application.hs` before `readConfirmation`. When `Origin`
+is present, parse one serialized origin and compare its scheme/host case-insensitively and
+its effective port consistently against configured entries or the request's own scheme and
+Host. Reject malformed/multiple/null origins unless an explicit supported policy allows them;
+do not treat parse failure as absence. Use the same helper for HTTP, CORS and WebSocket
+comparisons. Do not trust arbitrary forwarded headers; behind TLS termination the public
+HTTPS origin must be explicitly allow-listed. Add 403 `origin_not_allowed` before any body
+read or preview/execution side effect.
 
-Milestone 3 changes feed verification cadence. Give `FeedHandle` one schema-check result with a
-timestamp; `readView` consults it and triggers a new verification only when it is older than
-the fallback interval, running the verification inside the same `bounded` admission so ADR-56's
-"inside the deadline" rule holds. Keep the websocket upgrade check as it is (it is per
-connection, not per refresh). Skip the snapshot `prepare` in `refresh` when `different` is false
-and a snapshot already exists. Return `view_retiring` (or wait for `stopDriver` to join) in
-`acquireDriver` for a zero-reference entry. Tests: two views on the same handle with a pool
-wrapper that counts `verifyExpectedSchemaSession` calls show one call per tick; a refresh with
-no change does not allocate a new snapshot frame (compare the `IORef`/TVar identity); a quick
-unsubscribe and resubscribe does not return `inspection_busy`.
+Require application/json for any nonempty confirmation body, accepting media-type parameters.
+An empty body remains preview without a content type. Unknown/chunked lengths must not bypass
+this rule: determine emptiness through the existing bounded body read inside the computation
+deadline, and reject a nonempty unsupported type before decoding or executing. Preserve the
+1 KiB cap and 400 malformed-confirmation response. Existing JSON confirmation tests must
+supply the JSON header. Test allowed and denied origins, empty previews, nonempty no-header
+and text/plain bodies, chunked bodies, and a throwing body callback that a foreign-origin
+refusal never invokes.
 
-Milestone 4 completes the guides: enumerate every socket code from `Protocol.hs` in the stream
-guide, add the TLS caveat (allow-list the public `https://` origin explicitly when terminating
-TLS in front of the listener), and complete the serve guide's error table with the codes named
-in Progress. Run `just user-documentation-validate`.
+M2 adds `deliveryDeadlineSeconds` to `InspectionLimits`, validates positivity and microsecond
+representability in `Budget.hs`, and updates all direct constructors/examples. The computation
+deadline still covers verification, execution and bounded encoding. Wrap the subsequent
+`respond` callback in the separate delivery timeout inside `withInspectionAdmission`.
+On expiry, unwind the callback, release the permit via the existing bracket, and throw a
+private delivery-expired exception out of the application. Do not manufacture a
+`ResponseReceived`, return normally after an incomplete response, convert it to a computation
+504, or call respond again. Network/async exceptions must retain the same unwinding behavior.
+Confirm the runner closes the connection on this path with a real socket test; dependency
+source lookup through Mori is required before relying on host-server exception semantics.
+
+Use a deterministic blocked respond callback with a one-second test deadline to prove that
+four admitted requests occupy four slots, `/health` initially returns 503 inspection_busy,
+then returns 200 within a bounded scheduling allowance after the callbacks are cancelled.
+Assert exactly one respond invocation per request and no permit leak on normal completion,
+expiry or caller cancellation. Separately start Warp on loopback with one slot and a
+one-second delivery deadline. Use a small client receive buffer and a test response cap/body
+large enough to exceed socket buffers, and explicitly establish the application remains in
+delivery before starting the recovery observation. Stop that client from reading. After
+expiry, verify termination/truncation and health recovery; do not infer backpressure merely
+from reading one byte. Document the test's body/buffer sizes and use bounded synchronization,
+not sleeps as proof of admission.
+
+M3 keeps `readView` calling `checkFeedSchema` for every refresh and keeps WebSocket upgrade
+verification. Use two active views and induce schema drift or loss of visibility between
+successful reads; each subsequent refresh must check, refuse publication under RefuseOnDrift,
+and recover only after successful verification. Keep failure results local to that failed
+refresh, not cached success or an indefinite failure cache. The tests count completed
+refresh verifications, not a fictional global handle tick. Retain the existing deadline and
+cancellation tests and record the verification-cost rationale in the guide.
+
+Keep preparing the fresh snapshot in `Feed/Driver.hs` even when semantic comparison yields no
+update. Test two reads with identical timer identity/state but different database timestamps
+and countdowns: the existing subscriber receives no delta and the sequence stays stable;
+a new subscriber receives the second timestamp/countdown. This proves semantic diffing and
+presentation freshness independently; pointer identity is not acceptance evidence.
+
+Add a `FeedRetiring` acquire error mapped to the wire code `view_retiring` in the feed/socket
+protocol path for a zero-reference retiring entry. Keep the entry and capacity accounting
+until cancellation joins; do not wait under the registry lock. Test unsubscribe/resubscribe
+while cleanup is deliberately blocked, then successful acquisition after cleanup. Update
+`Protocol.hs`, WebSocket mapping and exhaustive matches together.
+
+M4 completes the serve, stream and composition guides, including all Protocol.hs codes,
+HTTP structured errors, the TLS allow-list requirement, configurable delivery bound and
+shared health admission, per-refresh schema verification, fresh snapshots and retirement retry.
+ADR-53's implementation wording changes only when bounded delivery actually lands; ADR-56
+retains the per-refresh/fresh-presentation policy. Plan 320 owns changelog wording.
 
 
 ## Concrete Steps
+
 
 From the repository root inside `nix develop`:
 
@@ -195,34 +245,35 @@ just user-documentation-validate
 just adr-validate
 ```
 
-Manual check of the origin gate against a running standalone server (replace the connection
-string with the project database from `just postgres-start`):
+For a configured standalone test server with mutations enabled, exercise a known mutation
+route (the queue need not exist because refusals precede command execution):
 
 ```bash
-cabal run keiro-ops-http -- --database-url "host=$PWD/db dbname=keiro" --enable-mutations --listen 127.0.0.1:8090 &
 curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Origin: https://evil.example' \
   -H 'Content-Type: application/json' --data '{"confirm":"execute"}' \
-  http://127.0.0.1:8090/pgmq/dlq/read?queue=billing          # expect 403
+  'http://127.0.0.1:8090/pgmq/dlq/read?queue=billing'
 curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: text/plain' \
-  --data '{"confirm":"execute"}' http://127.0.0.1:8090/pgmq/dlq/read?queue=billing   # expect 415
+  --data '{"confirm":"execute"}' 'http://127.0.0.1:8090/pgmq/dlq/read?queue=billing'
 ```
 
-Expected output of the two `curl` lines:
-
-```text
-403
-415
-```
+Expected codes are 403 and 415. The socket fixture in M2 is the reproducible delivery proof;
+curl alone does not prove that response delivery is blocked.
 
 
 ## Validation and Acceptance
 
-M1: the four new tests pass and the two `curl` lines print 403 and 415. M2: the slow-consumer
-test passes and the revised ADR-53 validates. M3: the counting-pool test shows one verification
-per tick for two views, the no-change refresh allocates no new frame, and the resubscribe test
-does not see `inspection_busy`. M4: the validator passes and the two guides list the codes.
-Beyond compilation, the proof is the standalone server refusing the cross-site `POST` and
-answering `/health` while four stalled clients hold connections.
+
+M1 requires refusal/allowed-case tests, no body or command side effects for foreign origins,
+and the manual 403/415 check. M2 requires bounded delivery cancellation, exact permit return,
+no second response, and real Warp connection termination. Under saturation health may return
+503 before expiry; it must recover after the bounded work unwinds. The test uses a short
+explicit deadline rather than assuming a 30-second default expires within one second.
+
+M3 requires fresh verification on each of two views, drift/failure refusal and recovery,
+clock-only refresh without a delta but with fresh resubscription presentation, and a distinct
+retirement refusal followed by recovery. M4 requires complete guides and passing validators.
+Existing composition and HTTP mapping tests must still pass after plan 317 removes the old
+workflow work-limit error. No TTL/frame-cache performance result is claimed by this plan.
 
 
 ## Idempotence and Recovery
@@ -231,7 +282,9 @@ Source and documentation edits only; `git checkout` restores any file. The origi
 additive: a deployment that sets no `allowedOrigins` and receives no `Origin` header is
 unaffected; one that is called cross-site from an allow-listed console keeps working because
 the allow-list is consulted first. The delivery deadline defaults to 30 seconds and can be
-raised by the host configuration if a legitimate client needs longer.
+raised by the host configuration if a legitimate client needs longer. Shared health admission
+can refuse during that interval; the guide must state this. No successful schema observation
+or clock-bearing snapshot is reused on the basis of elapsed time or semantic equality alone.
 
 
 ## Interfaces and Dependencies
@@ -241,4 +294,6 @@ raised by the host configuration if a legitimate client needs longer.
 only); `warp`, `wai`, `websockets`; the HTTP test suite in `keiro-ops-http/test/`. The
 `InspectionLimits` record gains `deliveryDeadlineSeconds`, which direct constructors must
 supply; plan 320 records that in the changelog. The three HTTP guides are owned by this plan.
-No parent milestone must be accepted before this plan begins.
+No prerequisite blocks this plan. It owns admission/delivery in Application.hs; plan 317
+owns only workflow-error removal there. Plan 320 final acceptance and plan 303 tagging require
+this plan Complete. ADR-40/53/56 retain fresh schema and presentation constraints.

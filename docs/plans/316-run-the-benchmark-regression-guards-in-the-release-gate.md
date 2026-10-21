@@ -11,6 +11,18 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-10-21T12:21:07Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-21T13:24:48Z
+      verdict: "approved"
+      note: "Runner, recipes, release procedure, and independent gate-wiring scope agree with the tree; red/green execution evidence remains pending as documented."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-21T13:49:51Z
+      mode: "update"
+      note: "Make passing-run dependency explicit, reconcile release preflight, and link ADR-58 policy and remaining implementation evidence."
 ---
 
 # Run the benchmark regression guards in the release gate
@@ -42,14 +54,14 @@ several releases because the procedure never required it.
 - [ ] M2: `just release-gate` runs `just verify` then the guards into one retained log and
       exits non-zero when either half fails. The recipe is committed; acceptance is one run
       whose log under `keiro/bench/results/release-gates/` carries `VERIFY_EXIT=`,
-      `BENCH_EXIT=`, and the guard lines, and whose exit status is 1 while plan 315's guards are
-      still red (the demonstration that the gate stops) and 0 once they are green.
+      `BENCH_EXIT=`, and the guard lines, and whose exit status is 1 for a known failing guard (the demonstration that the gate stops)
+      and 0 after plan 315 is Complete. The failing demonstration may run earlier.
 - [ ] M3: The release procedure requires the gate. `agents/skills/release/SKILL.md` step 4
       names `just release-gate`, the quiet-machine rule, the log-in-the-release-commit rule, and
       the no-re-recording rule; `docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md`
-      Milestone 1 lists the gate log among its preflight artifacts.
-- [ ] M4: The rule is durable. An ADR records that benchmark guards are a release gate, how a
-      baseline is recorded, and when it may move.
+      Milestone 1 lists the gate log and all MasterPlan 46 mandatory prerequisites among its preflight artifacts.
+- [ ] M4: ADR-58 records the rule; after plans 315/321 acceptance, link their retained
+      recording, threshold and fixture evidence and verify that implementation meets the policy.
 
 
 ## Surprises & Discoveries
@@ -71,6 +83,10 @@ several releases because the procedure never required it.
   reported only the producer guard and never reached the command guard; a release gate must
   show the whole picture in one run.
   Date: 2026-10-21
+
+
+Revision note (2026-10-21): Made the passing-run prerequisite explicit, reconciled release
+preflight obligations, and assigned this plan sole ownership of the benchmark policy ADR.
 
 
 ## Outcomes & Retrospective
@@ -101,8 +117,8 @@ recipe calls it and accepts guard names as arguments; the `release-gate` recipe 
 `keiro/bench/results/release-gates/<UTC timestamp>-<short sha>.log` with `VERIFY_EXIT=` and
 `BENCH_EXIT=` lines, and exits non-zero unless both were 0. Step 4 of the release skill now
 names `just release-gate` as the gate. What remains is to run them for acceptance (the machine
-was busy with plan 315's sweep when they were written), to update plan 303's preflight, and to
-write the ADR.
+was busy with plan 315's sweep when they were written), verify the amended plan 303
+preflight, and finish implementation evidence for [ADR-58](../adr/0058-benchmark-release-gates-require-isolated-fixed-workloads-and-attributed-baselines.md).
 
 The companion plan `docs/plans/315-attribute-the-command-path-append-slowdown-and-restore-trustworthy-benchmark-guards.md`
 owns the baselines and makes the guards green; this plan owns the runner, the recipes, and the
@@ -112,27 +128,28 @@ skill text, and never edits a baseline.
 ## Plan of Work
 
 Milestone 1 verifies the runner. Run `nix develop -c just bench-regression` on a quiet machine
-and check that the log reaches the summary with six `GUARD(...)` lines even though some guards
-fail today, that the exit status is 1, and that `just bench-regression command inbox` runs only
+and check that the log reaches the summary with six `GUARD(...)` lines and the exit status agrees with their individual results, and that `just bench-regression command inbox` runs only
 those two.
 
 Milestone 2 verifies the release gate. Run `nix develop -c just release-gate` from a clean
-tree on a quiet machine. Today it must exit 1 with `VERIFY_EXIT=0` and `BENCH_EXIT=1`; keep
-that log as the demonstration that the gate refuses a red guard. Once plan 315 is complete,
+tree on a quiet machine. With correctness passing and a known failing benchmark it must exit 1 with `VERIFY_EXIT=0`
+and `BENCH_EXIT=1`; keep that log as the refusal demonstration. If the historical guards have
+already been repaired, use an isolated temporary baseline with a deliberately impossible
+ceiling, record the perturbation, and restore it before the passing run. Do not rely on an
+unrelated correctness failure. Once plan 315 is Complete,
 run it again and keep the passing log; the release commit for 0.22.0.0 includes it.
 
-Milestone 3 updates plan 303's Milestone 1 preflight list to name the release-gate log as a
-required artifact and to point at the skill text, so the person cutting the release reads the
-rule in both places.
+Milestone 3 verifies plan 303's preflight now names the release-gate log and MasterPlan 46's
+mandatory completions: plans 315, 316, 317, 318, 320, and 321, plus plan 319 M3. The preflight
+was amended during review remediation. Check that the release skill and plan agree; plan 319's
+optional state-inspector milestones may not substitute for required legacy labelling.
 
-Milestone 4 writes the ADR. Allocate the handle with `okf id next docs/adr --profile
-docs/adr/profile.dhall ADR`, create the record per `agents/skills/exec-plan/ADR.md`, and state:
-the six guards and their baselines are a release gate run through `just release-gate`; a
-baseline is recorded from five serial runs on a quiet machine with a README under
-`keiro/bench/results/` naming machine, GHC, PostgreSQL, and commit; a baseline moves only with
-an attributed cause recorded in such a README, never to make a guard pass; a guard that fails
-under load is rerun alone before it counts. Validate with the strict profile command and add
-the log entry with `okf log add`.
+Milestone 4 completes evidence for [ADR-58](../adr/0058-benchmark-release-gates-require-isolated-fixed-workloads-and-attributed-baselines.md), allocated during review
+remediation. Do not allocate a duplicate ADR. Check its isolated/fixed-workload policy against
+plan 321 evidence, and its five-sample/control and threshold rules against plan 315 evidence.
+Link the accepted evidence directories and red/green gate logs, retaining the distinction
+between an accepted design and demonstrated implementation. Validate the ADR bundle and
+append its update log whenever the ADR timestamp advances.
 
 
 ## Concrete Steps
@@ -149,7 +166,7 @@ just release-gate                        # verify then guards, about thirty minu
 tail -n 12 keiro/bench/results/release-gates/*.log
 ```
 
-Expected tail while plan 315 is open:
+Example failing tail (the actual failed subset may change as plan 315 progresses):
 
 ```text
 GUARD(producer-identity)=1
@@ -163,10 +180,9 @@ BENCH_EXIT=1
 finished 2026-10-21T13:40:00Z
 ```
 
-ADR allocation and validation:
+ADR validation (ADR-58 already exists):
 
 ```bash
-okf id next docs/adr --profile docs/adr/profile.dhall ADR
 okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
 ```
 
@@ -175,10 +191,10 @@ okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforc
 
 M1: the summary block exists in a full-run log and the process exit status equals 1 exactly
 when any `GUARD(...)` line is non-zero. M2: a release-gate log exists with both `_EXIT` lines
-and the recipe's exit status follows them. M3: plan 303 names the log. M4: `just adr-validate`
-passes with the new record and `docs/adr/log.md` carries its entry. The behavioural proof is
-the red run: with plan 315 open, `just release-gate` must refuse, and the log must say which
-guard refused it.
+and the recipe's exit status follows them. M3: plan 303 names the log and every mandatory MasterPlan 46 release prerequisite. M4: `just adr-validate`
+passes with ADR-58 and its accepted implementation evidence and `docs/adr/log.md` carries its entry. The behavioural proof is
+the red run: with a known failing guard, `just release-gate` must refuse and identify that
+guard; a separate passing run is required after plan 315 Complete.
 
 
 ## Idempotence and Recovery
@@ -196,5 +212,6 @@ inside `release-gate`, fix the cause and rerun the whole recipe; do not splice a
 `keiro-bench` benchmark and `tasty-bench` options; `agents/skills/release/SKILL.md` step 4;
 `docs/plans/303-...` Milestone 1; the OKF ADR bundle under `docs/adr/`. The output contract
 other work depends on is the `GUARD(<name>)=<status>` and `BENCH_REGRESSION=` lines, which
-plan 315 cites as acceptance and the release skill reads. No parent milestone must be accepted
-before this plan begins; its green outcome depends on plan 315.
+plan 315 cites as acceptance and the release skill reads. No prerequisite blocks wiring or the red demonstration. M2 passing-run acceptance requires
+plan 315 Complete; this plan remains In Progress until then. That milestone dependency is
+recorded in the MasterPlan registry, with no cycle through the already available runner.
