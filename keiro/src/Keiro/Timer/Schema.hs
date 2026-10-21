@@ -28,6 +28,17 @@ module Keiro.Timer.Schema
     DeadTimerPage (..),
     lookupTimerInspection,
     findDeadTimers,
+    PendingTimerFilter (..),
+    anyPendingTimer,
+    PendingTimerPageRequest (..),
+    PendingTimerReadError (..),
+    PendingTimerPage (..),
+    pendingTimerStatuses,
+    pendingTimerCursorKind,
+    validatePendingTimerRequest,
+    findPendingTimers,
+    pendingTimerItemJson,
+    pendingTimerPageJson,
 
     -- * Guarded foreground resume
     DeadTimerClaimRequest (..),
@@ -66,15 +77,19 @@ module Keiro.Timer.Schema
 where
 
 import Contravariant.Extras (contrazip2, contrazip5, contrazip6)
+import Data.Aeson (object, (.=))
 import Data.Int (Int32)
-import Data.Time (NominalDiffTime, addUTCTime)
+import Data.List.NonEmpty (NonEmpty (..))
+import Data.Time (NominalDiffTime, addUTCTime, diffUTCTime)
 import Data.UUID (UUID)
+import Data.UUID qualified as UUID
 import Data.UUID.V4 qualified as UUIDv4
 import Effectful (Eff, IOE, (:>))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
-import Keiro.Prelude
+import Keiro.Inspection.Cursor
+import Keiro.Prelude hiding ((.=))
 import Keiro.Timer.Types (TimerId (..), TimerRequest (..))
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
@@ -205,6 +220,133 @@ findDeadTimers deadFilter request
       ReasonAbsent -> (1, Nothing)
       ReasonExact value -> (2, Just value)
       ReasonPrefix value -> (3, Just value)
+
+-- | Exact optional owner/correlation filters. These reads reserve no work.
+data PendingTimerFilter = PendingTimerFilter
+  { processManagerName :: !(Maybe Text),
+    correlationId :: !(Maybe Text)
+  }
+  deriving stock (Generic, Eq, Show)
+
+anyPendingTimer :: PendingTimerFilter
+anyPendingTimer = PendingTimerFilter Nothing Nothing
+
+data PendingTimerPageRequest = PendingTimerPageRequest
+  { pageSize :: !Int,
+    after :: !(Maybe InspectionCursor)
+  }
+  deriving stock (Generic, Eq, Show)
+
+data PendingTimerReadError
+  = InvalidPendingTimerPageSize !Int
+  | InvalidPendingTimerCursor !CursorError
+  | PendingTimerResultTooLarge
+  deriving stock (Generic, Eq, Show)
+
+-- | Live eligibility, ordered by (fire_at,timer_id), not a frozen traversal.
+-- Limits bound returned rows, not search work. In particular filtered reads
+-- can examine the pending ledger; automatic callers must apply their budget.
+data PendingTimerPage = PendingTimerPage
+  { observedAt :: !UTCTime,
+    timers :: ![TimerInspection],
+    next :: !(Maybe InspectionCursor)
+  }
+  deriving stock (Generic, Eq, Show)
+
+pendingTimerStatuses :: NonEmpty TimerStatus
+pendingTimerStatuses = Scheduled :| [Firing]
+
+pendingTimerCursorKind :: Text
+pendingTimerCursorKind = "timer-pending"
+
+-- | Pure validation, before borrowing a connection or hydrating an instance.
+-- Continuations bind both filters as well as the exclusive database key.
+validatePendingTimerRequest :: PendingTimerFilter -> PendingTimerPageRequest -> Either PendingTimerReadError (Maybe (UTCTime, UUID))
+validatePendingTimerRequest timerFilter request
+  | request ^. #pageSize < 1 || request ^. #pageSize > 500 = Left (InvalidPendingTimerPageSize (request ^. #pageSize))
+  | otherwise = traverse decode (request ^. #after)
+  where
+    invalid = Left . InvalidPendingTimerCursor
+    decode cursor = case decodeCursor pendingTimerCursorKind cursor of
+      Left err -> invalid err
+      Right (manager, correlation, fireAt, timerText)
+        | manager /= timerFilter ^. #processManagerName || correlation /= timerFilter ^. #correlationId -> invalid (MalformedCursor "cursor belongs to another timer filter")
+        | otherwise -> case UUID.fromText timerText of
+            Nothing -> invalid (MalformedCursor "invalid timer UUID")
+            Just timerId -> Right (fireAt, timerId)
+
+-- | Read pending timers and database time in one observational transaction.
+-- No locks, claims, cleanup or mutation. Statement shapes avoid nullable OR
+-- filters so custom and generic plans can use the available ordered indexes.
+findPendingTimers :: (Store :> es) => PendingTimerFilter -> PendingTimerPageRequest -> Eff es (Either PendingTimerReadError PendingTimerPage)
+findPendingTimers timerFilter request = case validatePendingTimerRequest timerFilter request of
+  Left err -> pure (Left err)
+  Right position -> do
+    (observed, rows) <- runTransaction $ do
+      observed <- Tx.statement () (preparable "SELECT now()" mempty (D.singleRow (D.column (D.nonNullable D.timestamptz))))
+      rows <-
+        Tx.statement
+          (timerFilter ^. #processManagerName, timerFilter ^. #correlationId, fst <$> position, snd <$> position, fromIntegral size + 1)
+          (findPendingTimersStmt (isJust (timerFilter ^. #processManagerName)) (isJust (timerFilter ^. #correlationId)) (isJust position))
+      pure (observed, rows)
+    let selected = take size rows
+        continuation = case (drop size rows, reverse selected) of
+          (_ : _, lastRow : _) ->
+            let timer = lastRow ^. #timer
+             in Just
+                  <$> maybe
+                    (Left PendingTimerResultTooLarge)
+                    Right
+                    ( encodeCursorBounded
+                        pendingTimerCursorKind
+                        (timerFilter ^. #processManagerName, timerFilter ^. #correlationId, timer ^. #fireAt, UUID.toText (timerIdToUuid (timer ^. #timerId)))
+                    )
+          _ -> Right Nothing
+    pure (PendingTimerPage observed selected <$> continuation)
+  where
+    size = request ^. #pageSize
+
+-- | Shared representation for pending pages and process-manager details.
+pendingTimerItemJson :: UTCTime -> TimerInspection -> Value
+pendingTimerItemJson observed inspection =
+  let timer = inspection ^. #timer
+   in object
+        [ "timer_id" .= UUID.toText (timerIdToUuid (timer ^. #timerId)),
+          "process_manager_name" .= (timer ^. #processManagerName),
+          "correlation_id" .= (timer ^. #correlationId),
+          "fire_at" .= (timer ^. #fireAt),
+          "payload" .= (timer ^. #payload),
+          "status" .= statusToText (timer ^. #status),
+          "attempts" .= (timer ^. #attempts),
+          "fired_event_id" .= fmap (UUID.toText . eventIdToUuid) (timer ^. #firedEventId),
+          "last_error" .= (inspection ^. #lastError),
+          "due_in_seconds" .= (realToFrac (diffUTCTime (timer ^. #fireAt) observed) :: Double)
+        ]
+
+pendingTimerPageJson :: PendingTimerPage -> Value
+pendingTimerPageJson page =
+  object
+    ( ["observed_at" .= (page ^. #observedAt), "items" .= map (pendingTimerItemJson (page ^. #observedAt)) (page ^. #timers)]
+        <> maybe [] (\cursor -> ["next_cursor" .= cursorText cursor]) (page ^. #next)
+    )
+
+findPendingTimersStmt :: Bool -> Bool -> Bool -> Statement (Maybe Text, Maybe Text, Maybe UTCTime, Maybe UUID, Int64) [TimerInspection]
+findPendingTimersStmt manager correlation cursor =
+  preparable
+    ( "SELECT timer_id,process_manager_name,correlation_id,fire_at,payload,status,attempts,fired_event_id,last_error FROM keiro.keiro_timers WHERE status IN ('scheduled','firing')"
+        <> (if manager then " AND process_manager_name=$1" else " AND $1::text IS NULL")
+        <> (if correlation then " AND correlation_id=$2" else " AND $2::text IS NULL")
+        <> (if cursor then " AND (fire_at,timer_id)>($3,$4)" else " AND $3::timestamptz IS NULL AND $4::uuid IS NULL")
+        <> " ORDER BY fire_at,timer_id LIMIT $5"
+    )
+    ( contrazip5
+        (E.param (E.nullable E.text))
+        (E.param (E.nullable E.text))
+        (E.param (E.nullable E.timestamptz))
+        (E.param (E.nullable E.uuid))
+        (E.param (E.nonNullable E.int8))
+    )
+    (D.rowList timerInspectionDecoder)
 
 -- | Exact dead-row guards and an explicit total attempt ceiling. Lease seconds
 -- must be between 1 and 2147483647, avoiding interval conversion overflow.

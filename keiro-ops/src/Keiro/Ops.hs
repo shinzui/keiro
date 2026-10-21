@@ -3,6 +3,7 @@ module Keiro.Ops
     mainWithHooks,
     AppHooks (..),
     AggregateInspectors,
+    ProcessManagerInspectors,
     OpsAuditConfig (..),
     emptyAppHooks,
     OpsInvocation (..),
@@ -31,6 +32,7 @@ import Keiro.Ops.Env
 import Keiro.Ops.Inbox qualified as Inbox
 import Keiro.Ops.Outbox qualified as Outbox
 import Keiro.Ops.Pgmq qualified as Pgmq
+import Keiro.Ops.ProcessManager qualified as ProcessManager
 import Keiro.Ops.Projection qualified as Projection
 import Keiro.Ops.Rebuild qualified as Rebuild
 import Keiro.Ops.Render
@@ -73,7 +75,8 @@ data OpsInvocation = OpsInvocation
 -- | Programmatic front-end boundary. Alternative front ends must verify the
 -- live schema, use JSON output mode, and respect 'isMutation'.
 data Command
-  = Aggregate Aggregate.Command
+  = ProcessManager ProcessManager.Command
+  | Aggregate Aggregate.Command
   | Workflow Workflow.Command
   | Timer Timer.Command
   | Outbox Outbox.Command
@@ -138,8 +141,12 @@ commandParser hooks =
         <> replayAuditCommand
         <> rebuildCommand
         <> aggregateCommand
+        <> processManagerCommand
     )
   where
+    processManagerCommand = case hooks.processManagers of
+      Nothing -> mempty
+      Just _ -> command "pm" (info (ProcessManager <$> ProcessManager.commandParser) (progDesc "Inspect mounted process managers"))
     aggregateCommand =
       case hooks.aggregates of
         Nothing -> mempty
@@ -186,13 +193,16 @@ runInvocation hooks OpsInvocation {globalOptions, opsCommand} = do
 
 -- | Validate supported command arguments before admission or schema work.
 validateCommand :: Command -> Either (Text.Text, Text.Text) ()
+validateCommand (ProcessManager command) = ProcessManager.validateCommand command
 validateCommand (Aggregate command) = Aggregate.validateCommand command
 validateCommand (Workflow command) = Workflow.validateCommand command
+validateCommand (Timer command) = Timer.validateCommand command
 validateCommand _ = Right ()
 
 -- | Authoritative read/write classification for every front end.
 isMutation :: Command -> Bool
 isMutation = \case
+  ProcessManager command -> ProcessManager.isMutation command
   Aggregate command -> Aggregate.isMutation command
   Workflow workflowCommand -> Workflow.isMutation workflowCommand
   Timer timerCommand -> Timer.isMutation timerCommand
@@ -219,6 +229,7 @@ runCommandWithHeaderCache _ hooks env command = do
 -- JSON mode and enable force only after explicit mutation confirmation.
 runCommand :: AppHooks -> OpsEnv -> Command -> IO OpsOutcome
 runCommand hooks env = \case
+  ProcessManager command -> maybe (pure (Failed "process-manager inspection hook is not mounted")) (\catalog -> ProcessManager.runCommand catalog env command) hooks.processManagers
   Aggregate command -> maybe (pure (Failed "aggregate inspection hook is not mounted")) (\catalog -> Aggregate.runCommand env catalog command) hooks.aggregates
   Workflow workflowCommand -> Workflow.runCommandWithResume hooks.workflowResume env workflowCommand
   Timer timerCommand -> Timer.runCommandWithFire hooks.timerFire env timerCommand

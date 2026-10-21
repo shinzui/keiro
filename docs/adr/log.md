@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-21
+* **Update**: Extend ADR-55 and ADR-28 with source-reporting manager views, owner API adapters, raw cursor continuation and database-clock timer/shard observations without writer-side indexes.
 * **Addition**: ADR-55 records explicit default-off bounded legacy reaction provenance, unchanged write identities and unavailable modern-family evidence.
 * **Update**: Bind aggregate membership, metadata and hydration to the same physical stream while preserving custom audit-target handles.
 * **Addition**: ADR-54 records shared hydration with a specialized ordinary result and explicit aggregate display and page contracts.

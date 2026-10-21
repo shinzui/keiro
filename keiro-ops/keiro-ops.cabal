@@ -56,6 +56,7 @@ library
     Keiro.Ops.Outbox
     Keiro.Ops.Parse
     Keiro.Ops.Pgmq
+    Keiro.Ops.ProcessManager
     Keiro.Ops.Projection
     Keiro.Ops.Rebuild
     Keiro.Ops.Render

@@ -11,6 +11,7 @@ module Jitsurei.FulfillmentProcess
     fulfillmentEventStream,
     fulfillmentProcessManager,
     fulfillmentStream,
+    fulfillmentCategory,
     runFulfillmentOnce,
   )
 where

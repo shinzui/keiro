@@ -23,6 +23,11 @@
 module Keiro.Subscription.Shard.Schema
   ( -- * Worker identity
     WorkerId (..),
+    ShardOwnershipRow (..),
+    ShardedSubscriptionSummary (..),
+    listShardOwnershipDetail,
+    listShardedSubscriptionSummaries,
+    currentDatabaseTime,
 
     -- * Lease statements (composable within a transaction)
     ensureShardRows,
@@ -39,6 +44,7 @@ where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5)
 import Data.Int (Int32)
+import Data.Map.Strict qualified as Map
 import Data.Time (NominalDiffTime, addUTCTime)
 import Data.UUID (UUID)
 import Hasql.Decoders qualified as D
@@ -54,6 +60,93 @@ import "hasql-transaction" Hasql.Transaction qualified as Tx
 -- dead process's leases — it claims afresh once the old leases expire.
 newtype WorkerId = WorkerId UUID
   deriving stock (Eq, Ord, Show)
+
+-- | Detailed lease observation. No ownership or lock is acquired by reads.
+data ShardOwnershipRow = ShardOwnershipRow
+  { bucket :: !Int,
+    shardCount :: !Int,
+    owner :: !(Maybe WorkerId),
+    leaseExpiresAt :: !(Maybe UTCTime),
+    heartbeatAt :: !(Maybe UTCTime),
+    updatedAt :: !UTCTime
+  }
+  deriving stock (Generic, Eq, Show)
+
+data ShardedSubscriptionSummary = ShardedSubscriptionSummary
+  { subscriptionName :: !SubscriptionName,
+    shardCounts :: ![(Int, Int)],
+    bucketsTotal :: !Int,
+    bucketsLive :: !Int,
+    bucketsExpired :: !Int,
+    bucketsUnowned :: !Int,
+    liveOwners :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
+currentDatabaseTime :: Tx.Transaction UTCTime
+currentDatabaseTime = Tx.statement () (preparable "SELECT now()" mempty (D.singleRow (D.column (D.nonNullable D.timestamptz))))
+
+listShardOwnershipDetail :: SubscriptionName -> Tx.Transaction [ShardOwnershipRow]
+listShardOwnershipDetail (SubscriptionName name) =
+  Tx.statement name $
+    preparable
+      "SELECT bucket,shard_count,owner_worker_id,lease_expires_at,heartbeat_at,updated_at FROM keiro.keiro_subscription_shards WHERE subscription_name=$1 ORDER BY bucket"
+      (E.param (E.nonNullable E.text))
+      ( D.rowList
+          ( ShardOwnershipRow
+              <$> (fromIntegral <$> D.column (D.nonNullable D.int4))
+              <*> (fromIntegral <$> D.column (D.nonNullable D.int4))
+              <*> (fmap WorkerId <$> D.column (D.nullable D.uuid))
+              <*> D.column (D.nullable D.timestamptz)
+              <*> D.column (D.nullable D.timestamptz)
+              <*> D.column (D.nonNullable D.timestamptz)
+          )
+      )
+
+listShardedSubscriptionSummaries :: Tx.Transaction [ShardedSubscriptionSummary]
+listShardedSubscriptionSummaries = do
+  rows <-
+    Tx.statement () $
+      preparable
+        """
+        WITH owners AS (
+          SELECT subscription_name, count(DISTINCT owner_worker_id) AS live_owners
+          FROM keiro.keiro_subscription_shards
+          WHERE owner_worker_id IS NOT NULL AND lease_expires_at >= now()
+          GROUP BY subscription_name
+        )
+        SELECT s.subscription_name,s.shard_count,count(*),
+          count(*) FILTER (WHERE owner_worker_id IS NOT NULL AND lease_expires_at >= now()),
+          count(*) FILTER (WHERE owner_worker_id IS NOT NULL AND lease_expires_at < now()),
+          count(*) FILTER (WHERE owner_worker_id IS NULL),coalesce(o.live_owners,0)
+        FROM keiro.keiro_subscription_shards s LEFT JOIN owners o USING (subscription_name)
+        GROUP BY s.subscription_name,s.shard_count,o.live_owners
+        ORDER BY s.subscription_name COLLATE "C",s.shard_count
+        """
+        mempty
+        ( D.rowList
+            ( (\name count total live expired unowned owners -> ShardedSubscriptionSummary (SubscriptionName name) [(count, total)] total live expired unowned owners)
+                <$> D.column (D.nonNullable D.text)
+                <*> (fromIntegral <$> D.column (D.nonNullable D.int4))
+                <*> number
+                <*> number
+                <*> number
+                <*> number
+                <*> number
+            )
+        )
+  pure (Map.elems (Map.fromListWith merge [(row ^. #subscriptionName, row) | row <- rows]))
+  where
+    number = fromIntegral <$> D.column (D.nonNullable D.int8)
+    merge a b =
+      ShardedSubscriptionSummary
+        (a ^. #subscriptionName)
+        (b ^. #shardCounts <> a ^. #shardCounts)
+        (a ^. #bucketsTotal + b ^. #bucketsTotal)
+        (a ^. #bucketsLive + b ^. #bucketsLive)
+        (a ^. #bucketsExpired + b ^. #bucketsExpired)
+        (a ^. #bucketsUnowned + b ^. #bucketsUnowned)
+        (a ^. #liveOwners)
 
 -- | Idempotently insert the @N@ rows @(name, bucket = 0..N-1, shard_count = N)@
 -- with @owner_worker_id@ left @NULL@. @ON CONFLICT DO NOTHING@ makes calling it

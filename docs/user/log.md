@@ -1,6 +1,7 @@
 # Keiro User Documentation Log
 
 ## 2026-10-21
+* **Update**: Document manager inspection, explicit bounded legacy provenance, filter-bound pending timer pages and database-clock shard observations with read costs.
 * **Update**: Document that custom aggregate audit-target mappings must resolve metadata and hydration to the same physical stream.
 * **Update**: Document aggregate inspection descriptors, command routes, state versions, snapshot observation clocks and bounded raw-page continuation.
 

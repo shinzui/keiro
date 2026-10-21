@@ -1,0 +1,25 @@
+{
+  "base_commit": "e181cd46f78f594e8561da94cd115d04db1a68c5",
+  "scope": "actual findPendingTimers prepared statements on durable disposable fixtures; query planning evidence, not writer interference acceptance",
+  "ghc": "9.12.4",
+  "library_optimization": "O1",
+  "driver_optimization": "O2",
+  "rts": "-N2",
+  "fixtures": [
+    10000,
+    100000
+  ],
+  "plans": 72,
+  "index_changes": [],
+  "decision": "No new timer index. Preserve ordinary writer key domain, WAL/index maintenance and HOT opportunities. Broad manual reads remain deadline-bound; any automatic consumer must declare the 100,000-row measured envelope and limit timer refreshes to at most one every five seconds per shared view, then pass integrated interference validation. Larger ledgers require new evidence before automatic refresh.",
+  "limitations": [
+    "One EXPLAIN sample per case; execution times are diagnostics, not latency distributions or writer acceptance.",
+    "Warm cache and concurrent machine activity vary; normal planner and durable settings recorded per sample."
+  ],
+  "sha256": {
+    "plans.json": "93725959299971dddfc97f56e3e54e6058c915a16243d85be8bd235317a7a52e",
+    "driver.hs.txt": "31f61d573015fa9c544a866585b03a5331c3091f85bb354bc34a03a339702ced",
+    "run.log": "7c2f00e692149de16974b066d0de62e79407059831997911c0c89a403c4bd13a",
+    "source.patch.gz": "d0d06806d155be09be927891224ab18d0dd072269f2de445ebb348d053c3823f"
+  }
+}

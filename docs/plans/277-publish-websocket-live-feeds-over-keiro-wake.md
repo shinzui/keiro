@@ -47,6 +47,15 @@ You can see it working by running the test suite `cabal test keiro-ops-http-test
 
 ## Progress
 
+2026-10-20: EP-4 has implemented the pending-timer API, shared item/page JSON
+and ops command. Actual prepared-query evidence lives at
+`keiro/bench/results/inspection/pending-timer-read/`. No timer index is added,
+preserving the core writer path. Broad reads scan/sort the pending ledger;
+automatic timer views must declare the measured 100k-row ledger envelope and
+share refreshes at intervals of at least five seconds per view. Larger ledgers
+need new evidence before automatic use. These costs are inspection diagnostics;
+ordinary-writer interference remains the integrated acceptance gate.
+
 2026-10-20 coordination clarification: MasterPlan 45 now gates implementation
 on accepted shared interfaces rather than whole-child release closure. The
 integrated experiment follows the implemented functional cohort; all child

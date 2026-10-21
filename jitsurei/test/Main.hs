@@ -37,10 +37,12 @@ import Keiro.Inspection.Aggregate qualified as Aggregate
 import Keiro.Ops qualified as Ops
 import Keiro.Ops.Aggregate qualified as OpsAggregate
 import Keiro.Ops.Env qualified as OpsEnv
+import Keiro.Ops.ProcessManager qualified as OpsPM
 import Keiro.Ops.Render qualified as OpsRender
 import Keiro.PGMQ.Job (Job (..))
 import Keiro.PGMQ.Runtime (JobRuntime (..), QueueRef (..), runJobEff, withJobRuntime)
 import Keiro.ProcessManager
+import Keiro.ProcessManager.Inspect qualified as PM
 import Keiro.Projection
 import Keiro.Projection.Catalog.Operations qualified as CatalogOperations
 import Keiro.ReadModel
@@ -764,7 +766,7 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
         _ -> expectationFailure "expected aggregate command success"
 
   describe "Jitsurei process manager" $ around (withFreshResourceStoreWith fixture (withProjectionSchema jitsureiProjectionSchema)) $ do
-    it "dispatches a packing command once for a payment event" $ \(_store, StoreRunner runner) -> do
+    it "dispatches a packing command once for a payment event" $ \(store, StoreRunner runner) -> do
       -- Dispatching the fulfillment process manager now runs the target's
       -- inline order-summary projection (see commit "run target inline
       -- projections on dispatch"), which writes to jitsurei_order_summary.
@@ -784,7 +786,7 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
       first <-
         runner $
           runFulfillmentOnce
-            defaultRunCommandOptions
+            (defaultRunCommandOptions {inspectionProvenance = CaptureInspectionProvenance})
             paymentRecorded
             (PaymentApproved PaymentApprovedData {orderId = sampleOrderId, paymentRef = samplePaymentRef})
       first `shouldSatisfy` \case
@@ -796,7 +798,7 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
       second <-
         runner $
           runFulfillmentOnce
-            defaultRunCommandOptions
+            (defaultRunCommandOptions {inspectionProvenance = CaptureInspectionProvenance})
             paymentRecorded
             (PaymentApproved PaymentApprovedData {orderId = sampleOrderId, paymentRef = samplePaymentRef})
       second `shouldSatisfy` \case
@@ -805,6 +807,27 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
             (PMStateDuplicate {}, [PMCommandDuplicate {}]) -> True
             _ -> False
         _ -> False
+
+      Just (PM.SomeProcessManagerInspector inspector) <- pure (Map.lookup "jitsurei-fulfillment" jitsureiProcessManagerInspectors)
+      Right (Right (Just view)) <- runner (PM.inspectProcessManagerInstance inspector (PM.InstanceViewRequest 20) "order-100")
+      Just reaction <- pure (view ^. #lastReaction)
+      map (^. #witness) (reaction ^. #dispatchedCommands) `shouldBe` [PM.EventPresent]
+      let hooks = Ops.emptyAppHooks {Ops.processManagers = Just jitsureiProcessManagerInspectors}
+          env = OpsEnv.OpsEnv store OpsEnv.Json False [] False
+      shown <- Ops.runCommand hooks env (Ops.ProcessManager (OpsPM.Show (OpsPM.ShowOptions "jitsurei-fulfillment" "order-100" 20)))
+      case shown of
+        OpsRender.Succeeded result -> case (OpsRender.jsonValue result, PM.processManagerViewJson view) of
+          (Aeson.Object actual, Aeson.Object expected) -> do
+            map (\key -> KeyMap.lookup key actual) ["state", "last_reaction", "waiting_for"]
+              `shouldBe` map (\key -> KeyMap.lookup key expected) ["state", "last_reaction", "waiting_for"]
+            KeyMap.member "pending_timers" actual `shouldBe` True
+          _ -> expectationFailure "expected process manager JSON"
+        _ -> expectationFailure "expected process manager command success"
+      listed <- Ops.runCommand hooks env (Ops.ProcessManager (OpsPM.List (OpsPM.ListOptions "jitsurei-fulfillment" Nothing 2)))
+      Right (Right page) <- runner (PM.listProcessManagerInstances inspector (PM.InstanceListRequest 2 Nothing))
+      case listed of
+        OpsRender.Succeeded result -> OpsRender.jsonValue result `shouldBe` PM.instancePageJson page
+        _ -> expectationFailure "expected process manager list success"
 
     it "updates the target inline read model when fulfillment dispatches packing" $ \(_store, StoreRunner runner) -> do
       Right () <- runner initializeJitsureiTables

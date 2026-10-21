@@ -355,3 +355,24 @@ keiro test suite's `describe "Keiro.ProcessManager snapshots"` block proves a
 `pm:` state stream snapshots at its threshold and that a later reaction replays
 only the tail. See [Snapshots And Hydration](snapshots-and-hydration.md) for the
 codec and shape-hash rules.
+
+## Inspecting an instance
+
+The example application exports `jitsureiProcessManagerInspectors` from
+`Jitsurei.Inspection`. It uses `processManagerInspector` with the fulfillment
+manager, its `fulfillment` category and an explicit display encoder. Its embedded
+ops hooks mount that catalog beside aggregate and projection hooks:
+
+```bash
+jitsurei-demo ops pm show --name jitsurei-fulfillment --correlation order-100 --json
+jitsurei-demo ops pm list --name jitsurei-fulfillment --limit 50 --json
+jitsurei-demo ops timer pending list --manager jitsurei-fulfillment --json
+```
+
+Enable `CaptureInspectionProvenance` explicitly when running legacy reactions if
+you need intended-dispatch witnesses. Mounting the catalog leaves capture off.
+The fulfillment example test compares the library view with the command JSON
+and observes the packing command's `event_present` witness. Missing witnesses
+and candidate `waiting_for` inputs are observations, not command outcome or
+guard guarantees. See [Process Managers And Timers](../user/process-managers-and-timers.md)
+for read costs, bounds and unavailable historical provenance.

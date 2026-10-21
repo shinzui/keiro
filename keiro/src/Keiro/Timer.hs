@@ -37,6 +37,17 @@ module Keiro.Timer
     DeadTimerPage (..),
     lookupTimerInspection,
     findDeadTimers,
+    PendingTimerFilter (..),
+    anyPendingTimer,
+    PendingTimerPageRequest (..),
+    PendingTimerReadError (..),
+    PendingTimerPage (..),
+    pendingTimerStatuses,
+    pendingTimerCursorKind,
+    validatePendingTimerRequest,
+    findPendingTimers,
+    pendingTimerItemJson,
+    pendingTimerPageJson,
 
     -- * Guarded foreground resume
     DeadTimerClaimRequest (..),

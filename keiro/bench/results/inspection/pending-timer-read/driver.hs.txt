@@ -1,0 +1,73 @@
+{-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE OverloadedStrings #-}
+
+-- Actual public pending-timer API and its Hasql prepared statements. Disposable
+-- durable fixtures; intentionally separate from the small behavior tests.
+import Control.Monad (forM, forM_, unless)
+import Data.Aeson (Value, encode, object, (.=))
+import Data.ByteString.Lazy qualified as Lazy
+import Data.Text (Text)
+import Data.Text qualified as Text
+import Data.Time (UTCTime, addUTCTime)
+import Hasql.Decoders qualified as D
+import Hasql.Encoders qualified as E
+import Hasql.Pool qualified as Pool
+import Hasql.Session qualified as Session
+import Hasql.Statement qualified as Statement
+import Keiro.Inspection.Cursor
+import Keiro.Test.Postgres
+import Keiro.Timer
+import Kiroku.Store.Connection
+import Kiroku.Store.Effect (runStoreIO)
+import System.Environment (getArgs)
+
+main :: IO ()
+main = do
+  [output] <- getArgs
+  results <- withMigratedBenchmarkSuite $ \fixture -> forM [10000,100000 :: Int] $ \count ->
+    withFreshDatabase fixture $ \url ->
+      withStore (defaultConnectionSettings url) {poolSize=1} $ \store -> do
+        settings <- use store (Session.statement () (Statement.preparable
+          "SELECT jsonb_build_object('server_version',current_setting('server_version'),'fsync',current_setting('fsync'),'synchronous_commit',current_setting('synchronous_commit'),'full_page_writes',current_setting('full_page_writes'),'autovacuum',current_setting('autovacuum'))"
+          E.noParams (D.singleRow (D.column (D.nonNullable D.jsonb)))))
+        durable <- use store (Session.statement () (Statement.preparable
+          "SELECT current_setting('fsync')='on' AND current_setting('synchronous_commit')='on' AND current_setting('full_page_writes')='on' AND current_setting('autovacuum')='on'"
+          E.noParams (D.singleRow (D.column (D.nonNullable D.bool)))))
+        unless durable (fail "requires durable settings and normal autovacuum")
+        use store (Session.script ("INSERT INTO keiro.keiro_timers(timer_id,process_manager_name,correlation_id,fire_at,payload,status) SELECT ('00000000-0000-0000-0000-'||lpad(n::text,12,'0'))::uuid,CASE WHEN n<=" <> number (count*9 `div` 10) <> " THEN 'hot' ELSE 'pm-'||lpad((n%100)::text,2,'0') END,'corr-'||lpad((n%100)::text,2,'0'),'2026-10-01'::timestamptz+(n/1000)*interval '1 minute',jsonb_build_object('n',n),CASE WHEN n%4=0 THEN 'fired' WHEN n%8=1 THEN 'firing' ELSE 'scheduled' END FROM generate_series(1," <> number count <> ") n"))
+        use store (Session.script "ANALYZE keiro.keiro_timers")
+        forM ["force_custom_plan", "force_generic_plan"] $ \mode -> do
+          use store (Session.script ("SET plan_cache_mode='" <> mode <> "'"))
+          forM cases $ \(label, manager, correlation) -> forM [False,True] $ \deep -> do
+            let stamp = addUTCTime (fromIntegral (count*8 `div` 10000*60)) (read "2026-10-01 00:00:00 UTC" :: UTCTime)
+                position = if deep then Just (encodeCursor pendingTimerCursorKind (manager,correlation,stamp,"00000000-0000-0000-0000-000000000000" :: Text)) else Nothing
+                request = PendingTimerPageRequest 100 position
+                arguments = quote manager <> "," <> quote correlation <> ","
+                  <> (if deep then "'" <> Text.pack (show stamp) <> "'::timestamptz,'00000000-0000-0000-0000-000000000000'::uuid" else "NULL,NULL") <> ",101"
+            -- Hasql caches names, so use a fresh pool for each API capture.
+            withStore (defaultConnectionSettings url) {poolSize=1} $ \reader -> do
+              use reader (Session.script ("SET plan_cache_mode='" <> mode <> "'"))
+              page <- runStoreIO reader (findPendingTimers (PendingTimerFilter manager correlation) request) >>= right >>= right
+              entries <- use reader (Session.statement () (Statement.preparable
+                "SELECT name,statement FROM pg_prepared_statements WHERE statement LIKE 'SELECT timer_id,process_manager_name,correlation_id,fire_at,payload,status,attempts,fired_event_id,last_error FROM keiro.keiro_timers WHERE status IN%'" E.noParams (D.rowList ((,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text)))))
+              (name,sql) <- case entries of [entry] -> pure entry; _ -> fail ("expected one timer statement: " <> show entries)
+              plan <- use reader (Session.statement () (Statement.preparable
+                ("EXPLAIN (ANALYZE,BUFFERS,SETTINGS,FORMAT JSON) EXECUTE \"" <> Text.replace "\"" "\"\"" name <> "\"(" <> arguments <> ")")
+                E.noParams (D.singleRow (D.column (D.nonNullable D.json)))))
+              pure (object ["rows" .= count,"mode" .= mode,"case" .= label,"deep" .= deep,
+                "settings" .= (settings :: Value),"sql" .= sql,"arguments" .= arguments,"returned" .= length page.timers,
+                "has_next" .= maybe False (const True) page.next,"plan" .= (plan :: Value)])
+  Lazy.writeFile output (encode results)
+
+cases :: [(Text,Maybe Text,Maybe Text)]
+cases = [("all",Nothing,Nothing),("manager-hot",Just "hot",Nothing),("manager-rare",Just "pm-07",Nothing),
+  ("manager-absent",Just "absent",Nothing),("correlation",Nothing,Just "corr-07"),("correlation-absent",Nothing,Just "absent"),
+  ("combined-hot",Just "hot",Just "corr-07"),("combined-rare",Just "pm-07",Just "corr-07"),("combined-absent",Just "hot",Just "absent")]
+quote :: Maybe Text -> Text
+quote = maybe "NULL" (\value -> "'" <> Text.replace "'" "''" value <> "'")
+number :: Int -> Text
+number = Text.pack . show
+use :: KirokuStore -> Session.Session a -> IO a
+use store session = Pool.use store.pool session >>= right
+right :: Show e => Either e a -> IO a
+right = either (fail . show) pure

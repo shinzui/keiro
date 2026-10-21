@@ -1,6 +1,7 @@
 # Keiro Guides Log
 
 ## 2026-10-21
+* **Update**: Explain mounting the fulfillment manager inspector, explicit provenance capture and the manager/timer CLI reads.
 * **Update**: Explain source-reporting aggregate inspection through explicit descriptors while ordinary hydration retains its existing result path.
 
 ## 2026-10-20

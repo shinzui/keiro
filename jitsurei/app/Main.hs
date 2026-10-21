@@ -108,7 +108,8 @@ jitsureiOpsHooks metrics =
       timerFire = Just workflowSleepFireAction,
       replayAudit = Just (Ops.OpsAuditConfig replayAuditTargets),
       projectionCatalog = Just orderCatalogOperations,
-      aggregates = Just jitsureiAggregateInspectors
+      aggregates = Just jitsureiAggregateInspectors,
+      processManagers = Just jitsureiProcessManagerInspectors
     }
 
 -- | Give the whole executable one SDK meter provider and one instrument set.

@@ -2,7 +2,7 @@
 type: Explanation
 title: Process Managers And Timers
 description: Explain event-sourced coordination, deterministic command IDs, and durable timer workers.
-timestamp: 2026-09-08T02:26:00Z
+timestamp: 2026-10-21T01:53:43Z
 docId: DOC-17
 tags: [keiro, process-managers, timers, coordination]
 generated:
@@ -457,3 +457,53 @@ mixed-version timer writers are unsafe despite the additive columns. Before
 rollback, disable resume and drain or recover all guarded claims before starting
 an older writer. Existing `TimerRow`, `TimerInspection`, worker callback, and
 ID-only API signatures remain source-compatible.
+
+## Inspecting process managers
+
+`Keiro.ProcessManager.Inspect` describes an application's manager journal with a
+`ProcessManagerInspector`. `processManagerInspector` and
+`domainProcessManagerInspector` supply labels and candidate live input shapes for
+`HsPred` machines; the application supplies a category and display encoder.
+Custom membership mappings must round-trip through `streamFor` and the event
+stream's name resolver. Mount the catalog in `AppHooks.processManagers` to expose
+`pm show` and `pm list` through the embedded console and inspection HTTP app.
+
+`inspectProcessManagerInstance inspector (InstanceViewRequest 20) correlation`
+uses ordinary hydration with inspection diagnostics disabled. Its folded version
+is the state's version; `observed_head_version` is a separate header observation.
+The last reaction is the persisted event at that folded version. Reads of the
+header, state, source, targets and timers are separate observations, rather than
+one cross-stream snapshot. Deleted journals return lifecycle metadata and null
+state. `waiting_for` lists candidate live input shapes; it does not evaluate
+command guards or promise a future reaction.
+
+Legacy reactions record intended dispatches only when the application explicitly
+sets `inspectionProvenance = CaptureInspectionProvenance` in command options.
+The default is `NoInspectionProvenance`, independently of whether inspection is
+mounted. Capture preserves caller metadata validation and deterministic ids,
+records at most 64 targets and 64 timers, and caps the inner `keiro.pm` frame at
+16 KiB. Oversized values retain source-only evidence marked `truncated`.
+Historical events, unknown identity families and the modern reaction runner have
+unavailable provenance. An `event_present` witness proves that a recorded target
+event exists; `not_observed` does not establish failure, since silent outcomes,
+deletions and retention can leave no event witness.
+
+An instance read costs one hydration (potentially a full replay), header and last
+event reads, at most 64 target identity probes (with the existing compatibility
+probe where required), an optional source-name lookup, and one pending-timer
+page. Listing costs one raw Kiroku stream page and never hydrates. Rejected
+membership rows count toward the raw page limit, so an empty display page can
+still have a continuation. Always follow `next_cursor` until it is absent.
+
+`findPendingTimers` observes scheduled and firing timers with optional exact
+manager/correlation filters. Pages accept 1..500 items, order by `(fire_at,
+timer_id)`, and bind continuations to both filters. Database time supplies
+`observed_at`; `due_in_seconds` is negative when overdue. Reads claim or mutate
+nothing. Page size bounds returned rows, not ledger search cost: filtered reads
+can scan pending rows. Apply the inspection deadline and avoid polling broad
+filters at command rates. No new timer index or worker query is installed by
+these APIs.
+
+`shardOwnershipView` and `listShardedSubscriptions` read current lease rows and
+use database time for live/expired state and heartbeat age. Failover appears on
+the next read. They do not renew leases, restart workers or establish ownership.

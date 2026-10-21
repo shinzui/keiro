@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Operator commands wrap supported library APIs and respect schema ownership
 description: Keiro operator commands preserve library invariants, schema ownership, destructive previews, and the standalone-versus-embedded capability boundary.
-timestamp: 2026-10-21T00:26:46Z
+timestamp: 2026-10-21T01:53:43Z
 docId: ADR-28
 status: Accepted
 date: 2026-08-08
@@ -243,3 +243,11 @@ raw row even when every display item is rejected. Raw history remains Kiroku's.
   schema-changing projection rebuilds.
 - [ExecPlan 275](../plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md)
   records workflow page, write-cost, key-domain and manual-query evidence.
+
+Application-owned `processManagers` hooks mount `pm show` and `pm list`, wrapping
+`Keiro.ProcessManager.Inspect`. Database-only `timer pending list`, `shard list`
+and detailed `shard status` wrap their owning timer/shard reads. The HTTP app
+uses the same grammar and encoders. No adapter adds SQL or derives event-store
+identity from private tables. Adding the hook requires applications that build
+AppHooks records directly to supply the optional field; `emptyAppHooks` leaves
+it unmounted.

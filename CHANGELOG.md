@@ -6,6 +6,12 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+- Add process-manager persisted-state inspection and bounded raw stream listing,
+  pending-timer pages with filter-bound cursors, and database-clock shard
+  ownership/listing. Reads add no worker queries, polling tasks or migrations.
+  Embedded `pm show/list` uses the additive `AppHooks.processManagers` field;
+  direct record constructors must supply it, while `emptyAppHooks` leaves it off.
+
 ### Other Changes
 
 - Migration 0034 derives workflow inspection classes in stored generated data and

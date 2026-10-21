@@ -29,6 +29,7 @@ import Hasql.Session qualified as HasqlSession
 import Hasql.Transaction qualified as Tx
 import Keiro.DeadLetter
 import Keiro.Inbox qualified as Inbox
+import Keiro.Inspection.Cursor (InspectionCursor (..))
 import Keiro.Integration.Event
 import Keiro.Ops (AppHooks (..))
 import Keiro.Ops qualified as Ops
@@ -90,7 +91,8 @@ embeddedHooks =
       timerFire = Just (\_ -> pure Nothing),
       replayAudit = Just (OpsReplayAudit.OpsAuditConfig []),
       projectionCatalog = Just emptyCatalogOperations,
-      aggregates = Just Map.empty
+      aggregates = Just Map.empty,
+      processManagers = Just Map.empty
     }
 
 emptyCatalogOperations :: CatalogOperations.ProjectionCatalogOperations
@@ -114,6 +116,7 @@ spec :: Fixture -> Spec
 spec fixture = do
   describe "embedded command tree" do
     it "omits code-dependent commands from the standalone tree" do
+      isParseSuccess (parseOps Ops.emptyAppHooks ["pm", "show", "--name", "test", "--correlation", "one"]) `shouldBe` False
       isParseSuccess (parseOps Ops.emptyAppHooks ["aggregate", "types"]) `shouldBe` False
       isParseFailure (parseOps Ops.emptyAppHooks ["wf", "resume-once"]) `shouldBe` True
       isParseFailure (parseOps Ops.emptyAppHooks ["timer", "drain-once"]) `shouldBe` True
@@ -126,6 +129,8 @@ spec fixture = do
       isParseFailure (parseOps Ops.emptyAppHooks ["rebuild", "reproject-stream", "ops-group", "ops-projection", "orders-1"]) `shouldBe` True
 
     it "mounts every code-dependent command from typed application hooks" do
+      isParseSuccess (parseOps embeddedHooks ["pm", "show", "--name", "test", "--correlation", "one"]) `shouldBe` True
+      isParseSuccess (parseOps embeddedHooks ["pm", "list", "--name", "test"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["aggregate", "types"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["aggregate", "show", "--name", "counter", "--id", "one"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["aggregate", "snapshot", "--name", "counter", "--id", "one"]) `shouldBe` True
@@ -983,6 +988,34 @@ spec fixture = do
       workflowStatus store ref `shouldReturn` Nothing
 
   describe "timer handlers" $ around (withFreshStore fixture) do
+    it "renders pending timer pages with reusable cursors and due time" $ \store -> do
+      now <- getCurrentTime
+      let request = timerRequest "018f5f43-8a70-7b9a-9a9b-59d391a76720" (addUTCTime (-60) now)
+          another = timerRequest "018f5f43-8a70-7b9a-9a9b-59d391a76721" (addUTCTime (-60) now)
+          options = OpsTimer.PendingListOptions Nothing Nothing Nothing 1
+      expectStore store (runTransaction (Timer.scheduleTimerTx request >> Timer.scheduleTimerTx another))
+      first <- OpsTimer.runCommand (opsEnv False store) (OpsTimer.PendingList options)
+      case first of
+        Succeeded result -> case result.jsonValue of
+          Aeson.Object fields -> do
+            Just (Aeson.String cursor) <- pure (KeyMap.lookup "next_cursor" fields)
+            Just (Aeson.Array items) <- pure (KeyMap.lookup "items" fields)
+            Vector.length items `shouldBe` 1
+            case Vector.head items of
+              Aeson.Object item -> KeyMap.lookup "due_in_seconds" item `shouldSatisfy` (\case Just (Aeson.Number n) -> n < 0; _ -> False)
+              _ -> expectationFailure "expected timer item"
+            second <- OpsTimer.runCommand (opsEnv False store) (OpsTimer.PendingList (options {OpsTimer.after = Just (InspectionCursor cursor)}))
+            case second of
+              Succeeded rendered -> case rendered.jsonValue of
+                Aeson.Object page -> KeyMap.lookup "next_cursor" page `shouldBe` Nothing
+                _ -> expectationFailure "expected timer page"
+              _ -> expectationFailure (show second)
+          _ -> expectationFailure "expected timer page"
+        _ -> expectationFailure (show first)
+      filtered <- OpsTimer.runCommand (opsEnv False store) (OpsTimer.PendingList (options {OpsTimer.manager = Just "missing"}))
+      filtered `shouldSatisfy` isSucceeded
+      timerStatus store request.timerId `shouldReturn` Just Timer.Scheduled
+
     it "previews and dispatches one bounded due-timer pass through the mounted hook" $ \store -> do
       now <- getCurrentTime
       let request = timerRequest "018f5f43-8a70-7b9a-9a9b-59d391a76722" (addUTCTime (-60) now)
@@ -1290,6 +1323,32 @@ spec fixture = do
 
       status <- OpsShard.runCommand (opsEnv False store) (OpsShard.Status "ops-shards")
       resultArrayLengthFromObject "ownership" status `shouldBe` Just 2
+
+      detailed <- expectStore store (Shard.shardOwnershipView subscription)
+      case status of
+        Succeeded result -> case result.jsonValue of
+          Aeson.Object fields -> do
+            KeyMap.member "observed_at" fields `shouldBe` True
+            Just (Aeson.Array ownership) <- pure (KeyMap.lookup "ownership" fields)
+            Vector.length ownership `shouldBe` length detailed.buckets
+            case Vector.head ownership of
+              Aeson.Object row -> do
+                KeyMap.member "heartbeat_at" row `shouldBe` True
+                KeyMap.member "lease_age_seconds" row `shouldBe` True
+              _ -> expectationFailure "expected ownership row"
+          _ -> expectationFailure "expected shard status"
+        _ -> expectationFailure (show status)
+      listed <- OpsShard.runCommand (opsEnv False store) OpsShard.List
+      case listed of
+        Succeeded result -> case result.jsonValue of
+          Aeson.Object fields -> do
+            Just (Aeson.Array items) <- pure (KeyMap.lookup "items" fields)
+            Vector.length items `shouldBe` 1
+            case Vector.head items of
+              Aeson.Object row -> KeyMap.lookup "buckets_live" row `shouldBe` Just (Aeson.toJSON (2 :: Int))
+              _ -> expectationFailure "expected shard summary"
+          _ -> expectationFailure "expected shard list"
+        _ -> expectationFailure (show listed)
 
       preview <- OpsShard.runCommand (opsEnv False store) (OpsShard.Relinquish "ops-shards" worker)
       preview `shouldSatisfy` isPreview

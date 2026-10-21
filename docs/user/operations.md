@@ -2,7 +2,7 @@
 type: Runbook
 title: Operations
 description: Deploy and operate Keiro applications, workers, rebuilds, retries, and production checks.
-timestamp: 2026-10-21T00:26:46Z
+timestamp: 2026-10-21T01:53:43Z
 docId: DOC-15
 tags: [keiro, operations, deployment, runbook]
 generated:
@@ -704,3 +704,48 @@ These are observational reads: the folded state, history head and snapshot can
 observe concurrent writes at different times. Snapshot age uses the returned
 database `observed_at` clock. See the [API reference](api-reference.md#keiroinspectionaggregate)
 for the library contract.
+
+## Manager, pending-timer and shard inspection
+
+Applications mount `AppHooks.processManagers` for manager reads. Database-only
+timer and shard reads are available in the standalone tree too. These commands
+are read-only and require no `--force`:
+
+```bash
+jitsurei-demo ops pm show --name jitsurei-fulfillment --correlation order-100 --timer-limit 20 --json
+jitsurei-demo ops pm list --name jitsurei-fulfillment --limit 50 --json
+keiro-ops timer pending list --manager jitsurei-fulfillment --correlation order-100 --limit 100 --json
+keiro-ops shard list --json
+keiro-ops shard status --subscription orders-shard --json
+```
+
+The HTTP application derives `GET /pm/show`, `GET /pm/list`,
+`GET /timer/pending/list`, `GET /shard/list` and `GET /shard/status` from the same
+command grammar and handlers. Use underscore query keys such as `timer_limit`.
+Manager routes are present only when the application mounts the catalog.
+
+Pending timer pages have this shape (the final page omits `next_cursor`):
+
+```json
+{"observed_at":"2026-10-21T00:00:00Z","manager":"jitsurei-fulfillment","correlation_id":"order-100","items":[]}
+```
+
+`pm show` reports folded `state_version` separately from
+`observed_head_version`, nullable state for deleted journals, hydration source,
+last persisted reaction, candidate live input shapes and a bounded pending-timer
+page. Intended dispatch provenance is explicitly enabled by the host, bounded,
+and unavailable for older history and modern reaction identities. Its witnesses
+say `event_present` or `not_observed`; missing evidence is not a failure result.
+
+`pm list` examines one raw stream page, so an empty `items` array can have a
+continuation. Timer cursors bind manager/correlation filters. Echo cursors on the
+same read and restart pagination when changing filters; pages observe current
+rows rather than a frozen result set. Limits are 1..500. Timer reads can scan the
+pending ledger despite a small page size and remain subject to inspection
+budgets and deadlines.
+
+Shard lists include per-subscription shard-count groups, total/live/expired/
+unowned buckets and distinct live owners. Shard status preserves `ownership`
+and `shard_counts`, adding database `observed_at`, each row's `heartbeat_at` and
+`updated_at`, and `lease_age_seconds` (null for unowned rows). Lease expiry uses
+the same strict comparison as the worker; observation does not grant ownership.

@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Legacy reaction provenance is bounded explicit opt-in metadata
 description: Legacy manager writes may record bounded intended-dispatch evidence while default-off writes retain existing metadata, identities and database work.
-timestamp: 2026-10-21T01:32:02Z
+timestamp: 2026-10-21T01:53:43Z
 docId: ADR-55
 status: Accepted
 date: 2026-10-20
@@ -46,6 +46,23 @@ families and resource bounds; absence is unavailable evidence. Inspection uses
 the configured manager name for legacy identity probes and reports only event
 presence or lack of an observed witness. Modern target identities must never be
 synthesized from this family.
+
+Inspection descriptors keep display encoders and membership mappings in the
+application. Views use `hydrateWithSource` and the returned folded version,
+then read the persisted event at exactly that version. Header, source, target
+and timer observations are not a cross-stream atomic snapshot. Soft-deleted
+journals expose lifecycle metadata and null state. Live input shapes describe
+candidates rather than guard satisfaction. Listing uses one released Kiroku
+category/prefix page; rejected membership rows advance the raw cursor without
+hydration or draining more pages.
+
+Pending timer pages bind manager and correlation filters and read database time
+in the same transaction. Shard observations use database time for lease state
+and heartbeat age, preserving the runtime's strict expiry comparison. Neither
+read performs a claim, cleanup, heartbeat or other mutation. No timer index is
+introduced: candidate indexes that narrow valid writer keys are rejected, and
+response cardinality is not a query-cost guarantee. Automatic consumers must
+respect measured workloads and inspection budgets.
 
 ## Consequences
 

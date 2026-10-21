@@ -14,6 +14,8 @@ packages:
   - keiro
 interface:
   - Keiro.ProcessManager
+  - Keiro.ProcessManager.Inspect
+  - Keiro.Subscription.Shard
   - Keiro.Router
   - Keiro.Router.Selection
   - Keiro.Timer
@@ -130,3 +132,19 @@ execution, not exactly-once effects. Deploy all upgraded writers before enabling
 resume; old writers must be stopped before migration and remain stopped during
 activation. See [the consumer lifecycle](../user/process-managers-and-timers.md#resuming-deliberately-parked-work)
 and [ADR-39](../adr/0039-foreground-timer-resume-uses-expiring-token-ownership.md).
+
+## Persisted-state inspection
+
+Application-owned process-manager inspectors use ordinary source-reporting
+hydration, display encoders and live-edge candidate inputs. Last persisted
+reaction provenance is bounded explicit opt-in for legacy runners; default-off
+writes retain prior metadata and database work. Dispatch witnesses are event
+presence observations, not target outcomes. Missing and unknown-family evidence
+is unavailable, and deleted journals have null state.
+
+Pending timer pages and database-clock shard ownership reads claim nothing.
+Manager listing delegates one raw category/prefix page to the released Kiroku
+API, advances across rejected membership rows and never hydrates. Timer page
+limits bound response size rather than search cost. The focused manager,
+timer and shard cases in `keiro/test/Main.hs` cover these contracts; query-plan
+fixtures stay outside the unit suite.

@@ -6,6 +6,12 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## [Unreleased]
 
+- Add process-manager persisted-state inspection and bounded raw stream listing,
+  pending-timer pages with filter-bound cursors, and database-clock shard
+  ownership/listing. Reads add no worker queries, polling tasks or migrations.
+  Embedded `pm show/list` uses the additive `AppHooks.processManagers` field;
+  direct record constructors must supply it, while `emptyAppHooks` leaves it off.
+
 ### New Features
 
 - An optional `AppHooks.aggregates` catalog mounts read-only `aggregate types|list|show|snapshot` commands. Snapshot show adds `observed_at` and `age_seconds`.

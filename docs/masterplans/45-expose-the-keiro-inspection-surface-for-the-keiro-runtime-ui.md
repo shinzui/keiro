@@ -443,6 +443,17 @@ consequences paragraph naming the shipped package and the release that carried i
 
 ## Progress
 
+2026-10-20: EP-4 now provides the PM/timer/shard functional handoff: explicit
+bounded legacy provenance, runtime-equivalent instance views, one-page public
+stream listing, filter-bound timer pages and database-clock lease observations.
+The real fulfillment catalog is mounted alongside aggregate hooks. Full
+`just verify` and native flake checks pass for this functional handoff. No timer
+migration or recurring runtime work is introduced. Its actual prepared plans
+show broad reads scanning/sorting the pending ledger, so EP-5 timer consumers
+must stay within the measured 100k-row envelope and refresh each shared view no
+more than once per five seconds. Core-path interference remains an integrated
+gate; inspection query latency has no blanket percentage target.
+
 EP-3 now implements the aggregate catalog, shared source-reporting hydration,
 snapshot clocks and raw-page continuation. The focused core/ops/HTTP/example
 suites pass 777/51/29/25 examples, with the ordinary-worker comparison retained.

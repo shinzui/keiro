@@ -49,6 +49,15 @@ module Keiro.Subscription.Shard
     ownershipSnapshot,
     ownershipSnapshotFor,
     shardCountSnapshot,
+    LeaseState (..),
+    ShardOwnershipRow (..),
+    ShardOwnershipView (..),
+    ShardedSubscriptionSummary (..),
+    ShardedSubscriptionList (..),
+    leaseStateAt,
+    leaseAgeAt,
+    shardOwnershipView,
+    listShardedSubscriptions,
 
     -- * Fair-share helper
     fairShareTarget,
@@ -57,18 +66,23 @@ where
 
 import Data.Set (Set)
 import Data.Set qualified as Set
-import Data.Time (NominalDiffTime)
+import Data.Time (NominalDiffTime, diffUTCTime)
 import Data.Typeable (cast)
 import Data.UUID.V4 qualified as UUIDv4
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (Exception (..), throwIO)
 import Keiro.Prelude
 import Keiro.Subscription.Shard.Schema
-  ( WorkerId (..),
+  ( ShardOwnershipRow (..),
+    ShardedSubscriptionSummary (..),
+    WorkerId (..),
     claimShardsTx,
+    currentDatabaseTime,
     ensureShardRows,
     listShardCounts,
     listShardOwnership,
+    listShardOwnershipDetail,
+    listShardedSubscriptionSummaries,
     lockShardNameTx,
     lockShardRowsTx,
     releaseShardsTx,
@@ -80,6 +94,37 @@ import Kiroku.Store.Subscription.Checkpoint (ConsumerGroupResizeReport, resizeCo
 import Kiroku.Store.Subscription.Types (ConsumerGroupSize, SomeSubscriptionStartupFailure (..), SubscriptionName (..), consumerGroupSizeValue)
 import Kiroku.Store.Transaction (runTransaction)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
+
+-- | Interpret lease state at the database observation time. Equality remains
+-- live, matching the runtime's strict-less-than expiry predicate.
+data LeaseState = LeaseLive | LeaseExpired | LeaseUnowned | LeaseInvalid
+  deriving stock (Generic, Eq, Show)
+
+data ShardOwnershipView = ShardOwnershipView
+  {subscriptionName :: !SubscriptionName, observedAt :: !UTCTime, buckets :: ![ShardOwnershipRow]}
+  deriving stock (Generic, Eq, Show)
+
+data ShardedSubscriptionList = ShardedSubscriptionList
+  {observedAt :: !UTCTime, subscriptions :: ![ShardedSubscriptionSummary]}
+  deriving stock (Generic, Eq, Show)
+
+leaseStateAt :: UTCTime -> ShardOwnershipRow -> LeaseState
+leaseStateAt now row = case (row ^. #owner, row ^. #leaseExpiresAt) of
+  (Nothing, _) -> LeaseUnowned
+  (Just _, Nothing) -> LeaseInvalid
+  (Just _, Just expires) | expires < now -> LeaseExpired
+  _ -> LeaseLive
+
+leaseAgeAt :: UTCTime -> ShardOwnershipRow -> Maybe NominalDiffTime
+leaseAgeAt now row = case row ^. #owner of
+  Nothing -> Nothing
+  Just _ -> diffUTCTime now <$> row ^. #heartbeatAt
+
+shardOwnershipView :: (Store :> es) => SubscriptionName -> Eff es ShardOwnershipView
+shardOwnershipView name = runTransaction (ShardOwnershipView name <$> currentDatabaseTime <*> listShardOwnershipDetail name)
+
+listShardedSubscriptions :: (Store :> es) => Eff es ShardedSubscriptionList
+listShardedSubscriptions = runTransaction (ShardedSubscriptionList <$> currentDatabaseTime <*> listShardedSubscriptionSummaries)
 
 -- | Mint a fresh per-process 'WorkerId' (a random UUID).
 freshWorkerId :: (IOE :> es) => Eff es WorkerId
@@ -125,17 +170,17 @@ fairShareTarget shardCount liveWorkers =
 ensureShards :: (Store :> es) => ShardLease -> Eff es ()
 ensureShards lease = do
   outcome <- runTransaction $ do
-    lockShardNameTx (subscriptionName lease)
-    counts <- listShardCounts (subscriptionName lease)
-    let configured = shardCount lease
+    lockShardNameTx (lease ^. #subscriptionName)
+    counts <- listShardCounts (lease ^. #subscriptionName)
+    let configured = lease ^. #shardCount
         found = [n | (n, _) <- counts, n /= configured]
     if null found
-      then ensureShardRows (subscriptionName lease) configured >> pure (Right ())
+      then ensureShardRows (lease ^. #subscriptionName) configured >> pure (Right ())
       else
         pure
           ( Left
               ShardCountMismatch
-                { mismatchSubscriptionName = case subscriptionName lease of SubscriptionName name -> name,
+                { mismatchSubscriptionName = case lease ^. #subscriptionName of SubscriptionName name -> name,
                   mismatchConfigured = configured,
                   mismatchFound = found
                 }
@@ -214,13 +259,13 @@ resizeShardCountTx name count = do
 acquireOwnedBuckets :: (IOE :> es, Store :> es) => ShardLease -> Int -> Eff es (Set Int)
 acquireOwnedBuckets lease liveWorkers = do
   now <- liftIO getCurrentTime
-  let target = fairShareTarget (shardCount lease) liveWorkers
+  let target = fairShareTarget (lease ^. #shardCount) liveWorkers
   runTransaction $ do
-    held <- renewLeaseTx (subscriptionName lease) (workerId lease) now (leaseTtl lease)
+    held <- renewLeaseTx (lease ^. #subscriptionName) (workerId lease) now (leaseTtl lease)
     -- Claim at most one bucket per pass (see the note above on convergence).
     claimed <-
       if length held < target
-        then claimShardsTx (subscriptionName lease) (workerId lease) 1 now (leaseTtl lease)
+        then claimShardsTx (lease ^. #subscriptionName) (workerId lease) 1 now (leaseTtl lease)
         else pure []
     pure (Set.fromList held <> Set.fromList claimed)
 
@@ -229,14 +274,14 @@ acquireOwnedBuckets lease liveWorkers = do
 renewOwnedBuckets :: (IOE :> es, Store :> es) => ShardLease -> Eff es (Set Int)
 renewOwnedBuckets lease = do
   now <- liftIO getCurrentTime
-  held <- runTransaction (renewLeaseTx (subscriptionName lease) (workerId lease) now (leaseTtl lease))
+  held <- runTransaction (renewLeaseTx (lease ^. #subscriptionName) (workerId lease) now (leaseTtl lease))
   pure (Set.fromList held)
 
 -- | Graceful release of the given buckets (clean shutdown), so they are
 -- claimable immediately instead of after lease expiry.
 relinquish :: (Store :> es) => ShardLease -> Set Int -> Eff es ()
 relinquish lease buckets =
-  runTransaction (releaseShardsTx (subscriptionName lease) (workerId lease) (Set.toList buckets))
+  runTransaction (releaseShardsTx (lease ^. #subscriptionName) (workerId lease) (Set.toList buckets))
 
 -- | Read every bucket's @(bucket, owner, lease_expires_at)@ for this
 -- subscription. The worker uses it to estimate @liveWorkers@ (count of distinct
@@ -244,7 +289,7 @@ relinquish lease buckets =
 ownershipSnapshot ::
   (Store :> es) => ShardLease -> Eff es [(Int, Maybe WorkerId, Maybe UTCTime)]
 ownershipSnapshot lease =
-  runTransaction (listShardOwnership (subscriptionName lease))
+  runTransaction (listShardOwnership (lease ^. #subscriptionName))
 
 -- | Read ownership for a subscription without constructing a worker lease.
 -- Intended for operator and observability surfaces.

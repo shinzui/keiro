@@ -10,11 +10,12 @@ module Keiro.Ops.Shard
   )
 where
 
-import Data.Aeson (object, (.=))
+import Data.Aeson (Value, object, (.=))
+import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Data.Time (UTCTime, getCurrentTime)
+import Data.Time (UTCTime)
 import Data.UUID (UUID)
 import Data.UUID qualified as UUID
 import Effectful (Eff, IOE, (:>))
@@ -28,14 +29,16 @@ import Kiroku.Store.Subscription.Types (SubscriptionName (..))
 import Options.Applicative hiding (action, value)
 
 data Command
-  = Status !Text
+  = List
+  | Status !Text
   | Relinquish !Text !WorkerId
   deriving stock (Eq, Show)
 
 commandParser :: Parser Command
 commandParser =
   hsubparser
-    ( command "status" (info statusParser (progDesc "Show shard counts and ownership"))
+    ( command "list" (info (pure List) (progDesc "List sharded subscriptions and live ownership counts"))
+        <> command "status" (info statusParser (progDesc "Show shard counts and ownership"))
         <> command "relinquish" (info relinquishParser (progDesc "Preview or release every bucket owned by one worker"))
     )
   where
@@ -50,21 +53,15 @@ uuidReader = eitherReader $ \raw -> maybe (Left "expected a UUID worker id") Rig
 
 isMutation :: Command -> Bool
 isMutation = \case
+  List -> False
   Status {} -> False
   Relinquish {} -> True
 
 runCommand :: OpsEnv -> Command -> IO OpsOutcome
 runCommand env = \case
-  Status name -> do
-    now <- getCurrentTime
-    runAction env (statusAction name) (Succeeded . uncurry (statusResult now name))
+  List -> runAction env listShardedSubscriptions (Succeeded . listResult)
+  Status name -> runAction env (shardOwnershipView (SubscriptionName name)) (Succeeded . statusResult)
   Relinquish name worker -> runRelinquish env name worker
-
-statusAction :: (Store :> es) => Text -> Eff es ([(Int, Maybe WorkerId, Maybe UTCTime)], [(Int, Int)])
-statusAction name = do
-  ownership <- ownershipSnapshotFor (SubscriptionName name)
-  counts <- shardCountSnapshot (SubscriptionName name)
-  pure (ownership, counts)
 
 runRelinquish :: OpsEnv -> Text -> WorkerId -> IO OpsOutcome
 runRelinquish env name worker
@@ -94,38 +91,66 @@ runAction env action onSuccess = do
   result <- runStoreIO env.store action
   pure $ either (Failed . Text.pack . show) onSuccess result
 
-statusResult :: UTCTime -> Text -> [(Int, Maybe WorkerId, Maybe UTCTime)] -> [(Int, Int)] -> OpsResult
-statusResult now name ownership counts =
+statusResult :: ShardOwnershipView -> OpsResult
+statusResult view =
   OpsResult
     { headers = ["subscription", "bucket", "owner", "lease_expires_at", "lease_state", "configured_shards"],
-      rows = map rowText ownership,
-      jsonValue = object ["subscription" .= name, "shard_counts" .= map countJson counts, "ownership" .= map ownershipJson ownership]
+      rows = map rowText view.buckets,
+      jsonValue =
+        object
+          [ "subscription" .= name,
+            "observed_at" .= view.observedAt,
+            "shard_counts" .= map countJson counts,
+            "ownership" .= map ownershipJson view.buckets
+          ]
     }
   where
+    SubscriptionName name = view.subscriptionName
+    counts = Map.toAscList (Map.fromListWith (+) [(row.shardCount, 1 :: Int) | row <- view.buckets])
     configured = Text.intercalate "," [showText shardCount <> " (" <> showText rowCount <> " rows)" | (shardCount, rowCount) <- counts]
-    rowText (bucket, owner, expiresAt) =
+    rowText row =
       [ name,
-        showText bucket,
-        maybe "unowned" workerText owner,
-        maybe "" timeText expiresAt,
-        leaseState now owner expiresAt,
+        showText row.bucket,
+        maybe "unowned" workerText row.owner,
+        maybe "" timeText row.leaseExpiresAt,
+        leaseStateText (leaseStateAt view.observedAt row),
         configured
       ]
-    countJson (shardCount, rowCount) = object ["shard_count" .= shardCount, "rows" .= rowCount]
-    ownershipJson (bucket, owner, expiresAt) =
+    ownershipJson row =
       object
-        [ "bucket" .= bucket,
-          "owner" .= fmap workerText owner,
-          "lease_expires_at" .= expiresAt,
-          "lease_state" .= leaseState now owner expiresAt
+        [ "bucket" .= row.bucket,
+          "owner" .= fmap workerText row.owner,
+          "lease_expires_at" .= row.leaseExpiresAt,
+          "lease_state" .= leaseStateText (leaseStateAt view.observedAt row),
+          "heartbeat_at" .= row.heartbeatAt,
+          "updated_at" .= row.updatedAt,
+          "lease_age_seconds" .= fmap (\age -> realToFrac age :: Double) (leaseAgeAt view.observedAt row)
         ]
 
-leaseState :: UTCTime -> Maybe WorkerId -> Maybe UTCTime -> Text
-leaseState _ Nothing _ = "unowned"
-leaseState now (Just _) (Just expiry)
-  | expiry < now = "expired"
-  | otherwise = "live"
-leaseState _ (Just _) Nothing = "invalid"
+countJson :: (Int, Int) -> Value
+countJson (shardCount, rowCount) = object ["shard_count" .= shardCount, "rows" .= rowCount]
+
+listResult :: ShardedSubscriptionList -> OpsResult
+listResult view =
+  OpsResult
+    ["subscription", "buckets_total", "buckets_live", "live_owners"]
+    [[nameText row.subscriptionName, showText row.bucketsTotal, showText row.bucketsLive, showText row.liveOwners] | row <- view.subscriptions]
+    (object ["observed_at" .= view.observedAt, "items" .= map summaryJson view.subscriptions])
+  where
+    nameText (SubscriptionName name) = name
+    summaryJson row =
+      object
+        [ "subscription" .= nameText row.subscriptionName,
+          "shard_counts" .= map countJson row.shardCounts,
+          "buckets_total" .= row.bucketsTotal,
+          "buckets_live" .= row.bucketsLive,
+          "buckets_expired" .= row.bucketsExpired,
+          "buckets_unowned" .= row.bucketsUnowned,
+          "live_owners" .= row.liveOwners
+        ]
+
+leaseStateText :: LeaseState -> Text
+leaseStateText = \case LeaseLive -> "live"; LeaseExpired -> "expired"; LeaseUnowned -> "unowned"; LeaseInvalid -> "invalid"
 
 relinquishResult :: Bool -> Text -> WorkerId -> [Int] -> OpsResult
 relinquishResult preview name worker buckets =

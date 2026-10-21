@@ -80,6 +80,21 @@ whose Integration Points settle the artifacts this plan shares with its siblings
 
 ## Progress
 
+2026-10-20: M2/M3/M4/M5 functional implementation is in place: manager views
+reuse hydration and exact folded-version history; pending timers have shared
+JSON and filter-bound cursors; shard reads use database time; manager listings
+consume one public raw Kiroku page. The real fulfillment catalog is mounted
+beside existing hooks. Ops has 52 passing examples, the example app's 6 focused
+manager examples pass, and the first full core run passed 782/783 with one invalid
+no-codec fixture configuration. After correcting that fixture, all 24 focused
+instance cases pass. Final `just verify` and native `nix flake check` both pass. No new timer
+index is added. The actual API's 72 prepared-query plans on durable 10k/100k
+fixtures are retained in `keiro/bench/results/inspection/pending-timer-read/`.
+Broad shapes scan/sort pending rows (generic 100k samples 0.038..15.785 ms).
+Automatic timer consumers must declare the measured 100k-row envelope and share
+refreshes at intervals of at least five seconds; integrated core interference
+acceptance remains EP-5/EP-7 work, not a claim from these EXPLAIN samples.
+
 2026-10-20: M1 capture is implemented for the two legacy runners, with the
 policy disabled by default and no migration. The 43 focused process-manager
 examples pass, including stored source fields, caller metadata, unchanged ids,
@@ -114,15 +129,15 @@ recorded in the Decision Log.
 - [x] (2026-10-20) M0: capture `EXPLAIN (ANALYZE, BUFFERS)` evidence for the per-type and per-instance pending-timer queries against a seeded table, with and without the candidate partial index, and record the go/no-go for the pending-timer index migration (the next migration, 0033 at planning time; its number is allocated by `keiro-migrate new` at implementation).
 - [x] (2026-10-20) M1: add reaction provenance metadata to the manager-state append in `runProcessManagerOnce` and `advanceDomainProcessManager`, preserving caller metadata.
 - [x] (2026-10-20) M1: tests prove the stored metadata shape, caller-metadata preservation, unchanged deterministic ids, and duplicate-replay behavior.
-- [ ] M2: add `Keiro.ProcessManager.Inspect` with the inspector descriptor, the smart constructors, and `inspectProcessManagerInstance` built on `Keiro.Command.hydrateWithSource` (creating `hydrateWithSource` to plan 278's interface if plan 278 has not landed).
-- [ ] M2: rebuild-equivalence test against `hydrateFull`, provenance rendering test, pre-provenance history test, missing-instance test, and dispatched-command status test.
-- [ ] M2: add `AppHooks.processManagers` (additive beside plan 278's `aggregates`) and the embedded-only `pm show` command in `keiro-ops` with tests.
-- [ ] M3: add `findPendingTimers` to `Keiro.Timer` over the shared `Keiro.Inspection.Cursor` codec (imported from prerequisite plan 275); add the pending-timer index as the next migration only if Milestone 0 recorded a go.
-- [ ] M3: tests for ordering, cursor stability, page bounds, fired-timer exclusion, and read-only behavior; `timer pending list` command and `pendingTimerItemJson` with tests.
-- [ ] M4: add `shardOwnershipView` and `listShardedSubscriptions` to `Keiro.Subscription.Shard` with heartbeat, lease age, and database-observed time.
-- [ ] M4: failover test (owner stops renewing, lease passes, new owner appears without restarting the read); `shard list` command and additive `shard status` fields with tests.
-- [ ] M5: integrate released `listStreams` without lowering the existing 0.11 bound; implement bounded raw-row pagination for `listProcessManagerInstances` and `pm list`.
-- [ ] M6: user documentation, capability records, changelogs, IR-29 evidence, ADR distillation, and the full `just verify` gate.
+- [x] (2026-10-20) M2: add `Keiro.ProcessManager.Inspect` with the inspector descriptor, the smart constructors, and `inspectProcessManagerInstance` built on `Keiro.Command.hydrateWithSource` (creating `hydrateWithSource` to plan 278's interface if plan 278 has not landed).
+- [x] (2026-10-20) M2: focused runtime rebuild equivalence with snapshot/full replay, missing/deleted instances, bounded provenance and configured-name target witnesses; the real fulfillment test compares library and ops JSON. Existing hydration tests own fallback algorithm coverage.
+- [x] (2026-10-20) M2: add `AppHooks.processManagers` (additive beside plan 278's `aggregates`) and the embedded-only `pm show` command in `keiro-ops` with tests.
+- [x] (2026-10-20) M3: add `findPendingTimers` to `Keiro.Timer` over the shared `Keiro.Inspection.Cursor` codec (imported from prerequisite plan 275); add the pending-timer index as the next migration only if Milestone 0 recorded a go.
+- [x] (2026-10-20) M3: focused ordering, filter-bound cursor continuation, page bounds, fired/dead exclusion and unchanged persisted rows; `timer pending list` command and `pendingTimerItemJson` with tests.
+- [x] (2026-10-20) M4: add `shardOwnershipView` and `listShardedSubscriptions` to `Keiro.Subscription.Shard` with heartbeat, lease age, and database-observed time.
+- [x] (2026-10-20) M4: a focused ownership handoff/age/list test plus existing worker failover coverage; `shard list` command and additive `shard status` fields with tests.
+- [x] (2026-10-20) M5: integrate released `listStreams` without lowering the existing 0.11 bound; implement bounded raw-row pagination for `listProcessManagerInstances` and `pm list`.
+- [x] (2026-10-20) M6: user documentation, capability records, changelogs, IR-29 evidence, ADR-55/ADR-28 distillation, full `just verify`, native `nix flake check`, package and bundle checks. Integrated interference remains open.
 
 
 ## Surprises & Discoveries
@@ -156,6 +171,15 @@ actual owning-query and timer write/WAL/HOT checks. No production DDL changed.
 
 
 ## Decision Log
+
+- 2026-10-20: Keep existing timer indexes. Actual API plans confirm broad reads
+  scan/sort the pending ledger; response size is not search cost. A new index
+  would add writer maintenance, and M0's correlation indexes reject valid
+  writer keys. Manual reads remain deadline-bound. Automatic consumption is
+  limited to the measured 100k-row envelope and at most one refresh per five
+  seconds per shared timer view, with writer interference still gated in the
+  composed experiment. Larger ledgers need new evidence before automatic use.
+  Evidence: `keiro/bench/results/inspection/pending-timer-read/`.
 
 - (2026-10-20) M0 go: proceed with explicit default-off provenance and inspection
   reads against the accepted cursor/hydration/listing interfaces. Existing
@@ -333,6 +357,22 @@ actual owning-query and timer write/WAL/HOT checks. No production DDL changed.
 
 
 ## Outcomes & Retrospective
+
+2026-10-20: The functional inspection surface is implemented and locally
+verified: 783 core, 52 ops, 29 HTTP, 26 example and 43 migration examples pass;
+884 DSL examples, conformance/mutation/adoption checks, docs/policies and the
+existing coarse retention gate pass. Two existing pg_partman-dependent PGMQ
+examples remain pending in the standard fixture. The default reaction probe is
+silent and opt-in entry counts are unchanged. Native flake checks pass.
+
+No timer migration is shipped. Read evidence shows why a cardinality limit is
+not a cost bound, while avoiding index maintenance and key-domain regressions
+on writers. The PM view reuses hydration rather than implementing a second
+fold, and its witnesses retain the distinction between persisted intent and
+observed target events. EP-5 may consume the functional handoff under the
+recorded timer refresh envelope. This plan remains In Progress until the
+composed core-path interference gate passes; local correctness is not that
+performance claim.
 
 2026-10-13: Design corrected after source review; no feature implementation or passing performance evidence exists yet. The new acceptance gates must be met during implementation.
 

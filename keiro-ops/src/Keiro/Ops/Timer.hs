@@ -2,6 +2,9 @@ module Keiro.Ops.Timer
   ( Command (..),
     DrainOptions (..),
     StuckListOptions (..),
+    PendingListOptions (..),
+    pendingTimerItemJson,
+    validateCommand,
     TimerFire,
     commandParser,
     commandParserWithDrain,
@@ -20,8 +23,9 @@ import Data.UUID (UUID)
 import Data.UUID qualified as UUID
 import Effectful (Eff, IOE)
 import Effectful.Error.Static (Error)
+import Keiro.Inspection.Cursor (InspectionCursor (..))
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
-import Keiro.Ops.Parse (durationReader, nonNegativeIntReader, positiveIntReader)
+import Keiro.Ops.Parse (cursorReader, durationReader, nonNegativeIntReader, positiveIntReader)
 import Keiro.Ops.Render
 import Keiro.Timer
 import Kiroku.Store.Effect (Store, runStoreIO)
@@ -36,6 +40,10 @@ data StuckListOptions = StuckListOptions
   }
   deriving stock (Eq, Show)
 
+data PendingListOptions = PendingListOptions
+  {manager :: !(Maybe Text), correlation :: !(Maybe Text), after :: !(Maybe InspectionCursor), limit :: !Int}
+  deriving stock (Eq, Show)
+
 data DrainOptions = DrainOptions
   { limit :: !Int
   }
@@ -45,6 +53,7 @@ type TimerFire = TimerRow -> Eff '[Store, Error StoreError, IOE] (Maybe EventId)
 
 data Command
   = StuckList !StuckListOptions
+  | PendingList !PendingListOptions
   | Requeue !TimerId
   | Cancel !TimerId
   | DeadLetter !TimerId !Text
@@ -57,12 +66,13 @@ commandParser = commandParserWithDrain False
 commandParserWithDrain :: Bool -> Parser Command
 commandParserWithDrain includeDrain =
   hsubparser
-    ( command
-        "stuck"
-        ( info
-            stuckCommandParser
-            (progDesc "Find timers left firing by an interrupted worker")
-        )
+    ( command "pending" (info pendingCommandParser (progDesc "Read a bounded page of scheduled and firing timers"))
+        <> command
+          "stuck"
+          ( info
+              stuckCommandParser
+              (progDesc "Find timers left firing by an interrupted worker")
+          )
         <> command
           "requeue"
           ( info
@@ -97,6 +107,42 @@ commandParserWithDrain includeDrain =
             )
       | otherwise = mempty
 
+pendingCommandParser :: Parser Command
+pendingCommandParser =
+  hsubparser
+    ( command
+        "list"
+        ( info
+            ( PendingList
+                <$> ( PendingListOptions
+                        <$> optional (Text.pack <$> strOption (long "manager" <> metavar "NAME"))
+                        <*> optional (Text.pack <$> strOption (long "correlation" <> metavar "ID"))
+                        <*> optional (option cursorReader (long "after" <> metavar "CURSOR"))
+                        <*> option positiveIntReader (long "limit" <> metavar "N" <> Optparse.value 100)
+                    )
+            )
+            (progDesc "Observe pending timers without claiming them")
+        )
+    )
+
+pendingInput :: PendingListOptions -> (PendingTimerFilter, PendingTimerPageRequest)
+pendingInput options = (PendingTimerFilter options.manager options.correlation, PendingTimerPageRequest options.limit options.after)
+
+validateCommand :: Command -> Either (Text, Text) ()
+validateCommand (PendingList options) =
+  let (timerFilter, request) = pendingInput options
+   in either (Left . pendingError) (const (Right ())) (validatePendingTimerRequest timerFilter request)
+validateCommand _ = Right ()
+
+pendingError :: PendingTimerReadError -> (Text, Text)
+pendingError err =
+  ( case err of
+      InvalidPendingTimerPageSize _ -> "invalid_page_size"
+      InvalidPendingTimerCursor _ -> "invalid_cursor"
+      PendingTimerResultTooLarge -> "inspection_result_too_large",
+    Text.pack (show err)
+  )
+
 stuckCommandParser :: Parser Command
 stuckCommandParser =
   hsubparser
@@ -123,6 +169,7 @@ uuidReader = eitherReader $ \raw ->
 isMutation :: Command -> Bool
 isMutation = \case
   StuckList {} -> False
+  PendingList {} -> False
   Requeue {} -> True
   Cancel {} -> True
   DeadLetter {} -> True
@@ -134,10 +181,30 @@ runCommand = runCommandWithFire Nothing
 runCommandWithFire :: Maybe TimerFire -> OpsEnv -> Command -> IO OpsOutcome
 runCommandWithFire timerFire env = \case
   StuckList options -> runStuckList env options
+  PendingList options -> runPendingList env options
   Requeue timerId -> runMutation env RequeueOperation timerId Nothing
   Cancel timerId -> runMutation env CancelOperation timerId Nothing
   DeadLetter timerId reason -> runMutation env DeadLetterOperation timerId (Just reason)
   DrainOnce options -> runDrainOnce timerFire env options
+
+runPendingList :: OpsEnv -> PendingListOptions -> IO OpsOutcome
+runPendingList env options = do
+  let (timerFilter, request) = pendingInput options
+  runAction env (findPendingTimers timerFilter request) $ \case
+    Left err -> uncurry InspectionFailed (pendingError err)
+    Right page ->
+      Succeeded
+        ( OpsResult
+            ["id", "manager", "correlation", "fire_at", "status", "attempts", "payload"]
+            (map (timerRow . (.timer)) page.timers)
+            ( object
+                ( ["observed_at" .= page.observedAt, "items" .= map (pendingTimerItemJson page.observedAt) page.timers]
+                    <> maybe [] (\manager -> ["manager" .= manager]) options.manager
+                    <> maybe [] (\correlation -> ["correlation_id" .= correlation]) options.correlation
+                    <> maybe [] (\cursor -> ["next_cursor" .= cursor.cursorText]) page.next
+                )
+            )
+        )
 
 runDrainOnce :: Maybe TimerFire -> OpsEnv -> DrainOptions -> IO OpsOutcome
 runDrainOnce Nothing _ _ = pure (Failed "timer fire hook is not mounted")

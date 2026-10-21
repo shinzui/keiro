@@ -6,7 +6,7 @@ description: >-
   journal streams, list shard ownership from keiro_subscription_shards, and list a process
   manager's pending timers — then endpoints wrapping them — so an operator can see what a
   process manager last did and what it is waiting on.
-timestamp: 2026-10-14T13:54:48Z
+timestamp: 2026-10-21T01:53:43Z
 requestId: IR-29
 status: accepted
 origin: mori://shinzui/keiro-ui
@@ -127,3 +127,15 @@ kiroku before keiro wraps it. The endpoints of item 2 are delivered as read-only
 commands emitting the initiative's wire shapes; the HTTP transport itself is
 `mori://shinzui/keiro/okf/improvement-requests/concepts/IR-26`'s sister package. This request
 is accepted and completes once implementation and release evidence are recorded.
+
+## Implementation evidence (2026-10-20)
+
+Plan 274 adds `Keiro.ProcessManager.Inspect`, pending-timer pages and detailed
+shard ownership/listing through supported owner APIs. The embedded example
+mounts the fulfillment catalog beside existing hooks. Its packing test compares
+CLI JSON with the library state and intended-dispatch witness. Core tests cover
+runtime rebuild equivalence, default-off metadata, bounded capture, membership
+continuation, read-only timer pages and lease failover. Historical and modern
+reaction provenance remain explicitly unavailable; target witnesses never infer
+failure. The request stays accepted while integrated interference, feeds and
+release-cohort work remain open under MasterPlan 45.

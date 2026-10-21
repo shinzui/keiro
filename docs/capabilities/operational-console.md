@@ -15,6 +15,9 @@ packages:
 interface:
   - Keiro.Ops
   - Keiro.Ops.Embed
+  - Keiro.Ops.ProcessManager
+  - Keiro.Ops.Timer
+  - Keiro.Ops.Shard
   - Keiro.Ops.Env
 requires:
   - CAP-13
@@ -91,3 +94,10 @@ metrics or trace views, which stay with
 
 `AppHooks.aggregates` optionally mounts `aggregate types|list|show|snapshot`
 through application-owned descriptors and display encoders.
+
+`AppHooks.processManagers` mounts the application catalog beside existing hooks.
+`pm show` and `pm list` wrap the owning inspection APIs. Database-only
+`timer pending list` and `shard list` share the command grammar with HTTP;
+`shard status` adds database observation time, heartbeat and lease age while
+preserving existing keys. The example fulfillment test compares manager command
+JSON with its library view and intended packing-command witness.

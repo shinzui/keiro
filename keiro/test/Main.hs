@@ -209,15 +209,20 @@ import Keiro.ReplayAudit qualified as ReplayAudit
 import Keiro.Snapshot.Policy (shouldSnapshot, shouldSnapshotSpan)
 import Keiro.Stream qualified as Stream
 import Keiro.Subscription.Shard
-  ( ShardCountMismatch (..),
+  ( LeaseState (..),
+    ShardCountMismatch (..),
     ShardCountResizeReport (..),
     ShardLease (..),
     ShardResizeActiveLeases (..),
     WorkerId (..),
     ensureShards,
     fairShareTarget,
+    leaseAgeAt,
+    leaseStateAt,
+    listShardedSubscriptions,
     resizeShardCount,
     resizeShardCountTx,
+    shardOwnershipView,
   )
 import Keiro.Subscription.Shard.Schema
   ( claimShardsTx,
@@ -5311,6 +5316,52 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           Prelude.sum persistedCounts `shouldBe` fanOut
 
   describe "Keiro.ProcessManager" $ around (withFreshResourceStore fixture) $ do
+    it "instance view equals the runtime's own rebuild" $ \(storeHandle, StoreRunner runner) -> do
+      let options = defaultRunCommandOptions & #inspectionProvenance .~ CaptureInspectionProvenance
+          definition = unvalidated pmSnapshotCounterEventStream
+          Just codec = definition ^. #stateCodec
+          display state registers = codec ^. #encode $ (state, registers)
+          inspector = PMInspection.processManagerInspector pmSnapshotProcessManager (categoryUnsafe "pm:counter") display
+          inspect value correlation = runner (PMInspection.inspectProcessManagerInstance value (PMInspection.InstanceViewRequest 20) correlation)
+      forM_ [1 .. 3] $ \n -> do
+        let source = recordedFromEventId (EventId (UUID.fromWords 0 0 0 n)) (CounterAdded (fromIntegral n))
+        Right (Right _) <- runner (runProcessManagerOnce options pmSnapshotProcessManager source (CounterAdded (fromIntegral n)))
+        pure ()
+      Right (Right rebuilt) <- runner (hydrateFull inspectionRunCommandOptions definition ((pmSnapshotProcessManager ^. #streamFor) "order-1"))
+      Right (Right (Just view)) <- inspect inspector "order-1"
+      view ^. #state `shouldBe` Just (display (rebuilt ^. #state) (rebuilt ^. #registers))
+      view ^. #streamVersion `shouldBe` rebuilt ^. #streamVersion
+      view ^. #hydration `shouldBe` Just (FromSnapshot (StreamVersion 2))
+      view ^. #waitingFor `shouldSatisfy` (not . null)
+      let noCodec = inspector & #eventStream .~ mkEventStreamOrThrow "inspection-no-codec" definition {stateCodec = Nothing, snapshotPolicy = Never}
+      Right (Right (Just replayed)) <- inspect noCodec "order-1"
+      replayed ^. #state `shouldBe` view ^. #state
+      replayed ^. #hydration `shouldBe` Just (FullReplay NoStateCodec)
+      Right absent <- inspect inspector "missing"
+      absent `shouldBe` Right Nothing
+      Right _ <- Store.runStoreIO storeHandle (Store.softDeleteStream (StreamName "pm:counter-snap-order-1"))
+      Right (Right (Just deleted)) <- inspect inspector "order-1"
+      deleted ^. #state `shouldBe` Nothing
+      deleted ^. #hydration `shouldBe` Nothing
+      deleted ^. #deletedAt `shouldSatisfy` isJust
+
+    it "advances manager listings across rejected raw rows" $ \(_, StoreRunner runner) -> do
+      let inspector =
+            (PMInspection.processManagerInspector counterProcessManager (categoryUnsafe "pm:counter") (\state _ -> Aeson.toJSON (show state)))
+              & #correlationOf
+              .~ (\(StreamName raw) -> if raw == "pm:counter-c" then Just ("c" :: Text) else Nothing)
+          readPage after = runner (PMInspection.listProcessManagerInstances inspector (PMInspection.InstanceListRequest 2 after))
+      forM_ ["a", "b", "c"] $ \key -> do
+        Right (Right _) <- runner (runCommand defaultRunCommandOptions counterEventStream (stream ("pm:counter-" <> key)) (Add 1))
+        pure ()
+      Right (Right first) <- readPage Nothing
+      first ^. #items `shouldBe` []
+      first ^. #skipped `shouldBe` 2
+      first ^. #next `shouldSatisfy` isJust
+      Right (Right second) <- readPage (first ^. #next)
+      map (^. #correlationId) (second ^. #items) `shouldBe` ["c"]
+      second ^. #next `shouldBe` Nothing
+
     it "records source provenance for explicit inspection capture" $ \(_, StoreRunner runner) -> do
       let source = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
       let options = defaultRunCommandOptions & #inspectionProvenance .~ CaptureInspectionProvenance & #metadata ?~ Aeson.object ["actor" Aeson..= ("ops" :: Text)]
@@ -5347,6 +5398,15 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             _ -> expectationFailure "expected provenance object"
         _ -> expectationFailure "expected source provenance metadata"
       (Vector.head events ^. #eventId) `shouldBe` deterministicCommandId "counter-pm" "order-1" (source ^. #eventId) (-1)
+      let inspector = PMInspection.processManagerInspector counterProcessManager (categoryUnsafe "pm:counter") (\state _ -> Aeson.toJSON (show state))
+      Right (Right (Just observed)) <- runner (PMInspection.inspectProcessManagerInstance inspector (PMInspection.InstanceViewRequest 20) "order-1")
+      Just last <- pure (observed ^. #lastReaction)
+      map (^. #witness) (last ^. #dispatchedCommands) `shouldBe` [PMInspection.EventPresent]
+      map (^. #eventId) (last ^. #dispatchedCommands) `shouldBe` [deterministicCommandId "counter-pm" "order-1" (source ^. #eventId) 0]
+      Right _ <- runner (Store.softDeleteStream (StreamName "counter-target-order-1"))
+      Right (Right (Just afterDelete)) <- runner (PMInspection.inspectProcessManagerInstance inspector (PMInspection.InstanceViewRequest 20) "order-1")
+      Just missingTarget <- pure (afterDelete ^. #lastReaction)
+      map (^. #witness) (missingTarget ^. #dispatchedCommands) `shouldBe` [PMInspection.NotObserved]
       let another = recordedFromEventId (EventId sampleUuid2) (CounterAdded 9)
       Right invalid <- runner (runProcessManagerOnce (options & #metadata ?~ Aeson.String "invalid") counterProcessManager another (CounterAdded 9))
       invalid `shouldSatisfy` (\case Left (EncodeFailed (NonObjectCallerMetadata _)) -> True; _ -> False)
@@ -6780,6 +6840,47 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         noRecovery `shouldBe` Right 0
 
   describe "Keiro.Timer" $ around (withFreshStore fixture) $ do
+    it "pages pending timers in due order without mutating rows" $ \storeHandle -> do
+      let requests =
+            [ counterTimerRequest
+                & #timerId
+                .~ TimerId (UUID.fromWords 0 0 0 n)
+                & #processManagerName
+                .~ manager
+                & #correlationId
+                .~ correlation
+            | (n, manager, correlation) <- [(1, "a", "x"), (2, "b", "x"), (3, "a", "y"), (4, "b", "y")]
+            ]
+          readPage timerFilter size after = Store.runStoreIO storeHandle (Timer.findPendingTimers timerFilter (Timer.PendingTimerPageRequest size after))
+          ids page = map (^. #timer . #timerId) (page ^. #timers)
+          snapshot = Store.runStoreIO storeHandle (Store.runTransaction (Tx.statement () timerReadSnapshotStmt))
+      Right () <- Store.runStoreIO storeHandle $ Store.runTransaction $ traverse_ scheduleTimerTx requests
+      Right before <- snapshot
+      Right (Right first) <- readPage Timer.anyPendingTimer 2 Nothing
+      ids first `shouldBe` map (^. #timerId) (take 2 requests)
+      Right (Right second) <- readPage Timer.anyPendingTimer 2 (first ^. #next)
+      ids second `shouldBe` map (^. #timerId) (drop 2 requests)
+      second ^. #next `shouldBe` Nothing
+      forM_ [(Timer.PendingTimerFilter (Just "a") Nothing, [0, 2]), (Timer.PendingTimerFilter Nothing (Just "y"), [2, 3]), (Timer.PendingTimerFilter (Just "b") (Just "x"), [1])] $ \(timerFilter, indices) -> do
+        Right (Right page) <- readPage timerFilter 10 Nothing
+        ids page `shouldBe` [requests !! index ^. #timerId | index <- indices]
+      snapshot `shouldReturn` Right before
+      Right (Left foreignFilter) <- readPage (Timer.PendingTimerFilter (Just "a") Nothing) 2 (first ^. #next)
+      foreignFilter `shouldSatisfy` (\case Timer.InvalidPendingTimerCursor _ -> True; _ -> False)
+      Right (Just claimed) <- Store.runStoreIO storeHandle (claimDueTimer dueTimerTime)
+      Right True <- Store.runStoreIO storeHandle (markTimerFired (claimed ^. #timerId) (EventId sampleUuid2))
+      Right True <- Store.runStoreIO storeHandle (deadLetterTimer (requests !! 1 ^. #timerId) "excluded")
+      Right (Right remaining) <- readPage Timer.anyPendingTimer 10 Nothing
+      ids remaining `shouldBe` map (^. #timerId) (drop 2 requests)
+
+    it "rejects invalid pending timer requests before database work" $ \_ -> do
+      forM_ [0, -1, 501] $ \size ->
+        Timer.validatePendingTimerRequest Timer.anyPendingTimer (Timer.PendingTimerPageRequest size Nothing)
+          `shouldBe` Left (Timer.InvalidPendingTimerPageSize size)
+      forM_ [Cursor.InspectionCursor "not-a-cursor", Cursor.encodeCursor "wf-key" ("key" :: Text)] $ \cursor ->
+        Timer.validatePendingTimerRequest Timer.anyPendingTimer (Timer.PendingTimerPageRequest 1 (Just cursor))
+          `shouldSatisfy` (\case Left (Timer.InvalidPendingTimerCursor _) -> True; _ -> False)
+
     it "guards dead resume ownership and retains attempts when parked" $ \storeHandle -> do
       let tid = counterTimerRequest ^. #timerId
           request = DeadTimerClaimRequest tid (counterTimerRequest ^. #processManagerName) "deferred" 2 60
@@ -12012,6 +12113,28 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         t0 = UTCTime (ModifiedJulianDay 60000) (secondsToDiffTime 0)
         tExpired = addUTCTime 60 t0 -- past A's 30 s lease
         shardOpts = defaultShardedWorkerOptions (Category (CategoryName "orders")) 4
+    it "observes ownership failover and lease ages without changing workers" $ \store -> do
+      now <- getCurrentTime
+      Right _ <- Store.runStoreIO store $ Store.runTransaction $ do
+        ensureShardRows subName 4
+        ensureShardRows (SubscriptionName "other-shard") 2
+        claimShardsTx subName wA 4 now ttl
+      Right first <- Store.runStoreIO store (shardOwnershipView subName)
+      map (^. #owner) (first ^. #buckets) `shouldBe` replicate 4 (Just wA)
+      map (leaseStateAt (first ^. #observedAt)) (first ^. #buckets) `shouldBe` replicate 4 LeaseLive
+      map (leaseAgeAt (first ^. #observedAt)) (first ^. #buckets) `shouldBe` replicate 4 (Just (diffUTCTime (first ^. #observedAt) now))
+      Right _ <- Store.runStoreIO store $ Store.runTransaction $ claimShardsTx subName wB 4 (addUTCTime 60 now) ttl
+      Right second <- Store.runStoreIO store (shardOwnershipView subName)
+      map (^. #owner) (second ^. #buckets) `shouldBe` replicate 4 (Just wB)
+      Right listing <- Store.runStoreIO store listShardedSubscriptions
+      let summaries = listing ^. #subscriptions
+      map (^. #bucketsTotal) summaries `shouldBe` [4, 2]
+      map (^. #bucketsLive) summaries `shouldBe` [4, 0]
+      map (^. #liveOwners) summaries `shouldBe` [1, 0]
+      Right () <- Store.runStoreIO store $ Store.runTransaction $ releaseShardsTx subName wB [0]
+      Right released <- Store.runStoreIO store (shardOwnershipView subName)
+      map (leaseAgeAt (released ^. #observedAt)) (take 1 (released ^. #buckets)) `shouldBe` [Nothing]
+
     it "validates sharded worker options before startup" $ \_store -> do
       shouldBeRight_ (mkShardedWorkerOptions shardOpts)
       mkShardedWorkerOptions (shardOpts & #shardCount .~ (fromIntegral (maxBound :: Int32) + 1))

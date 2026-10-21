@@ -478,8 +478,15 @@ spec fixture = do
             (path, exit, out, err) `shouldSatisfy` (\(_, code, _, _) -> code == ExitSuccess)
             response <- call app methodGet path ""
             simpleStatus response `shouldBe` status200
-            Aeson.eitherDecode (simpleBody response) `shouldBe` (Aeson.eitherDecode (LazyByteString.fromStrict (Char8.pack out)) :: Either String Value)
+            -- These are two observations at different times. Compare stable
+            -- fields while retaining the timestamp/age shape checks in ops.
+            fmap stableObservation (Aeson.eitherDecode (simpleBody response)) `shouldBe` (fmap stableObservation (Aeson.eitherDecode (LazyByteString.fromStrict (Char8.pack out))) :: Either String Value)
             err `shouldBe` ""
+
+stableObservation :: Value -> Value
+stableObservation (Object fields) = Object (KeyMap.map stableObservation (foldr KeyMap.delete fields ["observed_at", "lease_age_seconds", "due_in_seconds"]))
+stableObservation (Array items) = Array (fmap stableObservation items)
+stableObservation value = value
 
 hooks :: Ops.AppHooks
 hooks =
@@ -511,6 +518,8 @@ commandPairs =
 cliReads :: [(Text, [String])]
 cliReads =
   [ ("/wf/list", ["wf", "list"]),
+    ("/timer/pending/list?limit=1", ["timer", "pending", "list", "--limit", "1"]),
+    ("/shard/list", ["shard", "list"]),
     ("/timer/stuck/list?min_age=0s", ["timer", "stuck", "list", "--min-age", "0s"]),
     ("/outbox/backlog", ["outbox", "backlog"]),
     ("/inbox/backlog", ["inbox", "backlog"]),
