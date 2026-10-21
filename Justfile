@@ -153,14 +153,36 @@ haskell-test:
 # dev machine; this is deliberately not wired into verify/CI. Cabal runs the
 # benchmark from the keiro package directory, so the baseline path is
 # package-relative.
+# Every guard runs even when an earlier one fails, and the script prints a
+# GUARD(name)=status line per guard plus BENCH_REGRESSION=PASSED|FAILED at the
+# end. The guards are timing-sensitive: run them on a quiet machine, with no
+# compiler, test suite, or other benchmark alongside. Pass guard names to run
+# a subset, e.g. `just bench-regression command inbox`.
 [group('haskell')]
-bench-regression:
-    cabal bench keiro-bench --benchmark-options="-p producer-identity -j1 --time-mode wall --hide-progress --stdev 1 --timeout 120s +RTS -N2 -RTS"
-    cabal bench keiro-bench --benchmark-options="-p outbox --time-mode wall --baseline bench/baseline-outbox.csv --fail-if-slower 25"
-    cabal bench keiro-bench --benchmark-options="-p inbox --time-mode wall --baseline bench/baseline-inbox.csv --fail-if-slower 25"
-    cabal bench keiro-bench --benchmark-options="-p command --time-mode wall --hide-progress --baseline bench/baseline-command.csv --fail-if-slower 25"
-    KEIRO_READ_MODEL_P95=1 cabal bench keiro-bench --benchmark-options="-p projection --time-mode wall --hide-progress --timeout 1 --baseline bench/baseline-projection.csv --fail-if-slower 25"
-    cabal bench keiro-bench --benchmark-options="-p read-model --time-mode wall --hide-progress --timeout 1 --baseline bench/baseline-read-model.csv --fail-if-slower 25"
+bench-regression *guards:
+    scripts/bench-regression.sh {{guards}}
+
+# The release gate: the correctness gate, then every benchmark regression
+# guard, with both exit statuses recorded inside one retained log under
+# keiro/bench/results/release-gates/ so a failed guard cannot be mistaken for
+# a pass. The release skill (agents/skills/release/SKILL.md) requires this
+# recipe before any tag and commits the log with the release.
+[group('meta')]
+release-gate:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    mkdir -p keiro/bench/results/release-gates
+    log="keiro/bench/results/release-gates/$(date -u +%Y%m%dT%H%M%SZ)-$(git rev-parse --short HEAD).log"
+    { echo "commit $(git rev-parse HEAD)"; echo "started $(date -u +%FT%TZ)"; uptime; } | tee "$log"
+    just verify 2>&1 | tee -a "$log"
+    verify_status=${PIPESTATUS[0]}
+    echo "VERIFY_EXIT=$verify_status" | tee -a "$log"
+    just bench-regression 2>&1 | tee -a "$log"
+    bench_status=${PIPESTATUS[0]}
+    echo "BENCH_EXIT=$bench_status" | tee -a "$log"
+    echo "finished $(date -u +%FT%TZ)" | tee -a "$log"
+    echo "log: $log"
+    [ "$verify_status" -eq 0 ] && [ "$bench_status" -eq 0 ]
 
 [group('haskell')]
 haskell-verify: haskell-build haskell-test
