@@ -1,0 +1,77 @@
+{
+  "idle": {
+    "lifecycle_before": {
+      "active_threads": 18,
+      "large_object_bytes": 169840,
+      "live_bytes": 499264,
+      "operations": 0,
+      "phase": "mounted-before-pollers"
+    },
+    "lifecycle_after": {
+      "active_threads": 17,
+      "large_object_bytes": 272232,
+      "live_bytes": 902256,
+      "operations": 6000,
+      "phase": "mounted-after-poller-cleanup-and-drain"
+    },
+    "resources_after_clients": {
+      "connections": 0,
+      "views": 0,
+      "wake_pump": false
+    },
+    "clients": 0,
+    "views": 0,
+    "poll_success": 0,
+    "poll_failure": 0
+  },
+  "slow-reader": {
+    "lifecycle_before": {
+      "active_threads": 18,
+      "large_object_bytes": 169568,
+      "live_bytes": 738760,
+      "operations": 0,
+      "phase": "mounted-before-pollers"
+    },
+    "lifecycle_after": {
+      "active_threads": 18,
+      "large_object_bytes": 877088,
+      "live_bytes": 1669584,
+      "operations": 6000,
+      "phase": "mounted-after-poller-cleanup-and-drain"
+    },
+    "resources_after_clients": {
+      "connections": 0,
+      "views": 0,
+      "wake_pump": false
+    },
+    "clients": 256,
+    "views": 32,
+    "poll_success": 13605,
+    "poll_failure": 1957
+  },
+  "churn": {
+    "lifecycle_before": {
+      "active_threads": 18,
+      "large_object_bytes": 169568,
+      "live_bytes": 738472,
+      "operations": 0,
+      "phase": "mounted-before-pollers"
+    },
+    "lifecycle_after": {
+      "active_threads": 17,
+      "large_object_bytes": 821840,
+      "live_bytes": 1610720,
+      "operations": 6000,
+      "phase": "mounted-after-poller-cleanup-and-drain"
+    },
+    "resources_after_clients": {
+      "connections": 0,
+      "views": 0,
+      "wake_pump": false
+    },
+    "clients": 32,
+    "views": 32,
+    "poll_success": 2184,
+    "poll_failure": 1712
+  }
+}

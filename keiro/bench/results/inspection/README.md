@@ -4,23 +4,50 @@ These checkpoints preserve successful correctness experiments, rejected query pa
 
 Manifests identify source and binary hashes, commands, RTS settings and limitations. Retained `driver.hs`, `runner.py` and `client.py` files preserve earlier probe versions. Compressed `source.patch.gz` files are lossless unified diffs against the named candidate commit; decompress and apply them in a detached checkout before rebuilding that checkpoint. Raw JSON contains full samples and EXPLAIN plans. The root runtime baseline is commit `3bf3ac229f21d6c95179ce49b5e8f6323322f99b`.
 
-The current narrow old/new comparison is `matched-http-qualified/`: all medians lie within 5%, but latency remains inconclusive because controls vary and active connection startup produces an outlier. The subsequent `matched-http-warm/` repeats with warmed persistent clients but aborts when the fifth old-runtime baseline fails headroom; it also establishes no latency pass. The key/class-index experiment remains rejection evidence for generic filtered plans; no extra index migration was selected from it.
+## Current candidate: 5893c7eb
 
-`class-branch-prototype/` demonstrates bounded generic class branches on clones.
-The direct expression index is rejected by `class-index-write-crash/`: HOT drops
-from 210/210 updates to zero and WAL rises about 190%. The nominal companion
-would miss this regression. The guarded candidate uses a stored class instead; its longer schema-only
-write diagnostics are retained separately and do not establish cohort acceptance.
+The final implementation keeps the published 0.21.0.0 writer schema and migration
+payloads. Inspection classes are computed during reads. Ordinary writer SQL,
+default-off provenance metadata and default hydration stay on their existing
+paths; existing runtime libraries have no web dependency.
 
-`key-domain/` rejects the unguarded workflow and compound-owner indexes because
-they reject previously accepted stored keys. `query-guarded-keys/` and
-`query-wide-key-budget/` retain 136 actual prepared plans for the revised guarded
-workflow schema, including bounded explicit failures over 100,000 wide keys.
-Owner compound indexes remain unselected; their write diagnostic exceeds the
-preliminary 5% median p95 threshold, and the pages stay manual under deadlines.
+- [Writer capacity](readside-writer-capacity/README.md): five alternating pairs,
+  throughput -1.66%, p95 -1.70%, writer-thread allocation -0.01%.
+- [Final core interference](final-core-interference/README.md): five matched
+  blocks pass all six writer throughput/p95/allocation median gates, with raw
+  variation retained.
+- [Final workflow query plans](query-readside/README.md): 68 actual prepared
+  custom/generic plans over 10k/100k ledgers, with existing indexes.
+- [Final lifecycle probes](readside-retention/README.md) and
+  [active probe](readside-retention-active/README.md): zero feed resources after
+  cleanup; mounted server retains about 0.9–1.7 MB. Timing overlapped verification
+  and is not latency acceptance.
+- [Ordinary hydration](hydration-core-path/README.md): five matched comparisons
+  per source mode plus optimized Core for the diagnostic-free worker.
+- [Pending timer plans](pending-timer-read/README.md) and
+  [projection status plans](projection-status-read/README.md): inspection cost
+  evidence and operating envelopes, not blanket performance targets.
 
-`guarded-index-write-nominal/` is a longer same-binary schema-only comparison,
-not a pre-change/full-cohort proof. Its p95 spread is still inconclusive.
-`guarded-index-write-wide/` is a failed pre-measurement fixture: a journal stream
-name constraint rejects that key during warmup. Large-row storage checks must
-be distinguished from valid completed-workflow measurements.
+## Rejected and diagnostic checkpoints
+
+The former generated-class/guarded-index candidate is withdrawn. Its
+[capacity comparison](composed-writer-capacity-final/README.md) loses 9.22%
+median writer throughput with inspection unmounted. The earlier
+[paced matrix](composed-core-interference/README.md) concealed that capacity
+loss and does not accept the final implementation. Old class/key/hash query
+plans and schema-only write tests retain the rejected approaches and why they
+were investigated; none describes the final writer schema.
+
+The original heap probe retained a floated enumeration even in the pre-change
+runtime; [controls](composed-retention-controls/README.md) and optimized Core
+identify the instrumentation root. The corrected counter then exposed lazy
+HTTP connection-registry map updates retaining finished handles. Those
+[intermediate probes](composed-feed-retention-corrected/README.md) predate the
+strict registry fix. Final lifecycle evidence is linked above.
+
+Earlier HTTP capacity/startup/long-pool and interrupted experiments are kept
+for attribution with their local limitations. In particular, narrow
+`matched-http-qualified/` and `matched-http-warm/` comparisons were inconclusive,
+and `composed-unmounted-control/` overlapped compilation and was interrupted.
+They are not acceptance. Every sample remains available; inspection request
+latency, total-process allocation and WAL have no blanket 5% target.

@@ -175,12 +175,12 @@ keiro's composed mount embeds, which is the constraint EP-6 relies on.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Serve the keiro-ops surface over HTTP (IR-26) | docs/plans/276-serve-the-keiro-ops-surface-over-http.md | None | None | In Progress |
-| 2 | Add cursor-paged workflow inspection reads for the HTTP surface (IR-30) | docs/plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md | None | None | In Progress |
+| 1 | Serve the keiro-ops surface over HTTP (IR-26) | docs/plans/276-serve-the-keiro-ops-surface-over-http.md | None | None | Complete |
+| 2 | Add cursor-paged workflow inspection reads for the HTTP surface (IR-30) | docs/plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md | None | None | Complete |
 | 3 | Expose aggregate inspection read APIs (IR-28) | docs/plans/278-expose-aggregate-inspection-read-apis.md | EP-2 M1/M3/M4 (accepted cursor, page and ops interfaces) | None | Complete |
-| 4 | Expose process-manager inspection reads (IR-29) | docs/plans/274-expose-process-manager-inspection-reads.md | EP-2 accepted cursor/ops pages; EP-3 accepted hydration/aggregate interfaces | None | In Progress |
-| 5 | Publish WebSocket live feeds over Keiro.Wake (IR-27) | docs/plans/277-publish-websocket-live-feeds-over-keiro-wake.md | EP-1 accepted HTTP/budget; EP-2 accepted pages; EP-4 accepted PM/timer reads | None | In Progress |
-| 6 | Mount composed runtime inspection surfaces under one port (IR-31) | docs/plans/302-mount-composed-runtime-inspection-surfaces-under-one-port.md | EP-1 accepted HTTP/budget | EP-5 real-feed interface for final composition | In Progress |
+| 4 | Expose process-manager inspection reads (IR-29) | docs/plans/274-expose-process-manager-inspection-reads.md | EP-2 accepted cursor/ops pages; EP-3 accepted hydration/aggregate interfaces | None | Complete |
+| 5 | Publish WebSocket live feeds over Keiro.Wake (IR-27) | docs/plans/277-publish-websocket-live-feeds-over-keiro-wake.md | EP-1 accepted HTTP/budget; EP-2 accepted pages; EP-4 accepted PM/timer reads | None | Complete |
+| 6 | Mount composed runtime inspection surfaces under one port (IR-31) | docs/plans/302-mount-composed-runtime-inspection-surfaces-under-one-port.md | EP-1 accepted HTTP/budget | EP-5 real-feed interface for final composition | Complete |
 | 7 | Release the keiro inspection surface cohort and complete the keiro-ui requests | docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md | Accepted functional handoffs from EP-1–EP-6 for integrated proof; all six Complete before release | None | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -250,14 +250,16 @@ establish leak freedom.
 **Bounded workflow routes** (owner EP-2, consumed by EP-1 and EP-5). Add the read-only command subtree `wf inspect`: `list`, `header NAME ID`, `journal NAME ID`, `steps NAME ID`, `children NAME ID`, and `awakeables NAME ID`. It exposes the new page APIs directly, without draining them. List options are repeatable `--status-class`, `--workflow-name`, `--created-since`, `--created-before`, `--updated-since`, `--updated-before`, `--ordering key|created_desc`, `--limit`, and `--after`; detail reads use `--limit`, `--after`, and, for journal/steps, `--generation`. These mechanically become `/wf/inspect/...` routes; EP-1 does not write a second route table. EP-2 adds structured `InspectionFailed code message` outcomes and updates an existing transport match; if the transport lands later, EP-1 consumes that variant. Whichever integrates second proves HTTP codes without introducing a reverse package dependency. Old CLI commands keep their shapes and are explicitly expensive compatibility routes when they drain whole histories. EP-5's workflow feed consumes this bounded listing and the seven status classes; `/wf/inspect/list` is its authoritative poll route.
 
 Workflow automatic refresh is restricted to key ordering with class/name filters.
-Superseded prototype: EP-2's generic-plan evidence with guarded migrations 0033/0034 bounds those paths;
-manual update windows and creation-order status filtering can still scan broadly
-and remain outside feed inputs. The listing merges at most 64 exceptionally wide keys / 256 KiB raw key bytes
-before time/cursor filtering and otherwise returns an explicit size failure.
-Hash keys only locate candidates; exact text and database ordering remain
-canonical. Owner compound indexes fail write/key-domain checks; child and
-awakeable pages remain manual under host SQL/read deadlines, outside feeds.
-The child is not complete merely from list results.
+The final implementation classifies existing runtime fields during reads and
+uses the published status/key indexes. It adds no generated column or writer
+index. Actual custom/generic plans at 10k/100k rows are retained in
+`keiro/bench/results/inspection/query-readside/`; broader scan/sort paths run
+under the shared SQL/read deadlines. Manual update windows and creation-order
+filtering remain outside feed inputs. The listing admits at most 64 exceptionally
+wide keys / 256 KiB raw key bytes before time/cursor filtering and otherwise
+returns an explicit size failure. Exact text and database ordering remain
+canonical. Child and awakeable pages remain manual under host deadlines,
+outside feeds. Historical guarded-index/hash plans describe rejected prototypes.
 
 **Resource limits** (EP-1 and EP-5). Application construction becomes `IO Application`, allocating one admission budget once per mount. Defaults: at most 4 concurrent inspection jobs including schema checks and feed reads, no unbounded waiting queue (HTTP excess returns 503 `inspection_busy`), 5-second overall read deadline, 2-second database statement timeout, 1 MiB encoded response/frame limit, 2 MiB queued bytes per socket, and 16 KiB request/cursor input limits (cursor maximum 4096 encoded bytes). EP-5 additionally caps distinct active views at 32, refreshes a view at most once per second, caps connections at 256 and subscriptions at three per socket, and accounts for in-flight construction as well as established resources. Oversized results fail explicitly, never truncate silently. Configure longer deadlines only through host policy. A Warp idle timeout is not a handler deadline. Use an inspection-owned pool in standalone/composed examples and recommend it for embedding; a shared pool remains supported only within these budgets and must pass interference tests. PostgreSQL CPU, IO, WAL and index-write costs are shared even with separate pools.
 
@@ -463,64 +465,34 @@ consequences paragraph naming the shipped package and the release that carried i
 
 ## Progress
 
-2026-10-20: EP-5's functional feed handoff is implemented and locally validated
-by 37 HTTP-package examples. Shared initialization/read drivers, active-only
-wake ownership, strict queue/in-flight budgets and scoped socket shutdown stay
-in the sister package. Core library dependency closures remain web-free.
-EP-6 can now exercise the real feeds under composed path prefixes; integrated
-writer interference and cohort release remain open.
+2026-10-20: All six functional surfaces are implemented: HTTP, workflow pages,
+aggregate reads, manager/timer/shard reads, shared feeds and prefix composition.
+EP-1 through EP-6 are Complete after the final integrated core-path gate.
+EP-7 remains In Progress for version approval, publication and consumer proof. The current code
+(`5893c7eb`) passes full Nix `just verify`, all eight package checks and native
+flake checks: 783 core, 15 retention, 52 ops, 40 HTTP, 26 example and 41 migration
+examples, plus 884 main DSL examples and the conformance/mutation/adoption,
+documentation and policy gates. Two standard pg_partman-dependent cases remain
+pending. Existing runtime library closures remain web-free.
 
-2026-10-20: EP-4 now provides the PM/timer/shard functional handoff: explicit
-bounded legacy provenance, runtime-equivalent instance views, one-page public
-stream listing, filter-bound timer pages and database-clock lease observations.
-The real fulfillment catalog is mounted alongside aggregate hooks. Full
-`just verify` and native flake checks pass for this functional handoff. No timer
-migration or recurring runtime work is introduced. Its actual prepared plans
-show broad reads scanning/sorting the pending ledger, so EP-5 timer consumers
-must stay within the measured 100k-row envelope and refresh each shared view no
-more than once per five seconds. Core-path interference remains an integrated
-gate; inspection query latency has no blanket percentage target.
+The writer schema, native migration manifest/lock and snapshot match published
+0.21.0.0 byte-for-byte. The unpublished inspection-only column/index prototypes
+were rejected for a measured 9.22% writer capacity loss. Five final alternating
+capacity pairs restore the gate: throughput -1.66%, p95 -1.70%, writer allocation
+-0.01%. Actual workflow query evidence covers 68 custom/generic plans over
+10k/100k rows. Final idle/active/slow-reader/churn heap probes return zero
+feed resources and about 0.9–1.7 MB post-cleanup heap with the server mounted.
+The [final matched interference matrix](../../keiro/bench/results/inspection/final-core-interference/README.md)
+passes all six writer throughput/p95/allocation median gates against pre-change
+`3bf3ac229f21d6c95179ce49b5e8f6323322f99b`. Raw variation is retained; earlier
+paced/heap prototypes are explicitly superseded diagnostics.
 
-EP-3 now implements the aggregate catalog, shared source-reporting hydration,
-snapshot clocks and raw-page continuation. The focused core/ops/HTTP/example
-suites pass 777/51/29/25 examples, with the ordinary-worker comparison retained.
-EP-3 is Complete after full Nix verification, strict documentation/policy
-checks, final resolver regression checks and Nix flake checks. Publication and
-the integrated core-interference gate remain open under EP-7.
-
-EP-1 (276) and EP-2 (275) are In Progress; EP-3 (278) is Complete; the other
-four children remain Not Started. HTTP transport, bounded workflow reads, canonical rendering and typed
-failures are implemented. Focused workflow/ops/HTTP/migration checks pass
-16/51/29/43 examples. The bounded header candidate passes Nix `just verify`, including
-772 Keiro examples, all DSL proofs, coarse retention, strict documentation/
-terminology checks and 43 migration examples. EP-3 uses the explicit accepted-interface handoff above; final release prerequisites remain open.
-
-EP-2 now preserves the existing large-key writer domain with guarded indexes
-and an exceptional-key budget. 136 actual custom/generic plans cover normal
-key/class/name pages and 100,000 wide keys; an excessive exceptional population
-fails explicitly before cursor/time filtering. Five paired schema-only write
-runs per profile retain normal/crash medians within 5%, noisy latency and higher
-large-row WAL costs. Owner detail reads stay manual under deadlines after their
-compound indexes fail write-cost and key-domain checks.
-
-The pre-implementation baseline is
-`3bf3ac229f21d6c95179ce49b5e8f6323322f99b`. A five-run narrow HTTP comparison has
-medians within 5% but inconclusive latency; its warmed repeat aborts when the
-fifth baseline lacks headroom, preserving every leg. The expanded smoke completes all polls and measures about +11.5% total-process allocation
-with 256 HTTP clients. This includes inspection work and is diagnostic, not proof of a core-path allocation regression. Timed pool attribution
-shows temporary timer roots plus a shared 32 KiB buffer step; it is not strict
-retention acceptance. A bounded exact current-row presentation candidate passes
-16 owning-query / 29 HTTP examples without a TTL or skipped schema check;
-its allocation/interference evidence remains pending. The 180-second pooled/
-direct follow-up has slightly negative fits over seconds 60..180, supporting
-finite timer/buffer warm-up without establishing domain retention acceptance.
-The first bounded N2 matrix aborts at a missing final offered poll; it is retained,
-and the client now joins its finite schedule. A separate N8/A16m profile will
-qualify fresh capacity and use adjacent old/new controls for every mode. Strict matched
-interference and persistent-retention acceptance remain open. Publication,
-consumer proofs and later child implementations remain required. The user
-confirmed that benchmarking should continue on this machine while other work
-runs; matched controls and measured uncertainty remain the acceptance basis.
+A concrete 0.22.0.0 release patch and one Keiro-only upgrade edge are prepared
+outside the working tree. The major bump accounts for public record/outcome
+changes and corrected DLQ reservation confirmation. The upgrade draft validates
+and its debug migration preview selects the exact edge. Version/changelog
+approval, versioned-cohort verification, publication and clean-consumer proof
+remain open; IR-26 through IR-31 are accepted with implementation evidence.
 
 ## Surprises & Discoveries
 
@@ -689,6 +661,16 @@ interactions between child plans. Provide concise evidence.
 
 
 ## Outcomes & Retrospective
+
+2026-10-20: The six implementation children are locally Complete. HTTP, bounded
+owner reads, shared feed drivers and allocated application composition are
+verified, with no new writer schema or default-off inspection work. The durable
+lessons are recorded in ADR-40/48/53–57: capacity must accompany paced tests,
+heap instruments must not retain their own work, ownership registries need
+strict updates, and inspection reuses owner APIs under shared finite budgets.
+The measured local core-path gates pass. The overall MasterPlan remains open
+until the approved cohort is published and an outside consumer proves it.
+
 
 Review validation (2026-10-13 local date): the ADR profile type-check and `just adr-validate` passed in `nix develop` (50 concepts); all eight plans passed tagged-fence, required-section and newly added local-link checks; `git diff --check` passed. ADR-40 now carries the durable isolation requirements. Only planning documents changed; no runtime benchmark, build, or implementation acceptance is claimed.
 

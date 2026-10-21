@@ -47,6 +47,20 @@ You can see it working by running the test suite `cabal test keiro-ops-http-test
 
 ## Progress
 
+2026-10-20: Local implementation is Complete. Candidate `5893c7eb` passes
+full Nix `just verify`, all eight package checks and native flake checks: 783
+core, 15 retention, 52 ops, 40 HTTP, 26 example and 41 migration examples,
+plus the DSL/proof/documentation/policy gates. Two standard pg_partman cases
+remain pending. The final five-block six-mode [core interference evidence](../../keiro/bench/results/inspection/final-core-interference/README.md)
+meets the writer throughput/p95/allocation gates. Separate five-pair saturation
+evidence preserves writer headroom. Final idle/active/slow-reader/churn probes
+return zero feed resources with about 0.9–1.7 MB live heap after cleanup.
+No inspection column/index/migration changes ordinary writer work. These are
+local measured bounds; publication and request completion remain EP-7 work.
+
+Earlier checkpoints below precede the final acceptance above.
+
+
 2026-10-20: Shared driver/registry, strict outbound queue, `/ws` endpoint and
 standalone mounting are implemented. All 37 HTTP-package cases pass, with three
 focused driver/registry and three real socket cases covering the lifecycle and
@@ -94,7 +108,7 @@ acceptance and release requirements remain open until measured. Use its current
 registry and execution sequence when interpreting older dependency text below.
 
 - [x] (2026-10-13) Correctness and hot-path design review applied; implementation remains outstanding.
-- [ ] Validate the review constraints and record the required performance/correctness evidence before marking this plan complete.
+- [x] (2026-10-20) Validate local review constraints with owner behavior checks, matched core-path/capacity evidence and bounded lifecycle probes; cohort publication remains EP-7.
 
 
 - [x] (2026-09-10T02:40Z) Planning: IR-27 records this plan (`## Planning` section and a bundle log entry); the request stays `proposed` until implementation evidence exists.
@@ -107,7 +121,7 @@ registry and execution sequence when interpreting older dependency text below.
 - [x] (2026-10-20) Milestone 3: focused real WebSocket tests: shared workflow snapshot/completion updates, timer fallback, projection extra-only changes, typed frames and errors, poll-encoder agreement, replacement refusal, origin/capacity/schema policy and active shutdown.
 - [x] (2026-10-20) Milestone 4: focused wake-contract evidence proves fallback truth without delivered notifications and notify-driven refresh when hints arrive; the owner retains listener recovery. See the user-directed test scope decision above.
 - [x] (2026-10-20) Milestone 5: mount the feeds in the standalone `keiro-ops-http` executable, user documentation with the verbatim NOTIFY caveat and example frames, CAP-16 update, changelogs, `mori.dhall` dependency entries, ADR distillation, and IR-27 implementation evidence.
-- [ ] Final gates: `nix fmt`, `nix develop -c just verify`, `cabal check` in `keiro-ops-http/`, `nix flake check`, and bundle validations.
+- [x] (2026-10-20) Final local gates: `nix fmt`, `nix develop -c just verify`, `cabal check` in `keiro-ops-http/`, `nix flake check`, and bundle validations.
 
 
 ## Surprises & Discoveries
@@ -178,6 +192,20 @@ Plans 274, 275, and 276 were created by other sessions while this plan was being
 
 
 ## Outcomes & Retrospective
+
+2026-10-20: Local implementation is Complete. Candidate `5893c7eb` passes
+full Nix `just verify`, all eight package checks and native flake checks: 783
+core, 15 retention, 52 ops, 40 HTTP, 26 example and 41 migration examples,
+plus the DSL/proof/documentation/policy gates. Two standard pg_partman cases
+remain pending. The final five-block six-mode [core interference evidence](../../keiro/bench/results/inspection/final-core-interference/README.md)
+meets the writer throughput/p95/allocation gates. Separate five-pair saturation
+evidence preserves writer headroom. Final idle/active/slow-reader/churn probes
+return zero feed resources with about 0.9–1.7 MB live heap after cleanup.
+No inspection column/index/migration changes ordinary writer work. These are
+local measured bounds; publication and request completion remain EP-7 work.
+
+Earlier checkpoints below precede the final acceptance above.
+
 
 2026-10-13: Design corrected after source review; no feature implementation or passing performance evidence exists yet. The new acceptance gates must be met during implementation.
 

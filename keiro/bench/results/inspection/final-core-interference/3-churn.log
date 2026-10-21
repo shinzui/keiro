@@ -1,0 +1,2 @@
+inspection clients: fromList [("feed_Just (String \"inspection_busy\")",499),("http_200",591),("http_503",44),("snapshot",143),("update",21)]
+keiro/bench/results/inspection/final-core-interference/3-churn/1-churn.json

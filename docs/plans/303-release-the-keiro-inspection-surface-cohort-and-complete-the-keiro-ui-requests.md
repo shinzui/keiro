@@ -85,15 +85,28 @@ registry and execution sequence when interpreting older dependency text below.
       MasterPlan 45 closure, and the ADR distillation pass.
 
 
-Current work (2026-10-20): `keiro-ops-http:bench:inspection-interference`
-reuses the unchanged durable workflow writer across the pre-change and candidate
-package sets and adds timer schedule/claim/fire. Its named modes are `disabled`,
-`idle`, `active-shared`, `active-distinct`, `slow-reader` and `churn`, served
-through `/keiro`. Load clients run in a separate process. Writer-thread
-allocation is recorded independently from combined runtime allocation. The
-32-view case includes workflow, timer and projection feeds, 256 clients,
-HTTP polls, 100k workflow/timer ledgers and bounded large values. Smoke runs
-overlap builds and are diagnostics only; matched acceptance is pending.
+Current work (2026-10-20): functional candidate `5893c7eb` passes full
+`just verify`, all eight package checks and native flake checks. Writer schema
+and migration payloads match 0.21.0.0. Five final saturation pairs measure
+-1.66% throughput, -1.70% p95 and -0.01% writer allocation, superseding the
+rejected stored-class/index candidate. The final five-block six-mode interference matrix passes all core median gates
+with frozen pre-change/candidate binaries, no repository compilation or tests
+alongside it, and user-authorized activity elsewhere on the machine.
+The 60-second final ownership probes return zero views/connections/wake pump
+and 0.9–1.7 MB post-cleanup heap. Query timings and total allocation are
+diagnostics rather than blanket percentage gates.
+
+Release preflight is concrete: current published/shared version 0.21.0.0;
+proposed 0.22.0.0 for public record and outcome changes and corrected DLQ
+reservation confirmation. `/tmp/keiro-mp45-release-review/release.patch`
+contains exact eight-package/internal-bound/changelog/capability edits and the
+0.21→0.22 Keiro-only upgrade edge, with blueprint/registry version 0.11.0.
+Native blueprint validation and the isolated `seihou agent --debug migrate`
+preview pass. No version edits, tags or uploads have occurred. After local
+acceptance, ask once for the concrete version/changelog approval required by
+`agents/skills/release/SKILL.md`; then apply, regenerate corpus provenance,
+verify the clean versioned cohort and publish in dependency order. Keep requests
+and this plan open until publication and the outside-consumer proof succeed.
 
 ## Surprises & Discoveries
 
@@ -179,6 +192,14 @@ observations; the HTTP tests prove the reservation and confirmation explicitly.
 
 
 ## Outcomes & Retrospective
+
+2026-10-20: Integrated local acceptance passes. The six implementation siblings
+are Complete with retained raw capacity/interference and lifecycle evidence.
+All core writer medians meet the required bounds; inspection request cost,
+whole-process allocation and WAL remain diagnostics. Version/changelog approval,
+the final clean versioned gate, eight-package publication and outside-consumer
+proof are still required. No release or request completion is claimed.
+
 
 2026-10-13: Design corrected after source review; no feature implementation or passing performance evidence exists yet. The new acceptance gates must be met during implementation.
 

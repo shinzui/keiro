@@ -1,0 +1,13 @@
+{"active_threads":147,"large_object_bytes":5490408,"live_bytes":10739248,"operations":0,"phase":"before-running"}
+{"active_threads":122,"large_object_bytes":4639528,"live_bytes":7204664,"operations":500,"phase":"running"}
+{"active_threads":122,"large_object_bytes":4857384,"live_bytes":8397072,"operations":1000,"phase":"running"}
+{"active_threads":123,"large_object_bytes":4900936,"live_bytes":8524832,"operations":1500,"phase":"running"}
+{"active_threads":123,"large_object_bytes":4748592,"live_bytes":8510456,"operations":2000,"phase":"running"}
+{"active_threads":122,"large_object_bytes":4895800,"live_bytes":8757448,"operations":2500,"phase":"running"}
+{"active_threads":123,"large_object_bytes":4790328,"live_bytes":8768752,"operations":3000,"phase":"running"}
+{"active_threads":124,"large_object_bytes":4938440,"live_bytes":8914992,"operations":3500,"phase":"running"}
+{"active_threads":123,"large_object_bytes":4942256,"live_bytes":8917432,"operations":4000,"phase":"running"}
+{"active_threads":124,"large_object_bytes":4794392,"live_bytes":8775568,"operations":4500,"phase":"running"}
+{"active_threads":124,"large_object_bytes":4828744,"live_bytes":8806936,"operations":5000,"phase":"running"}
+{"active_threads":127,"large_object_bytes":4921768,"live_bytes":8890952,"operations":5500,"phase":"running"}
+{"active_threads":128,"large_object_bytes":4897576,"live_bytes":8847624,"operations":6000,"phase":"running"}

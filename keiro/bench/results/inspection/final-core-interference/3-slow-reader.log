@@ -1,0 +1,2 @@
+inspection clients: fromList [("http_200",4684),("http_503",412),("snapshot",256)]
+keiro/bench/results/inspection/final-core-interference/3-slow-reader/1-slow-reader.json

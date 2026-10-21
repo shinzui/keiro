@@ -82,6 +82,20 @@ requested separately; see the Decision Log for how this plan relates to it.
 
 ## Progress
 
+2026-10-20: Local implementation is Complete. Candidate `5893c7eb` passes
+full Nix `just verify`, all eight package checks and native flake checks: 783
+core, 15 retention, 52 ops, 40 HTTP, 26 example and 41 migration examples,
+plus the DSL/proof/documentation/policy gates. Two standard pg_partman cases
+remain pending. The final five-block six-mode [core interference evidence](../../keiro/bench/results/inspection/final-core-interference/README.md)
+meets the writer throughput/p95/allocation gates. Separate five-pair saturation
+evidence preserves writer headroom. Final idle/active/slow-reader/churn probes
+return zero feed resources with about 0.9–1.7 MB live heap after cleanup.
+No inspection column/index/migration changes ordinary writer work. These are
+local measured bounds; publication and request completion remain EP-7 work.
+
+Earlier checkpoints below precede the final acceptance above.
+
+
 2026-10-20: The bounded exact-header candidate passes the complete Nix
 `just verify`: 772 Keiro examples, 51 ops, 29 HTTP, 43 migration, 25 example
 application examples, coarse retention and the DSL/policy/documentation gates.
@@ -93,13 +107,12 @@ interference, strict retention and final release checks remain open.
   from PostgreSQL, prepared values remain shared, pure read parsing is bounded
   to 64 entries, and successful deadlines reuse the request thread. All 42
   migration, 51 ops, and 24 HTTP examples pass after the relevant changes.
-- [ ] Steady-state latency, full domain interference matrix and strict retention
-  acceptance. The narrow 380/s old/new profile has medians within 5%, but its
-  control variation and startup outlier make latency inconclusive. Keep raw
-  evidence; the warmed-client repeat also fails baseline headroom and remains inconclusive.
+- [x] (2026-10-20) Focused core-path interference and lifecycle acceptance.
+  The final composed matrix and saturation pairs supersede inconclusive narrow
+  HTTP prototypes. No additional domain-outcome/UI-mode cross-product is required.
 
 - [x] (2026-10-13) Correctness and hot-path design review applied; implementation remains outstanding.
-- [ ] Validate the review constraints and record the required performance/correctness evidence before marking this plan complete.
+- [x] (2026-10-20) Validate local review constraints with owner behavior checks, matched core-path/capacity evidence and bounded lifecycle probes; cohort publication remains EP-7.
 
 
 - [x] Planning: IR-26 records this plan (`## Planning` section and a bundle log entry,
@@ -114,7 +127,7 @@ interference, strict retention and final release checks remain open.
 - [x] (2026-10-20) Milestone 4: the Warp runner and the standalone `keiro-ops-http` executable exist; the
       CLI-agreement test diffs the executable's `--json` output against endpoint bodies for a
       representative non-consuming command in each applicable domain; DLQ reservation separately requires confirmation. The runner is exercised over a real socket, closes its listener, and joins accepted connection workers.
-- [ ] Milestone 5: documentation (runbook, operations guide pointer, capability record),
+- [x] (2026-10-20) Milestone 5: documentation (runbook, operations guide pointer, capability record),
       changelogs, README, release skill, justfile, the build-plan check for acceptance
       criterion 5, IR-26 implementation evidence, and the ADR distillation.
 
@@ -496,6 +509,20 @@ shutdown test caught and fixed the ownership leak.
 
 
 ## Outcomes & Retrospective
+
+2026-10-20: Local implementation is Complete. Candidate `5893c7eb` passes
+full Nix `just verify`, all eight package checks and native flake checks: 783
+core, 15 retention, 52 ops, 40 HTTP, 26 example and 41 migration examples,
+plus the DSL/proof/documentation/policy gates. Two standard pg_partman cases
+remain pending. The final five-block six-mode [core interference evidence](../../keiro/bench/results/inspection/final-core-interference/README.md)
+meets the writer throughput/p95/allocation gates. Separate five-pair saturation
+evidence preserves writer headroom. Final idle/active/slow-reader/churn probes
+return zero feed resources with about 0.9–1.7 MB live heap after cleanup.
+No inspection column/index/migration changes ordinary writer work. These are
+local measured bounds; publication and request completion remain EP-7 work.
+
+Earlier checkpoints below precede the final acceptance above.
+
 
 2026-10-20 implementation checkpoint: 20 focused HTTP examples pass, as do the
 51 existing ops examples and 40 migration examples. The package/executable

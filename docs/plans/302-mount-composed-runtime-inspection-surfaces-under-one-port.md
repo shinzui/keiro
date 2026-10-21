@@ -87,6 +87,20 @@ reshapes, or re-implements an endpoint another library owns.
 
 ## Progress
 
+2026-10-20: Local implementation is Complete. Candidate `5893c7eb` passes
+full Nix `just verify`, all eight package checks and native flake checks: 783
+core, 15 retention, 52 ops, 40 HTTP, 26 example and 41 migration examples,
+plus the DSL/proof/documentation/policy gates. Two standard pg_partman cases
+remain pending. The final five-block six-mode [core interference evidence](../../keiro/bench/results/inspection/final-core-interference/README.md)
+meets the writer throughput/p95/allocation gates. Separate five-pair saturation
+evidence preserves writer headroom. Final idle/active/slow-reader/churn probes
+return zero feed resources with about 0.9–1.7 MB live heap after cleanup.
+No inspection column/index/migration changes ordinary writer work. These are
+local measured bounds; publication and request completion remain EP-7 work.
+
+Earlier checkpoints below precede the final acceptance above.
+
+
 2026-10-20 coordination clarification: MasterPlan 45 now gates implementation
 on accepted shared interfaces rather than whole-child release closure. The
 integrated experiment follows the implemented functional cohort; all child
@@ -94,7 +108,7 @@ acceptance and release requirements remain open until measured. Use its current
 registry and execution sequence when interpreting older dependency text below.
 
 - [x] (2026-10-13) Correctness and hot-path design review applied; implementation remains outstanding.
-- [ ] Validate the review constraints and record the required performance/correctness evidence before marking this plan complete.
+- [x] (2026-10-20) Validate local review constraints with owner behavior checks, matched core-path/capacity evidence and bounded lifecycle probes; cohort publication remains EP-7.
 
 
 - [x] (2026-10-20) Milestone 1: `Keiro.Ops.Http.Compose` (prefix type, router, root index, unmounted-prefix
@@ -107,7 +121,7 @@ registry and execution sequence when interpreting older dependency text below.
       landed.
 - [x] (2026-10-20) Milestone 3: the `keiro-ops-http-compose-example` executable behind the `compose-example`
       flag, enabled for this workspace in `cabal.project`, and the composition guide.
-- [ ] Milestone 4: capability record update, changelogs, `mori.dhall` entries, the ADR, IR-31
+- [x] (2026-10-20) Milestone 4: capability record update, changelogs, `mori.dhall` entries, the ADR, IR-31
       implementation evidence, and the full verification gate.
 
 
@@ -247,6 +261,20 @@ Shibuya mounting lifecycle without adding a default library dependency.
 
 
 ## Outcomes & Retrospective
+
+2026-10-20: Local implementation is Complete. Candidate `5893c7eb` passes
+full Nix `just verify`, all eight package checks and native flake checks: 783
+core, 15 retention, 52 ops, 40 HTTP, 26 example and 41 migration examples,
+plus the DSL/proof/documentation/policy gates. Two standard pg_partman cases
+remain pending. The final five-block six-mode [core interference evidence](../../keiro/bench/results/inspection/final-core-interference/README.md)
+meets the writer throughput/p95/allocation gates. Separate five-pair saturation
+evidence preserves writer headroom. Final idle/active/slow-reader/churn probes
+return zero feed resources with about 0.9–1.7 MB live heap after cleanup.
+No inspection column/index/migration changes ordinary writer work. These are
+local measured bounds; publication and request completion remain EP-7 work.
+
+Earlier checkpoints below precede the final acceptance above.
+
 
 2026-10-13: Design corrected after source review; no feature implementation or passing performance evidence exists yet. The new acceptance gates must be met during implementation.
 

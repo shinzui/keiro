@@ -1,0 +1,29 @@
+{
+  "baseline_commit": "3bf3ac229f21d6c95179ce49b5e8f6323322f99b",
+  "candidate_commit": "5893c7eb30383eec152eaf8cdee8eaaf0f919b34",
+  "baseline_sha256": "c603ba8b2a87b4f4f29e5b934f840a376c354424050602aac58425f3bd76c5c4",
+  "candidate_sha256": "5f64c8cf424d39d648b193c559729b3f19df4639d51c0d50386a532a06c0a556",
+  "rts": [
+    "-N8",
+    "-A16m",
+    "-T"
+  ],
+  "rate": 100,
+  "seconds": 20,
+  "rounds": 5,
+  "modes": [
+    "disabled",
+    "idle",
+    "active-shared",
+    "active-distinct",
+    "slow-reader",
+    "churn"
+  ],
+  "source_sha256": {
+    "keiro-ops-http/bench/InspectionInterference.hs": "739791aab17ddf421b27fd59fcc3be8687ed9206919014ec9159ede6f5f19724",
+    "keiro-ops-http/bench/InspectionClients.hs": "332788f2451b6169193cc866ca2afc5a3c846717c29aa0ab88b72926a7eaf545",
+    "/Users/shinzui/Keikaku/bokuno/keiro/scripts/inspection-composed-evidence.py": "f836da5c81af1054001becdd52f5d89d818042e7ab3eb77f37ce1186ffc6417e"
+  },
+  "design": "Fresh-process/database block controls; alternate baseline-first/baseline-last each round, rotate candidate order. Same baseline block controls each mode; retain every sample.",
+  "allocation_scope": "writer_thread_allocated_bytes_per_operation measures the calling runtime thread; process allocation and WAL are diagnostics, with external client allocation excluded"
+}

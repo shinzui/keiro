@@ -80,6 +80,20 @@ whose Integration Points settle the artifacts this plan shares with its siblings
 
 ## Progress
 
+2026-10-20: Local implementation is Complete. Candidate `5893c7eb` passes
+full Nix `just verify`, all eight package checks and native flake checks: 783
+core, 15 retention, 52 ops, 40 HTTP, 26 example and 41 migration examples,
+plus the DSL/proof/documentation/policy gates. Two standard pg_partman cases
+remain pending. The final five-block six-mode [core interference evidence](../../keiro/bench/results/inspection/final-core-interference/README.md)
+meets the writer throughput/p95/allocation gates. Separate five-pair saturation
+evidence preserves writer headroom. Final idle/active/slow-reader/churn probes
+return zero feed resources with about 0.9–1.7 MB live heap after cleanup.
+No inspection column/index/migration changes ordinary writer work. These are
+local measured bounds; publication and request completion remain EP-7 work.
+
+Earlier checkpoints below precede the final acceptance above.
+
+
 2026-10-20: M2/M3/M4/M5 functional implementation is in place: manager views
 reuse hydration and exact folded-version history; pending timers have shared
 JSON and filter-bound cursors; shard reads use database time; manager listings
@@ -116,7 +130,7 @@ acceptance and release requirements remain open until measured. Use its current
 registry and execution sequence when interpreting older dependency text below.
 
 - [x] (2026-10-13) Correctness and hot-path design review applied; implementation remains outstanding.
-- [ ] Validate the review constraints and record the required performance/correctness evidence before marking this plan complete.
+- [x] (2026-10-20) Validate local review constraints with owner behavior checks, matched core-path/capacity evidence and bounded lifecycle probes; cohort publication remains EP-7.
 
 
 Milestone 0 is the validation gate; every later milestone starts only after its go decision is
@@ -357,6 +371,20 @@ actual owning-query and timer write/WAL/HOT checks. No production DDL changed.
 
 
 ## Outcomes & Retrospective
+
+2026-10-20: Local implementation is Complete. Candidate `5893c7eb` passes
+full Nix `just verify`, all eight package checks and native flake checks: 783
+core, 15 retention, 52 ops, 40 HTTP, 26 example and 41 migration examples,
+plus the DSL/proof/documentation/policy gates. Two standard pg_partman cases
+remain pending. The final five-block six-mode [core interference evidence](../../keiro/bench/results/inspection/final-core-interference/README.md)
+meets the writer throughput/p95/allocation gates. Separate five-pair saturation
+evidence preserves writer headroom. Final idle/active/slow-reader/churn probes
+return zero feed resources with about 0.9–1.7 MB live heap after cleanup.
+No inspection column/index/migration changes ordinary writer work. These are
+local measured bounds; publication and request completion remain EP-7 work.
+
+Earlier checkpoints below precede the final acceptance above.
+
 
 2026-10-20: The functional inspection surface is implemented and locally
 verified: 783 core, 52 ops, 29 HTTP, 26 example and 43 migration examples pass;

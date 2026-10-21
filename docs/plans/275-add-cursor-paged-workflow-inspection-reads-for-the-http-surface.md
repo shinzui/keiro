@@ -67,6 +67,20 @@ paging a seeded ledger with the new `Keiro.Workflow.Inspection` functions from `
 
 ## Progress
 
+2026-10-20: Local implementation is Complete. Candidate `5893c7eb` passes
+full Nix `just verify`, all eight package checks and native flake checks: 783
+core, 15 retention, 52 ops, 40 HTTP, 26 example and 41 migration examples,
+plus the DSL/proof/documentation/policy gates. Two standard pg_partman cases
+remain pending. The final five-block six-mode [core interference evidence](../../keiro/bench/results/inspection/final-core-interference/README.md)
+meets the writer throughput/p95/allocation gates. Separate five-pair saturation
+evidence preserves writer headroom. Final idle/active/slow-reader/churn probes
+return zero feed resources with about 0.9–1.7 MB live heap after cleanup.
+No inspection column/index/migration changes ordinary writer work. These are
+local measured bounds; publication and request completion remain EP-7 work.
+
+Earlier checkpoints below precede the final acceptance above.
+
+
 Current boundary (2026-10-20, user-directed core-path priority): saturation
 comparisons found a 9.22% median ordinary-writer capacity loss with the
 inspection-only stored class/indexes. The 100/s paced matrix had concealed that
@@ -74,8 +88,11 @@ loss of headroom. Withdraw unpublished migrations 0033/0034, retaining the exact
 0.21 writer schema and migration payloads. Inspection class predicates use
 stored runtime fields and existing indexes; no new column/index is maintained
 by writes. Historical index decisions and query plans below describe rejected
-prototypes, not the final implementation. Fresh read and capacity evidence is
-required before completion.
+prototypes, not the final implementation. Fresh evidence: 16 focused read examples, 41 migration examples and 40 HTTP
+examples pass. 68 actual custom/generic plans span 10k/100k ledgers (0.046–26.879 ms
+observed; diagnostic timings). Five capacity pairs in `readside-writer-capacity/`
+measure -1.66% throughput, -1.70% p95 and -0.01% writer allocation. The published
+migration payloads and snapshot match byte-for-byte. Final integrated gates remain open.
 
 
 2026-10-20: The bounded exact-header candidate passes the complete Nix
@@ -86,13 +103,13 @@ interference, strict retention and final release checks remain open.
 
 
 - [x] (2026-10-13) Correctness and hot-path design review applied; implementation remains outstanding.
-- [ ] Validate the review constraints and record the required performance/correctness evidence before marking this plan complete.
+- [x] (2026-10-20) Validate local review constraints with owner behavior checks, matched core-path/capacity evidence and bounded lifecycle probes; cohort publication remains EP-7.
 
 
 - [x] (2026-10-20) Milestone 1: opaque cursor codec, status-class vocabulary, and the bounded instance
       listing over `keiro_workflows` in key order and creation order, with the legacy
       `listWorkflowInstances` SQL unchanged. Eleven focused examples cover classes, both orders, UTC cursors, validation, and read-only behavior.
-- [ ] Milestone 2: preserve the ordinary writer schema and capacity. Classify
+- [x] (2026-10-20) Milestone 2: preserve the ordinary writer schema and capacity. Classify
       during reads using existing status/key indexes; retain bounded large-key
       work and deadline-bound scan/sort paths. Validate actual prepared plans and
       matched writer capacity. The unpublished 0033/0034 prototypes are withdrawn.
@@ -100,7 +117,7 @@ interference, strict retention and final release checks remain open.
       generation resolution, exercised against a real workflow instance.
 - [x] (2026-10-20) Milestone 4: canonical JSON rendering in the library and `keiro-ops` adoption
       (`wf show`, `wf steps`, `wf journal`), including header agreement, six parsed routes, HTTP pagination and typed failures, and pure pre-admission validation; 51 ops and 22 HTTP examples pass.
-- [ ] Milestone 5: documentation, changelogs, ADR-28 update, IR-30 evidence, and the full
+- [x] (2026-10-20) Milestone 5: documentation, changelogs, ADR-28 update, IR-30 evidence, and the full
       verification gate.
 
 
@@ -434,6 +451,20 @@ one verification session and one instance read.
 
 
 ## Outcomes & Retrospective
+
+2026-10-20: Local implementation is Complete. Candidate `5893c7eb` passes
+full Nix `just verify`, all eight package checks and native flake checks: 783
+core, 15 retention, 52 ops, 40 HTTP, 26 example and 41 migration examples,
+plus the DSL/proof/documentation/policy gates. Two standard pg_partman cases
+remain pending. The final five-block six-mode [core interference evidence](../../keiro/bench/results/inspection/final-core-interference/README.md)
+meets the writer throughput/p95/allocation gates. Separate five-pair saturation
+evidence preserves writer headroom. Final idle/active/slow-reader/churn probes
+return zero feed resources with about 0.9–1.7 MB live heap after cleanup.
+No inspection column/index/migration changes ordinary writer work. These are
+local measured bounds; publication and request completion remain EP-7 work.
+
+Earlier checkpoints below precede the final acceptance above.
+
 
 2026-10-20 guarded-index checkpoint: focused workflow/ops/HTTP/migration
 checks pass 13/51/26/43 examples. Actual custom/generic plans now bound the
