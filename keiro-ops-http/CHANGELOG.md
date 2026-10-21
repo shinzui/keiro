@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Add bounded projection-status pages and `projection status`, preserving the
+  frozen v1 relation and complete-list compatibility API. Page keys precede
+  correlated status reads; no writer index is added. HTTP feed protocol and
+  canonical view definitions are available as foundations for live feeds.
+
 ### Bug Fixes
 
 - Fail oversized workflow continuations explicitly instead of returning a cursor

@@ -4,6 +4,9 @@
 -- with ADR 28.
 module Keiro.Ops.Projection
   ( Command (..),
+    ProjectionStatusOptions (..),
+    projectionGroupStatusJson,
+    validateCommand,
     commandParser,
     isMutation,
     runCommand,
@@ -18,10 +21,14 @@ import Data.Time (UTCTime, defaultTimeLocale, formatTime, parseTimeM)
 import Data.Vector qualified as Vector
 import Effectful (Eff, IOE)
 import Effectful.Error.Static (Error)
+import Keiro.Inspection.Cursor (InspectionCursor (..))
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
+import Keiro.Ops.Parse (cursorReader, positiveIntReader)
 import Keiro.Ops.Render
 import Keiro.Projection (countAsyncProjectionDedupForBefore, pruneAsyncProjectionDedupForBefore)
+import Keiro.Projection.Catalog (projectionRevisionIdText, rebuildGroupIdText)
 import Keiro.ReadModel (storeHeadPosition)
+import Keiro.ReadModel.Rebuild
 import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Subscription
@@ -31,18 +38,23 @@ import Kiroku.Store.Subscription
     subscriptionCheckpointInventory,
   )
 import Kiroku.Store.Types (GlobalPosition (..))
-import Options.Applicative hiding (action, value)
+import Options.Applicative hiding (action)
 import Prelude
 
+data ProjectionStatusOptions = ProjectionStatusOptions {limit :: !Int, after :: !(Maybe InspectionCursor)}
+  deriving stock (Eq, Show)
+
 data Command
-  = Position !Text
+  = Status !ProjectionStatusOptions
+  | Position !Text
   | PruneDedup !Text !UTCTime
   deriving stock (Eq, Show)
 
 commandParser :: Parser Command
 commandParser =
   hsubparser
-    ( command "position" (info positionParser (progDesc "Show one subscription's durable member checkpoints and floor"))
+    ( command "status" (info (Status <$> (ProjectionStatusOptions <$> option positiveIntReader (long "limit" <> value 100 <> metavar "N") <*> optional (option cursorReader (long "after" <> metavar "CURSOR")))) (progDesc "Observe one bounded page of projection-group status"))
+        <> command "position" (info positionParser (progDesc "Show one subscription's durable member checkpoints and floor"))
         <> command "prune-dedup" (info pruneParser (progDesc "Preview or prune one projection's old dedup rows"))
     )
   where
@@ -62,13 +74,49 @@ utcReader = eitherReader $ \raw ->
     Right
     (parseTimeM True defaultTimeLocale "%Y-%m-%dT%H:%M:%S%QZ" raw)
 
+statusInput :: ProjectionStatusOptions -> ProjectionStatusPageRequest
+statusInput options = ProjectionStatusPageRequest options.limit options.after
+
+validateCommand :: Command -> Either (Text, Text) ()
+validateCommand (Status options) = either (Left . statusError) (const (Right ())) (validateProjectionStatusRequest (statusInput options))
+validateCommand _ = Right ()
+
+statusError :: ProjectionStatusReadError -> (Text, Text)
+statusError err =
+  ( case err of
+      InvalidProjectionStatusPageSize _ -> "invalid_page_size"
+      InvalidProjectionStatusCursor _ -> "invalid_cursor"
+      ProjectionStatusResultTooLarge -> "inspection_result_too_large",
+    Text.pack (show err)
+  )
+
 isMutation :: Command -> Bool
 isMutation = \case
+  Status {} -> False
   Position {} -> False
   PruneDedup {} -> True
 
 runCommand :: OpsEnv -> Command -> IO OpsOutcome
 runCommand env = \case
+  Status options -> runAction env action $ \case
+    Left err -> uncurry InspectionFailed (statusError err)
+    Right (page, head) ->
+      Succeeded
+        ( OpsResult
+            ["group_id", "lifecycle_phase", "reads_allowed", "serving_position_basis"]
+            [[rebuildGroupIdText row.groupId, row.lifecyclePhase, Text.pack (show row.readsAllowed), basisText row.servingPositionBasis] | row <- page.items]
+            ( object
+                ( ["observed_at" .= page.observedAt, "visible_store_head" .= positionInt head, "items" .= map projectionGroupStatusJson page.items]
+                    <> maybe [] (\cursor -> ["next_cursor" .= cursor.cursorText]) page.next
+                )
+            )
+        )
+    where
+      action = do
+        page <- listProjectionGroupStatusesPage (statusInput options)
+        case page of
+          Left err -> pure (Left err)
+          Right value -> Right . (value,) <$> storeHeadPosition
   Position subscription -> runPosition env subscription
   PruneDedup projection before
     | env.force ->
@@ -79,6 +127,33 @@ runCommand env = \case
           PreviewRequired
             (pruneResult True projection before affected)
             (forceInvocation env ["projection", "prune-dedup", "--projection", projection, "--before", utcText before])
+
+-- | The frozen v1 owner relation, using ADR-28 position vocabulary.
+projectionGroupStatusJson :: ProjectionGroupStatusV1 -> Value
+projectionGroupStatusJson row =
+  object
+    [ "group_id" .= rebuildGroupIdText row.groupId,
+      "lifecycle_phase" .= row.lifecyclePhase,
+      "reads_allowed" .= row.readsAllowed,
+      "writes_allowed" .= row.writesAllowed,
+      "serving_revision_id" .= fmap projectionRevisionIdText row.servingRevisionId,
+      "serving_epoch" .= row.servingEpoch,
+      "serving_position_basis" .= basisText row.servingPositionBasis,
+      "serving_applied_position" .= fmap positionInt row.servingAppliedPosition,
+      "active_run_id" .= fmap rebuildRunIdText row.activeRunId,
+      "candidate_revision_id" .= fmap projectionRevisionIdText row.candidateRevisionId,
+      "candidate_rebuild_position" .= fmap positionInt row.candidateRebuildPosition,
+      "candidate_rebuild_head" .= fmap positionInt row.candidateRebuildHead,
+      "query_models" .= row.queryModels,
+      "rebuild_started_at" .= row.rebuildStartedAt,
+      "last_promoted_at" .= row.lastPromotedAt,
+      "failed_at" .= row.failedAt,
+      "failure_code" .= row.failureCode,
+      "failure_detail" .= row.failureDetail
+    ]
+
+basisText :: ServingPositionBasis -> Text
+basisText = \case ServingPositionAppend -> "append"; ServingPositionCheckpoint -> "checkpoint"; ServingPositionUnmanaged -> "unmanaged"
 
 runPosition :: OpsEnv -> Text -> IO OpsOutcome
 runPosition env subscription =

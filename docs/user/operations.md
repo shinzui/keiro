@@ -2,7 +2,7 @@
 type: Runbook
 title: Operations
 description: Deploy and operate Keiro applications, workers, rebuilds, retries, and production checks.
-timestamp: 2026-10-21T01:53:43Z
+timestamp: 2026-10-21T02:25:39Z
 docId: DOC-15
 tags: [keiro, operations, deployment, runbook]
 generated:
@@ -749,3 +749,18 @@ unowned buckets and distinct live owners. Shard status preserves `ownership`
 and `shard_counts`, adding database `observed_at`, each row's `heartbeat_at` and
 `updated_at`, and `lease_age_seconds` (null for unowned rows). Lease expiry uses
 the same strict comparison as the worker; observation does not grant ownership.
+
+### Projection status pages
+
+```bash
+keiro-ops projection status --limit 100 --json
+```
+
+`GET /projection/status?limit=100` uses the same handler and returns
+`observed_at`, `items`, `visible_store_head`, and optional `next_cursor`.
+Continuations belong to the frozen v1 status contract; limits are 1..500.
+The read selects group keys before interpreting their status, preserving the
+existing relation and compatibility API without adding writer indexes. A
+selected group's models/checkpoints and response bytes still affect read cost.
+The visible head is a separate observation, and position differences mean
+global position distance rather than event lag or backlog.

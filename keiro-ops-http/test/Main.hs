@@ -33,7 +33,9 @@ import Keiro.Ops.Http
 import Keiro.Ops.Http.Application
 import Keiro.Ops.Http.Budget
 import Keiro.Ops.Http.Config qualified
+import Keiro.Ops.Http.Protocol qualified as Protocol
 import Keiro.Ops.Http.Route
+import Keiro.Ops.Http.Views qualified as Views
 import Keiro.Ops.Render
 import Keiro.Ops.ReplayAudit qualified as Audit
 import Keiro.Ops.Workflow qualified as Workflow
@@ -73,6 +75,21 @@ main = do
 
 spec :: Fixture -> Spec
 spec fixture = do
+  describe "live view parameters" $ do
+    it "canonicalizes equivalent status sets and bounds subscription inputs" $ do
+      Right one <- pure (Views.workflowsView 500 (object ["status_class" .= (["running", "sleeping", "running"] :: [Text])]))
+      Right two <- pure (Views.workflowsView 500 (object ["status_class" .= (["sleeping", "running"] :: [Text])]))
+      one.viewId `shouldBe` two.viewId
+      either (const True) (const False) (Views.timersView 20 (object ["limit" .= (21 :: Int)])) `shouldBe` True
+      case Views.timersView 20 (object ["unexpected_filter" .= True]) of
+        Left message -> message `shouldSatisfy` Text.isInfixOf "unexpected_filter"
+        Right _ -> expectationFailure "unknown filter was accepted"
+    it "compares timer state independently of presentation countdowns" $ do
+      let one = Views.Item "timer" (object ["timer_id" .= ("timer" :: Text)]) (object ["status" .= ("scheduled" :: Text), "due_in_seconds" .= (10 :: Int)])
+          two = one {Views.body = object ["status" .= ("scheduled" :: Text), "due_in_seconds" .= (9 :: Int)]}
+      Views.stableItemBody Protocol.Timers one `shouldBe` Views.stableItemBody Protocol.Timers two
+      one.body `shouldNotBe` two.body
+
   describe "request translation" $ do
     it "preserves path and repeated option order, converting snake_case" $ do
       translateRequest Set.empty ["wf", "show", "approval", "wf-1"] [] `shouldBe` Right ["wf", "show", "approval", "wf-1"]
@@ -524,6 +541,7 @@ cliReads =
     ("/outbox/backlog", ["outbox", "backlog"]),
     ("/inbox/backlog", ["inbox", "backlog"]),
     ("/projection/position?subscription=http_test", ["projection", "position", "--subscription", "http_test"]),
+    ("/projection/status?limit=1", ["projection", "status", "--limit", "1"]),
     ("/shard/status?subscription=http_test", ["shard", "status", "--subscription", "http_test"]),
     ("/snapshot/show?stream=missing", ["snapshot", "show", "--stream", "missing"]),
     ("/stream/show/order-1", ["stream", "show", "order-1"]),

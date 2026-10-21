@@ -20,6 +20,7 @@ import Effectful.Error.Static (Error)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
+import Keiro.Inspection.Cursor qualified as Cursor
 import Keiro.Prelude
 import Keiro.Projection
   ( CatalogAsyncApplyOutcome (..),
@@ -187,6 +188,17 @@ spec fixture = describe "catalog rebuild groups" $ around (withFreshStore fixtur
 
     statuses <- expectStore store listProjectionGroupStatuses
     length statuses `shouldBe` 251
+    Right first <- expectStore store (listProjectionGroupStatusesPage (ProjectionStatusPageRequest 100 Nothing))
+    Right second <- expectStore store (listProjectionGroupStatusesPage (ProjectionStatusPageRequest 100 (first ^. #next)))
+    Right third <- expectStore store (listProjectionGroupStatusesPage (ProjectionStatusPageRequest 100 (second ^. #next)))
+    (first ^. #items) <> (second ^. #items) <> (third ^. #items) `shouldBe` statuses
+    third ^. #next `shouldBe` Nothing
+    expectStore store listProjectionGroupStatuses `shouldReturn` statuses
+    for_ [0, -1, 501] $ \size ->
+      validateProjectionStatusRequest (ProjectionStatusPageRequest size Nothing) `shouldBe` Left (InvalidProjectionStatusPageSize size)
+    for_ [Cursor.InspectionCursor "broken", Cursor.encodeCursor "timer-pending" ("other" :: Text)] $ \cursor ->
+      validateProjectionStatusRequest (ProjectionStatusPageRequest 1 (Just cursor)) `shouldSatisfy` isLeft
+
     map (^. #groupId) statuses `shouldSatisfy` strictlyAscending
 
   it "registers an additive catalog without disturbing the existing group slice" $ \store -> do

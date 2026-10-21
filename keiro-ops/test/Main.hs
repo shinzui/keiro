@@ -1292,6 +1292,22 @@ spec fixture = do
       dlqDepth `shouldReturn` 0
 
   describe "projection handlers" $ around (withFreshStore fixture) do
+    it "renders bounded projection status through the owning public relation" $ \store -> do
+      expectStore store (runTransaction (Tx.sql "CREATE SCHEMA app; CREATE TABLE app.ops_catalog (id bigint PRIMARY KEY)"))
+      catalog <- expectValidatedCatalog (opsCatalog "status-codec")
+      _ <- expectStore store (Rebuild.registerProjectionCatalog catalog)
+      Right page <- expectStore store (Rebuild.listProjectionGroupStatusesPage (Rebuild.ProjectionStatusPageRequest 1 Nothing))
+      shown <- OpsProjection.runCommand (opsEnv False store) (OpsProjection.Status (OpsProjection.ProjectionStatusOptions 1 Nothing))
+      case shown of
+        Succeeded result -> case result.jsonValue of
+          Aeson.Object fields -> do
+            KeyMap.lookup "items" fields `shouldBe` Just (Aeson.toJSON (map OpsProjection.projectionGroupStatusJson page.items))
+            KeyMap.member "observed_at" fields `shouldBe` True
+            KeyMap.lookup "visible_store_head" fields `shouldBe` Just (Aeson.toJSON (0 :: Int))
+            KeyMap.lookup "next_cursor" fields `shouldBe` Nothing
+          _ -> expectationFailure "expected projection status page"
+        _ -> expectationFailure (show shown)
+
     it "prunes only the named dedup rows" $ \store -> do
       _ <- seedKirokuEvent store "projection-source" "018f5f43-8a70-7b9a-9a9b-59d391a76810" Nothing
       events <- expectStore store (readStreamForward (StreamName "projection-source") (StreamVersion 0) 1)

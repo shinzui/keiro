@@ -197,6 +197,7 @@ validateCommand (ProcessManager command) = ProcessManager.validateCommand comman
 validateCommand (Aggregate command) = Aggregate.validateCommand command
 validateCommand (Workflow command) = Workflow.validateCommand command
 validateCommand (Timer command) = Timer.validateCommand command
+validateCommand (Projection command) = Projection.validateCommand command
 validateCommand _ = Right ()
 
 -- | Authoritative read/write classification for every front end.

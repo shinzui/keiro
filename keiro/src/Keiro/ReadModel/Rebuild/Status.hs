@@ -7,14 +7,22 @@ module Keiro.ReadModel.Rebuild.Status
     ProjectionGroupStatusV1 (..),
     listProjectionGroupStatuses,
     lookupProjectionGroupStatus,
+    ProjectionStatusPageRequest (..),
+    ProjectionStatusReadError (..),
+    ProjectionStatusPage (..),
+    projectionGroupsCursorKind,
+    validateProjectionStatusRequest,
+    listProjectionGroupStatusesPage,
   )
 where
 
+import Contravariant.Extras (contrazip2)
 import Data.Text qualified as Text
 import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
+import Keiro.Inspection.Cursor
 import Keiro.Prelude
 import Keiro.Projection.Catalog
   ( ProjectionRevisionId,
@@ -63,6 +71,74 @@ data ProjectionGroupStatusV1 = ProjectionGroupStatusV1
     failureDetail :: !(Maybe Text)
   }
   deriving stock (Eq, Show, Generic)
+
+-- | A bounded observation of the frozen v1 relation. The existing unbounded
+-- compatibility API below retains its behavior.
+data ProjectionStatusPageRequest = ProjectionStatusPageRequest
+  {pageSize :: !Int, after :: !(Maybe InspectionCursor)}
+  deriving stock (Eq, Show, Generic)
+
+data ProjectionStatusReadError
+  = InvalidProjectionStatusPageSize !Int
+  | InvalidProjectionStatusCursor !CursorError
+  | ProjectionStatusResultTooLarge
+  deriving stock (Eq, Show, Generic)
+
+data ProjectionStatusPage = ProjectionStatusPage
+  {observedAt :: !UTCTime, items :: ![ProjectionGroupStatusV1], next :: !(Maybe InspectionCursor)}
+  deriving stock (Eq, Show, Generic)
+
+projectionGroupsCursorKind :: Text
+projectionGroupsCursorKind = "projection-groups"
+
+validateProjectionStatusRequest :: ProjectionStatusPageRequest -> Either ProjectionStatusReadError (Maybe Text)
+validateProjectionStatusRequest request
+  | request ^. #pageSize < 1 || request ^. #pageSize > 500 = Left (InvalidProjectionStatusPageSize (request ^. #pageSize))
+  | otherwise = traverse decode (request ^. #after)
+  where
+    decode cursor = do
+      (contract, groupId) <- either (Left . InvalidProjectionStatusCursor) Right (decodeCursor projectionGroupsCursorKind cursor)
+      if contract /= ("projection_group_status_v1" :: Text)
+        then invalid "cursor belongs to another status contract"
+        else either (const (invalid "invalid group id")) (Right . rebuildGroupIdText) (mkRebuildGroupId groupId)
+    invalid = Left . InvalidProjectionStatusCursor . MalformedCursor
+
+-- | Page in database group-id order, with exclusive continuation and one
+-- look-ahead row. Select Keiro-owned group keys first, then use correlated
+-- lookups through the frozen owner relation. The OFFSET 0 boundary preserves
+-- parameterized lookups instead of flattening the view into fleet-wide joins.
+-- A group's own model/checkpoint cardinality remains part of its read cost.
+listProjectionGroupStatusesPage :: (Store :> es) => ProjectionStatusPageRequest -> Eff es (Either ProjectionStatusReadError ProjectionStatusPage)
+listProjectionGroupStatusesPage request = case validateProjectionStatusRequest request of
+  Left err -> pure (Left err)
+  Right after -> do
+    (observed, rows) <- runTransaction $ do
+      observed <- Tx.statement () (preparable "SELECT now()" mempty (D.singleRow (D.column (D.nonNullable D.timestamptz))))
+      rows <- Tx.statement (after, fromIntegral size + 1) (pageProjectionGroupStatusesStmt (isJust after))
+      pure (observed, rows)
+    let selected = take size rows
+        continuation = case (drop size rows, reverse selected) of
+          (_ : _, row : _) ->
+            maybe
+              (Left ProjectionStatusResultTooLarge)
+              (Right . Just)
+              (encodeCursorBounded projectionGroupsCursorKind ("projection_group_status_v1" :: Text, rebuildGroupIdText (row ^. #groupId)))
+          _ -> Right Nothing
+    pure (ProjectionStatusPage observed selected <$> continuation)
+  where
+    size = request ^. #pageSize
+
+pageProjectionGroupStatusesStmt :: Bool -> Statement (Maybe Text, Int64) [ProjectionGroupStatusV1]
+pageProjectionGroupStatusesStmt after =
+  preparable
+    ( "WITH inspection_groups AS MATERIALIZED (SELECT group_id FROM keiro.keiro_projection_rebuild_groups"
+        <> (if after then " WHERE group_id > $1" else " WHERE $1::text IS NULL")
+        <> " ORDER BY group_id LIMIT $2) SELECT status.* FROM inspection_groups page CROSS JOIN LATERAL ("
+        <> statusSelect
+        <> " WHERE group_id = page.group_id OFFSET 0) status ORDER BY status.group_id"
+    )
+    (contrazip2 (E.param (E.nullable E.text)) (E.param (E.nonNullable E.int8)))
+    (D.rowList projectionGroupStatusDecoder)
 
 -- | List the complete public status relation in stable group-id order.
 listProjectionGroupStatuses ::

@@ -1,0 +1,30 @@
+{
+  "base_commit": "ee637be51cfcdd0762c060df3d719d4a877ce5c6",
+  "scope": "actual listProjectionGroupStatusesPage prepared statements; query evidence, not writer interference acceptance",
+  "groups": [
+    10000,
+    100000
+  ],
+  "model_rows": "3 per group plus 10,000 in the first group",
+  "plans_per_strategy": 8,
+  "strategies": [
+    "whole frozen view with LIMIT",
+    "bounded own group keys plus correlated frozen-view lookups"
+  ],
+  "index_changes": [],
+  "ghc": "9.12.4",
+  "library_optimization": "O1",
+  "driver_optimization": "O2",
+  "rts": "-N2",
+  "limitations": [
+    "One EXPLAIN sample per shape, with normal planner, custom/generic plans and recorded durable settings; no latency-distribution or writer-interference acceptance inferred.",
+    "The first selected group has 10,003 models; model/checkpoint cardinality within an individual selected group still affects row size and read cost.",
+    "The retained driver was formatted after compilation; exact executed prepared SQL/arguments/settings are recorded in each plan artifact."
+  ],
+  "sha256": {
+    "whole-view-plans.json": "473e6493a9c28c585b103347efb7fc1d4b3e8d4c728edb5a65e776b2e9d87e1a",
+    "source.patch.gz": "6cab9ce4f6ce0096368fb6e75f4e740f1047951b7ac465d4a317790b6a4fcf12",
+    "key-first-plans.json": "0c6b23b3fe8af26163aae04f62f56d91c75a1574e6254efc6a76bc49d7aec633",
+    "driver.hs.txt": "b8a015cdb8014ed4961147e541be5c1ba62dc49b1965c547bf57ff1c4f2202b8"
+  }
+}

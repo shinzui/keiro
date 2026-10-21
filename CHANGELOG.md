@@ -6,6 +6,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+- Add bounded projection-status pages and `projection status`, preserving the
+  frozen v1 relation and complete-list compatibility API. Page keys precede
+  correlated status reads; no writer index is added. HTTP feed protocol and
+  canonical view definitions are available as foundations for live feeds.
+
 - Add process-manager persisted-state inspection and bounded raw stream listing,
   pending-timer pages with filter-bound cursors, and database-clock shard
   ownership/listing. Reads add no worker queries, polling tasks or migrations.

@@ -47,6 +47,26 @@ You can see it working by running the test suite `cabal test keiro-ops-http-test
 
 ## Progress
 
+2026-10-20: M1's bounded projection read and command are implemented. Existing
+status coverage now traverses all 251 fixture groups in bounded pages and checks
+invalid input and unchanged relation rows. Seven focused core and two ops
+status examples pass; all 31 HTTP examples pass, including paired CLI agreement.
+The protocol and canonical view definitions compile and have focused parameter/
+stable-timer-comparison coverage; no driver or socket is mounted yet.
+
+Actual custom/generic prepared-query evidence on durable 10k/100k groups with
+three models each plus a 10k-model hot group is retained in
+`keiro/bench/results/inspection/projection-status-read/`. LIMIT on the whole
+view cost about 200 ms at 100k; bounded group keys plus correlated v1 lookups
+cost 2.779/0.562 ms for generic first/deep pages. No index or writer change is
+introduced. This is query evidence, not core-path interference acceptance.
+
+2026-10-20: Begin EP-5 from the verified `ee637be5` PM/timer/shard handoff,
+`d1db5376` aggregate/hydration handoff, and existing HTTP/workflow pages.
+M1 adds a bounded projection-status read over the frozen v1 relation, preserving
+the existing compatibility API; M3's pure protocol module is drafted separately
+from the runtime. Query-cost and feed lifecycle checks remain outstanding.
+
 2026-10-20: EP-4 has implemented the pending-timer API, shared item/page JSON
 and ops command. Actual prepared-query evidence lives at
 `keiro/bench/results/inspection/pending-timer-read/`. No timer index is added,
@@ -67,9 +87,9 @@ registry and execution sequence when interpreting older dependency text below.
 
 
 - [x] (2026-09-10T02:40Z) Planning: IR-27 records this plan (`## Planning` section and a bundle log entry); the request stays `proposed` until implementation evidence exists.
-- [ ] Milestone 1: add `Keiro.Timer.findPendingTimers` to the interface MasterPlan 45 settles (both filters optional, pages of 1 through 500, `TimerInspection` rows, `observedAt`, opaque `timer-pending` cursor) and its tests in `keiro/test/Main.hs`, unless plan 274 has already landed it.
-- [ ] Milestone 1: create `keiro/src/Keiro/Inspection/Cursor.hs` to plan 275's interface if it does not exist yet, and `cursorReader` in `keiro-ops/src/Keiro/Ops/Parse.hs` if absent; export `workflowInstanceJson` from `Keiro.Ops.Workflow` only if plan 275's `instanceToJson` has not landed; add `pendingTimerItemJson` and the read-only `timer pending list` command to `Keiro.Ops.Timer` (unless plan 274 landed them); add `projectionGroupStatusJson` and the read-only `projection status` command to `Keiro.Ops.Projection`; extend `keiro-ops/test/Main.hs`.
-- [ ] Gate: plan 276 Milestones 1 through 3 are implemented (`keiro-ops-http` exists with `Keiro.Ops.Http.Application.opsApplication`, `Keiro.Ops.Http.Config`, `Keiro.Ops.Http.Cors`, and the health route). Record the commit in the Decision Log.
+- [x] (2026-10-20) Milestone 1: add `Keiro.Timer.findPendingTimers` to the interface MasterPlan 45 settles (both filters optional, pages of 1 through 500, `TimerInspection` rows, `observedAt`, opaque `timer-pending` cursor) and its tests in `keiro/test/Main.hs`, unless plan 274 has already landed it.
+- [x] (2026-10-20) Milestone 1: create `keiro/src/Keiro/Inspection/Cursor.hs` to plan 275's interface if it does not exist yet, and `cursorReader` in `keiro-ops/src/Keiro/Ops/Parse.hs` if absent; export `workflowInstanceJson` from `Keiro.Ops.Workflow` only if plan 275's `instanceToJson` has not landed; add `pendingTimerItemJson` and the read-only `timer pending list` command to `Keiro.Ops.Timer` (unless plan 274 landed them); add `projectionGroupStatusJson` and the read-only `projection status` command to `Keiro.Ops.Projection`; extend `keiro-ops/test/Main.hs`.
+- [x] (2026-10-20) Gate: plan 276 Milestones 1 through 3 are implemented (`keiro-ops-http` exists with `Keiro.Ops.Http.Application.opsApplication`, `Keiro.Ops.Http.Config`, `Keiro.Ops.Http.Cors`, and the health route). Record the commit in the Decision Log.
 - [ ] Milestone 2: prove the three paired poll routes (`GET /wf/inspect/list`, `GET /timer/pending/list`, `GET /projection/status`) answer through plan 276's mechanical translation with bodies equal to the CLI's `--json` output; add `websockets` and `wai-websockets` to `keiro-ops-http`.
 - [ ] Milestone 3: `Keiro.Ops.Http.Protocol` frames, `Keiro.Ops.Http.Views`, `Keiro.Ops.Http.Feed` (shared per-view driver with wake-or-fallback refresh, diffing, bounded per-connection queues with drop-oldest and in-band overflow error), `Keiro.Ops.Http.WebSocket` on `/ws`, and the `opsApplicationWithFeeds` composition.
 - [ ] Milestone 3: driver unit tests with `neverWake` and injected reads (fallback refresh, diff, overflow ordering, sequence gaps).
@@ -81,6 +101,15 @@ registry and execution sequence when interpreting older dependency text below.
 
 ## Surprises & Discoveries
 
+2026-10-20 dependency preflight: Mori locates the WAI bridge in
+`mori://yesodweb/wai/packages/wai-websockets`. Its corpus checkout says 3.0.1.3,
+but Hackage preferred versions and the upstream release tag both identify
+3.0.1.2 as released. Websockets is released at 0.13.0.0, verified against Hackage
+and upstream tag `v0.13.0.0` (peeled `cbba20b9e073e15e767052fc08b9e35cf8afb985`).
+Exact released sources were downloaded for API inspection; the planned bounds
+`wai-websockets >=3.0 && <3.1` and `websockets >=0.13 && <0.14` admit those
+releases without assuming the corpus version has shipped.
+
 2026-10-13 source review: Keiro.Wake uses a consumable duplicated TChan; sharing it steals ticks and leaving it idle retains backlog. Whole-body timer diffs churn on due_in_seconds; projection extra-only changes were discarded.
 
 
@@ -88,6 +117,13 @@ Plans 274, 275, and 276 were created by other sessions while this plan was being
 
 
 ## Decision Log
+
+- 2026-10-20: Give `newDriver` an explicit `FeedName` argument and carry it on
+  `View`. The older injected constructor signature had no way to identify the
+  feed in its output frames or apply stable timer comparisons. This is a new,
+  unreleased API correction, not a second driver implementation. Timer drivers
+  enforce at least five seconds between refresh starts under EP-4's measured
+  envelope; workflow/projection cadence remains separately budgeted.
 
 - Decision (2026-10-13): apply the current review constraints in Context, Plan of Work, and Validation. Rationale: Keiro.Wake uses a consumable duplicated TChan; sharing it steals ticks and leaving it idle retains backlog. Whole-body timer diffs churn on due_in_seconds; projection extra-only changes were discarded. Historical September decisions below are retained as history; conflicting create-first, downgrade, zero-cost-index, unconditional-provenance and partial-completion instructions are withdrawn.
 
@@ -405,7 +441,7 @@ data Driver
 data Subscriber
 -- The injected await-change action observes the shared epoch in production;
 -- tests may supply an action backed by neverWake/a private WakeSignal.
-newDriver :: FeedConfig -> IO WakeReason -> IO (Either Text (UTCTime, [Item], Maybe Value)) -> IO Driver
+newDriver :: FeedName -> FeedConfig -> IO WakeReason -> IO (Either Text (UTCTime, [Item], Maybe Value)) -> IO Driver
 stopDriver :: Driver -> IO ()
 subscribe :: Driver -> IO Subscriber
 unsubscribe :: Driver -> Subscriber -> IO ()
