@@ -905,36 +905,44 @@ inspectionInstanceStatement query position count = preparable sql params decoder
         <> " ORDER BY "
         <> rowOrder
         <> rowLimit
-    -- Literal classes constrain the leading key under custom and generic
-    -- plans. The array only gates branches; values never enter prepared SQL.
+    -- Classification is inspection-only. Reuse existing status/key access;
+    -- no generated column or inspection index adds work to ordinary writes.
+    classPredicate = \case
+      ClassRunning -> "status = 'running' AND attempts = 0"
+      ClassRetrying -> "status = 'running' AND attempts <> 0"
+      ClassSleeping -> "status = 'suspended' AND wake_after IS NOT NULL"
+      ClassAwaiting -> "status = 'suspended' AND wake_after IS NULL"
+      ClassCompleted -> "status = 'completed'"
+      ClassCancelled -> "status = 'cancelled'"
+      ClassFailed -> "status = 'failed'"
+    classExpression = "(CASE WHEN status = 'running' AND attempts = 0 THEN 'running' WHEN status = 'running' THEN 'retrying' WHEN status = 'suspended' AND wake_after IS NOT NULL THEN 'sleeping' WHEN status = 'suspended' THEN 'awaiting' ELSE status END)"
     classPredicates status =
       [ "'" <> statusClassToText status <> "' = ANY($1::text[])",
-        "inspection_status_class = '" <> statusClassToText status <> "'"
+        classPredicate status
       ]
     union branches = Text.intercalate " UNION ALL " ["(" <> branch <> ")" | branch <- branches]
     narrowPage = case query.ordering of
       ByCreatedDesc ->
         selectRows
-          ([narrowKey] <> ["inspection_status_class = ANY($1::text[])" | query.classes /= Nothing] <> predicates)
+          ([narrowKey] <> [classExpression <> " = ANY($1::text[])" | query.classes /= Nothing] <> predicates)
           order
           limit
       ByKey ->
-        "SELECT * FROM ("
-          <> union [selectRows (classPredicates status <> [narrowKey] <> predicates) order limit | status <- [minBound .. maxBound]]
-          <> ") AS candidates ORDER BY "
-          <> order
-          <> limit
-    -- The fixed-width hash keys only locate/sort candidates. Exact text
-    -- equality still rechecks collisions and follows the database collation.
-    wideName = ["hashtextextended(workflow_name,0) = hashtextextended($2::text,0)" | query.workflowName /= Nothing]
+        if query.classes == Nothing
+          then selectRows ([narrowKey] <> predicates) order limit
+          else
+            "SELECT * FROM ("
+              <> union [selectRows (classPredicates status <> [narrowKey] <> predicates) order limit | status <- [minBound .. maxBound]]
+              <> ") AS candidates ORDER BY "
+              <> order
+              <> limit
     wideExactName = ["workflow_name = $2" | query.workflowName /= Nothing]
-    wideOrder = "hashtextextended(workflow_name,0), hashtextextended(workflow_id,0)"
     wideLimit = " LIMIT " <> number (maxWideWorkflowCandidates + 1)
     -- Budget the raw class/name population before time/cursor filtering, so a
     -- deep cursor cannot turn the exceptional path into a ledger-wide search.
     widePage =
       "SELECT * FROM ("
-        <> union [selectRows (classPredicates status <> [wideKey] <> wideName <> wideExactName) wideOrder wideLimit | status <- [minBound .. maxBound]]
+        <> union ["SELECT " <> columns <> " FROM keiro.keiro_workflows WHERE " <> Text.intercalate " AND " (classPredicates status <> [wideKey] <> wideExactName) <> wideLimit | status <- [minBound .. maxBound]]
         <> ") AS wide_candidates"
         <> wideLimit
     sql =

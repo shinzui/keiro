@@ -67,6 +67,17 @@ paging a seeded ledger with the new `Keiro.Workflow.Inspection` functions from `
 
 ## Progress
 
+Current boundary (2026-10-20, user-directed core-path priority): saturation
+comparisons found a 9.22% median ordinary-writer capacity loss with the
+inspection-only stored class/indexes. The 100/s paced matrix had concealed that
+loss of headroom. Withdraw unpublished migrations 0033/0034, retaining the exact
+0.21 writer schema and migration payloads. Inspection class predicates use
+stored runtime fields and existing indexes; no new column/index is maintained
+by writes. Historical index decisions and query plans below describe rejected
+prototypes, not the final implementation. Fresh read and capacity evidence is
+required before completion.
+
+
 2026-10-20: The bounded exact-header candidate passes the complete Nix
 `just verify`: 772 Keiro examples, 51 ops, 29 HTTP, 43 migration, 25 example
 application examples, coarse retention and the DSL/policy/documentation gates.
@@ -81,10 +92,10 @@ interference, strict retention and final release checks remain open.
 - [x] (2026-10-20) Milestone 1: opaque cursor codec, status-class vocabulary, and the bounded instance
       listing over `keiro_workflows` in key order and creation order, with the legacy
       `listWorkflowInstances` SQL unchanged. Eleven focused examples cover classes, both orders, UTC cursors, validation, and read-only behavior.
-- [ ] Milestone 2: the next migration (`0033.sql` at planning time; the number is
-      allocated by `keiro-migrate new` at implementation) adding
-      `keiro_workflows_created_idx`, the migration-suite bookkeeping, and the index-usage
-      proof.
+- [ ] Milestone 2: preserve the ordinary writer schema and capacity. Classify
+      during reads using existing status/key indexes; retain bounded large-key
+      work and deadline-bound scan/sort paths. Validate actual prepared plans and
+      matched writer capacity. The unpublished 0033/0034 prototypes are withdrawn.
 - [x] (2026-10-20) Milestone 3: paged detail reads (journal, step index, children, awakeables) with
       generation resolution, exercised against a real workflow instance.
 - [x] (2026-10-20) Milestone 4: canonical JSON rendering in the library and `keiro-ops` adoption

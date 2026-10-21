@@ -65,9 +65,8 @@ defaultWorkflowListQuery = WorkflowListQuery Nothing Nothing Nothing Nothing Not
 data WorkflowListPosition = AfterWorkflowKey !Text !Text | AfterWorkflowCreated !UTCTime !Text !Text
   deriving stock (Eq, Show)
 
--- Wide keys keep their ordinary writer domain. Page indexes cover narrow
--- entries; inspection merges a bounded exceptional set rather than indexing
--- wider tuples than the existing primary key permits.
+-- Large keys keep their ordinary writer domain. Inspection caps their candidate
+-- count and bytes before merging; it adds no writer-side column or index.
 maxIndexedWorkflowKeyBytes, maxWideWorkflowCandidates, maxWideWorkflowKeyBytes :: Int
 maxIndexedWorkflowKeyBytes = 2600
 maxWideWorkflowCandidates = 64

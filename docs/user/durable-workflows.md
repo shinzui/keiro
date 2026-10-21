@@ -7,7 +7,7 @@ tags: [keiro, workflows, durability, reference]
 generated:
   by: human:nadeem
   at: 2026-08-14T15:06:34Z
-timestamp: 2026-10-20T22:01:39Z
+timestamp: 2026-10-21T04:46:30Z
 ---
 
 # Durable Workflows
@@ -277,20 +277,19 @@ failed row remains discoverable even if it retains a lease.
 `listWorkflowInstancesPage` accepts classes, an exact workflow name, half-open
 creation/update windows (since inclusive, before exclusive), and `ByKey` or
 `ByCreatedDesc`. Key order is `(workflow_name, workflow_id)`; creation order
-is `(created_at, workflow_name, workflow_id)` descending. Migration 0033 adds
-the creation index. Migration 0034 adds a stored generated status class and a
-class/name/id index for key-order browsing. It rewrites the workflow table and
-blocks writes while applying; schedule a maintenance window for large stores.
-The class stays derived by PostgreSQL when runtime status, attempts, or wake
-values change. Ordinary writer key limits are preserved. Key-order class/name
-pages use fixed class branches under generic plans. Lists merge up to 64
+is `(created_at, workflow_name, workflow_id)` descending. Classification is
+computed during inspection from stored status, attempts and wake fields; no
+inspection column or index is maintained by writers. Key/class/name reads reuse
+the existing key and status indexes. Creation-order and time-window reads may
+scan/sort and must use the host's inspection deadline and admission budget.
+Ordinary writer keys and SQL remain unchanged. Lists merge up to 64
 instances with unusually large name/id keys and at most 256 KiB of those key
 bytes. The budget applies to the class/name population before cursor or time
 filtering. If it is exceeded, narrow the class/name filters or use header
 inspection; the read returns `inspection_result_too_large` (HTTP 413).
 Update windows and creation-order class filtering remain manual reads, outside
 automatic feed refresh. Use the inspection pool's SQL timeout when exposing
-those filters. Overall query/index-write acceptance remains open in [ExecPlan 275](../plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md).
+those filters. Measured query/runtime acceptance is tracked in [ExecPlan 275](../plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md).
 Row limits do not bound database scans.
 
 The header is `lookupInstance` rendered with `instanceToJson`. Journal and

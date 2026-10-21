@@ -250,7 +250,7 @@ establish leak freedom.
 **Bounded workflow routes** (owner EP-2, consumed by EP-1 and EP-5). Add the read-only command subtree `wf inspect`: `list`, `header NAME ID`, `journal NAME ID`, `steps NAME ID`, `children NAME ID`, and `awakeables NAME ID`. It exposes the new page APIs directly, without draining them. List options are repeatable `--status-class`, `--workflow-name`, `--created-since`, `--created-before`, `--updated-since`, `--updated-before`, `--ordering key|created_desc`, `--limit`, and `--after`; detail reads use `--limit`, `--after`, and, for journal/steps, `--generation`. These mechanically become `/wf/inspect/...` routes; EP-1 does not write a second route table. EP-2 adds structured `InspectionFailed code message` outcomes and updates an existing transport match; if the transport lands later, EP-1 consumes that variant. Whichever integrates second proves HTTP codes without introducing a reverse package dependency. Old CLI commands keep their shapes and are explicitly expensive compatibility routes when they drain whole histories. EP-5's workflow feed consumes this bounded listing and the seven status classes; `/wf/inspect/list` is its authoritative poll route.
 
 Workflow automatic refresh is restricted to key ordering with class/name filters.
-EP-2's actual generic-plan evidence with guarded migrations 0033/0034 bounds those paths;
+Superseded prototype: EP-2's generic-plan evidence with guarded migrations 0033/0034 bounds those paths;
 manual update windows and creation-order status filtering can still scan broadly
 and remain outside feed inputs. The listing merges at most 64 exceptionally wide keys / 256 KiB raw key bytes
 before time/cursor filtering and otherwise returns an explicit size failure.
@@ -591,6 +591,15 @@ interactions between child plans. Provide concise evidence.
 
 
 ## Decision Log
+
+- Decision (2026-10-20, core-path priority): withdraw the unpublished workflow
+  writer DDL (0033/0034). Five alternating saturation comparisons measured
+  -9.22% median writer capacity and +12.91% p95 with inspection unmounted.
+  Paced throughput at 100/s was insufficient to expose this headroom loss.
+  Use read-side classification, existing status/key indexes, and bounded,
+  deadline-controlled inspection scans. Require restored writer capacity and
+  fresh actual-query evidence. Earlier DDL/query matrices are superseded.
+
 
 - Decision (2026-10-20, user-directed): use the focused core-path evidence
   mapping in Integration Points and EP-7. Preserve default-off work invariants,

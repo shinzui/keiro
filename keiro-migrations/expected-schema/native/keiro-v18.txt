@@ -287,7 +287,6 @@ column	keiro_workflows.attempts	integer not null default 0
 column	keiro_workflows.completed_at	timestamp with time zone
 column	keiro_workflows.created_at	timestamp with time zone not null default now()
 column	keiro_workflows.generation	integer not null default 0
-column	keiro_workflows.inspection_status_class	text generated always as "\nCASE\n    WHEN ((status = 'running'::text) AND (attempts = 0)) THEN 'running'::text\n    WHEN (status = 'running'::text) THEN 'retrying'::text\n    WHEN ((status = 'suspended'::text) AND (wake_after IS NOT NULL)) THEN 'sleeping'::text\n    WHEN (status = 'suspended'::text) THEN 'awaiting'::text\n    ELSE status\nEND" stored
 column	keiro_workflows.last_error	text
 column	keiro_workflows.lease_expires_at	timestamp with time zone
 column	keiro_workflows.leased_by	text
@@ -652,10 +651,7 @@ index	keiro_workflow_children_running_idx	CREATE INDEX keiro_workflow_children_r
 index	keiro_workflow_steps_pkey	CREATE UNIQUE INDEX keiro_workflow_steps_pkey ON keiro.keiro_workflow_steps USING btree (workflow_id, workflow_name, generation, step_name)
 index	keiro_workflow_steps_workflow_idx	CREATE INDEX keiro_workflow_steps_workflow_idx ON keiro.keiro_workflow_steps USING btree (workflow_id, workflow_name, generation)
 index	keiro_workflows_active_idx	CREATE INDEX keiro_workflows_active_idx ON keiro.keiro_workflows USING btree (status, wake_after) WHERE (status = ANY (ARRAY['running'::text, 'suspended'::text]))
-index	keiro_workflows_created_idx	CREATE INDEX keiro_workflows_created_idx ON keiro.keiro_workflows USING btree (created_at, workflow_name, workflow_id) WHERE ((octet_length(workflow_name) + octet_length(workflow_id)) <= 2600)
 index	keiro_workflows_gc_idx	CREATE INDEX keiro_workflows_gc_idx ON keiro.keiro_workflows USING btree (status, completed_at)
-index	keiro_workflows_inspection_class_key_idx	CREATE INDEX keiro_workflows_inspection_class_key_idx ON keiro.keiro_workflows USING btree (inspection_status_class, workflow_name, workflow_id) WHERE ((octet_length(workflow_name) + octet_length(workflow_id)) <= 2600)
-index	keiro_workflows_inspection_wide_idx	CREATE INDEX keiro_workflows_inspection_wide_idx ON keiro.keiro_workflows USING btree (inspection_status_class, hashtextextended(workflow_name, (0)::bigint), hashtextextended(workflow_id, (0)::bigint)) WHERE ((octet_length(workflow_name) + octet_length(workflow_id)) > 2600)
 index	keiro_workflows_pkey	CREATE UNIQUE INDEX keiro_workflows_pkey ON keiro.keiro_workflows USING btree (workflow_id, workflow_name)
 table	keiro_awakeables	kind=r
 table	keiro_dead_letters	kind=r

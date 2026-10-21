@@ -131,6 +131,15 @@ observations; the HTTP tests prove the reservation and confirmation explicitly.
 
 ## Decision Log
 
+- Decision (2026-10-20, core-path priority): withdraw the unpublished workflow
+  writer DDL (0033/0034). Five alternating saturation comparisons measured
+  -9.22% median writer capacity and +12.91% p95 with inspection unmounted.
+  Paced throughput at 100/s was insufficient to expose this headroom loss.
+  Use read-side classification, existing status/key indexes, and bounded,
+  deadline-controlled inspection scans. Require restored writer capacity and
+  fresh actual-query evidence. Earlier DDL/query matrices are superseded.
+
+
 - Decision (2026-10-20, user-directed core-path focus): use the focused evidence
   mapping below rather than adding a domain-outcome/UI-load cross-product.
   Keep all default-off invariants, the core 5% gates and bounded lifecycle checks.

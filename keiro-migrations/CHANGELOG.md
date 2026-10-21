@@ -8,11 +8,7 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ### Other Changes
 
-- Migration 0034 derives workflow inspection classes in stored generated data and
-  indexes class/name/id pages while preserving existing writer key limits. Applying it rewrites the workflow table and blocks
-  writes; schedule maintenance for large stores. Manual time filters retain host
-  deadlines and remain outside automatic refresh. Large key populations have an
-  explicit inspection work budget rather than a silent partial result.
+- Keep workflow classification and browsing on the read side. No inspection-specific generated column, index, or migration changes ordinary writer work.
 
 ### Performance
 
@@ -21,7 +17,6 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ### New Features
 
-- Migration 0033 adds the workflow creation-order inspection index.
 
 ### Added
 

@@ -11,6 +11,7 @@
 * **Update**: Clarify that inspection performance acceptance protects core command and worker paths; inspection and combined-process allocation have no blanket percentage target.
 
 ## 2026-10-20
+* **Update**: ADR-40 records rejection of inspection-only workflow writer DDL after a matched capacity loss; read-side classification preserves writer schema.
 * **Update**: ADR-48 records shared enumeration retention in heap probes and the strict-counter requirement before assigning runtime ownership.
 * **Addition**: ADR-57 records pure prefix routing over allocated inspection applications, raw path preservation and shared CORS policy.
 * **Update**: Bound header presentation reuse while retaining exact fresh row checks, live schema policy and unchanged OpsResult and mutation protocols.

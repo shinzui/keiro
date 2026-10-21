@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Inspection surfaces are a bounded exception to the no-UI stance
 description: Keiro sanctions state browsing and safe operator actions over supported library APIs in opt-in sister packages, while metrics and traces stay in OpenTelemetry and no keiro package grows a dashboard, a server process, or a parallel observability stack.
-timestamp: 2026-10-21T00:12:00Z
+timestamp: 2026-10-21T04:46:30Z
 docId: ADR-40
 status: Accepted
 date: 2026-09-10
@@ -206,3 +206,11 @@ a design constraint, not a claim that the unimplemented surface has passed them.
   [ExecPlan 275](../plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md),
   and [ExecPlan 274](../plans/274-expose-process-manager-inspection-reads.md)
   implement IR-26, IR-27, IR-28, IR-30, and IR-29 under this boundary.
+
+Workflow inspection in this cohort computes classification during reads and
+uses existing status/key indexes. Unpublished inspection-only indexes and a
+stored generated class were withdrawn after matched saturation runs exposed
+about 9% ordinary-writer capacity loss, despite passing low-load latency
+medians. Inspection read cost is handled by admission, deadlines and supported
+workload envelopes; a paced throughput result alone does not establish that
+writer headroom is unchanged. No inspection-specific writer DDL ships here.
