@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-21
+* **Addition**: REV-20 requests changes before the next tag after reviewing 0.20.0.0, 0.21.0.0 and the unreleased inspection cohort: no per-event Keiro code on a hot path changed and every repository gate passes at HEAD, but the committed command benchmark guard is red at HEAD and was already red at 0.19.0.1, with append-heavy scenarios 25% to 239% slower than their August baseline, the default workflow listing scans the whole ledger per page under a withdrawn index design, the HTTP surface admits cross-site confirmed mutations and lets slow readers exhaust every permit, process-manager inspection ships only for the legacy API the 1.0 plan retires, 0.21.0.0 regenerated published-language output beyond what its edge states, and the version bump, edge and reconciled changelogs for the next release are not in the tree.
+
 ## 2026-09-20
 * **Addition**: REV-19 approves replacing exactly Rei's obsolete ActionId mapped-opaque declaration with the checked v5-or-v7 nominal path after immutable old-history replay and effect-isolated process continuation pass; generic opaque support and historical readers remain.
 * **Addition**: REV-18 requests changes for checked-mapping implementation retirement: clean public adoption and the required-reader negative gate pass, but every examined legacy path remains a supported authoring bridge or retained-history implementation.
