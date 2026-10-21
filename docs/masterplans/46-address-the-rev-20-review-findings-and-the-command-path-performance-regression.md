@@ -127,6 +127,10 @@ move; EP-1 and EP-2 should produce one.
 | 4 | Harden the HTTP operational surface against cross-site mutations and permit exhaustion | docs/plans/318-harden-the-http-operational-surface-against-cross-site-mutations-and-permit-exhaustion.md | None | None | Not Started |
 | 5 | Inspect reaction process managers and label legacy inspection before 1.0 | docs/plans/319-inspect-reaction-process-managers-and-label-legacy-inspection-before-1-0.md | None | None | Not Started |
 | 6 | Reconcile the 0.22.0.0 release surface and the 0.21.0.0 edge with the REV-20 findings | docs/plans/320-reconcile-the-0-22-0-0-release-surface-and-the-0-21-0-0-edge-with-the-rev-20-findings.md | None | EP-3, EP-4, EP-5 | Not Started |
+| 7 | Isolate the keiro-bench harness so each guard measures only its own fixture | docs/plans/321-isolate-the-keiro-bench-harness-so-each-guard-measures-only-its-own-fixture.md | None | None | Not Started |
+
+EP-1's M3 to M6 (re-recording the baselines and proving the gate green) require EP-7 to be
+Complete; EP-1's M1 and M2 (the attribution) are already done and had no prerequisite.
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -136,10 +140,11 @@ accepted output is needed, name it explicitly (e.g., EP-1 M1) and explain it bel
 
 ## Dependency Graph
 
-No plan hard-depends on another. EP-1, EP-3, EP-4, and EP-5 can proceed in parallel from the
-start; they touch different modules (`keiro/bench`, `keiro/src/Keiro/Workflow`,
-`keiro-ops-http/src`, and `keiro/src/Keiro/ProcessManager`) and are verified by different
-evidence. EP-2 can also start immediately and has in fact started: the `release-gate` recipe,
+One hard dependency exists at milestone granularity: EP-1's M3 to M6 require EP-7 Complete,
+because a baseline recorded on the shared-store harness would freeze the distortion EP-1's
+attribution found. EP-7, EP-3, EP-4, and EP-5 can proceed in parallel from the start; they
+touch different modules (`keiro/bench`, `keiro/src/Keiro/Workflow`, `keiro-ops-http/src`, and
+`keiro/src/Keiro/ProcessManager`) and are verified by different evidence. EP-2 can also start immediately and has in fact started: the `release-gate` recipe,
 the `scripts/bench-regression.sh` runner, and the release skill wording were committed with
 this MasterPlan. EP-2 soft-depends on EP-1 only in the sense that the gate stays red until
 EP-1 makes the guards green; the wiring itself is complete and verifiable regardless.
@@ -158,6 +163,13 @@ The six benchmark baselines `keiro/bench/baseline-*.csv` and the retained eviden
 `keiro/bench/results/` are owned by EP-1. EP-2 reads them through `scripts/bench-regression.sh`
 and never edits them. A baseline moves only with an evidence directory and a README that EP-1
 defines; EP-2's release skill text points at that rule.
+
+The benchmark harness structure (`keiro/bench/Main.hs`, `InboxDelegatedBench.hs`,
+`ProducerIdentityBench.hs`, `ReadModelBench.hs`: which store each group uses, where
+preparations run, what the timed actions reset, the `warm-up` rows) is owned by EP-7. EP-1
+records baselines only on EP-7's harness and must keep every existing scenario name, because
+`scripts/bench-regression.sh`'s `-p` patterns and the baseline CSVs match on names; EP-7 adds
+rows (`warm-up`) and never renames one.
 
 `scripts/bench-regression.sh` and the `bench-regression` and `release-gate` recipes in
 `justfile` are owned by EP-2. EP-1 runs them for its acceptance and may add guard-level
@@ -198,8 +210,9 @@ indexes (EP-3, a revision of ADR-40's rationale or a new ADR if the default orde
 ## Progress
 
 Phase 1 is open. EP-1 is In Progress with M1 and M2 complete: the command-guard slowdown is
-attributed to the benchmark harness, and M3 (isolate the command group's store, re-record)
-through M6 remain. EP-2 is In Progress: the runner, the recipes, and the release skill text are
+attributed to the benchmark harness; M3 to M6 (re-record, green runs) wait for EP-7. EP-7 is
+Not Started and is the next plan to implement, since EP-1 and the release gate's green state
+depend on it. EP-2 is In Progress: the runner, the recipes, and the release skill text are
 committed; its acceptance run waits for a quiet machine. EP-3, EP-4, EP-5, and
 EP-6 are Not Started. The only cross-plan gate is plan 303's tag, which needs EP-2 and EP-6
 Complete and EP-1's guards green at the release commit.
@@ -241,6 +254,12 @@ ADR must say that each benchmark group owns its store.
   Rationale: Plan 303 already holds the drafted 0.21.0.0 to 0.22.0.0 edge and the release
   rehearsal; the irreversible steps should stay in one plan with one owner, consuming a
   reconciled surface rather than producing one.
+  Date: 2026-10-21
+- Decision: Add EP-7 for the harness isolation and make EP-1's re-recording depend on it.
+  Rationale: The attribution showed that the command guard has measured another group's
+  fixture since 0.17.0.0 and that timed actions pay deletes no serving path pays; fixing that
+  is harness work with its own isolation test, separate from recording baselines, and
+  recording on an unfixed harness would freeze the distortion.
   Date: 2026-10-21
 - Decision: EP-5's minimum outcome before the tag is labelling, not the inspector extension.
   Rationale: ADR-49 and plan 304 retire the positional API; shipping its inspection unlabelled

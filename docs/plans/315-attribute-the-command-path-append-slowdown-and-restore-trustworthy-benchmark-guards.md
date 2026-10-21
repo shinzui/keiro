@@ -61,22 +61,22 @@ green for the next release.
       harness's fixture reset pays. Two systematic anomalies in the no-preparation run
       (`no-op` at 21 ms, router fan-out slower at 10 and 100 targets than at 1,000) are
       recorded for M3.
-- [ ] M3: The harness is isolated and the baseline re-recorded. `keiro/bench/Main.hs` gives
-      the command group its own fresh database (a second `withFreshResourceStore` clone, as
-      the read-model group already has) so no other group's preparation touches it, moves
-      each scenario's target reset out of the timed action, and explains the two anomalies
-      from M2 or removes them; then `keiro/bench/baseline-command.csv` is recorded from five
-      serial runs on this environment with a README under `keiro/bench/results/command-v2/`
-      that states the attribution, the control protocol and the machine, GHC, PostgreSQL and
-      commit. No Keiro serving path and no Kiroku change is involved.
+- [ ] M3: The command baseline is re-recorded on the isolated harness. After plan 321
+      (`docs/plans/321-isolate-the-keiro-bench-harness-so-each-guard-measures-only-its-own-fixture.md`)
+      is Complete, `keiro/bench/baseline-command.csv` is recorded from five serial runs on
+      this environment with a README under `keiro/bench/results/command-v2/` that states the
+      attribution, the control protocol (the recording commit must reproduce its own rows
+      within the ceiling) and the machine, GHC, PostgreSQL and commit. No Keiro serving path
+      and no Kiroku change is involved.
 - [ ] M4: The producer-identity guard passes for a stated reason. The same-process 1.10
       ceiling in `keiro/bench/ProducerIdentityBench.hs` is either met after a measured change
       or replaced by a guard whose rationale is recorded (for example an absolute per-row budget
       for the deterministic path's second statement), with the evidence directory
       `keiro/bench/results/producer-identity-v1/` extended rather than rewritten.
-- [ ] M5: The first fresh inbox scenario no longer pays a multi-second first-run cost in the
-      timed action: `table-downstream-single.fresh.metrics-off` measures within 25% of its
-      baseline in three consecutive `just bench-regression inbox` runs on a quiet machine.
+- [ ] M5: The inbox baseline is re-recorded on the isolated harness once plan 321's warm-up
+      rows have removed the first-run cost from `table-downstream-single.fresh.metrics-off`
+      (the harness change itself is plan 321's M3); acceptance is three consecutive passes of
+      `just bench-regression inbox` on a quiet machine against the new rows.
 - [ ] M6: `nix develop -c just bench-regression` prints `BENCH_REGRESSION=PASSED` three times
       in a row on a quiet machine, and the three logs are retained under
       `keiro/bench/results/release-gates/` or a plan-named directory.
@@ -208,6 +208,15 @@ which rests on the 1,000-target and single-command rows.
   the serving paths did not change cost. Kiroku 0.7's hard-delete guards are real but are paid
   only by the fixture reset, which M3 moves out of the timed action. This replaces the M2
   micro-measurement and the M3 "fix or accept" fork that the plan originally described.
+  Date: 2026-10-21
+
+- Decision: Split the harness work out of this plan into plan 321 and make M3 to M6 depend on
+  it.
+  Rationale: Fixing the harness (per-group stores, resets outside timed actions, warm-ups)
+  changes every group's numbers and is verified by its own isolation test, while this plan's
+  remaining work is recording baselines and proving the gate green; keeping them apart lets
+  the harness be reviewed on its own and prevents a baseline from being recorded on a
+  half-isolated harness.
   Date: 2026-10-21
 
 Revision note (2026-10-21): M1 and M2 were completed by a tag sweep (control, 0.16.0.0,
@@ -428,5 +437,7 @@ runs do not accumulate state.
 `BENCH_REGRESSION=PASSED|FAILED`. `Keiro.Workflow.Lifecycle.hardDeleteStream` and Kiroku's
 `appendToStream` are the operations M2 separates. The Kiroku checkout at
 `/Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku` is read-only for this plan; changes
-there go through an improvement request. No parent milestone must be accepted before this plan
-begins.
+there go through an improvement request. M1 and M2 needed no prerequisite; M3 to M6 require
+plan 321 (`docs/plans/321-isolate-the-keiro-bench-harness-so-each-guard-measures-only-its-own-fixture.md`)
+to be Complete, because a baseline recorded on the shared-store harness would freeze the
+distortion this plan found.
