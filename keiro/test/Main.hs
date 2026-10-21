@@ -18,6 +18,7 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (parseEither)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as ByteString
+import Data.ByteString.Lazy qualified as LazyByteString
 import Data.Char (isDigit)
 import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef, writeIORef)
 import Data.Int (Int32)
@@ -199,6 +200,7 @@ import Keiro.Outbox.Kafka qualified as OutboxKafka
 import Keiro.Outbox.Schema (markOutboxFailedTx, markOutboxRejectedTx)
 import Keiro.Prelude
 import Keiro.ProcessManager
+import Keiro.ProcessManager.Inspect qualified as PMInspection
 import Keiro.ProcessManager.Reaction qualified as Reaction
 import Keiro.Projection
 import Keiro.ReadModel
@@ -5309,6 +5311,54 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           Prelude.sum persistedCounts `shouldBe` fanOut
 
   describe "Keiro.ProcessManager" $ around (withFreshResourceStore fixture) $ do
+    it "records source provenance for explicit inspection capture" $ \(_, StoreRunner runner) -> do
+      let source = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
+      let options = defaultRunCommandOptions & #inspectionProvenance .~ CaptureInspectionProvenance & #metadata ?~ Aeson.object ["actor" Aeson..= ("ops" :: Text)]
+      Right (Right _) <- runner (runProcessManagerOnce options counterProcessManager source (CounterAdded 9))
+      Right events <- runner (Store.readStreamForward (StreamName "pm:counter-order-1") (StreamVersion 0) 1)
+      Vector.length events `shouldBe` 1
+      case Vector.head events ^. #metadata of
+        Just (Aeson.Object fields) -> do
+          KeyMap.lookup "actor" fields `shouldBe` Just (Aeson.String "ops")
+          Just frame <- pure (KeyMap.lookup "keiro.pm" fields)
+          Just provenance <- pure (PMInspection.decodeReactionProvenance frame)
+          (provenance ^. #sourceEventId) `shouldBe` (source ^. #eventId)
+          (provenance ^. #sourceGlobalPosition) `shouldBe` (source ^. #globalPosition)
+          (provenance ^. #sourceStreamId) `shouldBe` (source ^. #originalStreamId)
+          (provenance ^. #dispatched) `shouldBe` [(0, StreamName "counter-target-order-1")]
+          (provenance ^. #truncated) `shouldBe` False
+          LazyByteString.length (Aeson.encode frame) `shouldSatisfy` (<= 16384)
+          let many = provenance & #dispatched .~ [(i, StreamName ("target-" <> Text.pack (show i))) | i <- [0 .. 99]] & #timerIds .~ replicate 100 (TimerId sampleUuid)
+          Just prefix <- pure (PMInspection.decodeReactionProvenance (PMInspection.encodeReactionProvenance many))
+          length (prefix ^. #dispatched) `shouldBe` 64
+          length (prefix ^. #timerIds) `shouldBe` 64
+          (prefix ^. #truncated) `shouldBe` True
+          let escaped = many & #dispatched .~ [(i, StreamName (Text.replicate 400 "\"")) | i <- [0 .. 63]]
+              limited = PMInspection.encodeReactionProvenance escaped
+          Just sourceOnly <- pure (PMInspection.decodeReactionProvenance limited)
+          (sourceOnly ^. #dispatched) `shouldBe` []
+          (sourceOnly ^. #truncated) `shouldBe` True
+          LazyByteString.length (Aeson.encode limited) `shouldSatisfy` (<= 16384)
+          case frame of
+            Aeson.Object body -> do
+              PMInspection.decodeReactionProvenance (Aeson.Object (KeyMap.insert "family" (Aeson.String "other-family") body)) `shouldBe` Nothing
+              let tooLarge = Aeson.toJSON [Aeson.object ["i" Aeson..= (0 :: Int), "target" Aeson..= Text.replicate 20000 "x"]]
+              PMInspection.decodeReactionProvenance (Aeson.Object (KeyMap.insert "dispatched" tooLarge body)) `shouldBe` Nothing
+            _ -> expectationFailure "expected provenance object"
+        _ -> expectationFailure "expected source provenance metadata"
+      (Vector.head events ^. #eventId) `shouldBe` deterministicCommandId "counter-pm" "order-1" (source ^. #eventId) (-1)
+      let another = recordedFromEventId (EventId sampleUuid2) (CounterAdded 9)
+      Right invalid <- runner (runProcessManagerOnce (options & #metadata ?~ Aeson.String "invalid") counterProcessManager another (CounterAdded 9))
+      invalid `shouldSatisfy` (\case Left (EncodeFailed (NonObjectCallerMetadata _)) -> True; _ -> False)
+      Right (Right _) <- runner (runDomainProcessManagerOnce options domainProcessManager source (DomainDispatchInput "capture" [CoordinatorAccept 9]))
+      Right domainEvents <- runner (Store.readStreamForward (StreamName "domain-pm:capture") (StreamVersion 0) 1)
+      case Vector.head domainEvents ^. #metadata of
+        Just (Aeson.Object fields) -> do
+          Just domainFrame <- pure (KeyMap.lookup "keiro.pm" fields)
+          Just provenance <- pure (PMInspection.decodeReactionProvenance domainFrame)
+          (provenance ^. #dispatched) `shouldBe` [(0, StreamName "domain-pm-target:capture:0")]
+        _ -> expectationFailure "expected domain manager provenance"
+
     it "advances manager state, emits a deterministic target command once, and schedules a timer" $ \(_storeHandle, StoreRunner _runner) -> do
       let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
       result <-
@@ -5333,6 +5383,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         _runner $
           Store.readStreamForward (StreamName "counter-target-order-1") (StreamVersion 0) 10
       Vector.length managerEvents `shouldBe` 1
+      (Vector.head managerEvents ^. #metadata) `shouldBe` Just (Aeson.object ["schemaVersion" Aeson..= (1 :: Int)])
       Vector.length targetEvents `shouldBe` 1
       timer <-
         _runner $

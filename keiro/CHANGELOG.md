@@ -21,6 +21,13 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### New Features
 
+- Explicit, bounded legacy manager provenance through
+  `RunCommandOptions.inspectionProvenance` (default `NoInspectionProvenance`).
+  Capture records intended source/target evidence under `keiro.pm`, capped at
+  64 targets, 64 timer ids and 16 KiB, with an explicit truncation marker.
+  Direct RunCommandOptions record constructors must supply the new field;
+  existing updates of defaultRunCommandOptions remain disabled.
+
 - `Keiro.Inspection.Aggregate` exposes folded aggregate state, snapshot health and cursor pages through explicit application descriptors. `hydrateWithSource` reports the existing hydration algorithm’s source; ordinary hydration constructs no diagnostic result. `observeSnapshotRow` adds a database observation clock without changing runtime snapshot lookup.
 
 - Exact, bounded conditional workflow header sessions and reusable single-SELECT point reads.

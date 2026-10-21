@@ -65,6 +65,7 @@ module Keiro.Command
 
     -- * Options
     RunCommandOptions (..),
+    InspectionProvenancePolicy (..),
     defaultRunCommandOptions,
 
     -- * Running commands
@@ -335,6 +336,11 @@ data HydrationReplayReason
     HydrationTruncatedChain
   deriving stock (Generic, Eq, Show)
 
+-- | Legacy reaction source metadata is explicit application opt-in. Mounting
+-- an inspection application never enables it.
+data InspectionProvenancePolicy = NoInspectionProvenance | CaptureInspectionProvenance
+  deriving stock (Eq, Show, Generic)
+
 -- | Knobs controlling a single command invocation.
 --
 -- * 'retryLimit' — how many times to rehydrate-and-replay after an
@@ -362,6 +368,8 @@ data HydrationReplayReason
 -- * 'seedVerifyInFlightLimit' — maximum concurrent sampled verifications in
 --   this process. A sampled verification is skipped when the limit is full;
 --   @0@ removes the limit.
+-- * 'inspectionProvenance' — explicit bounded legacy reaction metadata;
+--   disabled by default and independent of mounting an inspection server.
 data RunCommandOptions = RunCommandOptions
   { retryLimit :: !Int,
     pageSize :: !Int32,
@@ -385,14 +393,16 @@ data RunCommandOptions = RunCommandOptions
     --     keys here are merged on top (see 'Keiro.Codec.metadataFor'). When
     --     'Nothing', events carry only the schema-version marker, exactly as
     --     before this field existed.
-    metadata :: !(Maybe Value)
+    metadata :: !(Maybe Value),
+    -- | Bounded legacy process-manager provenance; disabled on ordinary writes.
+    inspectionProvenance :: !InspectionProvenancePolicy
   }
   deriving stock (Generic)
 
 -- | Sensible defaults: 3 retries, 256-event read pages, no caller-assigned
 -- event ids, a no-op pre-append hook, 5ms retry backoff, no metrics, post-append
 -- replay verification enabled, one sampled snapshot-seed verification per 1000
--- snapshot hits, no tracer, and no extra metadata.
+-- snapshot hits, no tracer, no extra metadata, and inspection provenance off.
 defaultRunCommandOptions :: RunCommandOptions
 defaultRunCommandOptions =
   RunCommandOptions
@@ -406,7 +416,8 @@ defaultRunCommandOptions =
       seedVerifySampleRate = 1000,
       seedVerifyInFlightLimit = 1,
       tracer = Nothing,
-      metadata = Nothing
+      metadata = Nothing,
+      inspectionProvenance = NoInspectionProvenance
     }
 
 data Hydrated rs s = Hydrated

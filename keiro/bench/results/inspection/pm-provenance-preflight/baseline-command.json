@@ -1,0 +1,6 @@
+{
+  "baseline_commit": "d1db53761b725208d00a74e0a11be2354e001da2",
+  "binary_sha256": "25143eb8c3f2ffdb6d2fdd1d20269d279d812ffaf1d33d49dfb88eceb2e2eff9",
+  "benchmark_source_sha256": "a0931877708c42fd65c58f4d07701bd22c415af0ab0ab53f0e7ecbc6ae7e39bb",
+  "status": "frozen existing command benchmark before adding provenance policy; not yet a measured comparison"
+}

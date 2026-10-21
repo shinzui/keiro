@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-21
+* **Addition**: ADR-55 records explicit default-off bounded legacy reaction provenance, unchanged write identities and unavailable modern-family evidence.
 * **Update**: Bind aggregate membership, metadata and hydration to the same physical stream while preserving custom audit-target handles.
 * **Addition**: ADR-54 records shared hydration with a specialized ordinary result and explicit aggregate display and page contracts.
 * **Update**: ADR-28 records application-owned aggregate display, versioned state observations and raw-page cursor advancement.

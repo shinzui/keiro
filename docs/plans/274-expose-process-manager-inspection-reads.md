@@ -80,6 +80,20 @@ whose Integration Points settle the artifacts this plan shares with its siblings
 
 ## Progress
 
+2026-10-20: M1 capture is implemented for the two legacy runners, with the
+policy disabled by default and no migration. The 43 focused process-manager
+examples pass, including stored source fields, caller metadata, unchanged ids,
+byte/count caps, domain capture and existing non-object metadata rejection.
+The decoder byte-bound follow-up also passes (2 focused examples). Ordinary-path performance
+and broader cohort acceptance remain open; no passing interference claim is made.
+
+2026-10-20: Begin M0 against EP-2's accepted cursor/pages and EP-3's completed
+hydration/aggregate handoff (`d1db5376`). Default-off provenance and optional
+index costs are the core-path risks; timer planning evidence precedes a migration
+choice. Existing legacy manager appends alter only eventIds, and replay audits
+compare encoded state/registers rather than extra event metadata. The current
+store release already supplies public listing; no substrate gate remains.
+
 2026-10-20 coordination clarification: MasterPlan 45 now gates implementation
 on accepted shared interfaces rather than whole-child release closure. The
 integrated experiment follows the implemented functional cohort; all child
@@ -94,12 +108,12 @@ Milestone 0 is the validation gate; every later milestone starts only after its 
 recorded in the Decision Log.
 
 - [x] (2026-09-10T02:35Z) Plan created; IR-29 gained a "Planning (2026-09-10)" section linking this plan, its timestamp advanced, and the bundle log records the update. Status remains proposed.
-- [ ] M0: confirm on the current tree that manager-state appends carry no link to their source event (grep evidence in Surprises), and prove with a red test that the provenance read in Milestone 2 cannot be satisfied from existing history.
-- [ ] M0: confirm that `Keiro.ReplayAudit` and the post-append replay witness compare payloads and folded state only, never event metadata, so adding metadata cannot create replay divergence.
-- [ ] M0: confirm through Mori that the installed `kiroku-store` (0.9.0.1, the released bound) exposes no stream listing, record the exact `Store` constructor list, and record the Progress state of kiroku plan 88 (which adds `listStreams`) and the newest `kiroku-store` release on Hackage.
-- [ ] M0: capture `EXPLAIN (ANALYZE, BUFFERS)` evidence for the per-type and per-instance pending-timer queries against a seeded table, with and without the candidate partial index, and record the go/no-go for the pending-timer index migration (the next migration, 0033 at planning time; its number is allocated by `keiro-migrate new` at implementation).
-- [ ] M1: add reaction provenance metadata to the manager-state append in `runProcessManagerOnce` and `advanceDomainProcessManager`, preserving caller metadata.
-- [ ] M1: tests prove the stored metadata shape, caller-metadata preservation, unchanged deterministic ids, and duplicate-replay behavior.
+- [x] (2026-10-20) M0: confirm on the current tree that manager-state appends carry no link to their source event (grep evidence in Surprises), and prove with a red test that the provenance read in Milestone 2 cannot be satisfied from existing history.
+- [x] (2026-10-20) M0: confirm that `Keiro.ReplayAudit` and the post-append replay witness compare payloads and folded state only, never event metadata, so adding metadata cannot create replay divergence.
+- [x] (2026-10-20) M0: confirm the released store listing under the existing 0.11 bound through Mori, Hackage and upstream tags; no absent-substrate gate remains.
+- [x] (2026-10-20) M0: capture `EXPLAIN (ANALYZE, BUFFERS)` evidence for the per-type and per-instance pending-timer queries against a seeded table, with and without the candidate partial index, and record the go/no-go for the pending-timer index migration (the next migration, 0033 at planning time; its number is allocated by `keiro-migrate new` at implementation).
+- [x] (2026-10-20) M1: add reaction provenance metadata to the manager-state append in `runProcessManagerOnce` and `advanceDomainProcessManager`, preserving caller metadata.
+- [x] (2026-10-20) M1: tests prove the stored metadata shape, caller-metadata preservation, unchanged deterministic ids, and duplicate-replay behavior.
 - [ ] M2: add `Keiro.ProcessManager.Inspect` with the inspector descriptor, the smart constructors, and `inspectProcessManagerInstance` built on `Keiro.Command.hydrateWithSource` (creating `hydrateWithSource` to plan 278's interface if plan 278 has not landed).
 - [ ] M2: rebuild-equivalence test against `hydrateFull`, provenance rendering test, pre-provenance history test, missing-instance test, and dispatched-command status test.
 - [ ] M2: add `AppHooks.processManagers` (additive beside plan 278's `aggregates`) and the embedded-only `pm show` command in `keiro-ops` with tests.
@@ -113,6 +127,28 @@ recorded in the Decision Log.
 
 ## Surprises & Discoveries
 
+2026-10-20 M0: The source-link witness fails exactly on existing history:
+metadata is `{"schemaVersion":1}` and has no `keiro.pm`. Raw failure is retained
+in `keiro/bench/results/inspection/pm-provenance-preflight/source-link-red.log`.
+Both legacy manager append sites change only `eventIds`. Codec decoding reads
+the schemaVersion stamp, while replay audit and seed verification compare
+encoded state/registers and canonical digests, not the added provenance fields.
+Preserving the existing stamp therefore preserves replay identity.
+
+The public store listing is already released in 0.11.0.1 under the existing
+0.11 bound, verified through Mori, Hackage and upstream tags during EP-3.
+EP-3's source-reporting worker and descriptors are complete at `d1db5376`.
+
+Timer preflight retains 216 normal-planner prepared-query prototypes plus key
+probes under `keiro/bench/results/inspection/timer-query-prototypes/`. At 100,000
+rows the generic unfiltered first page scans/sorts with the existing due index
+(about 8.8 ms); a global `(fire_at,timer_id)` partial index returns 101 rows by
+range scan (about 0.023 ms). Filtered paths still examine broad populations.
+The full four-index candidate rejects correlation values accepted previously,
+including 2670 and 10000 bytes, so it is a compatibility no-go. The global index
+preserves the tested key domain; it is not approved for migration until M3's
+actual owning-query and timer write/WAL/HOT checks. No production DDL changed.
+
 2026-10-13 source review: Default-on unbounded provenance would add JSON traversal/WAL on every legacy reaction; actual target witnesses and the newer ADR-41 reaction family require narrower semantics. Timer ordering/filter indexes require realistic read/write evidence.
 
 
@@ -120,6 +156,15 @@ recorded in the Decision Log.
 
 
 ## Decision Log
+
+- (2026-10-20) M0 go: proceed with explicit default-off provenance and inspection
+  reads against the accepted cursor/hydration/listing interfaces. Existing
+  history cannot supply source links, and the added metadata is outside replay
+  comparisons. No-go for the unguarded four-index timer set because it narrows
+  valid writer inputs. Hold the global-only candidate for actual API and write
+  proof in M3 before allocating any migration; unsupported refresh shapes must
+  remain outside automatic feeds. This does not waive core-path interference
+  or write-cost acceptance.
 
 - Decision (2026-10-13): apply the current review constraints in Context, Plan of Work, and Validation. Rationale: Default-on unbounded provenance would add JSON traversal/WAL on every legacy reaction; actual target witnesses and the newer ADR-41 reaction family require narrower semantics. Timer ordering/filter indexes require realistic read/write evidence. Historical September decisions below are retained as history; conflicting create-first, downgrade, zero-cost-index, unconditional-provenance and partial-completion instructions are withdrawn.
 

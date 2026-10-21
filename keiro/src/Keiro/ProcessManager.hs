@@ -156,6 +156,7 @@ import Keiro.Command
     CommandResult,
     DomainCommandHandler,
     DomainCommandOutcome,
+    InspectionProvenancePolicy (..),
     RunCommandOptions,
     commandErrorClass,
     runCommandWithSql,
@@ -165,6 +166,7 @@ import Keiro.DeterministicId (deterministicIdProbes, legacySeedBytes)
 import Keiro.EventStream (EventStream)
 import Keiro.EventStream.Validate (ValidatedEventStream, unvalidated)
 import Keiro.Prelude
+import Keiro.ProcessManager.Provenance
 import Keiro.Projection (InlineProjection, runCommandWithProjections, runDomainCommandWithProjections)
 import Keiro.Stream (Stream)
 import Keiro.Telemetry (KeiroMetrics, recordDispatchDeadLettered, recordDispatchDuplicate, recordDispatchFailed, recordDispatchPoison)
@@ -520,6 +522,30 @@ commandIdSeed managerName correlationId sourceEventId emitIndex =
       Text.pack (show emitIndex)
     ]
 
+-- Inline so the disabled branch retains the original options update without
+-- constructing provenance, traversing lists or resolving any target names.
+{-# INLINE managerCommandOptions #-}
+managerCommandOptions :: RunCommandOptions -> EventId -> RecordedEvent -> ProcessManagerAction ci targetCi -> (Stream targetCi -> StoreTypes.StreamName) -> RunCommandOptions
+managerCommandOptions options managerEventId source action resolveTarget =
+  case options ^. #inspectionProvenance of
+    NoInspectionProvenance -> original
+    CaptureInspectionProvenance ->
+      withProvenanceMetadata
+        ( encodeReactionProvenance
+            ReactionProvenance
+              { sourceEventId = source ^. #eventId,
+                sourceGlobalPosition = source ^. #globalPosition,
+                sourceStreamId = source ^. #originalStreamId,
+                dispatched = [(index, resolveTarget (command ^. #target)) | (index, command) <- zip [0 ..] (action ^. #commands)],
+                timerIds = fmap (^. #timerId) (action ^. #timers),
+                family = legacyProvenanceFamily,
+                truncated = False
+              }
+        )
+        original
+  where
+    original = options & #eventIds .~ [managerEventId]
+
 -- | React to a single source event: advance the manager's state, dispatch
 -- its target commands, and schedule its timers — each under a deterministic,
 -- idempotent write id.
@@ -554,7 +580,7 @@ runProcessManagerOnce options manager sourceEvent input = do
       managerStream = (manager ^. #streamFor) correlationId
       managerProbes = deterministicCommandIdProbes (manager ^. #name) correlationId (sourceEvent ^. #eventId) (-1)
       managerEventId = NonEmpty.head managerProbes
-      managerOptions = options & #eventIds .~ [managerEventId]
+      managerOptions = managerCommandOptions options managerEventId sourceEvent action (\target -> ((unvalidated (manager ^. #targetEventStream)) ^. #resolveStreamName) (coerce target))
       managerStreamName = ((unvalidated (manager ^. #eventStream)) ^. #resolveStreamName) managerStream
   existingManagerId <- firstExistingEventId options managerStreamName managerProbes
   case existingManagerId of
@@ -694,7 +720,7 @@ advanceDomainProcessManager options manager sourceEvent input = do
       managerStream = (manager ^. #streamFor) correlationId
       managerProbes = deterministicCommandIdProbes (manager ^. #name) correlationId (sourceEvent ^. #eventId) (-1)
       managerEventId = NonEmpty.head managerProbes
-      managerOptions = options & #eventIds .~ [managerEventId]
+      managerOptions = managerCommandOptions options managerEventId sourceEvent action (\target -> ((unvalidated ((manager ^. #targetHandler) ^. #eventStream)) ^. #resolveStreamName) (coerce target))
       managerStreamName = ((unvalidated (manager ^. #eventStream)) ^. #resolveStreamName) managerStream
       finish managerResult = pure (Right (correlationId, managerResult, action))
   existingManagerId <- firstExistingEventId options managerStreamName managerProbes

@@ -1,0 +1,23 @@
+{
+  "kind": "M0 prepared-query prototypes and key-domain diagnostics; not final API or write-cost acceptance",
+  "baseline_commit": "d1db53761b725208d00a74e0a11be2354e001da2",
+  "ghc": "9.12.4",
+  "driver_optimization": "O2",
+  "library_optimization": "O1",
+  "rts": [
+    "-N2"
+  ],
+  "rows": [
+    10000,
+    100000
+  ],
+  "plan_count": 216,
+  "source_sha256": "ac3c341af47b6cc20880fe8fa9105a266ae74ae01eced499e11b5b0c0dbddc56",
+  "binary_sha256": "338f79ce1c16269ee61eb9fd3d8aaad36bdbcd98847e27544073ae713d20bf85",
+  "index_stages": [
+    "existing due index",
+    "additional global fire_at/timer_id partial index",
+    "additional manager/correlation/combined partial indexes"
+  ],
+  "settings": "observed in each plan artifact; fsync, synchronous_commit, full_page_writes and autovacuum required on"
+}

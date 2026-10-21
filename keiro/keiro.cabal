@@ -78,6 +78,7 @@ library
     Keiro.Outbox.Schema
     Keiro.Outbox.Types
     Keiro.ProcessManager
+    Keiro.ProcessManager.Inspect
     Keiro.ProcessManager.Reaction
     Keiro.Projection
     Keiro.Projection.Catalog
@@ -121,6 +122,7 @@ library
   other-modules:
     Keiro.Command.Domain
     Keiro.Outbox.Rejection
+    Keiro.ProcessManager.Provenance
     Keiro.Projection.Types
     Keiro.ReadModel.Rebuild.Group
     Keiro.ReadModel.Rebuild.Runner

@@ -31,6 +31,13 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### New Features
 
+- Explicit, bounded legacy manager provenance through
+  `RunCommandOptions.inspectionProvenance` (default `NoInspectionProvenance`).
+  Capture records intended source/target evidence under `keiro.pm`, capped at
+  64 targets, 64 timer ids and 16 KiB, with an explicit truncation marker.
+  Direct RunCommandOptions record constructors must supply the new field;
+  existing updates of defaultRunCommandOptions remain disabled.
+
 - Application-owned aggregate inspection catalogs, source-reporting hydration, bounded aggregate pages and embedded read-only ops commands.
 
 - Add bounded workflow pages and `wf inspect`, canonical status classes, and the shared cursor codec.
