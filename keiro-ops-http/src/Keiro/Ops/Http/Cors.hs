@@ -17,6 +17,6 @@ corsMiddleware origins = \app request respond ->
                 | any ((== "Access-Control-Allow-Origin") . fst) headers = headers
                 | otherwise = ("Access-Control-Allow-Origin", origin) : ("Vary", "Origin") : headers
            in if requestMethod request == methodOptions && any ((== "Access-Control-Request-Method") . fst) (requestHeaders request)
-                then respond (responseLBS status204 (add [("Access-Control-Allow-Methods", "GET, POST, OPTIONS"), ("Access-Control-Allow-Headers", "Content-Type"), ("Access-Control-Max-Age", "600")]) "")
+                then respond (responseLBS status204 (add [("Access-Control-Allow-Methods", "GET, POST, OPTIONS"), ("Access-Control-Allow-Headers", maybe "Content-Type" id (lookup "Access-Control-Request-Headers" (requestHeaders request))), ("Access-Control-Max-Age", "600")]) "")
                 else app request (respond . mapResponseHeaders add)
     _ -> app request respond

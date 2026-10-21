@@ -85,6 +85,16 @@ registry and execution sequence when interpreting older dependency text below.
       MasterPlan 45 closure, and the ADR distillation pass.
 
 
+Current work (2026-10-20): `keiro-ops-http:bench:inspection-interference`
+reuses the unchanged durable workflow writer across the pre-change and candidate
+package sets and adds timer schedule/claim/fire. Its named modes are `disabled`,
+`idle`, `active-shared`, `active-distinct`, `slow-reader` and `churn`, served
+through `/keiro`. Load clients run in a separate process. Writer-thread
+allocation is recorded independently from combined runtime allocation. The
+32-view case includes workflow, timer and projection feeds, 256 clients,
+HTTP polls, 100k workflow/timer ledgers and bounded large values. Smoke runs
+overlap builds and are diagnostics only; matched acceptance is pending.
+
 ## Surprises & Discoveries
 
 2026-10-20 EP-1 handoff: `pgmq dlq read` was incorrectly classified as read-only

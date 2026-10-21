@@ -10,6 +10,7 @@ import Keiro.Migrations.SchemaCheck
 import Keiro.Ops (emptyAppHooks)
 import Keiro.Ops.Env (resolveConnectionString)
 import Keiro.Ops.Http
+import Keiro.Ops.Http.Config qualified as Config
 import Kiroku.Store.Connection (ConnectionSettingsM (..), KirokuStore (..), defaultConnectionSettings, withStore)
 import Options.Applicative
 import System.IO (stderr)
@@ -20,7 +21,7 @@ options :: Parser Options
 options =
   Options
     <$> optional (textOption (long "database-url" <> metavar "URL"))
-    <*> ( (\enabled drift origins -> defaultOpsHttpConfig {mutations = if enabled then MutationsEnabled else MutationsDisabled, schemaDrift = if drift then AllowDrift else RefuseOnDrift, allowedOrigins = origins})
+    <*> ( (\enabled drift origins -> defaultOpsHttpConfig {mutations = if enabled then MutationsEnabled else MutationsDisabled, schemaDrift = if drift then AllowDrift else RefuseOnDrift, Config.allowedOrigins = origins})
             <$> switch (long "enable-mutations")
             <*> switch (long "allow-schema-drift")
             <*> many (textOption (long "allow-origin" <> metavar "ORIGIN"))

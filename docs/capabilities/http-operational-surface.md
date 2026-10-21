@@ -2,7 +2,7 @@
 title: HTTP operational surface
 type: Capability
 description: Mount the supported operational command tree over bounded HTTP reads and explicitly confirmed mutations.
-timestamp: 2026-10-21T03:09:44Z
+timestamp: 2026-10-21T03:23:25Z
 generated:
   by: openai/codex
   at: 2026-10-20T17:05:00Z
@@ -12,7 +12,7 @@ status: shipped
 stability: experimental
 since: unreleased
 packages: [keiro-ops-http]
-interface: [Keiro.Ops.Http, Keiro.Ops.Http.Feed, Keiro.Ops.Http.WebSocket, Keiro.Ops.Http.Protocol, Keiro.Ops.Http.Views]
+interface: [Keiro.Ops.Http, Keiro.Ops.Http.Feed, Keiro.Ops.Http.WebSocket, Keiro.Ops.Http.Protocol, Keiro.Ops.Http.Views, Keiro.Ops.Http.Compose]
 requires: [CAP-16]
 evidence:
   - kind: test
@@ -61,3 +61,7 @@ notify/fallback delivery, common poll encoders, replacement refusal, repeated
 in-flight release, upgrade policies and active close. See
 [Stream Keiro Inspection Views](../guides/stream-keiro-inspection-views.md).
 Composed writer-interference and release-cohort acceptance remain open.
+
+`Keiro.Ops.Http.Compose` mounts allocated owner applications with exact raw-path
+stripping and one duplicate-safe CORS policy. The example mounts released
+Kiroku metrics beside Keiro; no sibling web dependency enters the library.

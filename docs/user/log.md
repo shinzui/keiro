@@ -8,6 +8,7 @@
 * **Update**: Document aggregate inspection descriptors, command routes, state versions, snapshot observation clocks and bounded raw-page continuation.
 
 ## 2026-10-20
+* **Update**: DOC-15 links the one-port composition recipe and shared feed admission.
 * **Update**: Document guarded workflow pages, exceptional key budgets, and manual owner/time read deadlines.
 * **Update**: Point tools at bounded workflow inspection routes.
 * **Update**: Document workflow status classes, cursors, and bounded reads.

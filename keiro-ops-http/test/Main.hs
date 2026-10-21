@@ -33,6 +33,7 @@ import Keiro.Ops.Http
 import Keiro.Ops.Http.Application
 import Keiro.Ops.Http.Budget
 import Keiro.Ops.Http.Config qualified
+import Keiro.Ops.Http.Config qualified as Config
 import Keiro.Ops.Http.Protocol qualified as Protocol
 import Keiro.Ops.Http.Route
 import Keiro.Ops.Http.Views qualified as Views
@@ -66,6 +67,7 @@ import Pgmq.Migration qualified as Pgmq
 import System.Exit (ExitCode (..))
 import System.Process (readProcessWithExitCode)
 import System.Timeout (timeout)
+import Test.ComposeSpec qualified as ComposeSpec
 import Test.FeedSpec qualified as FeedSpec
 import Test.Hspec
 import Test.WebSocketSpec qualified as WebSocketSpec
@@ -77,6 +79,7 @@ main = do
 
 spec :: Fixture -> Spec
 spec fixture = do
+  ComposeSpec.spec fixture
   FeedSpec.spec fixture
   WebSocketSpec.spec fixture
   describe "live view parameters" $ do
@@ -330,7 +333,7 @@ spec fixture = do
         response <- call app methodGet "/" ""
         assertError response status404 "not_found"
       it "applies exact-origin CORS without credentials or duplicate headers" $ \store -> do
-        app <- opsApplication defaultOpsHttpConfig {allowedOrigins = ["http://ui.example"]} Ops.emptyAppHooks store
+        app <- opsApplication defaultOpsHttpConfig {Config.allowedOrigins = ["http://ui.example"]} Ops.emptyAppHooks store
         let request origin method = (setPath defaultRequest "/wf/list") {requestMethod = method, requestHeaders = [("Origin", origin), ("Access-Control-Request-Method", "GET")]}
         allowed <- runSession (srequest (SRequest (request "http://ui.example" methodGet) "")) app
         lookup "Access-Control-Allow-Origin" (simpleHeaders allowed) `shouldBe` Just "http://ui.example"

@@ -455,6 +455,15 @@ in  Schema.Project::{
         , description = Some "Bounded HTTP transport over the supported operational command tree"
         , dependencies =
           [ Schema.Dependency.WithAugmentation
+              { name = "shinzui/kiroku:kiroku-metrics"
+              , extraDocs = [] : List Schema.DocRef.Type
+              , localPathOverride = None Text
+              , kind = Some Schema.DependencyKind.ThirdParty
+              , source = Some Schema.DependencySource.Hackage
+              , scope = Some Schema.DependencyScope.Test
+              , versionConstraint = Some "^>=0.3.0.1"
+              }
+          , Schema.Dependency.WithAugmentation
               { name = "yesodweb/wai:wai"
               , extraDocs = [] : List Schema.DocRef.Type
               , localPathOverride = None Text

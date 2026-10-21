@@ -97,21 +97,36 @@ registry and execution sequence when interpreting older dependency text below.
 - [ ] Validate the review constraints and record the required performance/correctness evidence before marking this plan complete.
 
 
-- [ ] Milestone 1: `Keiro.Ops.Http.Compose` (prefix type, router, root index, unmounted-prefix
+- [x] (2026-10-20) Milestone 1: `Keiro.Ops.Http.Compose` (prefix type, router, root index, unmounted-prefix
       refusal, and the once-only CORS middleware), exported from `Keiro.Ops.Http`, with
       database-free tests over stub applications including a WebSocket upgrade through a prefix
       over a real socket.
-- [ ] Milestone 2: keiro's surface and `kiroku-metrics`'s surface composed end to end against a
+- [x] (2026-10-20) Milestone 2: keiro's surface and `kiroku-metrics`'s surface composed end to end against a
       real store: byte-identical routes, WebSocket through the prefix, CORS configured once,
       absent surfaces refused, and keiro's `/keiro/ws` feed through the prefix when plan 277 has
       landed.
-- [ ] Milestone 3: the `keiro-ops-http-compose-example` executable behind the `compose-example`
+- [x] (2026-10-20) Milestone 3: the `keiro-ops-http-compose-example` executable behind the `compose-example`
       flag, enabled for this workspace in `cabal.project`, and the composition guide.
 - [ ] Milestone 4: capability record update, changelogs, `mori.dhall` entries, the ADR, IR-31
       implementation evidence, and the full verification gate.
 
 
+Functional handoff (2026-10-20): the pure router, shared CORS implementation,
+flag-guarded example and DOC-32 are implemented. Focused tests exercise exact
+encoded remainders, streaming responses, mount refusals, both real HTTP owners
+and both socket protocols. All 40 HTTP examples pass, including both real sockets. The example builds
+and the strict documentation/profile checks pass. The native Nix flake check and package check also pass. Integrated runtime
+interference remains open; no release acceptance is claimed.
+
 ## Surprises & Discoveries
+
+2026-10-20 owner recheck: released `mori://shinzui/shibuya/packages/shibuya-metrics`
+0.10.0.1 exposes a public combined application; Hackage source and tag
+`v0.10.0.1` (peeled `de42f07a874bd7d59aff7e41e7ac07b7333f1397`) agree.
+`mori://shinzui/pgmq-hs/packages/pgmq-inspect` is present locally but its
+Hackage preferred.json returns 404 and no release tag exists. The example
+retains its required two released owners; the guide describes the additional
+Shibuya mounting lifecycle without adding a default library dependency.
 
 2026-10-13 source review: Released metrics 0.3 matches store 0.11. Stripping all trailing empty segments changes mounted route semantics. Real composed-feed tests are required at completion.
 
@@ -120,6 +135,17 @@ registry and execution sequence when interpreting older dependency text below.
 
 
 ## Decision Log
+
+- Decision (2026-10-20): reuse `Keiro.Ops.Http.Cors.corsMiddleware` as the
+  composition policy, extending its preflight header reflection. This preserves
+  one implementation of exact-origin and duplicate-header behavior.
+- Decision (2026-10-20): use released `mori://shinzui/kiroku/packages/kiroku-metrics`
+  0.3.0.1, verified against Hackage preferred.json and upstream tag
+  `kiroku-metrics-v0.3.0.1` (peeled `084fd8359850342447cdda8e632b7dc456c7fca4`).
+  Public providers allocate state without background tasks or a separate
+  finalizer; the owner store and active connections govern their lifecycle.
+  No library dependency or upstream edit is needed.
+
 
 - Decision (2026-10-13): apply the current review constraints in Context, Plan of Work, and Validation. Rationale: Released metrics 0.3 matches store 0.11. Stripping all trailing empty segments changes mounted route semantics. Real composed-feed tests are required at completion. Historical September decisions below are retained as history; conflicting create-first, downgrade, zero-cost-index, unconditional-provenance and partial-completion instructions are withdrawn.
 

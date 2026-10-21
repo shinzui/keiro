@@ -32,6 +32,7 @@ okf_version: "0.2"
 
 # Runbook
 
+- [Compose Runtime Inspection Surfaces](compose-runtime-inspection-surfaces.md) - Mount supported inspection applications under stable prefixes on one listener.
 - [Offline Projection Rebuilds](offline-projection-rebuilds.md) - Rebuild a projection while reads are stopped or safely routed away.
 - [Online Schema-Versioned Projection Rebuilds](online-projection-rebuilds.md) - Rebuild and cut over schema-versioned projections without stopping reads.
 - [Run And Operate Jitsurei](run-and-operate-jitsurei.md) - Run, inspect, recover, and verify the Jitsurei reference application.

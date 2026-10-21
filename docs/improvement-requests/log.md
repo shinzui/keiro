@@ -6,6 +6,7 @@
 * **Update**: IR-28 records aggregate read implementation, specialized ordinary hydration and focused state/page evidence; release completion remains open.
 
 ## 2026-10-20
+* **Update**: IR-31 records implemented prefix composition and real owner protocol checks; release remains open.
 * **Update**: Record IR-30 guarded paging evidence and the remaining performance/publication gates.
 * **Implementation**: IR-30 implements workflow pages, JSON, CLI and HTTP routes; performance and release gates remain open.
 * **Implementation**: IR-26 begins the bounded HTTP transport with parser-derived routes and fail-closed schema verification.

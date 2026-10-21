@@ -180,8 +180,8 @@ keiro's composed mount embeds, which is the constraint EP-6 relies on.
 | 3 | Expose aggregate inspection read APIs (IR-28) | docs/plans/278-expose-aggregate-inspection-read-apis.md | EP-2 M1/M3/M4 (accepted cursor, page and ops interfaces) | None | Complete |
 | 4 | Expose process-manager inspection reads (IR-29) | docs/plans/274-expose-process-manager-inspection-reads.md | EP-2 accepted cursor/ops pages; EP-3 accepted hydration/aggregate interfaces | None | In Progress |
 | 5 | Publish WebSocket live feeds over Keiro.Wake (IR-27) | docs/plans/277-publish-websocket-live-feeds-over-keiro-wake.md | EP-1 accepted HTTP/budget; EP-2 accepted pages; EP-4 accepted PM/timer reads | None | In Progress |
-| 6 | Mount composed runtime inspection surfaces under one port (IR-31) | docs/plans/302-mount-composed-runtime-inspection-surfaces-under-one-port.md | EP-1 accepted HTTP/budget | EP-5 real-feed interface for final composition | Not Started |
-| 7 | Release the keiro inspection surface cohort and complete the keiro-ui requests | docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md | Accepted functional handoffs from EP-1–EP-6 for integrated proof; all six Complete before release | None | Not Started |
+| 6 | Mount composed runtime inspection surfaces under one port (IR-31) | docs/plans/302-mount-composed-runtime-inspection-surfaces-under-one-port.md | EP-1 accepted HTTP/budget | EP-5 real-feed interface for final composition | In Progress |
+| 7 | Release the keiro inspection surface cohort and complete the keiro-ui requests | docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md | Accepted functional handoffs from EP-1–EP-6 for integrated proof; all six Complete before release | None | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).

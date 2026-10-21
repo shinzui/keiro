@@ -2,7 +2,7 @@
 type: Runbook
 title: Operations
 description: Deploy and operate Keiro applications, workers, rebuilds, retries, and production checks.
-timestamp: 2026-10-21T03:09:44Z
+timestamp: 2026-10-21T03:23:25Z
 docId: DOC-15
 tags: [keiro, operations, deployment, runbook]
 generated:
@@ -153,6 +153,10 @@ human mode, then calls the guarded `purgeDlq`: if a prior inspection left
 rows hidden, the command fails and deletes nothing. `--force` authorizes the
 purge after preview; it does not bypass that refusal. Archive the inspected
 IDs with `archive --entry` or wait for visibility to expire, then retry.
+
+For one listener with multiple owner surfaces, see
+[Compose Runtime Inspection Surfaces](../guides/compose-runtime-inspection-surfaces.md).
+The `/keiro/ws` socket and HTTP child share the same inspection budget.
 
 ## Database Requirements
 

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Compose allocated inspection applications under stable `/keiro`, `/kiroku`,
+  `/shibuya` and `/pgmq` prefixes with preserved raw paths, shared CORS policy
+  and a flag-guarded example using released Kiroku metrics.
+
 - Add shared `/ws` first-page feeds for workflow, timer and projection status,
   backed by the same bounded reads and encoders as polls. Drivers share the
   HTTP budget; idle handles own no wake cursor. Count/byte-bounded queues,

@@ -11,6 +11,7 @@
 * **Update**: Clarify that inspection performance acceptance protects core command and worker paths; inspection and combined-process allocation have no blanket percentage target.
 
 ## 2026-10-20
+* **Addition**: ADR-57 records pure prefix routing over allocated inspection applications, raw path preservation and shared CORS policy.
 * **Update**: Bound header presentation reuse while retaining exact fresh row checks, live schema policy and unchanged OpsResult and mutation protocols.
 * **Update**: Record exact bounded header-image sessions, identity checks and timestamp parity for pure presentation reuse.
 * **Update**: ADR-9 and ADR-28 record line-safe catalog fingerprints, guarded workflow key indexes, bounded exceptional reads, and isolated demo verification.

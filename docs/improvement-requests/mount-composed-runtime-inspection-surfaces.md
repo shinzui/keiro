@@ -6,7 +6,7 @@ description: >-
   keiro's inspection surface with kiroku-metrics', shibuya-metrics', and pgmq-hs's future
   surface under per-surface path prefixes, so an application serves its whole runtime's
   inspection API on one process and one port.
-timestamp: 2026-10-14T13:54:48Z
+timestamp: 2026-10-21T03:23:25Z
 requestId: IR-31
 status: accepted
 origin: mori://shinzui/keiro-ui
@@ -37,7 +37,8 @@ reviews:
 
 ## Status
 
-Accepted; implementation has not started. Originally proposed by the keiro runtime UI initiative
+Accepted; the pure router and real owner integration are implemented locally.
+Release completion remains with ExecPlan 303. Originally proposed by the keiro runtime UI initiative
 (`mori://shinzui/keiro-ui/masterplans/1-keiro-runtime-ui-foundations`, filed under
 `mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`).
 Composition is the one cross-cutting concern the initiative's layer-ownership matrix
@@ -164,3 +165,12 @@ each requested change directly:
 Acceptance criteria 1 through 5 map to named test cases in the plan's Validation and Acceptance
 section. This request stays `accepted` until implementation starts, and completes through
 plan 303 once the release that carries the module is on Hackage.
+
+## Implementation evidence (2026-10-20)
+
+`Keiro.Ops.Http.Compose` mounts allocated applications, preserves encoded
+remainders and query strings, and streams responses unchanged. The focused
+Compose tests cover mount validation, CORS and absent surfaces plus real
+Keiro/Kiroku HTTP and WebSocket protocols on one listener. The default-off
+example flag and DOC-32 provide the mounting recipe; ADR-57 records ownership.
+Core-runtime interference and the published consumer proof remain open.

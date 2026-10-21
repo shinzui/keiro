@@ -53,6 +53,7 @@ library
     Keiro.Ops.Http
     Keiro.Ops.Http.Application
     Keiro.Ops.Http.Budget
+    Keiro.Ops.Http.Compose
     Keiro.Ops.Http.Config
     Keiro.Ops.Http.Cors
     Keiro.Ops.Http.Feed
@@ -112,6 +113,67 @@ executable keiro-ops-http
     optparse-applicative >=0.19 && <0.20,
     text >=2.1 && <2.2,
 
+flag compose-example
+  description: Build the composed inspection example with the sibling metrics surface.
+  default: False
+  manual: True
+
+executable keiro-ops-http-compose-example
+  import: warnings, shared
+  hs-source-dirs: example
+  main-is: Compose.hs
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
+  if !flag(compose-example)
+    buildable: False
+  build-depends:
+    async >=2.2 && <2.3,
+    base >=4.21 && <5,
+    keiro-ops ^>=0.21.0.0,
+    keiro-ops-http,
+    kiroku-metrics ^>=0.3.0.1,
+    kiroku-store ^>=0.11.0.0,
+    optparse-applicative >=0.19 && <0.20,
+    text >=2.1 && <2.2,
+
+benchmark inspection-interference
+  import: warnings, shared
+  type: exitcode-stdio-1.0
+  hs-source-dirs: bench
+  main-is: InspectionInterference.hs
+  other-modules: InspectionClients
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N8
+
+  build-depends:
+    aeson >=2.2 && <2.3,
+    async >=2.2 && <2.3,
+    base >=4.21 && <5,
+    bytestring >=0.12 && <0.13,
+    containers >=0.6 && <0.8,
+    directory >=1.3 && <1.4,
+    effectful >=2.6 && <2.8,
+    filepath >=1.4 && <1.6,
+    hasql >=1.10 && <1.11,
+    hasql-pool >=1.2 && <1.5,
+    http-client >=0.7 && <0.8,
+    http-types >=0.12 && <0.13,
+    keiro ^>=0.21.0.0,
+    keiro-ops ^>=0.21.0.0,
+    keiro-ops-http,
+    keiro-test-support ^>=0.21.0.0,
+    kiroku-store ^>=0.11.0.0,
+    process >=1.6 && <1.7,
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15,
+    uuid >=1.3 && <1.4,
+    websockets >=0.13 && <0.14,
+
 test-suite keiro-ops-http-test
   import: warnings, shared
   type: exitcode-stdio-1.0
@@ -123,6 +185,7 @@ test-suite keiro-ops-http-test
     -with-rtsopts=-N
 
   other-modules:
+    Test.ComposeSpec
     Test.FeedSpec
     Test.WebSocketSpec
 
@@ -145,6 +208,7 @@ test-suite keiro-ops-http-test
     keiro-ops-http,
     keiro-pgmq ^>=0.21.0.0,
     keiro-test-support ^>=0.21.0.0,
+    kiroku-metrics ^>=0.3.0.1,
     kiroku-store ^>=0.11.0.0,
     network >=3.1 && <3.3,
     optparse-applicative >=0.19 && <0.20,
