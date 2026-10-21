@@ -44,7 +44,9 @@ instance FromJSON ClientFrame where
       "subscribe" -> do
         name <- fields .: "feed"
         pure (maybe (UnknownSubscription name) (\feed -> Subscribe feed (Object (KeyMap.delete "type" (KeyMap.delete "feed" fields)))) (parseFeedName name))
-      "unsubscribe" -> Unsubscribe <$> fields .: "feed"
+      "unsubscribe" -> do
+        name <- fields .: "feed"
+        pure (maybe (UnknownSubscription name) Unsubscribe (parseFeedName name))
       "ping" -> pure Ping
       _ -> fail "unknown frame type"
 

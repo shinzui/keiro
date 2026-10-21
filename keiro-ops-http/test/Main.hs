@@ -66,7 +66,9 @@ import Pgmq.Migration qualified as Pgmq
 import System.Exit (ExitCode (..))
 import System.Process (readProcessWithExitCode)
 import System.Timeout (timeout)
+import Test.FeedSpec qualified as FeedSpec
 import Test.Hspec
+import Test.WebSocketSpec qualified as WebSocketSpec
 
 main :: IO ()
 main = do
@@ -75,6 +77,8 @@ main = do
 
 spec :: Fixture -> Spec
 spec fixture = do
+  FeedSpec.spec fixture
+  WebSocketSpec.spec fixture
   describe "live view parameters" $ do
     it "canonicalizes equivalent status sets and bounds subscription inputs" $ do
       Right one <- pure (Views.workflowsView 500 (object ["status_class" .= (["running", "sleeping", "running"] :: [Text])]))

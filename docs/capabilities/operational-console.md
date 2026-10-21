@@ -18,6 +18,8 @@ interface:
   - Keiro.Ops.ProcessManager
   - Keiro.Ops.Timer
   - Keiro.Ops.Shard
+  - Keiro.Ops.Http.Feed
+  - Keiro.Ops.Http.WebSocket
   - Keiro.Ops.Env
 requires:
   - CAP-13
@@ -101,3 +103,8 @@ through application-owned descriptors and display encoders.
 `shard status` adds database observation time, heartbeat and lease age while
 preserving existing keys. The example fulfillment test compares manager command
 JSON with its library view and intended packing-command witness.
+
+The HTTP sister package adds shared observational socket feeds using the bounded
+poll reads and encoders. They are locally validated and unreleased until cohort
+release. Subscriber count does not multiply view reads; idle mounting adds no
+wake cursor or recurring work. Queue overflow requires snapshot/poll recovery.

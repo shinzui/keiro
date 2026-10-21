@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-21
+* **Addition**: ADR-56 records shared bounded feed drivers, active-only wake cursor ownership, strict queue/in-flight accounting and scoped shutdown under the shared inspection budget.
 * **Update**: Extend ADR-35 with bounded group-key-first projection-status reads through the unchanged v1 owner relation, preserving writer indexes.
 * **Update**: Extend ADR-55 and ADR-28 with source-reporting manager views, owner API adapters, raw cursor continuation and database-clock timer/shard observations without writer-side indexes.
 * **Addition**: ADR-55 records explicit default-off bounded legacy reaction provenance, unchanged write identities and unavailable modern-family evidence.

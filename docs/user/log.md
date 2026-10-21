@@ -1,6 +1,7 @@
 # Keiro User Documentation Log
 
 ## 2026-10-21
+* **Update**: Link operational HTTP serving to shared socket feeds and their recovery/cost runbook.
 * **Update**: Document projection status pages, paired HTTP rendering, cursor bounds and observational position semantics.
 * **Update**: Document manager inspection, explicit bounded legacy provenance, filter-bound pending timer pages and database-clock shard observations with read costs.
 * **Update**: Document that custom aggregate audit-target mappings must resolve metadata and hydration to the same physical stream.

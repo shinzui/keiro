@@ -472,6 +472,25 @@ in  Schema.Project::{
               , scope = Some Schema.DependencyScope.Regular
               , versionConstraint = Some ">=3.4 && <3.5"
               }
+
+          , Schema.Dependency.WithAugmentation
+              { name = "yesodweb/wai:wai-websockets"
+              , extraDocs = [] : List Schema.DocRef.Type
+              , localPathOverride = None Text
+              , kind = Some Schema.DependencyKind.ThirdParty
+              , source = Some Schema.DependencySource.Hackage
+              , scope = Some Schema.DependencyScope.Regular
+              , versionConstraint = Some ">=3.0 && <3.1"
+              }
+          , Schema.Dependency.WithAugmentation
+              { name = "jaspervdj/websockets:websockets"
+              , extraDocs = [] : List Schema.DocRef.Type
+              , localPathOverride = None Text
+              , kind = Some Schema.DependencyKind.ThirdParty
+              , source = Some Schema.DependencySource.Hackage
+              , scope = Some Schema.DependencyScope.Regular
+              , versionConstraint = Some ">=0.13 && <0.14"
+              }
           ]
         }
       ]

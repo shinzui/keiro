@@ -443,6 +443,13 @@ consequences paragraph naming the shipped package and the release that carried i
 
 ## Progress
 
+2026-10-20: EP-5's functional feed handoff is implemented and locally validated
+by 37 HTTP-package examples. Shared initialization/read drivers, active-only
+wake ownership, strict queue/in-flight budgets and scoped socket shutdown stay
+in the sister package. Core library dependency closures remain web-free.
+EP-6 can now exercise the real feeds under composed path prefixes; integrated
+writer interference and cohort release remain open.
+
 2026-10-20: EP-4 now provides the PM/timer/shard functional handoff: explicit
 bounded legacy provenance, runtime-equivalent instance views, one-page public
 stream listing, filter-bound timer pages and database-clock lease observations.

@@ -2,7 +2,7 @@
 type: Runbook
 title: Operations
 description: Deploy and operate Keiro applications, workers, rebuilds, retries, and production checks.
-timestamp: 2026-10-21T02:25:39Z
+timestamp: 2026-10-21T03:09:44Z
 docId: DOC-15
 tags: [keiro, operations, deployment, runbook]
 generated:
@@ -764,3 +764,10 @@ existing relation and compatibility API without adding writer indexes. A
 selected group's models/checkpoints and response bytes still affect read cost.
 The visible head is a separate observation, and position differences mean
 global position distance rather than event lag or backlog.
+
+The standalone HTTP server also mounts `/ws` for bounded workflow, timer and
+projection-group feeds. Configure explicit origins and use the same dedicated
+inspection store. Feeds watch first pages and recover through the paired poll
+routes; NOTIFY remains a best-effort hint. See
+[Stream Keiro Inspection Views](../guides/stream-keiro-inspection-views.md) for
+frames, queue limits, timer cadence and shutdown.

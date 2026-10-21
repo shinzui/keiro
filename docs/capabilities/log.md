@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-21
+* **Update**: Extend CAP-20 and CAP-16 with shared bounded socket feeds, active-only wake ownership, focused lifecycle evidence and unreleased cohort status.
 * **Update**: Extend CAP-7 and CAP-16 with bounded process-manager, pending-timer and shard observations through supported library APIs.
 * **Update**: Add CAP-21 aggregate inspection and extend command, snapshot and ops interfaces with source reporting, observation clocks and catalog hooks.
 

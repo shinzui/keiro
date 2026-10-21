@@ -6,7 +6,7 @@ description: >-
   built on Keiro.Wake and speaking the cross-project protocol convention, with every feed
   paired to an authoritative polling read because NOTIFY is a best-effort hint, so a UI stays
   fresh without polling storms and without ever trusting push as truth.
-timestamp: 2026-10-14T13:54:48Z
+timestamp: 2026-10-21T03:09:44Z
 requestId: IR-27
 status: accepted
 origin: mori://shinzui/keiro-ui
@@ -168,3 +168,19 @@ The feeds in the IR-26 sister package, their protocol documentation including th
 NOTIFY caveat and example frames, tests for each acceptance criterion (including the killed
 LISTEN connection and the overflow signal), and the paired HTTP poll endpoints where they do
 not already exist under IR-26.
+
+## Implementation evidence (2026-10-20)
+
+Plan 277 adds shared canonical first-page drivers for workflows, timers and
+projection status in the HTTP sister package. One active-only wake pump fans
+hints into epochs; fallback reads retain truth when no notification arrives.
+HTTP, upgrades and refreshes share the same admission budget and deadlines.
+Queues account for byte/count limits and in-flight frames, overflow explicitly
+requires recovery, and scoped cleanup joins drivers/pump and accepted sockets.
+
+All 37 HTTP-package examples pass locally, including focused driver cancellation,
+shared initialization, strict overflow, fallback/notify delivery, shared poll
+encoders, replacement refusal, upgrade policies and active close. The core,
+core-types, DSL and ops library dependency closures gain no web dependency.
+ADR-56 records the ownership boundary. This request remains accepted while
+composition, integrated writer-interference and release-cohort gates remain open.

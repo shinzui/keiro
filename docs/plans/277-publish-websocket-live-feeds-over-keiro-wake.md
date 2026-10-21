@@ -47,6 +47,17 @@ You can see it working by running the test suite `cabal test keiro-ops-http-test
 
 ## Progress
 
+2026-10-20: Shared driver/registry, strict outbound queue, `/ws` endpoint and
+standalone mounting are implemented. All 37 HTTP-package cases pass, with three
+focused driver/registry and three real socket cases covering the lifecycle and
+truth boundaries. The handle owns no cursor/refresh loop while idle, shares its
+budget with HTTP, bounds initialization and in-flight frames, and retains old
+subscriptions on replacement refusal. ADR-56 and DOC-31 record these contracts.
+The current build selects released websockets 0.13.0.0 and wai-websockets
+3.0.1.2. Dependency-graph traversal finds no web packages in keiro-core, keiro,
+keiro-dsl or keiro-ops library closures. Composed performance/retention and the
+final cohort gates remain open; this is the functional handoff for EP-6.
+
 2026-10-20: M1's bounded projection read and command are implemented. Existing
 status coverage now traverses all 251 fixture groups in bounded pages and checks
 invalid input and unchanged relation rows. Seven focused core and two ops
@@ -90,12 +101,12 @@ registry and execution sequence when interpreting older dependency text below.
 - [x] (2026-10-20) Milestone 1: add `Keiro.Timer.findPendingTimers` to the interface MasterPlan 45 settles (both filters optional, pages of 1 through 500, `TimerInspection` rows, `observedAt`, opaque `timer-pending` cursor) and its tests in `keiro/test/Main.hs`, unless plan 274 has already landed it.
 - [x] (2026-10-20) Milestone 1: create `keiro/src/Keiro/Inspection/Cursor.hs` to plan 275's interface if it does not exist yet, and `cursorReader` in `keiro-ops/src/Keiro/Ops/Parse.hs` if absent; export `workflowInstanceJson` from `Keiro.Ops.Workflow` only if plan 275's `instanceToJson` has not landed; add `pendingTimerItemJson` and the read-only `timer pending list` command to `Keiro.Ops.Timer` (unless plan 274 landed them); add `projectionGroupStatusJson` and the read-only `projection status` command to `Keiro.Ops.Projection`; extend `keiro-ops/test/Main.hs`.
 - [x] (2026-10-20) Gate: plan 276 Milestones 1 through 3 are implemented (`keiro-ops-http` exists with `Keiro.Ops.Http.Application.opsApplication`, `Keiro.Ops.Http.Config`, `Keiro.Ops.Http.Cors`, and the health route). Record the commit in the Decision Log.
-- [ ] Milestone 2: prove the three paired poll routes (`GET /wf/inspect/list`, `GET /timer/pending/list`, `GET /projection/status`) answer through plan 276's mechanical translation with bodies equal to the CLI's `--json` output; add `websockets` and `wai-websockets` to `keiro-ops-http`.
-- [ ] Milestone 3: `Keiro.Ops.Http.Protocol` frames, `Keiro.Ops.Http.Views`, `Keiro.Ops.Http.Feed` (shared per-view driver with wake-or-fallback refresh, diffing, bounded per-connection queues with drop-oldest and in-band overflow error), `Keiro.Ops.Http.WebSocket` on `/ws`, and the `opsApplicationWithFeeds` composition.
-- [ ] Milestone 3: driver unit tests with `neverWake` and injected reads (fallback refresh, diff, overflow ordering, sequence gaps).
-- [ ] Milestone 3: end-to-end WebSocket tests: workflow snapshot then delta after a real completion append; timers and projection group feeds; frame-shape validator; dialect-configured generic client; feed and poll agreement after quiescence; origin and drift refusals at upgrade.
-- [ ] Milestone 4: killed-LISTEN degradation test (`pg_terminate_backend` on `kiroku-listener`), proving timeout-driven refresh without wrong frames and notify-driven latency after reconnect.
-- [ ] Milestone 5: mount the feeds in the standalone `keiro-ops-http` executable, user documentation with the verbatim NOTIFY caveat and example frames, CAP-16 update, changelogs, `mori.dhall` dependency entries, ADR distillation, and IR-27 implementation evidence.
+- [x] (2026-10-20) Milestone 2: prove the three paired poll routes (`GET /wf/inspect/list`, `GET /timer/pending/list`, `GET /projection/status`) answer through plan 276's mechanical translation with bodies equal to the CLI's `--json` output; add `websockets` and `wai-websockets` to `keiro-ops-http`.
+- [x] (2026-10-20) Milestone 3: `Keiro.Ops.Http.Protocol` frames, `Keiro.Ops.Http.Views`, `Keiro.Ops.Http.Feed` (shared per-view driver with wake-or-fallback refresh, diffing, bounded per-connection queues with drop-oldest and in-band overflow error), `Keiro.Ops.Http.WebSocket` on `/ws`, and the `opsApplicationWithFeeds` composition.
+- [x] (2026-10-20) Milestone 3: focused driver tests with `neverWake` and injected reads (fallback, diff, extra-only changes, read recovery, overflow ordering and snapshot recovery), plus registry initialization/cancellation/retirement evidence.
+- [x] (2026-10-20) Milestone 3: focused real WebSocket tests: shared workflow snapshot/completion updates, timer fallback, projection extra-only changes, typed frames and errors, poll-encoder agreement, replacement refusal, origin/capacity/schema policy and active shutdown.
+- [x] (2026-10-20) Milestone 4: focused wake-contract evidence proves fallback truth without delivered notifications and notify-driven refresh when hints arrive; the owner retains listener recovery. See the user-directed test scope decision above.
+- [x] (2026-10-20) Milestone 5: mount the feeds in the standalone `keiro-ops-http` executable, user documentation with the verbatim NOTIFY caveat and example frames, CAP-16 update, changelogs, `mori.dhall` dependency entries, ADR distillation, and IR-27 implementation evidence.
 - [ ] Final gates: `nix fmt`, `nix develop -c just verify`, `cabal check` in `keiro-ops-http/`, `nix flake check`, and bundle validations.
 
 
@@ -117,6 +128,24 @@ Plans 274, 275, and 276 were created by other sessions while this plan was being
 
 
 ## Decision Log
+
+- 2026-10-20 user-directed test scope: prove the owned wake contract through
+  injected fallback/notify callbacks and real socket reads. Standalone timer
+  SQL supplies real changes without NOTIFY; a later real append supplies a
+  notify-driven extra-only projection update on that connection. Workflow
+  append notifications are independently checked. The existing Kiroku listener
+  owns reconnect/backoff; this change neither replaces it nor adds a backend-
+  termination/timing fixture. This focused evidence replaces the older request
+  to re-test upstream reconnect administration. Integrated runtime and retention
+  gates remain open, and no performance pass is inferred from these tests.
+
+- 2026-10-20: Queue byte/count accounting includes control frames and the
+  writer's in-flight frame. Making room for an overflow error may therefore
+  evict one additional old delta. The guarantee is error-before-later-delta
+  plus newest retained state and explicit snapshot/poll recovery, rather than
+  promising two retained deltas alongside an extra unaccounted control frame
+  when capacity is two. Focused checks cover the strict resource bound and
+  recovery sequence without expanding the test matrix.
 
 - 2026-10-20: Give `newDriver` an explicit `FeedName` argument and carry it on
   `View`. The older injected constructor signature had no way to identify the
@@ -389,7 +418,7 @@ IR-27 acceptance 1 is met when the `keiro-ops-http-test` case "sends a snapshot 
 
 Acceptance 2 is met when the "degrades" case passes: after `pg_terminate_backend` on the `kiroku-listener` backend, the completion still surfaces as an `update` with `trigger` `timeout` and the correct status, no frame with a wrong status or a skipped sequence appears, and after the listener backend is visible again in `pg_stat_activity` a fresh completion surfaces as an `update` with `trigger` `notify` within one second under a five-second fallback.
 
-Acceptance 3 is met when the `FeedSpec` overflow case passes: with a capacity of two and five published updates before the subscriber drains, the first frame the subscriber dequeues is `error` with code `queue_overflow`, followed only by the two newest updates, whose `sequence` values show the gap.
+Acceptance 3 is met when the `FeedSpec` overflow case passes: with a capacity of two and five published updates before the subscriber drains, the first frame the subscriber dequeues is `error` with code `queue_overflow`, followed only by the newest retained updates, whose `sequence` values show the gap; the control frame also fits the configured count/byte budget.
 
 Acceptance 4 is met when, in the end-to-end suite, the map a client builds from `snapshot` plus every `update` equals, key for key and value for value, the array returned by `GET /wf/inspect/list` for the same filters after the store has been quiet for one fallback interval, and when the Milestone 2 cases prove that array equals the `jsonValue` of `keiro-ops wf inspect list --json` for the same filters. The same agreement holds for the timers feed against `GET /timer/pending/list` and `keiro-ops timer pending list --json`, and for the projection groups feed against `GET /projection/status` and `keiro-ops projection status --json`.
 

@@ -2,7 +2,7 @@
 title: HTTP operational surface
 type: Capability
 description: Mount the supported operational command tree over bounded HTTP reads and explicitly confirmed mutations.
-timestamp: 2026-10-20T17:05:00Z
+timestamp: 2026-10-21T03:09:44Z
 generated:
   by: openai/codex
   at: 2026-10-20T17:05:00Z
@@ -12,7 +12,7 @@ status: shipped
 stability: experimental
 since: unreleased
 packages: [keiro-ops-http]
-interface: [Keiro.Ops.Http]
+interface: [Keiro.Ops.Http, Keiro.Ops.Http.Feed, Keiro.Ops.Http.WebSocket, Keiro.Ops.Http.Protocol, Keiro.Ops.Http.Views]
 requires: [CAP-16]
 evidence:
   - kind: test
@@ -44,3 +44,20 @@ The host supplies authentication and TLS. No existing Keiro package depends
 on a web framework. DLQ reads reserve messages and therefore use the mutation
 flow. This surface supplies operational state and actions; it adds no metrics
 or trace backend.
+
+## Shared observational feeds
+
+The unreleased local surface includes `/ws` for workflow, timer and projection
+status first pages. Drivers share canonical views across clients, use the HTTP
+inspection budget, keep last-known state on read failure and bound queues by
+encoded bytes and frame count including in-flight delivery. The last view
+release joins its driver and wake pump; an idle handle owns no wake cursor or
+recurring reads. Socket origin/schema/capacity checks precede acceptance.
+
+`keiro-ops-http/test/Test/FeedSpec.hs` checks fallback truth, diffs, extra-only changes,
+coalesced failures, strict overflow/recovery, initialization cancellation and
+resource retirement. `keiro-ops-http/test/Test/WebSocketSpec.hs` checks real shared reads,
+notify/fallback delivery, common poll encoders, replacement refusal, repeated
+in-flight release, upgrade policies and active close. See
+[Stream Keiro Inspection Views](../guides/stream-keiro-inspection-views.md).
+Composed writer-interference and release-cohort acceptance remain open.

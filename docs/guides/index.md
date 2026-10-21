@@ -18,6 +18,7 @@ okf_version: "0.2"
 - [Choosing `keiro-dsl`: Benefits, Costs, and Fit](choosing-keiro-dsl.md) - Decide whether generated services fit a context's guarantees, workflow, and maintenance needs.
 - [Evolution And Replayability](evolution-and-replayability.md) - Preserve replayability while evolving events, folds, snapshots, and projections.
 - [Evolve Events Safely](evolve-events-safely.md) - Evolve stored event schemas with versioned codecs, upcasters, and replay verification.
+- [Guarded Catalog Commands](guarded-catalog-commands.md) - Enforce a relational identity precondition atomically with a synchronous catalog command while keeping rich query views asynchronous.
 - [Inline Projections](inline-projections.md) - Build transactionally consistent read models inside the command transaction.
 - [Integration Events With Kafka](integration-events-with-kafka.md) - Publish and consume Keiro integration events through Kafka with stable envelopes.
 - [Migrating to the keiro-dsl 0.15 record API](migrating-keiro-dsl-record-api-0.15.md) - Update generated consumers and services for the keiro-dsl 0.15 record API.
@@ -31,11 +32,11 @@ okf_version: "0.2"
 
 # Runbook
 
-- [Serve Keiro Ops Over HTTP](serve-keiro-ops-over-http.md) - Mount bounded inspection and confirmed operator actions.
-
 - [Offline Projection Rebuilds](offline-projection-rebuilds.md) - Rebuild a projection while reads are stopped or safely routed away.
 - [Online Schema-Versioned Projection Rebuilds](online-projection-rebuilds.md) - Rebuild and cut over schema-versioned projections without stopping reads.
 - [Run And Operate Jitsurei](run-and-operate-jitsurei.md) - Run, inspect, recover, and verify the Jitsurei reference application.
+- [Serve Keiro Ops Over HTTP](serve-keiro-ops-over-http.md) - Mount bounded HTTP inspection and explicitly confirmed operator actions using the supported Keiro command tree.
+- [Stream Keiro Inspection Views](stream-keiro-inspection-views.md) - Mount bounded workflow, timer and projection-group feeds and recover clients through their paired poll reads.
 
 # Tutorial
 

@@ -42,7 +42,8 @@ main = do
   let settings = (defaultConnectionSettings connectionString) {poolSize = config.inspectionLimits.maxConcurrentReads, statementTimeout = Just 2}
   withStore settings $ \baseStore -> withOpsInspectionPool config.inspectionLimits settings $ \pool -> do
     let store = baseStore {pool}
-    app <- opsApplication config emptyAppHooks store
-    withOpsHttpServer serverConfig app $ \server -> do
-      Text.hPutStrLn stderr ("keiro-ops-http: listening on " <> serverConfig.bindHost <> ":" <> Text.pack (show server.serverPort) <> " (mutations " <> (if config.mutations == MutationsEnabled then "enabled" else "disabled") <> ")")
-      wait server.serverThread
+    withFeedHandle config defaultFeedConfig store $ \feeds -> do
+      app <- opsApplicationWithFeeds config feeds emptyAppHooks store
+      withOpsHttpServer serverConfig app $ \server -> do
+        Text.hPutStrLn stderr ("keiro-ops-http: listening on " <> serverConfig.bindHost <> ":" <> Text.pack (show server.serverPort) <> " (mutations " <> (if config.mutations == MutationsEnabled then "enabled" else "disabled") <> ")")
+        wait server.serverThread

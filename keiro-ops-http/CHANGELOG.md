@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Add shared `/ws` first-page feeds for workflow, timer and projection status,
+  backed by the same bounded reads and encoders as polls. Drivers share the
+  HTTP budget; idle handles own no wake cursor. Count/byte-bounded queues,
+  in-flight accounting, overflow recovery, upgrade policy checks and scoped
+  cleanup protect runtime resources. The standalone HTTP server mounts feeds.
+
 - Add bounded projection-status pages and `projection status`, preserving the
   frozen v1 relation and complete-list compatibility API. Page keys precede
   correlated status reads; no writer index is added. HTTP feed protocol and

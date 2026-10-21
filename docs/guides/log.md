@@ -1,6 +1,7 @@
 # Keiro Guides Log
 
 ## 2026-10-21
+* **Addition**: Add DOC-31 for socket feeds, shared driver lifecycle, paired polls, overflow recovery and timer workload limits.
 * **Update**: Explain mounting the fulfillment manager inspector, explicit provenance capture and the manager/timer CLI reads.
 * **Update**: Explain source-reporting aggregate inspection through explicit descriptors while ordinary hydration retains its existing result path.
 
