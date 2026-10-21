@@ -1,5 +1,11 @@
 # Bundle Update Log
 
+## 2026-10-21
+* **Update**: Bind aggregate membership, metadata and hydration to the same physical stream while preserving custom audit-target handles.
+* **Addition**: ADR-54 records shared hydration with a specialized ordinary result and explicit aggregate display and page contracts.
+* **Update**: ADR-28 records application-owned aggregate display, versioned state observations and raw-page cursor advancement.
+* **Update**: Clarify that inspection performance acceptance protects core command and worker paths; inspection and combined-process allocation have no blanket percentage target.
+
 ## 2026-10-20
 * **Update**: Bound header presentation reuse while retaining exact fresh row checks, live schema policy and unchanged OpsResult and mutation protocols.
 * **Update**: Record exact bounded header-image sessions, identity checks and timestamp parity for pure presentation reuse.

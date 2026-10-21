@@ -130,7 +130,7 @@ def main():
         "repetitions": 5,
         "candidate_modes": args.candidate_modes,
         "control_protocol": "adjacent per-mode baseline/candidate pairs; pair order alternates by trial" if args.paired_controls else "one baseline for every candidate mode in each trial",
-        "allocation_scope": "runtime process; HTTP clients are external Python processes",
+        "allocation_scope": "whole server process including inspection work; diagnostic only, not core-path allocation attribution; HTTP clients are external Python processes",
         "active_client_warmup": "one successful header per view on a retained TCP connection, then parent-controlled measurement start",
         "settle_seconds_after_warmup": 1,
         "checkpoint_before_writer_warmup": True,

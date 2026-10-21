@@ -4,7 +4,7 @@ type: Capability
 description: "Run the load → streaming replay → decide → append-batch command cycle with optimistic concurrency, duplicate-event probes, immediate replay verification, and optional transactional side effects."
 generated:
   by: openai/codex
-  at: "2026-08-15T00:00:00Z"
+  at: "2026-10-21T00:26:46Z"
 capabilityId: CAP-3
 provider: mori://shinzui/keiro
 status: shipped
@@ -74,3 +74,6 @@ runCommandWithSql options validatedStream targetStream command $ \appendResult -
 - The transactional step commits only what runs inside the one Postgres
   transaction — cross-database or cross-service effects are not covered and
   belong to the outbox/inbox path, not to `runCommandWithSql`.
+
+`hydrateWithSource` exposes the shared hydration source for inspection. Ordinary
+`hydrate` keeps its existing result path and constructs no diagnostic pair.

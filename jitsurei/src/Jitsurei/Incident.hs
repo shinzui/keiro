@@ -35,6 +35,7 @@ module Jitsurei.Incident
     IncidentRegs,
     IncidentEventStream,
     incidentEventStream,
+    incidentCategory,
     incidentStream,
     incidentCommandStream,
     incidentTransducer,

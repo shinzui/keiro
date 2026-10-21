@@ -21,11 +21,13 @@
 module Keiro.Snapshot.Schema
   ( -- * Rows
     SnapshotRow (..),
+    SnapshotObservation (..),
     SnapshotWrite (..),
 
     -- * Storage
     lookupSnapshot,
     lookupSnapshotRow,
+    observeSnapshotRow,
     deleteSnapshotRow,
     writeSnapshotRow,
   )
@@ -56,6 +58,14 @@ data SnapshotRow = SnapshotRow
     stateShapeHash :: !Text,
     createdAt :: !UTCTime,
     updatedAt :: !UTCTime
+  }
+  deriving stock (Generic, Eq, Show)
+
+-- | A snapshot and its database observation clock. This is an inspection read;
+-- it does not change the lookup used by ordinary hydration.
+data SnapshotObservation = SnapshotObservation
+  { row :: !(Maybe SnapshotRow),
+    observedAt :: !UTCTime
   }
   deriving stock (Generic, Eq, Show)
 
@@ -99,6 +109,18 @@ lookupSnapshotRow streamId =
     $ Tx.statement
       (streamIdToInt streamId)
       lookupSnapshotRowStmt
+
+-- | Observe a row and database time in one transaction. This is observational:
+-- ReadCommitted does not freeze concurrent updates between statements.
+observeSnapshotRow :: (Store :> es) => StreamId -> Eff es SnapshotObservation
+observeSnapshotRow streamId = runTransaction $ do
+  row <- Tx.statement (streamIdToInt streamId) lookupSnapshotRowStmt
+  observedAt <- Tx.statement () observationTimeStmt
+  pure SnapshotObservation {row, observedAt}
+
+observationTimeStmt :: Statement () UTCTime
+observationTimeStmt =
+  preparable "SELECT now()" E.noParams (D.singleRow (D.column (D.nonNullable D.timestamptz)))
 
 -- | Delete a stream's advisory snapshot. Returns 'True' when a row existed.
 -- Event history is untouched, so the next hydration falls back to full replay.

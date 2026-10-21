@@ -141,6 +141,8 @@ import Keiro.Inbox.Delegated
     delegatedFromPMCommand,
   )
 import Keiro.Inbox.Kafka qualified as InboxKafka
+import Keiro.Inspection.Aggregate qualified as Aggregate
+import Keiro.Inspection.Cursor qualified as Cursor
 import Keiro.Integration.Event
   ( IntegrationContentType (..),
     IntegrationEvent (..),
@@ -2440,6 +2442,57 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         for_ callbackRecordeds $ \recorded ->
           recorded ^. #metadata `shouldSatisfy` hasMarker
 
+  describe "Keiro.Inspection.Aggregate" $ around (withFreshStore fixture) $ do
+    it "inspects the command fold and snapshot, while deleted streams have no folded state" $ \store -> do
+      let codec = defaultStateCodec @SnapshotCounterRegs @CounterState 1
+          inspector = Aggregate.aggregateInspector "counter" snapshotCounterEventStream (Stream.categoryUnsafe "inspectioncounter") (Aggregate.displayViaStateCodec codec)
+          target = Stream.entityStream (Stream.categoryUnsafe "inspectioncounter") "one"
+      forM_ [2, 3, 4] $ \amount -> do
+        Right (Right _) <- Store.runStoreIO store (runCommand inspectionRunCommandOptions snapshotCounterEventStream target (Add amount))
+        pure ()
+      Right (Right view) <- Store.runStoreIO store (Aggregate.inspectAggregate inspector "one")
+      Right (Right full) <- Store.runStoreIO store (hydrateFull inspectionRunCommandOptions (unvalidated snapshotCounterEventStream) target)
+      (view ^. #state) `shouldBe` Just ((codec ^. #encode) (full ^. #state, full ^. #registers))
+      (view ^. #streamVersion) `shouldBe` (full ^. #streamVersion)
+      let mappedDefinition :: SnapshotCounterEventStream
+          mappedDefinition = (unvalidated snapshotCounterEventStream) & #resolveStreamName .~ (\typed -> case Stream.streamName typed of StreamName raw -> StreamName ("inspectioncounter-" <> raw))
+          mappedStream = mkEventStreamOrThrow "inspection-mapped-counter" mappedDefinition
+          auditTarget = ReplayAudit.AuditTarget mappedStream "inspectioncounter" (\(StreamName physical) -> stream <$> Text.stripPrefix "inspectioncounter-" physical)
+      Right mappedInspector <- pure (Aggregate.inspectorFromAuditTarget "counter" auditTarget (Aggregate.displayViaStateCodec codec))
+      Right (Right mappedView) <- Store.runStoreIO store (Aggregate.inspectAggregate mappedInspector "one")
+      (mappedView ^. #state) `shouldBe` (view ^. #state)
+      (mappedView ^. #streamName) `shouldBe` StreamName "inspectioncounter-one"
+      Aggregate.aggregateIdOf mappedInspector (StreamName "inspectioncounter-one") `shouldBe` Just "one"
+      (view ^. #hydration) `shouldBe` Just (FromSnapshot (StreamVersion 2))
+      fmap (^. #compatibility) (view ^. #snapshot . #stored) `shouldBe` Just Aggregate.Compatible
+      Right _ <- Store.runStoreIO store (Store.softDeleteStream (StreamName "inspectioncounter-one"))
+      Right (Right deleted) <- Store.runStoreIO store (Aggregate.inspectAggregate inspector "one")
+      (deleted ^. #state) `shouldBe` Nothing
+      (deleted ^. #hydration) `shouldBe` Nothing
+      (deleted ^. #streamVersion) `shouldBe` StreamVersion 3
+      Aggregate.aggregateStream inspector " " `shouldBe` Left (Aggregate.AggregateIdRejected " ")
+      missing <- Store.runStoreIO store (Aggregate.inspectAggregate inspector "missing")
+      missing `shouldBe` Right (Left (Aggregate.AggregateNotFound (StreamName "inspectioncounter-missing")))
+
+    it "advances one raw page through rejected rows without losing the look-ahead row" $ \store -> do
+      let base = Aggregate.aggregateInspector "counter" counterEventStream (Stream.categoryUnsafe "inspectionpage") (\state _ -> Aeson.String (Text.pack (show state)))
+          inspector = base & #mkStream .~ (\name@(StreamName raw) -> if Text.isSuffixOf "keep" raw then (base ^. #mkStream) name else Nothing)
+      forM_ ["a-reject", "b-reject", "c-keep"] $ \suffix -> do
+        Right (Right _) <- Store.runStoreIO store (runCommand inspectionRunCommandOptions counterEventStream (Stream.entityStream (Stream.categoryUnsafe "inspectionpage") suffix) (Add 1))
+        pure ()
+      Right (Right first) <- Store.runStoreIO store (Aggregate.listAggregates inspector (Aggregate.AggregateListRequest 2 Nothing))
+      (first ^. #items) `shouldBe` []
+      (first ^. #skipped) `shouldBe` 2
+      (first ^. #next) `shouldSatisfy` isJust
+      Right (Right second) <- Store.runStoreIO store (Aggregate.listAggregates inspector (Aggregate.AggregateListRequest 2 (first ^. #next)))
+      map (^. #aggregateId) (second ^. #items) `shouldBe` ["c-keep"]
+      (second ^. #next) `shouldBe` Nothing
+      let other = inspector & #name .~ ("another-counter" :: Text)
+      Right foreignPage <- Store.runStoreIO store (Aggregate.listAggregates other (Aggregate.AggregateListRequest 2 (first ^. #next)))
+      foreignPage `shouldSatisfy` (\case Left (Aggregate.InvalidCursor _) -> True; _ -> False)
+      Right malformed <- Store.runStoreIO store (Aggregate.listAggregates inspector (Aggregate.AggregateListRequest 2 (Just (Cursor.InspectionCursor "bad"))))
+      malformed `shouldSatisfy` (\case Left (Aggregate.InvalidCursor _) -> True; _ -> False)
+
   describe "Keiro.Snapshot" $ around (withFreshStore fixture) $ do
     it "reports an ErrorCall when strict encoding reaches an empty register slot" $ \_storeHandle -> do
       result <-
@@ -2551,6 +2604,55 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       let scalars = flattenScalarPoints exported
       lookup "keiro.snapshot.encode.failures" scalars `shouldBe` Just (IntNumber 1)
       lookup "keiro.snapshot.write.failures" scalars `shouldBe` Nothing
+
+    it "reports snapshot and corrupt-seed sources without changing the folded state" $ \storeHandle -> do
+      let target = stream "inspection-hydration-source" :: Stream SnapshotCounterEventStream
+          options = inspectionRunCommandOptions
+          definition = unvalidated snapshotCounterEventStream
+          codec = defaultStateCodec @SnapshotCounterRegs @CounterState 1
+          image hydrated = (hydrated ^. #streamVersion, (codec ^. #encode) (hydrated ^. #state, hydrated ^. #registers))
+      forM_ [2, 3, 4] $ \amount -> do
+        Right (Right _) <- Store.runStoreIO storeHandle (runCommand options snapshotCounterEventStream target (Add amount))
+        pure ()
+      Right (Right (fromSeed, source)) <- Store.runStoreIO storeHandle (hydrateWithSource options definition target)
+      Right (Right ordinary) <- Store.runStoreIO storeHandle (hydrate options definition target)
+      Right (Right full) <- Store.runStoreIO storeHandle (hydrateFull options definition target)
+      source `shouldBe` FromSnapshot (StreamVersion 2)
+      image fromSeed `shouldBe` image full
+      image ordinary `shouldBe` image full
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction $
+            Tx.statement ("inspection-hydration-source", Aeson.String "bad") corruptSnapshotStateStmt
+      Right (Right (fallback, fallbackSource)) <- Store.runStoreIO storeHandle (hydrateWithSource options definition target)
+      fallbackSource `shouldSatisfy` (\case FullReplay (SnapshotMissed (SnapshotDecodeFailed _)) -> True; _ -> False)
+      image fallback `shouldBe` image full
+
+    it "distinguishes absent snapshot streams and no codec during inspection hydration" $ \storeHandle -> do
+      Right (Right (_, noCodec)) <-
+        Store.runStoreIO storeHandle $
+          hydrateWithSource inspectionRunCommandOptions (unvalidated counterEventStream) (stream "inspection-no-codec")
+      noCodec `shouldBe` FullReplay NoStateCodec
+      Right (Right (_, absent)) <-
+        Store.runStoreIO storeHandle $
+          hydrateWithSource inspectionRunCommandOptions (unvalidated snapshotCounterEventStream) (stream "inspection-absent-seed")
+      absent `shouldBe` FullReplay (SnapshotMissed SnapshotNoStream)
+      (inspectionRunCommandOptions ^. #seedVerifySampleRate) `shouldBe` 0
+      (inspectionRunCommandOptions ^. #verifyReplayOnAppend) `shouldBe` False
+
+    it "observes absent and present snapshots with a database clock" $ \storeHandle -> do
+      let target = stream "inspection-snapshot-clock" :: Stream SnapshotCounterEventStream
+      Right (Right _) <- Store.runStoreIO storeHandle (runCommand inspectionRunCommandOptions snapshotCounterEventStream target (Add 2))
+      Right (Just sid) <- Store.runStoreIO storeHandle (Store.lookupStreamId (StreamName "inspection-snapshot-clock"))
+      Right absent <- Store.runStoreIO storeHandle (observeSnapshotRow sid)
+      (absent ^. #row) `shouldBe` Nothing
+      Right (Right _) <- Store.runStoreIO storeHandle (runCommand inspectionRunCommandOptions snapshotCounterEventStream target (Add 3))
+      Right observed <- Store.runStoreIO storeHandle (observeSnapshotRow sid)
+      case (observed ^. #row) of
+        Nothing -> expectationFailure "expected snapshot observation"
+        Just row -> do
+          (row ^. #streamVersion) `shouldBe` StreamVersion 2
+          (observed ^. #observedAt) `shouldSatisfy` (>= (row ^. #updatedAt))
 
     it "hydrates from snapshot and replays only the tail" $ \storeHandle -> do
       (exporter, metricsRef) <- inMemoryMetricExporter

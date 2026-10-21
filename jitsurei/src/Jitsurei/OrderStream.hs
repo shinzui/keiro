@@ -7,6 +7,7 @@ module Jitsurei.OrderStream
     orderDomainCommandHandler,
     renderOrderDecision,
     snapshotOrderEventStream,
+    orderCategory,
     orderStream,
     orderCommandStream,
     orderCodec,

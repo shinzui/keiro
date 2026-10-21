@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-14T01:38:52Z
       mode: "update"
       note: "Correct hot-path isolation, bounded inspection/feed ownership, released APIs, observation semantics, and mandatory performance acceptance; implementation remains pending."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-21T00:09:04Z
+      mode: "implement"
+      note: "Apply user clarification: protect core runtime paths; inspection and total-process allocation have no blanket percentage target."
 ---
 
 # Mount composed runtime inspection surfaces under one port
@@ -81,6 +86,12 @@ reshapes, or re-implements an endpoint another library owns.
 
 
 ## Progress
+
+2026-10-20 coordination clarification: MasterPlan 45 now gates implementation
+on accepted shared interfaces rather than whole-child release closure. The
+integrated experiment follows the implemented functional cohort; all child
+acceptance and release requirements remain open until measured. Use its current
+registry and execution sequence when interpreting older dependency text below.
 
 - [x] (2026-10-13) Correctness and hot-path design review applied; implementation remains outstanding.
 - [ ] Validate the review constraints and record the required performance/correctness evidence before marking this plan complete.

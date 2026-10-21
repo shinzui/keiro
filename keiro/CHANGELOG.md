@@ -21,6 +21,8 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### New Features
 
+- `Keiro.Inspection.Aggregate` exposes folded aggregate state, snapshot health and cursor pages through explicit application descriptors. `hydrateWithSource` reports the existing hydration algorithm’s source; ordinary hydration constructs no diagnostic result. `observeSnapshotRow` adds a database observation clock without changing runtime snapshot lookup.
+
 - Exact, bounded conditional workflow header sessions and reusable single-SELECT point reads.
 
 - Bounded workflow inspection pages, canonical status classes and JSON, pure validation, and opaque cursors.

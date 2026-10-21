@@ -6,10 +6,12 @@
 module Keiro.Ops.Embed
   ( AppHooks (..),
     OpsAuditConfig (..),
+    AggregateInspectors,
     emptyAppHooks,
   )
 where
 
+import Keiro.Inspection.Aggregate (AggregateInspectors)
 import Keiro.Ops.ReplayAudit (OpsAuditConfig (..))
 import Keiro.Ops.Timer (TimerFire)
 import Keiro.Ops.Workflow (ResumeHook)
@@ -19,7 +21,8 @@ data AppHooks = AppHooks
   { workflowResume :: !(Maybe ResumeHook),
     timerFire :: !(Maybe TimerFire),
     replayAudit :: !(Maybe OpsAuditConfig),
-    projectionCatalog :: !(Maybe ProjectionCatalogOperations)
+    projectionCatalog :: !(Maybe ProjectionCatalogOperations),
+    aggregates :: !(Maybe AggregateInspectors)
   }
 
 emptyAppHooks :: AppHooks
@@ -28,5 +31,6 @@ emptyAppHooks =
     { workflowResume = Nothing,
       timerFire = Nothing,
       replayAudit = Nothing,
-      projectionCatalog = Nothing
+      projectionCatalog = Nothing,
+      aggregates = Nothing
     }

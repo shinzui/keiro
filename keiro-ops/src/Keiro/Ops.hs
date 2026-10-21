@@ -2,6 +2,7 @@ module Keiro.Ops
   ( main,
     mainWithHooks,
     AppHooks (..),
+    AggregateInspectors,
     OpsAuditConfig (..),
     emptyAppHooks,
     OpsInvocation (..),
@@ -24,6 +25,7 @@ import Data.Text qualified as Text
 import Data.Text.IO qualified as Text.IO
 import Hasql.Connection.Settings qualified as Settings
 import Keiro.Migrations.SchemaCheck (renderSchemaDrift, verifyExpectedSchema)
+import Keiro.Ops.Aggregate qualified as Aggregate
 import Keiro.Ops.Embed
 import Keiro.Ops.Env
 import Keiro.Ops.Inbox qualified as Inbox
@@ -71,7 +73,8 @@ data OpsInvocation = OpsInvocation
 -- | Programmatic front-end boundary. Alternative front ends must verify the
 -- live schema, use JSON output mode, and respect 'isMutation'.
 data Command
-  = Workflow Workflow.Command
+  = Aggregate Aggregate.Command
+  | Workflow Workflow.Command
   | Timer Timer.Command
   | Outbox Outbox.Command
   | Inbox Inbox.Command
@@ -134,8 +137,13 @@ commandParser hooks =
           (info (Stream <$> Stream.commandParser) (progDesc "Inspect and operate Kiroku streams"))
         <> replayAuditCommand
         <> rebuildCommand
+        <> aggregateCommand
     )
   where
+    aggregateCommand =
+      case hooks.aggregates of
+        Nothing -> mempty
+        Just _ -> command "aggregate" (info (Aggregate <$> Aggregate.commandParser) (progDesc "Inspect mounted aggregates"))
     replayAuditCommand =
       case hooks.replayAudit of
         Nothing -> mempty
@@ -178,12 +186,14 @@ runInvocation hooks OpsInvocation {globalOptions, opsCommand} = do
 
 -- | Validate supported command arguments before admission or schema work.
 validateCommand :: Command -> Either (Text.Text, Text.Text) ()
+validateCommand (Aggregate command) = Aggregate.validateCommand command
 validateCommand (Workflow command) = Workflow.validateCommand command
 validateCommand _ = Right ()
 
 -- | Authoritative read/write classification for every front end.
 isMutation :: Command -> Bool
 isMutation = \case
+  Aggregate command -> Aggregate.isMutation command
   Workflow workflowCommand -> Workflow.isMutation workflowCommand
   Timer timerCommand -> Timer.isMutation timerCommand
   Outbox outboxCommand -> Outbox.isMutation outboxCommand
@@ -209,6 +219,7 @@ runCommandWithHeaderCache _ hooks env command = do
 -- JSON mode and enable force only after explicit mutation confirmation.
 runCommand :: AppHooks -> OpsEnv -> Command -> IO OpsOutcome
 runCommand hooks env = \case
+  Aggregate command -> maybe (pure (Failed "aggregate inspection hook is not mounted")) (\catalog -> Aggregate.runCommand env catalog command) hooks.aggregates
   Workflow workflowCommand -> Workflow.runCommandWithResume hooks.workflowResume env workflowCommand
   Timer timerCommand -> Timer.runCommandWithFire hooks.timerFire env timerCommand
   Outbox outboxCommand -> Outbox.runCommand env outboxCommand

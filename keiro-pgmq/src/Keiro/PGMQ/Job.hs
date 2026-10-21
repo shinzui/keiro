@@ -182,6 +182,7 @@ import "shibuya-core" Shibuya.Core.Ack
 import "shibuya-core" Shibuya.Core.Ingested qualified as Shibuya
 import "shibuya-core" Shibuya.Core.Lease (Lease (..))
 import "shibuya-core" Shibuya.Core.Types (Attempt (..), Envelope (..))
+
 -- Qualified only for 'unMessageId': shibuya's @MessageId@ type name would
 -- otherwise collide with @Pgmq.Effectful@'s, which the producer signatures use.
 import "shibuya-core" Shibuya.Core.Types qualified as ShibuyaTypes

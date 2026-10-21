@@ -1,0 +1,6 @@
+{
+  "cohort_acceptance": false,
+  "status": "aborted in trial 4 after inspection-request failures",
+  "scope": "writer latency/throughput measure runtime interference; process allocation includes all inspection work and is diagnostic, not a core allocation gate",
+  "overlap": "Core baseline and compiler/functional work proceeded during trial 3 onward, following user approval to use this shared host. Do not treat this incomplete exploratory run as release acceptance."
+}

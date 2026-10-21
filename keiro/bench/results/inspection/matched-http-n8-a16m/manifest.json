@@ -1,0 +1,787 @@
+{
+  "baseline_commit": "3bf3ac229f21d6c95179ce49b5e8f6323322f99b",
+  "offered_writer_operations_per_second": 360,
+  "selection_rule": "75% of minimum of five pre-change saturation throughputs rounded down to nearest ten, then fixed 20% reductions until paced headroom check passes",
+  "initial_proposal": 580,
+  "paced_qualifications": [
+    {
+      "offered": 580,
+      "passed": false,
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/paced-qualification/580",
+        "580",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "offered": 460,
+      "passed": false,
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/paced-qualification/460",
+        "460",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "offered": 360,
+      "passed": true,
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/paced-qualification/360",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    }
+  ],
+  "baseline_binary_sha256": "8165fc4b143ad9b5b357160f26cecac108a1cbf9e98b62835505ba38a248904d",
+  "candidate_binary_sha256": "6e79916d7bb199e8835a70b88d870e2dbdf91fb8504c9a0c270efb08eab65eab",
+  "driver_sha256": "1f32087ac92cc1ac0de8ebbb9f042f8dff76513738dc79cf23335fafdc6038fe",
+  "client_sha256": "08da0274978b1f60424b6cbbfdc41df0b98f97173571abf81269e6db74ab2a29",
+  "runner_sha256": "3d3980ee69cc7ff9bd0e413e69c58e2940af69717e509fb610361bdf072b62a3",
+  "rts": [
+    "-N8",
+    "-A16m",
+    "-T"
+  ],
+  "duration_seconds": 20,
+  "fixture_workflow_rows": 100000,
+  "repetitions": 5,
+  "candidate_modes": [
+    "idle",
+    "active-1",
+    "active-32x1",
+    "active-1x256",
+    "active-32x256"
+  ],
+  "control_protocol": "adjacent per-mode baseline/candidate pairs; pair order alternates by trial",
+  "allocation_scope": "runtime process; HTTP clients are external Python processes",
+  "active_client_warmup": "one successful header per view on a retained TCP connection, then parent-controlled measurement start",
+  "settle_seconds_after_warmup": 1,
+  "checkpoint_before_writer_warmup": true,
+  "headroom_check": "baseline throughput at least 99% of offered rate and last/first tenth mean queue delay growth at most 20ms",
+  "order": [
+    {
+      "trial": 1,
+      "role": "baseline",
+      "mode": "unmounted",
+      "paired_mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/1-baseline-for-unmounted",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 1,
+      "role": "candidate",
+      "mode": "unmounted",
+      "paired_mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-n8-evidence",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/1-candidate-unmounted",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 1,
+      "role": "baseline",
+      "mode": "unmounted",
+      "paired_mode": "idle",
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/1-baseline-for-idle",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 1,
+      "role": "candidate",
+      "mode": "idle",
+      "paired_mode": "idle",
+      "command": [
+        "/tmp/keiro-http-n8-evidence",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/1-candidate-idle",
+        "360",
+        "1",
+        "idle",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 1,
+      "role": "baseline",
+      "mode": "unmounted",
+      "paired_mode": "active-1",
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/1-baseline-for-active-1",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 1,
+      "role": "candidate",
+      "mode": "active-1",
+      "paired_mode": "active-1",
+      "command": [
+        "/tmp/keiro-http-n8-evidence",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/1-candidate-active-1",
+        "360",
+        "1",
+        "active-1",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 1,
+      "role": "baseline",
+      "mode": "unmounted",
+      "paired_mode": "active-32x1",
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/1-baseline-for-active-32x1",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 1,
+      "role": "candidate",
+      "mode": "active-32x1",
+      "paired_mode": "active-32x1",
+      "command": [
+        "/tmp/keiro-http-n8-evidence",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/1-candidate-active-32x1",
+        "360",
+        "1",
+        "active-32x1",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 1,
+      "role": "baseline",
+      "mode": "unmounted",
+      "paired_mode": "active-1x256",
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/1-baseline-for-active-1x256",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 1,
+      "role": "candidate",
+      "mode": "active-1x256",
+      "paired_mode": "active-1x256",
+      "command": [
+        "/tmp/keiro-http-n8-evidence",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/1-candidate-active-1x256",
+        "360",
+        "1",
+        "active-1x256",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 1,
+      "role": "baseline",
+      "mode": "unmounted",
+      "paired_mode": "active-32x256",
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/1-baseline-for-active-32x256",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 1,
+      "role": "candidate",
+      "mode": "active-32x256",
+      "paired_mode": "active-32x256",
+      "command": [
+        "/tmp/keiro-http-n8-evidence",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/1-candidate-active-32x256",
+        "360",
+        "1",
+        "active-32x256",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 2,
+      "role": "candidate",
+      "mode": "unmounted",
+      "paired_mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-n8-evidence",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/2-candidate-unmounted",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 2,
+      "role": "baseline",
+      "mode": "unmounted",
+      "paired_mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/2-baseline-for-unmounted",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 2,
+      "role": "candidate",
+      "mode": "active-1",
+      "paired_mode": "active-1",
+      "command": [
+        "/tmp/keiro-http-n8-evidence",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/2-candidate-active-1",
+        "360",
+        "1",
+        "active-1",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 2,
+      "role": "baseline",
+      "mode": "unmounted",
+      "paired_mode": "active-1",
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/2-baseline-for-active-1",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 2,
+      "role": "candidate",
+      "mode": "active-32x1",
+      "paired_mode": "active-32x1",
+      "command": [
+        "/tmp/keiro-http-n8-evidence",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/2-candidate-active-32x1",
+        "360",
+        "1",
+        "active-32x1",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 2,
+      "role": "baseline",
+      "mode": "unmounted",
+      "paired_mode": "active-32x1",
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/2-baseline-for-active-32x1",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 2,
+      "role": "candidate",
+      "mode": "active-1x256",
+      "paired_mode": "active-1x256",
+      "command": [
+        "/tmp/keiro-http-n8-evidence",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/2-candidate-active-1x256",
+        "360",
+        "1",
+        "active-1x256",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 2,
+      "role": "baseline",
+      "mode": "unmounted",
+      "paired_mode": "active-1x256",
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/2-baseline-for-active-1x256",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 2,
+      "role": "candidate",
+      "mode": "active-32x256",
+      "paired_mode": "active-32x256",
+      "command": [
+        "/tmp/keiro-http-n8-evidence",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/2-candidate-active-32x256",
+        "360",
+        "1",
+        "active-32x256",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 2,
+      "role": "baseline",
+      "mode": "unmounted",
+      "paired_mode": "active-32x256",
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/2-baseline-for-active-32x256",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 2,
+      "role": "candidate",
+      "mode": "idle",
+      "paired_mode": "idle",
+      "command": [
+        "/tmp/keiro-http-n8-evidence",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/2-candidate-idle",
+        "360",
+        "1",
+        "idle",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 2,
+      "role": "baseline",
+      "mode": "unmounted",
+      "paired_mode": "idle",
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/2-baseline-for-idle",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 3,
+      "role": "baseline",
+      "mode": "unmounted",
+      "paired_mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/3-baseline-for-unmounted",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 3,
+      "role": "candidate",
+      "mode": "unmounted",
+      "paired_mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-n8-evidence",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/3-candidate-unmounted",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 3,
+      "role": "baseline",
+      "mode": "unmounted",
+      "paired_mode": "active-32x1",
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/3-baseline-for-active-32x1",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 3,
+      "role": "candidate",
+      "mode": "active-32x1",
+      "paired_mode": "active-32x1",
+      "command": [
+        "/tmp/keiro-http-n8-evidence",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/3-candidate-active-32x1",
+        "360",
+        "1",
+        "active-32x1",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 3,
+      "role": "baseline",
+      "mode": "unmounted",
+      "paired_mode": "active-1x256",
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/3-baseline-for-active-1x256",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 3,
+      "role": "candidate",
+      "mode": "active-1x256",
+      "paired_mode": "active-1x256",
+      "command": [
+        "/tmp/keiro-http-n8-evidence",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/3-candidate-active-1x256",
+        "360",
+        "1",
+        "active-1x256",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 3,
+      "role": "baseline",
+      "mode": "unmounted",
+      "paired_mode": "active-32x256",
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/3-baseline-for-active-32x256",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 3,
+      "role": "candidate",
+      "mode": "active-32x256",
+      "paired_mode": "active-32x256",
+      "command": [
+        "/tmp/keiro-http-n8-evidence",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/3-candidate-active-32x256",
+        "360",
+        "1",
+        "active-32x256",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 3,
+      "role": "baseline",
+      "mode": "unmounted",
+      "paired_mode": "idle",
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/3-baseline-for-idle",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 3,
+      "role": "candidate",
+      "mode": "idle",
+      "paired_mode": "idle",
+      "command": [
+        "/tmp/keiro-http-n8-evidence",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/3-candidate-idle",
+        "360",
+        "1",
+        "idle",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 3,
+      "role": "baseline",
+      "mode": "unmounted",
+      "paired_mode": "active-1",
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/3-baseline-for-active-1",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 3,
+      "role": "candidate",
+      "mode": "active-1",
+      "paired_mode": "active-1",
+      "command": [
+        "/tmp/keiro-http-n8-evidence",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/3-candidate-active-1",
+        "360",
+        "1",
+        "active-1",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 4,
+      "role": "candidate",
+      "mode": "unmounted",
+      "paired_mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-n8-evidence",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/4-candidate-unmounted",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 4,
+      "role": "baseline",
+      "mode": "unmounted",
+      "paired_mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-n8-prechange",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/4-baseline-for-unmounted",
+        "360",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 4,
+      "role": "candidate",
+      "mode": "active-1x256",
+      "paired_mode": "active-1x256",
+      "command": [
+        "/tmp/keiro-http-n8-evidence",
+        "keiro/bench/results/inspection/matched-http-n8-a16m/4-candidate-active-1x256",
+        "360",
+        "1",
+        "active-1x256",
+        "+RTS",
+        "-N8",
+        "-A16m",
+        "-T",
+        "-RTS"
+      ]
+    }
+  ],
+  "limitations": "workflow point headers only; not the full domain, large-value, slow-reader or retention matrix"
+}

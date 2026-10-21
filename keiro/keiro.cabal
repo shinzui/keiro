@@ -70,6 +70,7 @@ library
     Keiro.Inbox.Kafka
     Keiro.Inbox.Schema
     Keiro.Inbox.Types
+    Keiro.Inspection.Aggregate
     Keiro.Inspection.Cursor
     Keiro.Outbox
     Keiro.Outbox.Identity

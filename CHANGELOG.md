@@ -31,6 +31,8 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### New Features
 
+- Application-owned aggregate inspection catalogs, source-reporting hydration, bounded aggregate pages and embedded read-only ops commands.
+
 - Add bounded workflow pages and `wf inspect`, canonical status classes, and the shared cursor codec.
 - Add `keiro-ops-http`, an opt-in HTTP transport with bounded inspection, per-request schema verification, and preview/confirm mutations.
 

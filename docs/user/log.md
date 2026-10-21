@@ -1,5 +1,9 @@
 # Keiro User Documentation Log
 
+## 2026-10-21
+* **Update**: Document that custom aggregate audit-target mappings must resolve metadata and hydration to the same physical stream.
+* **Update**: Document aggregate inspection descriptors, command routes, state versions, snapshot observation clocks and bounded raw-page continuation.
+
 ## 2026-10-20
 * **Update**: Document guarded workflow pages, exceptional key budgets, and manual owner/time read deadlines.
 * **Update**: Point tools at bounded workflow inspection routes.

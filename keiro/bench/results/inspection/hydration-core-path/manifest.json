@@ -1,0 +1,44 @@
+{
+  "baseline_commit": "842535ac4396815f259b4079bf85246b065c77ae",
+  "purpose": "Ordinary hydration allocation and latency; no inspection mounted or invoked",
+  "library_optimization": "O1",
+  "driver_optimization": "O2",
+  "rts": [
+    "-N2",
+    "-T"
+  ],
+  "modes": [
+    "hit",
+    "miss",
+    "corrupt",
+    "no-codec",
+    "long"
+  ],
+  "binaries": {
+    "before": "fc57e1a903653af601f6f9c23acca7acb7c445b4405a726afa016c864537aa31",
+    "after": "8bce4dc608b158ca150c473350890af5731a9de721eddb1ef0c51475b86b75e6"
+  },
+  "source_sha256": {
+    "ordinary-hydration-core.txt": "5cda31ee891e7d47bec5924fc666575fa80f9d3cbf142094784f20be50627cca",
+    "driver.hs.txt": "3ca8a61c8003eac64a2e4a04b48c87d65ecdfb737a83f21f791a5652dc99c12c",
+    "Fixture.hs.txt": "ce47b0cd78c99383b8021cb9f484604d3c0ffbc0d6e2908a84c08523edc501ec"
+  },
+  "notes": "Ordinary worker Core contains no HydrationSource/FullReplayReason constructors. No inspection requests occur in these legs. Preflight historical command benchmark CSV is diagnostic only: 1-second fanout timeout rejected it.",
+  "compiler_flags": [
+    "-O2",
+    "-threaded",
+    "-rtsopts",
+    "-XGHC2024",
+    "-XDeriveAnyClass",
+    "-XOverloadedLabels",
+    "-XOverloadedStrings",
+    "-XDuplicateRecordFields",
+    "-XTypeFamilies",
+    "-XPackageImports",
+    "-ikeiro/retention"
+  ],
+  "package_selection": "-hide-all-packages then -package-id for each depends entry of keiro test:keiro-retention in the matching Cabal plan; compile through nix develop -c cabal exec -- ghc",
+  "postgres_policy": "withMigratedBenchmarkSuite configures fsync/synchronous_commit/full_page_writes on and wal_level replica. This read-only local comparison did not export observed server settings; the integrated release comparison must retain them.",
+  "source_patch_sha256": "677efac14c74127667bf65b80ef8de1288285d98231d730318b2d548ae034a57",
+  "compressed_source_patch_sha256": "229cfb3e070ac7487ab384672933bfc49623dc4b6c933cb1913c8d5bfc4b234a"
+}

@@ -177,11 +177,11 @@ keiro's composed mount embeds, which is the constraint EP-6 relies on.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Serve the keiro-ops surface over HTTP (IR-26) | docs/plans/276-serve-the-keiro-ops-surface-over-http.md | None | None | In Progress |
 | 2 | Add cursor-paged workflow inspection reads for the HTTP surface (IR-30) | docs/plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md | None | None | In Progress |
-| 3 | Expose aggregate inspection read APIs (IR-28) | docs/plans/278-expose-aggregate-inspection-read-apis.md | EP-2 | None | Not Started |
-| 4 | Expose process-manager inspection reads (IR-29) | docs/plans/274-expose-process-manager-inspection-reads.md | EP-2, EP-3 | None | Not Started |
-| 5 | Publish WebSocket live feeds over Keiro.Wake (IR-27) | docs/plans/277-publish-websocket-live-feeds-over-keiro-wake.md | EP-1, EP-2, EP-4 | None | Not Started |
-| 6 | Mount composed runtime inspection surfaces under one port (IR-31) | docs/plans/302-mount-composed-runtime-inspection-surfaces-under-one-port.md | EP-1 | EP-5 | Not Started |
-| 7 | Release the keiro inspection surface cohort and complete the keiro-ui requests | docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md | EP-1, EP-2, EP-3, EP-4, EP-5, EP-6 | None | Not Started |
+| 3 | Expose aggregate inspection read APIs (IR-28) | docs/plans/278-expose-aggregate-inspection-read-apis.md | EP-2 M1/M3/M4 (accepted cursor, page and ops interfaces) | None | Complete |
+| 4 | Expose process-manager inspection reads (IR-29) | docs/plans/274-expose-process-manager-inspection-reads.md | EP-2 accepted cursor/ops pages; EP-3 accepted hydration/aggregate interfaces | None | Not Started |
+| 5 | Publish WebSocket live feeds over Keiro.Wake (IR-27) | docs/plans/277-publish-websocket-live-feeds-over-keiro-wake.md | EP-1 accepted HTTP/budget; EP-2 accepted pages; EP-4 accepted PM/timer reads | None | Not Started |
+| 6 | Mount composed runtime inspection surfaces under one port (IR-31) | docs/plans/302-mount-composed-runtime-inspection-surfaces-under-one-port.md | EP-1 accepted HTTP/budget | EP-5 real-feed interface for final composition | Not Started |
+| 7 | Release the keiro inspection surface cohort and complete the keiro-ui requests | docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md | Accepted functional handoffs from EP-1–EP-6 for integrated proof; all six Complete before release | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -197,7 +197,23 @@ Intention.
 
 ## Dependency Graph
 
-EP-1 and EP-2 can start independently. EP-2 precedes EP-3; EP-2 and EP-3 precede EP-4; EP-1, EP-2, and EP-4 precede EP-5. EP-1 precedes EP-6, with EP-5 an integration prerequisite for EP-6's final real-feed proof. All six precede EP-7. There is no cycle. The registry records full-plan hard dependencies; milestone-level research may proceed before code dependencies are available.
+EP-1 and EP-2 can start independently. EP-2 precedes EP-3; EP-2 and EP-3 precede EP-4; EP-1, EP-2, and EP-4 precede EP-5. EP-1 precedes EP-6, with EP-5 an integration prerequisite for EP-6's final real-feed proof. All six precede EP-7. There is no cycle. The registry names accepted functional interfaces as code prerequisites. Final publication still requires every child Complete and the integrated runtime-isolation proof; milestone-level research may proceed before code dependencies are available.
+
+Execution clarification (2026-10-20, following the user’s core-path priority):
+implement consumers after their exact shared interfaces pass functional checks,
+while producer children retain unfinished runtime-cost and release acceptance.
+EP-3 consumes EP-2 M1/M3/M4; EP-4 consumes those interfaces and EP-3's accepted
+source-reporting hydration and descriptor reads. EP-5 starts only after the HTTP
+budget, bounded pages and PM/timer feed inputs are accepted. EP-6 starts from
+the HTTP/budget handoff and finishes against the real feed. The integrated
+experiment can then exercise the implemented cohort under EP-7 before final
+child closure and publication. This explicitly replaces whole-child code
+prerequisites, which otherwise put the integrated experiment ahead of the
+features it must measure. No performance, correctness or release gate is
+considered passed by a functional handoff. Current accepted handoffs are the
+HTTP/budget interface (29 HTTP examples), cursor/workflow/ops pages, and
+source-reporting hydration/aggregate reads (777 core and 25 example cases).
+
 
 Shared files include `keiro/keiro.cabal`, `keiro-ops/keiro-ops.cabal`, `keiro-ops/src/Keiro/Ops.hs`, `keiro-ops/src/Keiro/Ops/Embed.hs`, their test suites, `jitsurei/app/Main.hs`, migration manifests/locks/schema snapshots, changelogs, and OKF logs. Later plans extend the prior owner's artifacts and retain unrelated additions. EP-4 completes its timer-read milestone before wiring its instance view, which consumes that read.
 
@@ -207,7 +223,7 @@ EP-7 requires complete listing and real composition evidence. An interim release
 
 **Performance and correctness boundary (2026-10-13 review).** EP-1 owns request admission and execution limits in `Keiro.Ops.Http.Budget`; EP-5 uses the same budget for feed reads. EP-2 owns cursor decoding and workflow query-cost proofs. EP-3 owns hydration specialization and its command-path benchmark. EP-4 owns opt-in reaction provenance and timer-index read/write evidence. EP-6 must preserve these limits through composition. EP-7 owns the integrated interference experiment below and cannot close the initiative without it. [ADR-40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md) records the durable isolation requirement.
 
-Inspection is accepted only with measured interference bounds, not from the fact that an API is read-only. Capture a baseline at the pre-implementation commit with the same GHC optimization, RTS capabilities, database size, connection limits, PostgreSQL settings, and workload seed as the candidate. Run inside `nix develop`, with normal autovacuum and durable settings (`fsync`, `synchronous_commit`, and `full_page_writes` on); record settings and raw samples. Compare at least five alternating baseline/candidate runs after warm-up. At a fixed offered load below baseline saturation, a reproducible median throughput loss over 5%, p95 command/worker latency increase over 5%, or allocated bytes per completed operation increase over 5% blocks the milestone. No extra database statements, event reads, metadata serialization, or background tasks are allowed on ordinary commands or provenance-disabled reactions. An inconclusive/noisy comparison is not a pass: extend matched runs and report uncertainty. Keep the existing 25% historical benchmark check as a coarse smoke test only.
+Inspection is accepted only with measured interference bounds, not from the fact that an API is read-only. Capture a baseline at the pre-implementation commit with the same GHC optimization, RTS capabilities, database size, connection limits, PostgreSQL settings, and workload seed as the candidate. Run inside `nix develop`, with normal autovacuum and durable settings (`fsync`, `synchronous_commit`, and `full_page_writes` on); record settings and raw samples. Compare at least five alternating baseline/candidate runs after warm-up. At a fixed offered load below baseline saturation, a reproducible median throughput loss over 5%, p95 command/worker latency increase over 5%, or core-path allocated bytes per completed runtime operation increase over 5% blocks the milestone. These thresholds protect ordinary commands and workers, including contention caused by active inspection; they are not blanket targets for inspection request latency, inspection allocations, total-process allocation divided by writer completions, or WAL volume. Combined process allocation and WAL remain attribution diagnostics. Unmounted/default-off paths must add no inspection work, and inspection-only code stays outside those paths. Use focused behavior checks and measurements that resolve an actual core-path risk, rather than expanding the test matrix for its own sake. No extra database statements, event reads, metadata serialization, or background tasks are allowed on ordinary commands or provenance-disabled reactions. An inconclusive/noisy comparison is not a pass: extend matched runs and report uncertainty. Keep the existing 25% historical benchmark check as a coarse smoke test only.
 
 Measure four deployment modes separately: pre-change runtime; candidate with inspection not mounted and provenance off; mounted but idle; and active inspection with 1 and 32 distinct views, 1 and 256 clients, repeated HTTP polls, large values, and deliberately slow readers. Hold writer load fixed and include snapshot hit, no codec, snapshot miss/corruption fallback, long history, accepted/no-op/rejected/duplicate reactions, fan-out of 0/1/10/100 targets, timer scheduling/claim/firing, workflow resume, and projection application. Report query counts, rows examined, buffers, pool wait, CPU, allocation, WAL bytes, writer p50/p95/p99, completed operations, and post-major-GC live bytes. Idle mounting must issue no recurring database work without a subscriber or request. Reuse [ADR-48](../adr/0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md)'s isolated retention legs; also run subscription churn and an idle-mounted notification storm, then assert driver/thread/queue counts return to their starting values. A positive live-heap trend that persists when repeating the steady-state run blocks release even if it is below the existing coarse retention threshold. Performance measurements remain implementation work; this review supplies no passing runtime evidence.
 
@@ -427,12 +443,19 @@ consequences paragraph naming the shipped package and the release that carried i
 
 ## Progress
 
-EP-1 (276) and EP-2 (275) are In Progress; the other five children remain Not
-Started. HTTP transport, bounded workflow reads, canonical rendering and typed
+EP-3 now implements the aggregate catalog, shared source-reporting hydration,
+snapshot clocks and raw-page continuation. The focused core/ops/HTTP/example
+suites pass 777/51/29/25 examples, with the ordinary-worker comparison retained.
+EP-3 is Complete after full Nix verification, strict documentation/policy
+checks, final resolver regression checks and Nix flake checks. Publication and
+the integrated core-interference gate remain open under EP-7.
+
+EP-1 (276) and EP-2 (275) are In Progress; EP-3 (278) is Complete; the other
+four children remain Not Started. HTTP transport, bounded workflow reads, canonical rendering and typed
 failures are implemented. Focused workflow/ops/HTTP/migration checks pass
 16/51/29/43 examples. The bounded header candidate passes Nix `just verify`, including
 772 Keiro examples, all DSL proofs, coarse retention, strict documentation/
-terminology checks and 43 migration examples. No whole-child prerequisite is waived.
+terminology checks and 43 migration examples. EP-3 uses the explicit accepted-interface handoff above; final release prerequisites remain open.
 
 EP-2 now preserves the existing large-key writer domain with guarded indexes
 and an exceptional-key budget. 136 actual custom/generic plans cover normal
@@ -445,8 +468,8 @@ compound indexes fail write-cost and key-domain checks.
 The pre-implementation baseline is
 `3bf3ac229f21d6c95179ce49b5e8f6323322f99b`. A five-run narrow HTTP comparison has
 medians within 5% but inconclusive latency; its warmed repeat aborts when the
-fifth baseline lacks headroom, preserving every leg. The expanded smoke completes all polls but measures about +11.5% allocation
-with 256 HTTP clients, requiring further optimization. Timed pool attribution
+fifth baseline lacks headroom, preserving every leg. The expanded smoke completes all polls and measures about +11.5% total-process allocation
+with 256 HTTP clients. This includes inspection work and is diagnostic, not proof of a core-path allocation regression. Timed pool attribution
 shows temporary timer roots plus a shared 32 KiB buffer step; it is not strict
 retention acceptance. A bounded exact current-row presentation candidate passes
 16 owning-query / 29 HTTP examples without a TTL or skipped schema check;
@@ -462,6 +485,16 @@ confirmed that benchmarking should continue on this machine while other work
 runs; matched controls and measured uncertainty remain the acceptance basis.
 
 ## Surprises & Discoveries
+
+- (2026-10-20) The user clarified the target: preserve the core runtime path;
+  inspection latency/allocation and total-process allocation are not blanket
+  percentage gates. ADR-40 and the shared child acceptance text now make the
+  attribution boundary explicit. Extra uncommitted HTTP resource-test machinery
+  was removed. EP-3 ordinary hydration has five matched pairs per source mode:
+  essentially unchanged allocation, no diagnostic constructors in ordinary Core,
+  and p95 medians -0.63%..+2.38%. This is local worker evidence, not cohort release
+  acceptance. The broader N8 HTTP run aborts in trial 4 on inspection request
+  failures; raw samples and concurrent-build overlap are retained explicitly.
 
 - (2026-10-20) EP-1's five alternating same-binary header-poll legs reject the
   first implementation on aggregate allocation: about 640.6 MiB per 1,000
@@ -520,6 +553,12 @@ interactions between child plans. Provide concise evidence.
 
 
 ## Decision Log
+
+- (2026-10-20) Coordinate code dependencies through explicitly accepted shared
+  interfaces, then run integrated runtime-isolation evidence before child closure
+  and publication. This follows the user's request to focus on preserving core
+  paths and avoids treating inspection throughput/allocation as blanket targets.
+  Existing child release requirements remain open until their evidence exists.
 
 - Decision (2026-10-13): replace create-first shared ownership with explicit code prerequisites; expose bounded workflow commands; keep inspection work within explicit budgets and measured writer-interference limits. Reaction provenance is opt-in and bounded; hydration diagnostics are absent from ordinary command results. Rationale: these are concrete hot-path and correctness risks in the reviewed plans, not measured regressions in shipped code.
 - Decision (2026-10-13): require all listing milestones and real composition tests before cohort closure. Rationale: released kiroku 0.11 already provides listing, and a partial delivery cannot satisfy the advertised initiative.

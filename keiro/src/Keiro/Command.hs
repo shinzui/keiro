@@ -47,7 +47,8 @@
 -- post-commit snapshot failures are likewise swallowed and counted. Every runner
 -- accepts a tracer for optional OpenTelemetry spans.
 --
--- The additive hydration primitives are also consumed by "Keiro.ReplayAudit".
+-- The source-reporting hydration variant supports inspection without command
+-- side effects. The additive hydration primitives are also consumed by "Keiro.ReplayAudit".
 -- The audit deliberately calls the seeded and full variants separately so the
 -- public command-serving fallback cannot hide a stale or unreplayable seed.
 module Keiro.Command
@@ -82,6 +83,10 @@ module Keiro.Command
 
     -- * Hydration primitives (replay audit)
     Hydrated (..),
+    HydrationSource (..),
+    FullReplayReason (..),
+    inspectionRunCommandOptions,
+    hydrateWithSource,
     hydrate,
     hydrateFull,
     hydrateSeeded,
@@ -411,6 +416,37 @@ data Hydrated rs s = Hydrated
   }
   deriving stock (Generic)
 
+-- | How the ordinary hydration algorithm recovered this state.
+data HydrationSource
+  = FromSnapshot !StreamVersion
+  | FullReplay !FullReplayReason
+  deriving stock (Eq, Show, Generic)
+
+data FullReplayReason
+  = NoStateCodec
+  | SnapshotMissed !SnapshotMissReason
+  | SeededReplayFailed !CommandError
+  deriving stock (Eq, Show, Generic)
+
+-- | Read-only diagnostics never schedule seed verification or emit telemetry.
+inspectionRunCommandOptions :: RunCommandOptions
+inspectionRunCommandOptions =
+  defaultRunCommandOptions
+    { seedVerifySampleRate = 0,
+      metrics = Nothing,
+      tracer = Nothing,
+      verifyReplayOnAppend = False
+    }
+
+hydrateWithSource ::
+  forall phi rs s ci co es.
+  (HasCallStack, IOE :> es, Store :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+  RunCommandOptions ->
+  EventStream phi rs s ci co ->
+  Stream (EventStream phi rs s ci co) ->
+  Eff es (Either CommandError (Hydrated rs s, HydrationSource))
+hydrateWithSource = hydrateUsing (\source -> fmap (\hydrated -> (hydrated, source)))
+
 data DomainCommandPlan target rs s co rejection noOp
   = DomainCommandSilent !(SilentDomainDecision rejection noOp) !(CommandResult target)
   | DomainCommandAppend !(Hydrated rs s) !(NonEmpty co) ![EventData]
@@ -451,39 +487,47 @@ hydrateAfterProbe ::
   EventStream phi rs s ci co ->
   Stream (EventStream phi rs s ci co) ->
   Eff es (Either CommandError (Hydrated rs s))
-hydrateAfterProbe options eventStream targetStream =
-  snapshotSeed >>= \case
-    Nothing -> hydrateFull options eventStream targetStream
-    Just seed -> do
-      replayed <-
-        hydrateSeeded
-          options
-          eventStream
-          targetStream
-          (seed ^. #state)
-          (seed ^. #registers)
-          (seed ^. #streamVersion)
-      case replayed of
-        Left _ -> hydrateFull options eventStream targetStream
-        Right hydrated -> do
-          for_ (eventStream ^. #stateCodec) $ \codec ->
-            scheduleSeedVerification options eventStream targetStream codec seed
-          pure (Right hydrated)
+hydrateAfterProbe = hydrateUsing (\_ result -> result)
+
+-- Inline at both entry points: the ordinary continuation ignores its lazy
+-- source argument, so it constructs neither diagnostics nor a result pair.
+{-# INLINE hydrateUsing #-}
+hydrateUsing ::
+  forall phi rs s ci co es result.
+  (HasCallStack, IOE :> es, Store :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+  (HydrationSource -> Either CommandError (Hydrated rs s) -> result) ->
+  RunCommandOptions ->
+  EventStream phi rs s ci co ->
+  Stream (EventStream phi rs s ci co) ->
+  Eff es result
+hydrateUsing finish options eventStream targetStream =
+  case eventStream ^. #stateCodec of
+    Nothing -> fullReplay NoStateCodec
+    Just codec ->
+      lookupSnapshotSeed ((eventStream ^. #resolveStreamName) targetStream) codec >>= \case
+        SnapshotUnavailable reason -> do
+          recordSnapshotReadMisses (options ^. #metrics) 1
+          case reason of
+            SnapshotDecodeFailed _ -> recordSnapshotDecodeFailures (options ^. #metrics) 1
+            _ -> pure ()
+          fullReplay (SnapshotMissed reason)
+        SnapshotHit seed -> do
+          recordSnapshotReadHits (options ^. #metrics) 1
+          replayed <-
+            hydrateSeeded
+              options
+              eventStream
+              targetStream
+              (seed ^. #state)
+              (seed ^. #registers)
+              (seed ^. #streamVersion)
+          case replayed of
+            Left failure -> fullReplay (SeededReplayFailed failure)
+            Right hydrated -> do
+              scheduleSeedVerification options eventStream targetStream codec seed
+              pure (finish (FromSnapshot (seed ^. #streamVersion)) (Right hydrated))
   where
-    snapshotSeed =
-      case eventStream ^. #stateCodec of
-        Nothing -> pure Nothing
-        Just codec -> do
-          lookupSnapshotSeed ((eventStream ^. #resolveStreamName) targetStream) codec >>= \case
-            SnapshotHit seed -> do
-              recordSnapshotReadHits (options ^. #metrics) 1
-              pure (Just seed)
-            SnapshotUnavailable reason -> do
-              recordSnapshotReadMisses (options ^. #metrics) 1
-              case reason of
-                SnapshotDecodeFailed _ -> recordSnapshotDecodeFailures (options ^. #metrics) 1
-                _ -> pure ()
-              pure Nothing
+    fullReplay reason = finish (FullReplay reason) <$> hydrateFull options eventStream targetStream
 
 hydrateFull ::
   forall phi rs s ci co es.

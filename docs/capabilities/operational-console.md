@@ -4,7 +4,7 @@ type: Capability
 description: "Inspect and repair a Keiro deployment through a standalone or application-embedded command tree with schema checks, stable JSON, and preview-before-force mutations."
 generated:
   by: openai/codex
-  at: "2026-08-15T00:00:00Z"
+  at: "2026-10-21T00:26:46Z"
 capabilityId: CAP-16
 provider: mori://shinzui/keiro
 status: shipped
@@ -88,3 +88,6 @@ in sister packages, renders only `keiro-ops` commands and exported library
 reads, keeps preview-then-confirm mutations disabled by default, and never grows
 metrics or trace views, which stay with
 [OpenTelemetry instrumentation](opentelemetry-instrumentation.md).
+
+`AppHooks.aggregates` optionally mounts `aggregate types|list|show|snapshot`
+through application-owned descriptors and display encoders.

@@ -15,10 +15,12 @@ where
 
 import Data.Aeson (Value, object, (.=))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy qualified as LazyByteString
 import Data.Int (Int64)
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Time (diffUTCTime)
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
@@ -92,7 +94,7 @@ isMutation = \case
 
 runCommand :: OpsEnv -> Command -> IO OpsOutcome
 runCommand env = \case
-  Show name -> runAction env (lookupByName name) (Succeeded . snapshotResult name)
+  Show name -> runAction env (observationByName name) (Succeeded . snapshotObservedResult name)
   Delete name -> runDelete env name
   TruncationPreflight name before suppliedExpected ->
     runAction env (preflightFor name before suppliedExpected) (Succeeded . preflightResult)
@@ -103,6 +105,11 @@ lookupByName name = do
   case stream of
     Nothing -> pure Nothing
     Just info -> lookupSnapshotRow info.id
+
+observationByName :: (Store :> es) => Text -> Eff es (Maybe SnapshotObservation)
+observationByName name = do
+  stream <- getStream (StreamName name)
+  traverse (observeSnapshotRow . (.id)) stream
 
 runDelete :: OpsEnv -> Text -> IO OpsOutcome
 runDelete env name
@@ -193,6 +200,21 @@ snapshotResult name row =
       rows = maybe [] (pure . snapshotRowText name) row,
       jsonValue = maybe Aeson.Null (snapshotJson name) row
     }
+
+snapshotObservedResult :: Text -> Maybe SnapshotObservation -> OpsResult
+snapshotObservedResult name observation =
+  case observation of
+    Just observed
+      | Just row <- observed.row ->
+          let age = realToFrac (diffUTCTime observed.observedAt row.updatedAt) :: Double
+              original = snapshotResult name (Just row)
+              fields = KeyMap.fromList [("observed_at", Aeson.toJSON observed.observedAt), ("age_seconds", Aeson.toJSON age)]
+           in original
+                { headers = original.headers <> ["observed_at", "age_seconds"],
+                  rows = map (<> [showText observed.observedAt, showText age]) original.rows,
+                  jsonValue = case original.jsonValue of Aeson.Object value -> Aeson.Object (value <> fields); value -> value
+                }
+    _ -> snapshotResult name Nothing
 
 snapshotRowText :: Text -> SnapshotRow -> [Text]
 snapshotRowText name row =

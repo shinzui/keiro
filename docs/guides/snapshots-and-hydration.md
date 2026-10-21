@@ -1,6 +1,7 @@
 ---
 type: Tutorial
 title: Snapshots And Hydration
+timestamp: 2026-10-21T00:26:46Z
 description: Add advisory snapshots to aggregate hydration while preserving event-log authority.
 docId: DOC-21
 tags: [keiro, snapshots, hydration, tutorial]
@@ -141,3 +142,17 @@ Expect `keiro.snapshot.read.misses` to spike while each affected stream pays a
 full replay. Its snapshot row repopulates the next time the configured policy
 fires after an append, after which hydration hits again. No event or aggregate
 state migration is required.
+
+## Inspecting a hydrated aggregate
+
+`Jitsurei.Inspection.jitsureiAggregateInspectors` describes the example's order
+and incident aggregates with explicit display encoders. Mount that catalog in
+`AppHooks.aggregates` to expose the four read-only aggregate commands described
+in [Operations](../user/operations.md#inspecting-aggregates).
+
+The descriptor's `inspectAggregate` read uses `hydrateWithSource` with
+`inspectionRunCommandOptions`. A compatible snapshot reports its seed version;
+full replay reports no codec, a missing/unusable snapshot, or failed seeded
+replay. The state version is the version actually folded, while history metadata
+records a separately observed head. Ordinary `hydrate` continues to return only
+its existing result, without source diagnostics or inspection tasks.

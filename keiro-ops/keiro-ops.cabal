@@ -49,6 +49,7 @@ library
   hs-source-dirs: src
   exposed-modules:
     Keiro.Ops
+    Keiro.Ops.Aggregate
     Keiro.Ops.Embed
     Keiro.Ops.Env
     Keiro.Ops.Inbox

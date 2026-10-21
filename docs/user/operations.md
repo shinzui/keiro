@@ -2,7 +2,7 @@
 type: Runbook
 title: Operations
 description: Deploy and operate Keiro applications, workers, rebuilds, retries, and production checks.
-timestamp: 2026-10-20T17:36:52Z
+timestamp: 2026-10-21T00:26:46Z
 docId: DOC-15
 tags: [keiro, operations, deployment, runbook]
 generated:
@@ -676,3 +676,31 @@ with `--limit` and `--after`. The [workflow inspection reference](durable-workfl
 documents status classes and owner/generation-bound cursors. `wf list` and
 `wf show` instances also include `status_class`; legacy whole reads remain
 compatibility operations.
+
+## Inspecting aggregates
+
+The application supplies `AppHooks.aggregates = Just catalog`, with descriptors
+from `Keiro.Inspection.Aggregate`. Jitsurei mounts its order and incident catalog.
+The standalone database-only executable omits this domain because it cannot
+supply application code or a display encoder.
+
+```bash
+jitsurei-demo ops aggregate types --json
+jitsurei-demo ops aggregate list --name order --limit 50 --json
+jitsurei-demo ops aggregate show --name order --id ORDER_ID --json
+jitsurei-demo ops aggregate snapshot --name order --id ORDER_ID --json
+```
+
+`list` reads one bounded metadata page without hydration. An empty `items` array
+can carry `next_cursor` when application membership rejects that raw page;
+continue until the cursor is absent. Limits are 1..500 and cursors belong to one
+inspector/category. `show` runs the same snapshot-assisted replay as the command
+path, with inspection verification and telemetry disabled. It reports the exact
+folded `state_version`. `snapshot` reads advisory health without replaying events.
+Missing aggregate ids fail explicitly; deleted streams expose metadata with null
+state and hydration. Raw history is browsed through Kiroku's surface.
+
+These are observational reads: the folded state, history head and snapshot can
+observe concurrent writes at different times. Snapshot age uses the returned
+database `observed_at` clock. See the [API reference](api-reference.md#keiroinspectionaggregate)
+for the library contract.

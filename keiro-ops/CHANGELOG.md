@@ -8,6 +8,8 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ### New Features
 
+- An optional `AppHooks.aggregates` catalog mounts read-only `aggregate types|list|show|snapshot` commands. Snapshot show adds `observed_at` and `age_seconds`.
+
 - Bounded header presentation reuse through an alternative runner that checks the exact current row before returning prepared JSON bytes.
 
 - Bounded `wf inspect` commands and typed inspection errors; shared workflow rendering and paged compatibility reads.

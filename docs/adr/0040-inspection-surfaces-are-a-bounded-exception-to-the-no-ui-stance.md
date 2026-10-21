@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Inspection surfaces are a bounded exception to the no-UI stance
 description: Keiro sanctions state browsing and safe operator actions over supported library APIs in opt-in sister packages, while metrics and traces stay in OpenTelemetry and no keiro package grows a dashboard, a server process, or a parallel observability stack.
-timestamp: 2026-10-14T01:35:20Z
+timestamp: 2026-10-21T00:12:00Z
 docId: ADR-40
 status: Accepted
 date: 2026-09-10
@@ -121,6 +121,12 @@ authoritative and the stance text is corrected.
 ### Runtime isolation and bounded inspection
 
 The exception also requires measured isolation from command and worker hot paths.
+Performance acceptance protects those runtime operations, including contention
+from active inspection. Inspection request latency and inspection allocations
+have no blanket percentage target. Combined-process allocation divided by writer
+completions cannot establish a core-path allocation regression; use an isolated
+ordinary-path comparison or attributed runtime measurements. WAL and total
+allocation remain useful diagnostics for investigating runtime impact.
 An unmounted surface and disabled inspection provenance introduce no additional
 queries, event reads, metadata encoding, or background work. Diagnostic hydration
 shares the existing replay logic while retaining a specialized ordinary-command

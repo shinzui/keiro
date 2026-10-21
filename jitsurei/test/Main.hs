@@ -8,10 +8,12 @@ import Control.Lens ((^.))
 import Control.Monad (replicateM_, when)
 import Data.Aeson (object)
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.IORef (atomicModifyIORef', modifyIORef', newIORef, readIORef)
 import Data.Int (Int32, Int64)
 import Data.List qualified as List
 import Data.List.NonEmpty qualified as NonEmpty
+import Data.Map.Strict qualified as Map
 import Data.Maybe (isJust)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -31,6 +33,11 @@ import Hasql.Statement (Statement, preparable)
 import Jitsurei
 import Keiro
 import Keiro.Connection (withProjectionSchema)
+import Keiro.Inspection.Aggregate qualified as Aggregate
+import Keiro.Ops qualified as Ops
+import Keiro.Ops.Aggregate qualified as OpsAggregate
+import Keiro.Ops.Env qualified as OpsEnv
+import Keiro.Ops.Render qualified as OpsRender
 import Keiro.PGMQ.Job (Job (..))
 import Keiro.PGMQ.Runtime (JobRuntime (..), QueueRef (..), runJobEff, withJobRuntime)
 import Keiro.ProcessManager
@@ -707,7 +714,7 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
       length (retired ^. #generations) `shouldBe` 3
 
   describe "Jitsurei snapshots" $ around (withFreshResourceStore fixture) $ do
-    it "writes a snapshot after the configured threshold" $ \(_store, StoreRunner runner) -> do
+    it "writes a snapshot after the configured threshold" $ \(store, StoreRunner runner) -> do
       let target = orderStream (OrderId "snapshot-100")
       Right (Right _) <-
         runner $
@@ -739,6 +746,22 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
           Store.runTransaction $
             Tx.statement "order-snapshot-100" snapshotVersionForStreamStmt
       snapshotVersion `shouldBe` Just (StreamVersion 2)
+      Just (Aggregate.SomeAggregateInspector inspector) <- pure (Map.lookup "order" jitsureiAggregateInspectors)
+      Right (Right view) <- runner (Aggregate.inspectAggregate inspector "snapshot-100")
+      (view ^. #stateLabel) `shouldBe` Just "paid"
+      fmap (^. #compatibility) (view ^. #snapshot . #stored) `shouldBe` Just Aggregate.Compatible
+      Right (Right page) <- runner (Aggregate.listAggregates inspector (Aggregate.AggregateListRequest 2 Nothing))
+      map (^. #aggregateId) (page ^. #items) `shouldBe` ["snapshot-100"]
+      let hooks = Ops.emptyAppHooks {Ops.aggregates = Just jitsureiAggregateInspectors}
+          env = OpsEnv.OpsEnv store OpsEnv.Json False [] False
+      shown <- Ops.runCommand hooks env (Ops.Aggregate (OpsAggregate.Show (OpsAggregate.ShowOptions "order" "snapshot-100")))
+      case shown of
+        OpsRender.Succeeded result -> case OpsRender.jsonValue result of
+          Aeson.Object fields -> do
+            KeyMap.lookup "state" fields `shouldBe` (view ^. #state)
+            KeyMap.lookup "state_version" fields `shouldBe` Just (Aeson.toJSON (2 :: Int))
+          _ -> expectationFailure "expected aggregate command JSON"
+        _ -> expectationFailure "expected aggregate command success"
 
   describe "Jitsurei process manager" $ around (withFreshResourceStoreWith fixture (withProjectionSchema jitsureiProjectionSchema)) $ do
     it "dispatches a packing command once for a payment event" $ \(_store, StoreRunner runner) -> do
@@ -950,6 +973,10 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
             incidentEventStream
             target
             (AcknowledgeIncident (AcknowledgeIncidentData incidentId))
+      Just (Aggregate.SomeAggregateInspector inspector) <- pure (Map.lookup "incident" jitsureiAggregateInspectors)
+      Right (Right view) <- runner (Aggregate.inspectAggregate inspector "inc-1")
+      (view ^. #stateLabel) `shouldBe` Just "acknowledged"
+      (view ^. #hydration) `shouldBe` Just (FullReplay NoStateCodec)
       -- The aggregate's guards resolve the ack/escalate race: once acknowledged,
       -- EscalateIncident has no edge and is a benign domain rejection.
       escalateResult <-

@@ -1,5 +1,8 @@
 # Keiro Guides Log
 
+## 2026-10-21
+* **Update**: Explain source-reporting aggregate inspection through explicit descriptors while ordinary hydration retains its existing result path.
+
 ## 2026-10-20
 * **Update**: Document header presentation limits and fresh observation/schema checks on repeated reads.
 * **Update**: Document explicit size failures for workflow continuation and exceptional-key work.

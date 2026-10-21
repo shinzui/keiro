@@ -89,7 +89,8 @@ embeddedHooks =
     { workflowResume = Just (Map.empty, defaultWorkflowResumeOptions),
       timerFire = Just (\_ -> pure Nothing),
       replayAudit = Just (OpsReplayAudit.OpsAuditConfig []),
-      projectionCatalog = Just emptyCatalogOperations
+      projectionCatalog = Just emptyCatalogOperations,
+      aggregates = Just Map.empty
     }
 
 emptyCatalogOperations :: CatalogOperations.ProjectionCatalogOperations
@@ -113,6 +114,7 @@ spec :: Fixture -> Spec
 spec fixture = do
   describe "embedded command tree" do
     it "omits code-dependent commands from the standalone tree" do
+      isParseSuccess (parseOps Ops.emptyAppHooks ["aggregate", "types"]) `shouldBe` False
       isParseFailure (parseOps Ops.emptyAppHooks ["wf", "resume-once"]) `shouldBe` True
       isParseFailure (parseOps Ops.emptyAppHooks ["timer", "drain-once"]) `shouldBe` True
       isParseFailure (parseOps Ops.emptyAppHooks ["replay-audit", "--full"]) `shouldBe` True
@@ -124,6 +126,10 @@ spec fixture = do
       isParseFailure (parseOps Ops.emptyAppHooks ["rebuild", "reproject-stream", "ops-group", "ops-projection", "orders-1"]) `shouldBe` True
 
     it "mounts every code-dependent command from typed application hooks" do
+      isParseSuccess (parseOps embeddedHooks ["aggregate", "types"]) `shouldBe` True
+      isParseSuccess (parseOps embeddedHooks ["aggregate", "show", "--name", "counter", "--id", "one"]) `shouldBe` True
+      isParseSuccess (parseOps embeddedHooks ["aggregate", "snapshot", "--name", "counter", "--id", "one"]) `shouldBe` True
+      isParseSuccess (parseOps embeddedHooks ["aggregate", "list", "--name", "counter", "--limit", "2"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["wf", "resume-once"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["timer", "drain-once"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["replay-audit", "--full"]) `shouldBe` True
@@ -1316,6 +1322,15 @@ spec fixture = do
               regfileShapeHash = expected.regfileShapeHash,
               stateShapeHash = expected.stateShapeHash
             }
+
+      shown <- OpsSnapshot.runCommand (opsEnv False store) (OpsSnapshot.Show "snapshot-ops")
+      case shown of
+        Succeeded result -> case result.jsonValue of
+          Aeson.Object fields -> do
+            KeyMap.lookup "observed_at" fields `shouldSatisfy` (\case Just (Aeson.String _) -> True; _ -> False)
+            KeyMap.lookup "age_seconds" fields `shouldSatisfy` (\case Just (Aeson.Number n) -> n >= 0; _ -> False)
+          _ -> expectationFailure "expected snapshot JSON object"
+        _ -> expectationFailure "expected snapshot show success"
 
       missing <- OpsSnapshot.runCommand (opsEnv False store) (OpsSnapshot.TruncationPreflight "no-snapshot" (StreamVersion 2) (Just expected))
       jsonBool "passed" missing `shouldBe` Just False

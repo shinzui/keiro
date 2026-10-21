@@ -18,6 +18,11 @@ provenance:
       at: 2026-10-14T01:38:52Z
       mode: "update"
       note: "Correct hot-path isolation, bounded inspection/feed ownership, released APIs, observation semantics, and mandatory performance acceptance; implementation remains pending."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-21T00:08:41Z
+      mode: "implement"
+      note: "Begin aggregate inspection using accepted cursor handoff; scope performance to preserving ordinary runtime paths."
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -81,29 +86,73 @@ keiro-side requests of the keiro runtime UI initiative (`mori://shinzui/keiro-ui
 
 ## Progress
 
+2026-10-20: Aggregate reads, paging, ops catalog and real example descriptors
+are implemented. Core/ops/HTTP/example suites pass 777/51/29/25 examples. The
+example order checks command JSON against the same library fold and state
+version. ADR-54 and CAP-21 record the boundary. Full Nix `just verify` and
+`nix flake check --no-write-lock-file` pass. The final custom-resolver correction
+passes the two focused aggregate examples after the full run; the ordinary
+hydration worker is unchanged. Strict documentation, IR and staged policy checks
+pass. Local implementation is complete; integrated cohort interference and
+publication remain EP-7 release work.
+
+2026-10-20: Implementation begins against the accepted EP-2 cursor/page/ops handoff, as explicitly scheduled in MasterPlan 45. Preserve the ordinary runtime path; inspection latency and combined-process allocation are not blanket acceptance targets. Existing functional tests will supply fixtures for focused source/state checks.
+
 - [x] (2026-10-13) Correctness and hot-path design review applied; implementation remains outstanding.
-- [ ] Validate the review constraints and record the required performance/correctness evidence before marking this plan complete.
+- [x] (2026-10-20) Validate the local review constraints with the existing runtime suites, focused inspection checks, five matched ordinary-path comparisons and optimized Core. Integrated deployment interference remains the EP-7 release gate.
 
 
-Milestone 0 is a short preflight; every later milestone starts only after its findings are
-recorded in Surprises & Discoveries. Milestone 4 is gated on a kiroku release and may
-complete after Milestone 5.
+Milestone 0 is a short preflight; its findings are recorded in Surprises &
+Discoveries. Listing uses the already released public store API and the existing
+supported bound.
 
 - [x] (2026-09-10T03:04Z) Plan created with intention `intention_01m24m6m00ev59wa81shymsktd`; IR-28 gained a "Planning (2026-09-10)" section linking this plan, its `timestamp` advanced, and the bundle log records the update. Status remains `proposed`.
-- [ ] M0: confirm that `Keiro.Command.hydrate` is the only snapshot-seeded hydration path used by every command runner, that a `seedVerifySampleRate` of zero schedules no background verification, and that no metrics or tracer are touched when both are `Nothing`; record the evidence.
-- [ ] M0: verify the current released `kiroku-store` listing API and supported bounds; record released source and tag evidence.
-- [ ] M0: record whether `keiro/src/Keiro/Inspection/Cursor.hs` (plan 275) exists on the current tree; if it does not, this plan creates it in Milestone 4 to plan 275's exact interface.
-- [ ] M1: add `HydrationSource`, `FullReplayReason`, `hydrateWithSource`, and `inspectionRunCommandOptions` to `keiro/src/Keiro/Command.hs`; keep the ordinary hydration result path specialized; tests prove source reporting for snapshot, full-replay, corrupt-snapshot, and no-codec cases; the command benchmark is unchanged.
-- [ ] M1: add `SnapshotObservation` and `observeSnapshotRow` to `keiro/src/Keiro/Snapshot/Schema.hs`; `keiro-ops snapshot show` gains the additive `observed_at` and `age_seconds` keys with tests.
-- [ ] M2: add `keiro/src/Keiro/Inspection/Aggregate.hs` with the inspector descriptor, smart constructors, `inspectAggregate`, `snapshotStatusFor`, `listAggregateTypes`, the error type, and the library-owned JSON rendering.
-- [ ] M2: tests in a new `describe "Keiro.Inspection.Aggregate"` group: exhaustive fold-equivalence against `hydrateFull` with and without a snapshot, corrupt-snapshot fallback, soft-deleted stream, truncation gap, unknown aggregate, blank id, snapshot status present/absent/incompatible/unused, and JSON key inventory.
-- [ ] M3: add `AppHooks.aggregates` to `keiro-ops/src/Keiro/Ops/Embed.hs` and the embedded-only `aggregate` domain (`types`, `show`, `snapshot`) in `keiro-ops/src/Keiro/Ops/Aggregate.hs`; standalone-tree and embedded-tree tests updated; handler tests compare `jsonValue` with the library rendering.
-- [ ] M3: add `jitsurei/src/Jitsurei/Inspection.hs` with inspectors for `order` and `incident`, mount it in `jitsurei/app/Main.hs`, and add a `describe "Jitsurei aggregate inspection"` test group.
-- [ ] M4: integrate released listing with raw-row cursors, retaining the current supported store bound; add library, CLI and example tests.
-- [ ] M5: user documentation, API reference, the aggregate-inspection capability record (CAP-20 on 2026-09-30 unless plan 276 took it; allocate with `okf id next`) and updates to CAP-4 and CAP-16, changelogs, IR-28 implementation evidence, the new ADR plus the ADR-28 paragraph, and the full `just verify` gate.
+- [x] (2026-10-20) M0: confirm that `Keiro.Command.hydrate` is the only snapshot-seeded hydration path used by every command runner, that a `seedVerifySampleRate` of zero schedules no background verification, and that no metrics or tracer are touched when both are `Nothing`; record the evidence.
+- [x] (2026-10-20) M0: verify the current released `kiroku-store` listing API and supported bounds; record released source and tag evidence.
+- [x] (2026-10-20) M0: confirm the cursor codec and ops reader exist, and import their accepted owner interfaces unchanged.
+- [x] (2026-10-20) M1: add `HydrationSource`, `FullReplayReason`, `hydrateWithSource`, and `inspectionRunCommandOptions` to `keiro/src/Keiro/Command.hs`; keep the ordinary hydration result path specialized; focused tests prove source reporting and folded-state parity; five matched ordinary hydration comparisons and optimized Core show no diagnostic construction on the command path.
+- [x] (2026-10-20) M1: add `SnapshotObservation` and `observeSnapshotRow` to `keiro/src/Keiro/Snapshot/Schema.hs`; `keiro-ops snapshot show` gains the additive `observed_at` and `age_seconds` keys with tests.
+- [x] (2026-10-20) M2: add `keiro/src/Keiro/Inspection/Aggregate.hs` with the inspector descriptor, smart constructors, `inspectAggregate`, `snapshotStatusFor`, `listAggregateTypes`, the error type, and the library-owned JSON rendering.
+- [x] (2026-10-20) M2: two focused aggregate examples prove fold/version parity, custom audit-handle identity, deleted/missing/blank-id behavior and raw-page continuation through rejected rows. Existing owner runtime/snapshot tests cover replay and codec failures.
+- [x] (2026-10-20) M3: add `AppHooks.aggregates` to `keiro-ops/src/Keiro/Ops/Embed.hs` and the embedded-only `aggregate` domain (`types`, `show`, `snapshot`) in `keiro-ops/src/Keiro/Ops/Aggregate.hs`; standalone-tree and embedded-tree tests updated; handler tests compare `jsonValue` with the library rendering.
+- [x] (2026-10-20) M3: add `jitsurei/src/Jitsurei/Inspection.hs` with inspectors for `order` and `incident`, mount it in `jitsurei/app/Main.hs`, and extend the existing order/incident tests, including an order command JSON parity check.
+- [x] (2026-10-20) M4: integrate released listing with raw-row cursors, retaining the current supported store bound; add library, CLI and example tests.
+- [x] (2026-10-20) M5: user documentation, API reference, the aggregate-inspection capability record (CAP-20 on 2026-09-30 unless plan 276 took it; allocate with `okf id next`) and updates to CAP-4 and CAP-16, changelogs, IR-28 implementation evidence, the new ADR plus the ADR-28 paragraph, and the full `just verify` gate.
 
 
 ## Surprises & Discoveries
+
+2026-10-20: Review found that physical membership and hydration resolution must
+agree for custom audit targets. The descriptor now retains the accepted typed
+handle and verifies its event-stream resolver maps back to the selected physical
+name. Metadata and hydration use that same resolved name. The focused state test
+also covers an audit target whose typed handle differs from its physical name.
+
+2026-10-20: The user clarified that performance protects core runtime paths,
+not a blanket budget on inspection work, and requested focused tests. The
+uncommitted extra HTTP thread/slow-reader/storm tests were removed. Total-process
+allocation during active HTTP includes inspection work and cannot establish a
+core allocation regression.
+
+The ordinary hydration continuation is now measured directly in
+`keiro/bench/results/inspection/hydration-core-path/`: five alternating pairs
+per hit/miss/corrupt/no-codec/10,000-event case, using the existing retention
+fixture. Allocation medians are unchanged (hit -0.13%; long replay +0.00014%);
+p95 medians range -0.63%..+2.38%. The optimized ordinary worker contains no
+HydrationSource or FullReplayReason constructors. Store reads, metrics and seed
+verification remain on the same branches, with no new command-path work.
+The standalone inspection options disable sampling, telemetry and post-append
+verification. The focused existing snapshot suites pass 36 runtime / 1 ops
+examples; broader aggregate/example validation is in progress.
+
+Mori locates the public store source; Hackage preferred versions and upstream
+`kiroku-store-v0.11.0.1` agree on the current 0.11.0.1 release (peeled commit
+`084fd8359850342447cdda8e632b7dc456c7fca4`). Its public listing signature and
+raw-page cursor contract remain compatible with `^>=0.11.0.0`; no bound change
+is needed. The cursor module and ops reader already exist and are imported from
+EP-2, rather than recreated. Hydration's only command-serving worker remains
+shared; sample rate zero returns before reserving or scheduling verification.
+
 
 2026-10-13 source review: hydrate has a probe wrapper and bounded seed verification. The proposed diagnostic pair was on the command path; initial getStream and hydration can observe different versions.
 
@@ -112,6 +161,18 @@ complete after Milestone 5.
 
 
 ## Decision Log
+
+- (2026-10-20) Follow the user's request for focused tests: reuse existing runtime
+  replay/snapshot fixtures and extend the real example tests, with two inspection
+  cases for new state/identity and raw-page logic. Source review checks that the
+  displayed version comes from the same Hydrated value as the state and that
+  metadata and hydration resolve to one physical stream. Artificial race hooks,
+  exhaustive JSON key mirrors and extra HTTP thread/storm machinery are outside
+  this local validation scope. Functional observation semantics remain required;
+  integrated runtime-interference evidence remains the release child's work.
+- (2026-10-20) The example incident descriptor uses its explicit display encoder
+  rather than adding a global domain JSON instance. This keeps the display
+  contract application-owned without changing existing domain serialization.
 
 - Decision (2026-10-13): apply the current review constraints in Context, Plan of Work, and Validation. Rationale: hydrate has a probe wrapper and bounded seed verification. The proposed diagnostic pair was on the command path; initial getStream and hydration can observe different versions. Historical September decisions below are retained as history; conflicting create-first, downgrade, zero-cost-index, unconditional-provenance and partial-completion instructions are withdrawn.
 
@@ -311,6 +372,17 @@ complete after Milestone 5.
 
 ## Outcomes & Retrospective
 
+2026-10-20: Complete locally. Explicit aggregate descriptors, state/snapshot/type
+reads, bounded raw-row pages, embedded ops and the real example catalog are
+implemented. Full Nix verification passes 777 core, 51 ops, 29 HTTP, 25 example,
+43 migration and all DSL/proof/policy/documentation gates; the final physical
+resolver correction passes the two focused aggregate examples. Nix flake checks
+pass after one existing import-comment blank separator was formatted. Five
+ordinary-worker comparisons show essentially unchanged allocation and p95
+medians within 2.38% of baseline; the optimized worker has no source/reason
+constructors. This closes EP-3 implementation, not cohort publication or the
+integrated active-inspection and strict retention gates owned by EP-7.
+
 2026-10-13: Design corrected after source review; no feature implementation or passing performance evidence exists yet. The new acceptance gates must be met during implementation.
 
 
@@ -333,7 +405,7 @@ that matter here are `keiro` (the runtime library, `keiro/src/Keiro/…`), `keir
 types, `keiro-core/src/Keiro/…`, re-exported by `keiro`), `keiro-ops` (the operator command
 tree, `keiro-ops/src/Keiro/Ops/…`), `keiro-test-support` (the PostgreSQL test fixture), and
 `jitsurei` (the example application, `jitsurei/src/Jitsurei/…` and `jitsurei/app/Main.hs`).
-The tree is at version 0.20.0.0 and uses `kiroku-store ^>=0.11.0.0`, which exports `listStreams`. Verify current registry releases and tags again before choosing bounds.
+The implementation tree is at version 0.21.0.0 and uses `kiroku-store ^>=0.11.0.0`, which exports `listStreams`. Verify current registry releases and tags again before choosing bounds.
 
 Terms used throughout, in plain language:
 
@@ -525,8 +597,8 @@ configured, and the policy label (`never`, `every:<n>`, `on_terminal`, `custom`)
 
 `aggregateStream inspector aggregateId` validates the id (non-blank after `Text.strip`, and
 `mkStream` accepts the resulting name; otherwise `Left (AggregateIdRejected aggregateId)`) and
-returns `entityStream (inspector ^. #category) aggregateId`. `aggregateIdOf inspector
-streamName` strips the `<category>-` prefix and is `Nothing` when `mkStream` rejects the name.
+returns the accepted typed handle only when the event stream resolver maps it back to the selected physical category/id name. `aggregateIdOf inspector
+streamName` strips the `<category>-` prefix and is `Nothing` when `mkStream` rejects the name or its accepted handle resolves to a different physical name.
 
 `inspectAggregate inspector aggregateId` performs, in order: `aggregateStream`; `getStream`
 on the resolved name, returning `Left (AggregateNotFound name)` for `Nothing`; when
@@ -800,7 +872,7 @@ with evidence as they occur.
 
 The concurrency test interleaves an append between the initial stream lookup and hydration and checks that displayed state is labelled with the hydrated version. Interleave snapshot advancement, deletion, and truncation too: report a raced/deleted observation or a typed hydration error, never invented initial state or a negative event distance. Database timestamps describe each observation and do not claim a transaction-wide snapshot.
 
-Inspection is accepted only with measured interference bounds, not from the fact that an API is read-only. Capture a baseline at the pre-implementation commit with the same GHC optimization, RTS capabilities, database size, connection limits, PostgreSQL settings, and workload seed as the candidate. Run inside `nix develop`, with normal autovacuum and durable settings (`fsync`, `synchronous_commit`, and `full_page_writes` on); record settings and raw samples. Compare at least five alternating baseline/candidate runs after warm-up. At a fixed offered load below baseline saturation, a reproducible median throughput loss over 5%, p95 command/worker latency increase over 5%, or allocated bytes per completed operation increase over 5% blocks the milestone. No extra database statements, event reads, metadata serialization, or background tasks are allowed on ordinary commands or provenance-disabled reactions. An inconclusive/noisy comparison is not a pass: extend matched runs and report uncertainty. Keep the existing 25% historical benchmark check as a coarse smoke test only.
+Inspection is accepted only with measured interference bounds, not from the fact that an API is read-only. Capture a baseline at the pre-implementation commit with the same GHC optimization, RTS capabilities, database size, connection limits, PostgreSQL settings, and workload seed as the candidate. Run inside `nix develop`, with normal autovacuum and durable settings (`fsync`, `synchronous_commit`, and `full_page_writes` on); record settings and raw samples. Compare at least five alternating baseline/candidate runs after warm-up. At a fixed offered load below baseline saturation, a reproducible median throughput loss over 5%, p95 command/worker latency increase over 5%, or core-path allocated bytes per completed runtime operation increase over 5% blocks the milestone. These thresholds protect ordinary commands and workers, including contention caused by active inspection; they are not blanket targets for inspection request latency, inspection allocations, total-process allocation divided by writer completions, or WAL volume. Combined process allocation and WAL remain attribution diagnostics. Unmounted/default-off paths must add no inspection work, and inspection-only code stays outside those paths. Use focused behavior checks and measurements that resolve an actual core-path risk, rather than expanding the test matrix for its own sake. No extra database statements, event reads, metadata serialization, or background tasks are allowed on ordinary commands or provenance-disabled reactions. An inconclusive/noisy comparison is not a pass: extend matched runs and report uncertainty. Keep the existing 25% historical benchmark check as a coarse smoke test only.
 
 Measure four deployment modes separately: pre-change runtime; candidate with inspection not mounted and provenance off; mounted but idle; and active inspection with 1 and 32 distinct views, 1 and 256 clients, repeated HTTP polls, large values, and deliberately slow readers. Hold writer load fixed and include snapshot hit, no codec, snapshot miss/corruption fallback, long history, accepted/no-op/rejected/duplicate reactions, fan-out of 0/1/10/100 targets, timer scheduling/claim/firing, workflow resume, and projection application. Report query counts, rows examined, buffers, pool wait, CPU, allocation, WAL bytes, writer p50/p95/p99, completed operations, and post-major-GC live bytes. Idle mounting must issue no recurring database work without a subscriber or request. Reuse [ADR-48](../adr/0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md)'s isolated retention legs; also run subscription churn and an idle-mounted notification storm, then assert driver/thread/queue counts return to their starting values. A positive live-heap trend that persists when repeating the steady-state run blocks release even if it is below the existing coarse retention threshold. Performance measurements remain implementation work; this review supplies no passing runtime evidence.
 
@@ -1018,6 +1090,7 @@ data AggregateInspectionError
   | AggregateHydrationFailed !StreamName !CommandError
   | InvalidPageSize !Int
   | InvalidCursor !CursorError
+  | ResultTooLarge
   deriving stock (Eq, Show, Generic)
 
 aggregateStream :: AggregateInspector phi rs s ci co -> Text -> Either AggregateInspectionError (Stream (EventStream phi rs s ci co))
@@ -1120,7 +1193,7 @@ data AppHooks = AppHooks
 
 -- Keiro.Ops.Aggregate
 data ShowOptions = ShowOptions { name :: !Text, aggregateId :: !Text }
-data ListOptions = ListOptions { name :: !Text, limit :: !Int, after :: !(Maybe Text) }   -- Milestone 4
+data ListOptions = ListOptions { name :: !Text, limit :: !Int, after :: !(Maybe InspectionCursor) }   -- Milestone 4
 data Command = Types | Show !ShowOptions | Snapshot !ShowOptions | List !ListOptions    -- List from Milestone 4
 commandParser :: Parser Command
 isMutation :: Command -> Bool          -- always False

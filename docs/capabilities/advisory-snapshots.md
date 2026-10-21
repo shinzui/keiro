@@ -4,7 +4,7 @@ type: Capability
 description: "Speed up aggregate and process-manager stream hydration with periodic snapshots that stay strictly advisory — a corrupt or stale snapshot falls back to replay from events."
 generated:
   by: openai/codex
-  at: "2026-08-15T00:00:00Z"
+  at: "2026-10-21T00:26:46Z"
 capabilityId: CAP-4
 provider: mori://shinzui/keiro
 status: shipped
@@ -67,3 +67,6 @@ eventStreamDef =
 - Changing any compatibility discriminator invalidates existing snapshots, so
   the next load of each stream pays a full replay before a new snapshot is
   written. A policy change by itself changes cadence, not compatibility.
+
+`observeSnapshotRow` adds a database observation clock to a read-only snapshot
+lookup. Runtime snapshot lookup remains unchanged.

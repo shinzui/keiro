@@ -57,6 +57,7 @@ library
     Jitsurei.EscalationProcess
     Jitsurei.FulfillmentProcess
     Jitsurei.Incident
+    Jitsurei.Inspection
     Jitsurei.OncallRoster
     Jitsurei.OrderStream
     Jitsurei.Paging
@@ -162,6 +163,7 @@ test-suite jitsurei-test
     hspec >=2.11,
     jitsurei,
     keiro,
+    keiro-ops ^>=0.21.0.0,
     keiro-pgmq,
     keiro-test-support,
     kiroku-store ^>=0.11.0.0,

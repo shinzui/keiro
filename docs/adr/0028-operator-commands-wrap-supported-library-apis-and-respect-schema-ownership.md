@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Operator commands wrap supported library APIs and respect schema ownership
 description: Keiro operator commands preserve library invariants, schema ownership, destructive previews, and the standalone-versus-embedded capability boundary.
-timestamp: 2026-10-20T23:50:22Z
+timestamp: 2026-10-21T00:26:46Z
 docId: ADR-28
 status: Accepted
 date: 2026-08-08
@@ -171,6 +171,15 @@ manual reads with host SQL/read deadlines, outside automatic feeds. Their row
 caps are cardinality bounds, not a claim that every owner lookup scans only one
 page. Matching read plans, key-domain compatibility and write costs are all
 required when choosing any later index.
+
+Aggregate inspection is an explicit application catalog over
+`Keiro.Inspection.Aggregate`. Its display encoders are application-owned; ops
+and HTTP reuse the library's JSON rather than adding transport SQL. State uses
+the shared command hydration algorithm with diagnostics enabled only for the
+inspection continuation. Folded state carries its own version; the separately
+observed stream head and snapshot clock are not an atomic-view promise. Stream
+listing consumes one public Kiroku raw page and advances from the last examined
+raw row even when every display item is rejected. Raw history remains Kiroku's.
 
 ## Consequences
 

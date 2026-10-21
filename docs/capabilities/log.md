@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-21
+* **Update**: Add CAP-21 aggregate inspection and extend command, snapshot and ops interfaces with source reporting, observation clocks and catalog hooks.
+
 ## 2026-10-20
 * **Update**: Record default-branch workflow inspection APIs; performance acceptance remains open.
 * **Addition**: Record the default-branch HTTP operational surface; release remains pending.

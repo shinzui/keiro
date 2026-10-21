@@ -8,6 +8,7 @@ module Jitsurei
     module Jitsurei.EscalationProcess,
     module Jitsurei.FulfillmentProcess,
     module Jitsurei.Incident,
+    module Jitsurei.Inspection,
     module Jitsurei.OncallRoster,
     module Jitsurei.OrderStream,
     module Jitsurei.Paging,
@@ -28,6 +29,7 @@ import Jitsurei.DurableWorkflow
 import Jitsurei.EscalationProcess
 import Jitsurei.FulfillmentProcess
 import Jitsurei.Incident
+import Jitsurei.Inspection
 import Jitsurei.OncallRoster
 import Jitsurei.OrderStream
 import Jitsurei.Paging

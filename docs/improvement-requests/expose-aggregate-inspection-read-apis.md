@@ -6,7 +6,7 @@ description: >-
   category, hydrate current state for display through the existing snapshot-plus-fold
   machinery, and expose snapshot metadata — and only then endpoints wrapping them, so an
   operator can see what aggregates exist and what state they hold.
-timestamp: 2026-10-14T13:54:48Z
+timestamp: 2026-10-21T00:26:46Z
 requestId: IR-28
 status: accepted
 origin: mori://shinzui/keiro-ui
@@ -149,8 +149,8 @@ directly:
   transaction and reports version, age, events since the snapshot, and the three ADR-3
   discriminators individually with a `compatible` / `incompatible` / `unused` verdict; the
   standalone `keiro-ops snapshot show` gains additive `observed_at` and `age_seconds` keys.
-- Item 1a (list by category): listing wraps the prefix-filtered `listStreams` primitive that
-  kiroku plan 88 adds for `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-8`
+- Item 1a (list by category): listing wraps the released `listStreams` primitive from
+  `mori://shinzui/kiroku/packages/kiroku-store`, delivered for `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-8`
   (prefix `<category>-` selects exactly one category), pages by an opaque cursor minted by the
   shared `Keiro.Inspection.Cursor` codec, and ships only against a released `kiroku-store`
   that exports the primitive. Keiro issues no SQL against kiroku's schema and performs no
@@ -165,8 +165,8 @@ directly:
 
 Acceptance mapping: criterion 1 is the gated listing milestone with a two-category
 `jitsurei` test and a handler-versus-library JSON agreement test; criterion 2 is an
-exhaustive fold-equivalence enumeration against `hydrateFull` on snapshot-enabled and plain
-aggregates; criterion 3 renders `status: absent` as a success rather than an error;
+focused state/source parity against `hydrateFull`, reusing the existing runtime replay and
+snapshot failure tests; criterion 3 renders `status: absent` as a success rather than an error;
 criterion 4 is met by construction (only exported owner operations, no Hasql statement in
 the inspection module) and checked by review; criterion 5 is met by the `history` reference
 and the absence of any event-page command.
@@ -176,3 +176,24 @@ not hydrated; an unknown aggregate fails the command (HTTP 422 under plan 276's 
 while a missing snapshot does not; listing the inputs an aggregate accepts next is deferred to
 the `EnabledInput` machinery plan 274 is building for process managers. This request is
 accepted and completes once implementation and release evidence are recorded.
+
+## Implementation evidence (2026-10-20)
+
+The development tree now provides `Keiro.Inspection.Aggregate`, explicit display
+catalogs, bounded raw-page listing and source-reporting hydration. Ops mounts
+`aggregate types|list|show|snapshot` only when the application supplies a catalog;
+Jitsurei supplies real order and incident descriptors. Schema checks and HTTP
+routes continue to use the shared command tree. Raw history remains Kiroku's.
+
+The 777-example core suite includes folded-state/version parity, deleted-stream
+metadata, corrupt-seed fallback and a rejected raw page that still advances its
+cursor. Existing example tests cover both aggregate kinds and snapshot health;
+ops command parity is checked against the same order fixture. The command-path
+comparison retains five alternating pairs per hit/miss/corrupt/no-codec/long
+case under `keiro/bench/results/inspection/hydration-core-path/`. Allocation is
+essentially unchanged; the optimized ordinary worker contains no diagnostic
+constructors. See [ADR-54](../adr/0054-aggregate-inspection-reuses-hydration-without-diagnostics-on-the-command-path.md).
+
+This evidence does not complete the request: cohort publication, the integrated
+runtime-isolation checks and consumer adoption remain under MasterPlan 45 and
+its release child. Status remains accepted until that release evidence exists.

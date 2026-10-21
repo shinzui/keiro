@@ -18,6 +18,11 @@ provenance:
       at: 2026-10-14T01:38:52Z
       mode: "update"
       note: "Correct hot-path isolation, bounded inspection/feed ownership, released APIs, observation semantics, and mandatory performance acceptance; implementation remains pending."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-21T00:09:04Z
+      mode: "implement"
+      note: "Apply user clarification: protect core runtime paths; inspection and total-process allocation have no blanket percentage target."
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -74,6 +79,12 @@ whose Integration Points settle the artifacts this plan shares with its siblings
 
 
 ## Progress
+
+2026-10-20 coordination clarification: MasterPlan 45 now gates implementation
+on accepted shared interfaces rather than whole-child release closure. The
+integrated experiment follows the implemented functional cohort; all child
+acceptance and release requirements remain open until measured. Use its current
+registry and execution sequence when interpreting older dependency text below.
 
 - [x] (2026-10-13) Correctness and hot-path design review applied; implementation remains outstanding.
 - [ ] Validate the review constraints and record the required performance/correctness evidence before marking this plan complete.
@@ -874,7 +885,7 @@ evidence as they occur.
 
 ## Validation and Acceptance
 
-Inspection is accepted only with measured interference bounds, not from the fact that an API is read-only. Capture a baseline at the pre-implementation commit with the same GHC optimization, RTS capabilities, database size, connection limits, PostgreSQL settings, and workload seed as the candidate. Run inside `nix develop`, with normal autovacuum and durable settings (`fsync`, `synchronous_commit`, and `full_page_writes` on); record settings and raw samples. Compare at least five alternating baseline/candidate runs after warm-up. At a fixed offered load below baseline saturation, a reproducible median throughput loss over 5%, p95 command/worker latency increase over 5%, or allocated bytes per completed operation increase over 5% blocks the milestone. No extra database statements, event reads, metadata serialization, or background tasks are allowed on ordinary commands or provenance-disabled reactions. An inconclusive/noisy comparison is not a pass: extend matched runs and report uncertainty. Keep the existing 25% historical benchmark check as a coarse smoke test only.
+Inspection is accepted only with measured interference bounds, not from the fact that an API is read-only. Capture a baseline at the pre-implementation commit with the same GHC optimization, RTS capabilities, database size, connection limits, PostgreSQL settings, and workload seed as the candidate. Run inside `nix develop`, with normal autovacuum and durable settings (`fsync`, `synchronous_commit`, and `full_page_writes` on); record settings and raw samples. Compare at least five alternating baseline/candidate runs after warm-up. At a fixed offered load below baseline saturation, a reproducible median throughput loss over 5%, p95 command/worker latency increase over 5%, or core-path allocated bytes per completed runtime operation increase over 5% blocks the milestone. These thresholds protect ordinary commands and workers, including contention caused by active inspection; they are not blanket targets for inspection request latency, inspection allocations, total-process allocation divided by writer completions, or WAL volume. Combined process allocation and WAL remain attribution diagnostics. Unmounted/default-off paths must add no inspection work, and inspection-only code stays outside those paths. Use focused behavior checks and measurements that resolve an actual core-path risk, rather than expanding the test matrix for its own sake. No extra database statements, event reads, metadata serialization, or background tasks are allowed on ordinary commands or provenance-disabled reactions. An inconclusive/noisy comparison is not a pass: extend matched runs and report uncertainty. Keep the existing 25% historical benchmark check as a coarse smoke test only.
 
 Measure four deployment modes separately: pre-change runtime; candidate with inspection not mounted and provenance off; mounted but idle; and active inspection with 1 and 32 distinct views, 1 and 256 clients, repeated HTTP polls, large values, and deliberately slow readers. Hold writer load fixed and include snapshot hit, no codec, snapshot miss/corruption fallback, long history, accepted/no-op/rejected/duplicate reactions, fan-out of 0/1/10/100 targets, timer scheduling/claim/firing, workflow resume, and projection application. Report query counts, rows examined, buffers, pool wait, CPU, allocation, WAL bytes, writer p50/p95/p99, completed operations, and post-major-GC live bytes. Idle mounting must issue no recurring database work without a subscriber or request. Reuse [ADR-48](../adr/0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md)'s isolated retention legs; also run subscription churn and an idle-mounted notification storm, then assert driver/thread/queue counts return to their starting values. A positive live-heap trend that persists when repeating the steady-state run blocks release even if it is below the existing coarse retention threshold. Performance measurements remain implementation work; this review supplies no passing runtime evidence.
 

@@ -1,0 +1,50 @@
+[
+  {
+    "offered": 580,
+    "passed": false,
+    "command": [
+      "/tmp/keiro-http-n8-prechange",
+      "keiro/bench/results/inspection/matched-http-n8-a16m/paced-qualification/580",
+      "580",
+      "1",
+      "unmounted",
+      "+RTS",
+      "-N8",
+      "-A16m",
+      "-T",
+      "-RTS"
+    ]
+  },
+  {
+    "offered": 460,
+    "passed": false,
+    "command": [
+      "/tmp/keiro-http-n8-prechange",
+      "keiro/bench/results/inspection/matched-http-n8-a16m/paced-qualification/460",
+      "460",
+      "1",
+      "unmounted",
+      "+RTS",
+      "-N8",
+      "-A16m",
+      "-T",
+      "-RTS"
+    ]
+  },
+  {
+    "offered": 360,
+    "passed": true,
+    "command": [
+      "/tmp/keiro-http-n8-prechange",
+      "keiro/bench/results/inspection/matched-http-n8-a16m/paced-qualification/360",
+      "360",
+      "1",
+      "unmounted",
+      "+RTS",
+      "-N8",
+      "-A16m",
+      "-T",
+      "-RTS"
+    ]
+  }
+]

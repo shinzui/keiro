@@ -1,12 +1,13 @@
 ---
 type: Reference
 title: API Reference
+timestamp: 2026-10-21T00:49:10Z
 description: Map Keiro's public modules and their user-facing interfaces.
 docId: DOC-2
 tags: [keiro, api, modules, reference]
 generated:
   by: process:codex-cli
-  at: 2026-10-11T21:11:39Z
+  at: 2026-10-21T00:26:46Z
 ---
 
 # API Reference
@@ -996,6 +997,35 @@ historical `keiro.projection.lag` gauge remains a deprecated 0.11 compatibility
 instrument and receives the same value. Both measure from the newest visible
 event to the slowest durable subscription member, so a caught-up projection
 reports zero after tail hard-deletion. Neither value counts relevant events.
+
+## `Keiro.Inspection.Aggregate`
+
+An application mounts an explicit `AggregateInspectors` catalog. Each descriptor
+pairs a validated event stream and category with a display encoder; snapshot
+serialization is not implicitly a display contract. `inspectAggregate` returns
+folded state, its exact `state_version`, hydration source, snapshot health and a
+Kiroku history reference. Deleted streams expose metadata without hydration.
+`history.head_version` is a separately observed head and can differ from the
+folded version under concurrent writes. Raw event browsing remains Kiroku's.
+
+`listAggregates` examines one raw stream page, with a limit of 1..500. Rejected
+membership rows count as `skipped`; an empty display page can still have a
+`next_cursor`. Continue until that cursor is absent. Cursors bind the inspector,
+category and last raw row; an oversized continuation fails explicitly.
+`snapshotStatusFor` reads metadata and an advisory snapshot without hydration.
+Snapshot age uses the accompanying database `observed_at` clock; its metadata
+and the hydrated state are observations rather than an atomic snapshot.
+
+`Keiro.Command.hydrateWithSource` shares ordinary hydration's replay and fallback
+logic. `inspectionRunCommandOptions` disables sampled verification and telemetry.
+The ordinary `hydrate` entry point keeps its result type and constructs no source
+report. `Keiro.Snapshot.Schema.observeSnapshotRow` adds a database clock to the
+inspection lookup; runtime snapshot lookup is unchanged.
+
+With `AppHooks.aggregates = Just catalog`, ops mounts `aggregate types`,
+`aggregate list --name NAME [--limit N] [--after CURSOR]`, and
+`aggregate show|snapshot --name NAME --id ID`. All four are read-only. The HTTP
+sister package derives their GET routes from this same grammar.
 
 ## `Keiro.Ops` (package `keiro-ops`)
 

@@ -1,6 +1,7 @@
 ---
 type: Reference
 title: Snapshots
+timestamp: 2026-10-21T00:26:46Z
 description: Reference advisory snapshots, fold versions, hydration behavior, and operations.
 docId: DOC-22
 tags: [keiro, snapshots, hydration, reference]
@@ -213,3 +214,18 @@ a Kiroku truncation marker, follow the snapshot-first workflow in
 [Stream Truncation](operations.md#stream-truncation). Keiro uses snapshot table
 rows and their recorded stream versions for this coverage check; it does not
 use Kiroku's snapshot-event convention.
+
+## Inspecting snapshot health
+
+An aggregate descriptor exposes `snapshotStatusFor` without hydration. The result
+contains `observed_at`, optional configured codec discriminators and an optional
+stored row. Stored compatibility is `compatible`, `incompatible` with named
+mismatched discriminators, or `unused` when the application configures no codec.
+The row reports age against the database clock, events since its version, and
+whether it is ahead of the separately observed stream head. These observations
+do not promise a transactionally frozen aggregate view.
+
+The database-only `snapshot show --stream NAME` command also adds `observed_at`
+and `age_seconds` for an existing row. Runtime hydration continues to use its
+existing compatible-snapshot lookup. Application-owned `aggregate snapshot`
+adds the configured-versus-stored comparison; its display encoder is explicit.

@@ -1,0 +1,172 @@
+{
+  "hit": {
+    "paired_percent_changes": [
+      {
+        "allocated_bytes_per_operation": -0.13136593802596241,
+        "p50_us": -0.9345794392523366,
+        "p95_us": 1.1976047904191711
+      },
+      {
+        "allocated_bytes_per_operation": -0.13077160602167348,
+        "p50_us": 3.3333333333333437,
+        "p95_us": -11.811023622047244
+      },
+      {
+        "allocated_bytes_per_operation": -0.13089044172549524,
+        "p50_us": 6.741573033707859,
+        "p95_us": 2.3809523809523725
+      },
+      {
+        "allocated_bytes_per_operation": -0.13077160602167348,
+        "p50_us": 4.494382022471921,
+        "p95_us": 5.454545454545445
+      },
+      {
+        "allocated_bytes_per_operation": -0.13100943303615553,
+        "p50_us": 0.0,
+        "p95_us": 4.545454545454541
+      }
+    ],
+    "median_percent_changes": {
+      "allocated_bytes_per_operation": -0.13089044172549524,
+      "p50_us": 3.3333333333333437,
+      "p95_us": 2.3809523809523725
+    }
+  },
+  "miss": {
+    "paired_percent_changes": [
+      {
+        "allocated_bytes_per_operation": 0.0,
+        "p50_us": 0.9866511897852481,
+        "p95_us": 1.8997574777688042
+      },
+      {
+        "allocated_bytes_per_operation": 0.0,
+        "p50_us": 1.6645326504481472,
+        "p95_us": 0.04391743522178526
+      },
+      {
+        "allocated_bytes_per_operation": 0.0014139658790712772,
+        "p50_us": 3.2658393207054104,
+        "p95_us": 0.6956521739130528
+      },
+      {
+        "allocated_bytes_per_operation": 0.0,
+        "p50_us": 0.3654080389768666,
+        "p95_us": -0.2102607232968845
+      },
+      {
+        "allocated_bytes_per_operation": -0.0014139458863526855,
+        "p50_us": 0.0,
+        "p95_us": -0.7068607068607013
+      }
+    ],
+    "median_percent_changes": {
+      "allocated_bytes_per_operation": 0.0,
+      "p50_us": 0.9866511897852481,
+      "p95_us": 0.04391743522178526
+    }
+  },
+  "corrupt": {
+    "paired_percent_changes": [
+      {
+        "allocated_bytes_per_operation": 8.759018914616945e-05,
+        "p50_us": -1.074053137365738,
+        "p95_us": -0.6254886630179812
+      },
+      {
+        "allocated_bytes_per_operation": -9.032730098335051e-05,
+        "p50_us": -2.826217678893561,
+        "p95_us": -4.0016501650165015
+      },
+      {
+        "allocated_bytes_per_operation": -2.7371909405715655e-06,
+        "p50_us": 0.6862133499688117,
+        "p95_us": -0.043290043290045155
+      },
+      {
+        "allocated_bytes_per_operation": -9.032730098335051e-05,
+        "p50_us": -2.373706634205719,
+        "p95_us": 1.4780405405405483
+      },
+      {
+        "allocated_bytes_per_operation": 0.0013822826726128667,
+        "p50_us": -4.596346493812609,
+        "p95_us": -4.120313143798926
+      }
+    ],
+    "median_percent_changes": {
+      "allocated_bytes_per_operation": -2.7371909405715655e-06,
+      "p50_us": -2.373706634205719,
+      "p95_us": -0.6254886630179812
+    }
+  },
+  "no-codec": {
+    "paired_percent_changes": [
+      {
+        "allocated_bytes_per_operation": -1.133735816338799e-05,
+        "p50_us": -1.1350059737156526,
+        "p95_us": -0.28949545078577055
+      },
+      {
+        "allocated_bytes_per_operation": 0.0,
+        "p50_us": -5.1266213712168,
+        "p95_us": -9.118150684931503
+      },
+      {
+        "allocated_bytes_per_operation": 2.8343403446484672e-05,
+        "p50_us": -3.359683794466406,
+        "p95_us": -1.1111111111111072
+      },
+      {
+        "allocated_bytes_per_operation": -1.133735816338799e-05,
+        "p50_us": 1.9193857965451144,
+        "p95_us": -0.3018542475204833
+      },
+      {
+        "allocated_bytes_per_operation": 0.0,
+        "p50_us": 7.809397749834557,
+        "p95_us": 9.76933514246947
+      }
+    ],
+    "median_percent_changes": {
+      "allocated_bytes_per_operation": 0.0,
+      "p50_us": -1.1350059737156526,
+      "p95_us": -0.3018542475204833
+    }
+  },
+  "long": {
+    "paired_percent_changes": [
+      {
+        "allocated_bytes_per_operation": 0.007517741776053022,
+        "p50_us": -8.557426023693814,
+        "p95_us": -1.19967955797462
+      },
+      {
+        "allocated_bytes_per_operation": 0.00014064899560572997,
+        "p50_us": 0.4987050790864922,
+        "p95_us": 1.596043283842108
+      },
+      {
+        "allocated_bytes_per_operation": 0.011499490367072873,
+        "p50_us": -5.167234046027125,
+        "p95_us": -10.06724666557881
+      },
+      {
+        "allocated_bytes_per_operation": -0.00945484272034669,
+        "p50_us": 2.2211365503764124,
+        "p95_us": 5.158889379288212
+      },
+      {
+        "allocated_bytes_per_operation": -0.0010403270381598162,
+        "p50_us": 6.115365127170613,
+        "p95_us": 0.7348444913020558
+      }
+    ],
+    "median_percent_changes": {
+      "allocated_bytes_per_operation": 0.00014064899560572997,
+      "p50_us": 0.4987050790864922,
+      "p95_us": 0.7348444913020558
+    }
+  }
+}
