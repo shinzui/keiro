@@ -304,6 +304,8 @@ benchmark keiro-bench
 
   main-is: Main.hs
   other-modules:
+    BenchSetup
+    CommandProbe
     GuardedCatalogBench
     GuardedCatalogExample
     GuardedCatalogFixture

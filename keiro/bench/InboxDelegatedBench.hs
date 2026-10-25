@@ -2,16 +2,18 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 
 module InboxDelegatedBench
-  ( prepareInboxDelegatedBenchmarks,
+  ( inboxDelegatedBenchmarks,
     runInboxDelegatedExplainIfRequested,
   )
 where
 
+import BenchSetup (nextIteration, selected, setupTrace)
 import Control.DeepSeq (NFData (..))
+import Control.Monad (replicateM_)
 import Data.Aeson qualified as Aeson
 import Data.Bifunctor (first)
 import Data.ByteString qualified as ByteString
-import Data.IORef (IORef, atomicModifyIORef', newIORef)
+import Data.IORef (IORef, newIORef)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
@@ -109,22 +111,21 @@ instance NFData DownstreamRun where
       Map.size downstreamRun.workByMessageId `seq`
         ()
 
-prepareInboxDelegatedBenchmarks :: Store.KirokuStore -> KeiroMetrics -> IO [Benchmark]
-prepareInboxDelegatedBenchmarks store metrics = do
-  runStoreChecked store $ Store.runTransaction (Tx.sql businessTableSql)
-  scenarios <- concat <$> traverse (prepareScenario store metrics) scenarioInputs
-  traverse_ (runScenario store) [scenario | scenario <- scenarios, scenario.traffic == FreshTraffic]
-  pure
-    ( [ bgroup
-          (Text.unpack scenario.name)
-          [ bgroup
-              (trafficName scenario.traffic)
-              [bench (metricsName scenario.metrics) (nfIO (runScenario store scenario))]
+inboxDelegatedBenchmarks :: Store.KirokuStore -> KeiroMetrics -> [Benchmark]
+inboxDelegatedBenchmarks store metrics =
+  [ bgroup
+      (Text.unpack name)
+      [ bgroup
+          (trafficName traffic)
+          [ selected (prepareScenario store name mode chunkSize traffic mMetrics) $ \scenario ->
+              bench (metricsName mMetrics) (nfIO (scenario `seq` runScenario store scenario))
+          | mMetrics <- [Nothing, Just metrics]
           ]
-      | scenario <- scenarios
+      | traffic <- [FreshTraffic, RepeatedTraffic, DuplicateTraffic]
       ]
-        <> [bgroup "delegated-history-duplicate" (historyBenchmark store <$> [10, 1000, 100000])]
-    )
+  | (name, mode, chunkSize) <- scenarioInputs
+  ]
+    <> [bgroup "delegated-history-duplicate" (historyBenchmark store <$> [10, 1000, 100000])]
 
 runInboxDelegatedExplainIfRequested :: Store.KirokuStore -> IO ()
 runInboxDelegatedExplainIfRequested store =
@@ -179,27 +180,30 @@ scenarioInputs =
     ("delegated-batch-1000", DelegatedMode, 1000)
   ]
 
-prepareScenario :: Store.KirokuStore -> KeiroMetrics -> (Text, IntakeMode, Int) -> IO [Scenario]
-prepareScenario store metrics (name, mode, chunkSize) =
-  traverse make [(traffic, mMetrics) | traffic <- [FreshTraffic, RepeatedTraffic, DuplicateTraffic], mMetrics <- [Nothing, Just metrics]]
-  where
-    make (traffic, mMetrics) = do
-      runNumber <- newIORef 0
-      duplicateRun <-
-        case traffic of
-          DuplicateTraffic -> do
-            prepared <- prepareDownstreamRun (scenarioPrefix name traffic mMetrics <> "-seed") RepeatedTraffic
-            seedDuplicateRun store mode prepared
-            pure (Just prepared)
-          _ -> pure Nothing
-      pure Scenario {name, mode, chunkSize, traffic, metrics = mMetrics, runNumber, duplicateRun}
+prepareScenario :: Store.KirokuStore -> Text -> IntakeMode -> Int -> Traffic -> Maybe KeiroMetrics -> IO Scenario
+prepareScenario store name mode chunkSize traffic metrics = do
+  let label = Text.unpack (scenarioPrefix name traffic metrics)
+  setupTrace "delegated-inbox" label "schema"
+  runStoreChecked store $ Store.runTransaction (Tx.sql businessTableSql)
+  runNumber <- newIORef 0
+  duplicateRun <- case traffic of
+    DuplicateTraffic -> do
+      setupTrace "delegated-inbox" label "duplicate-seed deliveries=2000"
+      prepared <- prepareDownstreamRun (scenarioPrefix name traffic metrics <> "-seed") RepeatedTraffic
+      seedDuplicateRun store mode prepared
+      pure (Just prepared)
+    _ -> pure Nothing
+  let scenario = Scenario {name, mode, chunkSize, traffic, metrics, runNumber, duplicateRun}
+  setupTrace "delegated-inbox" label "warm-up invocations=3"
+  replicateM_ 3 (runScenario store scenario)
+  pure scenario
 
 runScenario :: Store.KirokuStore -> Scenario -> IO ()
 runScenario store scenario = do
   downstreamRun <- case scenario.duplicateRun of
     Just prepared -> pure prepared
     Nothing -> do
-      invocation <- atomicModifyIORef' scenario.runNumber (\current -> let next = current + 1 in (next, next))
+      invocation <- nextIteration (Text.unpack scenario.name) (if scenario.traffic == FreshTraffic then deliveryCount else 1) scenario.runNumber
       prepareDownstreamRun (scenarioPrefix scenario.name scenario.traffic scenario.metrics <> "-" <> Text.pack (show invocation)) scenario.traffic
   runStoreChecked store (runDownstream scenario downstreamRun)
 
@@ -358,12 +362,12 @@ lookupWorkPure workById event =
 prepareDownstreamRun :: Text -> Traffic -> IO DownstreamRun
 prepareDownstreamRun prefix traffic = do
   uniqueWorks <- traverse (prepareWork prefix) uniqueIndexes
-  let selected = case (traffic, uniqueWorks) of
+  let selectedWorks = case (traffic, uniqueWorks) of
         (FreshTraffic, _) -> uniqueWorks
         (RepeatedTraffic, work : _) -> Prelude.replicate deliveryCount work
         (DuplicateTraffic, work : _) -> Prelude.replicate deliveryCount work
         _ -> error "prepareDownstreamRun: traffic generated no work"
-      deliveries = [(work.event, Just work.kafka) | work <- selected]
+      deliveries = [(work.event, Just work.kafka) | work <- selectedWorks]
       workByMessageId = Map.fromList [(work.event.messageId, work) | work <- uniqueWorks]
   pure DownstreamRun {deliveries, workByMessageId}
   where
@@ -406,6 +410,8 @@ historyBenchmark store historySize =
 
 prepareHistoryRun :: Store.KirokuStore -> Int -> IO DownstreamRun
 prepareHistoryRun store historySize = do
+  runStoreChecked store $ Store.runTransaction (Tx.sql businessTableSql)
+  setupTrace "delegated-inbox" ("events-" <> show historySize) ("history source_events=" <> show historySize)
   downstreamRun <- prepareDownstreamRun ("history-" <> Text.pack (show historySize)) DuplicateTraffic
   seedDuplicateRun store DelegatedMode downstreamRun
   case Map.elems downstreamRun.workByMessageId of

@@ -21,6 +21,11 @@ provenance:
       at: 2026-10-21T13:49:50Z
       mode: "update"
       note: "Apply review findings: explicit release prerequisites, milestone dependencies, shared ownership, evidence limits and ADR-58 policy."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T04:25:33Z
+      mode: "implement"
+      note: "Begin EP-7 before dependent baseline recording; preserve release prerequisites."
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -141,7 +146,7 @@ implementation evidence, with contributions from EP-1 and EP-7.
 | 4 | Harden the HTTP operational surface against cross-site mutations and permit exhaustion | docs/plans/318-harden-the-http-operational-surface-against-cross-site-mutations-and-permit-exhaustion.md | None | None | Not Started |
 | 5 | Inspect reaction process managers and label legacy inspection before 1.0 | docs/plans/319-inspect-reaction-process-managers-and-label-legacy-inspection-before-1-0.md | None | None | Not Started |
 | 6 | Reconcile the 0.22.0.0 release surface and the 0.21.0.0 edge with the REV-20 findings | docs/plans/320-reconcile-the-0-22-0-0-release-surface-and-the-0-21-0-0-edge-with-the-rev-20-findings.md | M1/M4 final acceptance: EP-3 Complete, EP-4 Complete, EP-5 M3 | EP-5 M1/M2 | Not Started |
-| 7 | Isolate the keiro-bench harness so each guard measures only its own fixture | docs/plans/321-isolate-the-keiro-bench-harness-so-each-guard-measures-only-its-own-fixture.md | None | None | Not Started |
+| 7 | Isolate the keiro-bench harness so each guard measures only its own fixture | docs/plans/321-isolate-the-keiro-bench-harness-so-each-guard-measures-only-its-own-fixture.md | None | None | In Progress |
 
 EP-1's M3 to M6 (re-recording the baselines and proving the gate green) require EP-7 to be
 Complete; EP-1's M1/M2 observations are already recorded and had no prerequisite.
@@ -245,7 +250,7 @@ planned changes already ship.
 
 Phase 1 remains open; this revision changes plans, not implementation status. EP-1 is
 In Progress with M1/M2's existing observations retained and M3–M6 blocked by EP-7. EP-7 is
-Not Started and next to implement. EP-2 wiring exists, but red/green acceptance and ADR-58 implementation evidence remain open; its passing run waits for EP-1 Complete. EP-3 to EP-6 are Not
+In Progress: selected isolated fixtures and fixed rebuild sources are being implemented. EP-2 wiring exists, but red/green acceptance and ADR-58 implementation evidence remain open; its passing run waits for EP-1 Complete. EP-3 to EP-6 are Not
 Started. EP-6 final acceptance waits for EP-3/EP-4 Complete and EP-5 M3. The release entry
 point now lists those mandatory prerequisites explicitly. EP-5 M1/M2 may follow the next
 tag, but must finish before this entire MasterPlan is Complete.

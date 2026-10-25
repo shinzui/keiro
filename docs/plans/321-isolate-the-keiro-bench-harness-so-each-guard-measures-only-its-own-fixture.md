@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-21T13:49:51Z
       mode: "update"
       note: "Use static selected setup, fixed 600-event rebuild sources, representative warm-up, explicit growth bounds and preparation traces."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T04:23:38Z
+      mode: "implement"
+      note: "Implement selected isolated fixtures and fixed source workloads."
 ---
 
 # Isolate the keiro-bench harness so each guard measures only its own fixture
@@ -67,6 +72,13 @@ records new baselines.
       with the new fixture boundary and hand accepted evidence to plan 315.
 
 
+Implementation status (2026-10-25): The isolated static-tree harness builds in the Nix
+shell. `harness-isolation-v1/list-tests.log` has no setup events; the rebuild probe records
+six successive 600-event reports. A one-second command smoke run is deliberately not
+acceptance: the two largest fan-outs time out and accepted-1 drifts across scenario order.
+`KEIRO_BENCH_COMMAND_PROBE=1` diagnoses actual prepared stream-read plans and growth before
+recording. No baseline or ratio threshold has changed.
+
 ## Surprises & Discoveries
 
 
@@ -86,7 +98,23 @@ state and vacuum. Isolation alone does not prove stationary samples; the evidenc
 operation counts and demonstrate that measured cost is stable across the permitted run size.
 
 
+The command-growth probe now attributes an order effect to a generic plan made on an
+empty `streams` relation: it still sequentially scans 5,001 rows after growth. ANALYZE
+switches to the existing stream-name index and no-op means return from 171.7 us to
+27.6 us, remaining 21.2 us at 10,000. Retained JSON contains actual prepared plans,
+row counts and relation bytes. The earlier one-second smoke is inconclusive and is
+preserved as such. The tasty-bench CSV uses picoseconds, correcting this plan's
+original nanosecond conversion.
+
 ## Decision Log
+
+- Decision: Seed 5,000 unrelated singleton streams and ANALYZE the three event-store
+  relations once during selected command-group setup; cap each eventful scenario at
+  100,000 appended events, including warm-up.
+  Rationale: The empty-fixture generic sequential plan explains observed growth drift.
+  Established statistics select existing indexes before timing without changing serving
+  SQL or adding indexes. Acceptance still requires growth and paired-run evidence.
+  Date: 2026-10-25
 
 
 - Decision: Keep existing bracketed fixture lifetimes and open one clone per group eagerly;
@@ -236,14 +264,15 @@ alone, full = rows('/tmp/command-alone.csv'), rows('/tmp/all.csv')
 assert alone and alone.keys() == full.keys(), 'missing or changed command names'
 for name in sorted(alone):
     assert alone[name] > 0
-    print(f'{name}: filtered={alone[name]/1e6:.3f} ms full={full[name]/1e6:.3f} ms difference={100*(full[name]/alone[name]-1):+.1f}%')
+    print(f'{name}: filtered={alone[name]/1e9:.3f} ms full={full[name]/1e9:.3f} ms difference={100*(full[name]/alone[name]-1):+.1f}%')
 PY_COMPARE
 ```
 
 These are one paired sample, not M4's full acceptance. Use distinct CSV/log names for the
 three alternating pairs and record the runner/RTS options. The first command listing must not
 emit preparation events. The command filter must emit no delegated-inbox setup events. The
-CSV parser handles quoted names correctly and converts nanoseconds to milliseconds with 1e6.
+CSV parser must inspect the header: this installed tasty-bench emits picoseconds, so
+convert to milliseconds with 1e9 (ratios are unit independent).
 
 Exercise the fixed projection fixture and verify three diagnostic iterations each traverse
 600 events before measuring it normally. Implement the count probe as a benchmark-only option

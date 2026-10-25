@@ -1,7 +1,8 @@
 -- | Compare the pre-plan-164 fresh-ID path with deterministic producer writes.
 module ProducerIdentityBench (producerIdentityBenchmarks) where
 
-import Control.Monad (forM, forM_)
+import BenchSetup (selected, setupTrace)
+import Control.Monad (forM, forM_, replicateM_)
 import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as BS
 import Data.IORef (IORef, atomicModifyIORef')
@@ -21,14 +22,15 @@ producerIdentityBenchmarks store sequenceRef =
   [ bgroup
       "producer-identity"
       [ bench "derive-v1" $ nf identityText (ProducerEventKey (EventId (UUID.fromWords 0 0 0 1)) 0),
-        bench "legacy-fresh-1000" $ nfIO (run True False False),
-        bcompareWithin 0 1.10 "$0 == \"All.producer-identity.legacy-fresh-1000\"" $ bench "deterministic-fresh-1000" $ nfIO (run True True False),
-        bench "deterministic-fresh-and-replay-1000" $ nfIO (run True True True),
-        bench "legacy-single-tx-per-event-1000" $ nfIO (run False False False),
-        bcompareWithin 0 1.10 "$0 == \"All.producer-identity.legacy-single-tx-per-event-1000\"" $ bench "deterministic-single-tx-per-event-1000" $ nfIO (run False True False)
+        sqlBench "legacy-fresh-1000" (run True False False),
+        bcompareWithin 0 1.10 "$0 == \"All.producer-identity.legacy-fresh-1000\"" $ sqlBench "deterministic-fresh-1000" (run True True False),
+        sqlBench "deterministic-fresh-and-replay-1000" (run True True True),
+        sqlBench "legacy-single-tx-per-event-1000" (run False False False),
+        bcompareWithin 0 1.10 "$0 == \"All.producer-identity.legacy-single-tx-per-event-1000\"" $ sqlBench "deterministic-single-tx-per-event-1000" (run False True False)
       ]
   ]
   where
+    sqlBench name action = selected (setupTrace "producer-identity" name "warm-up invocations=3 timed_reset=TRUNCATE" >> replicateM_ 3 action) $ \_ -> bench name (nfIO action)
     run batch deterministic replay = do
       generation <- atomicModifyIORef' sequenceRef (\n -> (n + 1, n + 1))
       result <- Store.runStoreIO store $ do

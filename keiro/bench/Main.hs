@@ -6,19 +6,24 @@ module Main
   )
 where
 
+import BenchSetup (freshCounter, memoSetup, nextIteration, selected, selectedCounter, setupTrace)
+import CommandProbe (commandPlanProbe)
 import Control.Concurrent (threadDelay)
+import Control.Monad (replicateM_)
 import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as BS
-import Data.IORef (IORef, atomicModifyIORef', newIORef)
+import Data.IORef (IORef, newIORef)
 import Data.Int (Int32)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Data.UUID qualified as UUID
+import Data.Vector qualified as Vector
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
+import GHC.Clock (getMonotonicTimeNSec)
 import GuardedCatalogBench (runGuardedCatalogEvidence)
-import InboxDelegatedBench (prepareInboxDelegatedBenchmarks, runInboxDelegatedExplainIfRequested)
+import InboxDelegatedBench (inboxDelegatedBenchmarks, runInboxDelegatedExplainIfRequested)
 import Keiki.Core
   ( Edge (..),
     HsPred,
@@ -79,7 +84,6 @@ import Keiro.Test.Postgres (StoreRunner (..), withFreshResourceStore, withMigrat
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
-import Kiroku.Store.Lifecycle qualified as Lifecycle
 import Kiroku.Store.Types
   ( CategoryName (..),
     EventData (..),
@@ -106,6 +110,7 @@ import Shibuya.Core.AckHandle (AckHandle (..))
 import Shibuya.Core.Ingested (Ingested (..))
 import Shibuya.Core.Types (Envelope (..))
 import Streamly.Data.Stream qualified as Streamly
+import System.Environment (lookupEnv)
 import Test.Tasty.Bench (Benchmark, bcompareWithin, bench, bgroup, defaultMain, nfIO)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Prelude
@@ -153,87 +158,99 @@ main = do
 ordinaryMain :: IO ()
 ordinaryMain =
   withMigratedSuite \fixture ->
-    withFreshResourceStore fixture \(store, runner) -> do
-      withFreshResourceStore fixture \(readModelStore, readModelRunner) -> do
-        (provider, _env) <-
-          createMeterProvider
-            emptyMaterializedResources
-            defaultSdkMeterProviderOptions
-        meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
-        metrics <- Telemetry.newKeiroMetrics meter
-        rebuildRunCounter <- newIORef 0
-        runStoreChecked store (Store.runTransaction (Tx.sql rebuildBenchSql))
-        readModelFixture <- setupReadModelBench readModelStore readModelRunner
-        runReadModelExplainEvidenceIfRequested readModelFixture
-        runReadModelLatencyEvidenceIfRequested readModelFixture
-        delegatedInboxBenchmarks <- prepareInboxDelegatedBenchmarks store metrics
-        runInboxDelegatedExplainIfRequested store
-        defaultMain (benchmarks store runner metrics rebuildRunCounter delegatedInboxBenchmarks <> readModelBenchmarks readModelFixture <> producerIdentityBenchmarks store rebuildRunCounter)
+    withFreshResourceStore fixture \(store, runner) ->
+      withFreshResourceStore fixture \(outboxStore, _) ->
+        withFreshResourceStore fixture \(inboxStore, _) ->
+          withFreshResourceStore fixture \(delegatedStore, _) ->
+            withFreshResourceStore fixture \(producerStore, _) ->
+              withFreshResourceStore fixture \(rebuildStore, _) ->
+                withFreshResourceStore fixture \(readModelStore, readModelRunner) -> do
+                  (provider, _env) <- createMeterProvider emptyMaterializedResources defaultSdkMeterProviderOptions
+                  meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+                  metrics <- Telemetry.newKeiroMetrics meter
+                  producerCounter <- newIORef 0
+                  readModelSetup <- memoSetup do
+                    setupTrace "read-model" "shared" "schema history=25000"
+                    model <- setupReadModelBench readModelStore readModelRunner
+                    runReadModelExplainEvidenceIfRequested model
+                    runReadModelLatencyEvidenceIfRequested model
+                    pure model
+                  runInboxDelegatedExplainIfRequested delegatedStore
+                  probe <- lookupEnv "KEIRO_BENCH_COMMAND_PROBE"
+                  if probe == Just "1"
+                    then runCommandGrowthProbe store
+                    else
+                      defaultMain
+                        ( benchmarks store runner outboxStore inboxStore rebuildStore metrics (inboxDelegatedBenchmarks delegatedStore metrics)
+                            <> [selected readModelSetup (\model -> readModelBenchmarks model !! groupIndex) | groupIndex <- [0 .. 2]]
+                            <> producerIdentityBenchmarks producerStore producerCounter
+                        )
 
-benchmarks :: Store.KirokuStore -> StoreRunner -> Telemetry.KeiroMetrics -> IORef Int -> [Benchmark] -> [Benchmark]
-benchmarks store runner metrics rebuildRunCounter delegatedInboxBenchmarks =
+benchmarks :: Store.KirokuStore -> StoreRunner -> Store.KirokuStore -> Store.KirokuStore -> Store.KirokuStore -> Telemetry.KeiroMetrics -> [Benchmark] -> [Benchmark]
+benchmarks store runner outboxStore inboxStore rebuildStore metrics delegatedInboxBenchmarks =
   [ bgroup
       "outbox"
-      [ scenarioBench store hotKey,
-        scenarioBench store hotKeyNoLatency,
-        scenarioBench store multiKey
+      [ scenarioBench outboxStore hotKey,
+        scenarioBench outboxStore hotKeyNoLatency,
+        scenarioBench outboxStore multiKey
       ],
     bgroup
       "inbox"
-      [ inboxScenarioBench store (singleFull metrics),
-        inboxScenarioBench store singleNoMetrics,
-        inboxScenarioBench store batch100,
-        inboxScenarioBench store singleSlim,
+      [ inboxScenarioBench inboxStore (singleFull metrics),
+        inboxScenarioBench inboxStore singleNoMetrics,
+        inboxScenarioBench inboxStore batch100,
+        inboxScenarioBench inboxStore singleSlim,
         bgroup "downstream" delegatedInboxBenchmarks
       ],
-    bgroup
-      "command"
-      [ bgroup
-          "legacy"
-          [commandScenarioBench store "accepted-1" legacyAcceptedOneStream legacyAcceptedOneTarget EmitOne],
-        bgroup
-          "control"
-          [commandScenarioBench store "accepted-1" legacyAcceptedOneStream legacyAcceptedOneTarget EmitOne],
-        bgroup
-          "domain-warmup"
-          [domainCommandScenarioBench store "accepted-1" domainAcceptedOneHandler domainAcceptedOneTarget EmitOne],
-        bgroup
-          "domain"
-          [ bcompareWithin 0 1.25 acceptedOneControlPattern $
-              domainCommandScenarioBench store "accepted-1" domainAcceptedOneHandler domainAcceptedOneTarget EmitOne
-          ],
-        bgroup
-          "legacy"
-          [commandScenarioBench store "accepted-large" legacyAcceptedLargeStream legacyAcceptedLargeTarget EmitLarge],
-        bgroup
-          "domain"
-          [ bcompareWithin 0 1.25 legacyAcceptedLargePattern $
-              domainCommandScenarioBench store "accepted-large" domainAcceptedLargeHandler domainAcceptedLargeTarget EmitLarge
-          ],
-        bgroup
-          "legacy"
-          [commandScenarioBench store "no-op" legacyNoOpStream legacyNoOpTarget SelectNoOp],
-        bgroup
-          "domain"
-          [ bcompareWithin 0 1.25 legacyNoOpPattern $
-              domainCommandScenarioBench store "rejected" domainRejectedHandler domainRejectedTarget SelectNoOp,
-            bcompareWithin 0 1.25 legacyNoOpPattern $
-              domainCommandScenarioBench store "no-op" domainNoOpHandler domainNoOpTarget SelectNoOp,
-            bgroup
-              "router-fanout"
-              [ domainRouterFanoutBench runner fanout
-              | fanout <- coordinatorFanouts
-              ],
-            bgroup
-              "process-manager-fanout"
-              [ domainProcessManagerFanoutBench runner fanout
-              | fanout <- coordinatorFanouts
-              ]
-          ]
-      ],
+    selected (prepareCommandStore store) $ \_ ->
+      bgroup
+        "command"
+        [ bgroup
+            "legacy"
+            [commandScenarioBench store "accepted-1" legacyAcceptedOneStream legacyAcceptedOneTarget EmitOne],
+          bgroup
+            "control"
+            [commandScenarioBench store "accepted-1" legacyAcceptedOneStream (stream "bench-command-control") EmitOne],
+          bgroup
+            "domain-warmup"
+            [domainCommandScenarioBench store "accepted-1" domainAcceptedOneHandler (stream "bench-command-domain-warmup") EmitOne],
+          bgroup
+            "domain"
+            [ bcompareWithin 0 1.25 acceptedOneControlPattern $
+                domainCommandScenarioBench store "accepted-1" domainAcceptedOneHandler domainAcceptedOneTarget EmitOne
+            ],
+          bgroup
+            "legacy"
+            [commandScenarioBench store "accepted-large" legacyAcceptedLargeStream legacyAcceptedLargeTarget EmitLarge],
+          bgroup
+            "domain"
+            [ bcompareWithin 0 1.25 legacyAcceptedLargePattern $
+                domainCommandScenarioBench store "accepted-large" domainAcceptedLargeHandler domainAcceptedLargeTarget EmitLarge
+            ],
+          bgroup
+            "legacy"
+            [commandScenarioBench store "no-op" legacyNoOpStream legacyNoOpTarget SelectNoOp],
+          bgroup
+            "domain"
+            [ bcompareWithin 0 1.25 legacyNoOpPattern $
+                domainCommandScenarioBench store "rejected" domainRejectedHandler domainRejectedTarget SelectNoOp,
+              bcompareWithin 0 1.25 legacyNoOpPattern $
+                domainCommandScenarioBench store "no-op" domainNoOpHandler domainNoOpTarget SelectNoOp,
+              bgroup
+                "router-fanout"
+                [ domainRouterFanoutBench runner fanout
+                | fanout <- coordinatorFanouts
+                ],
+              bgroup
+                "process-manager-fanout"
+                [ domainProcessManagerFanoutBench runner fanout
+                | fanout <- coordinatorFanouts
+                ]
+            ]
+        ],
     bgroup
       "rebuild"
-      [rebuildScenarioBench store rebuildRunCounter]
+      [rebuildScenarioBench rebuildStore]
   ]
   where
     hotKey =
@@ -289,8 +306,13 @@ benchmarks store runner metrics rebuildRunCounter delegatedInboxBenchmarks =
 
 scenarioBench :: Store.KirokuStore -> OutboxScenario -> Benchmark
 scenarioBench store scenario =
-  bench (Text.unpack scenario.scenarioName) $
-    nfIO (runScenario store scenario)
+  selected (warmAction "outbox" (Text.unpack scenario.scenarioName) (runScenario store scenario)) $ \_ ->
+    bench (Text.unpack scenario.scenarioName) $ nfIO (runScenario store scenario)
+
+warmAction :: String -> String -> IO () -> IO ()
+warmAction group name action = do
+  setupTrace group name "warm-up invocations=3 timed_reset=TRUNCATE"
+  replicateM_ 3 action
 
 runScenario :: Store.KirokuStore -> OutboxScenario -> IO ()
 runScenario store scenario = do
@@ -301,8 +323,8 @@ runScenario store scenario = do
 
 inboxScenarioBench :: Store.KirokuStore -> InboxScenario -> Benchmark
 inboxScenarioBench store scenario =
-  bench (Text.unpack scenario.inboxScenarioName) $
-    nfIO (runInboxScenario store scenario)
+  selected (warmAction "inbox" (Text.unpack scenario.inboxScenarioName) (runInboxScenario store scenario)) $ \_ ->
+    bench (Text.unpack scenario.inboxScenarioName) $ nfIO (runInboxScenario store scenario)
 
 runInboxScenario :: Store.KirokuStore -> InboxScenario -> IO ()
 runInboxScenario store scenario = do
@@ -614,23 +636,76 @@ benchEventCodec =
       upcasters = []
     }
 
+-- Seed a representative stream population before any prepared lookup is planned.
+-- Empty-table statistics otherwise keep sequential scans as fresh samples grow.
+prepareCommandStore :: Store.KirokuStore -> IO ()
+prepareCommandStore store = do
+  setupTrace "command" "shared" "schema seed_streams=5000 seed_events=5000 analyze=once-before-warm-up"
+  for_ [1 .. 5000 :: Int] $ \n -> runStoreChecked store $ do
+    void
+      ( Store.appendToStream
+          (StreamName ("benchseed-" <> Text.pack (show n)))
+          NoStream
+          [EventData Nothing (EventType "BenchSeed") Aeson.Null Nothing Nothing Nothing]
+      )
+  runStoreChecked store (Store.runTransaction (Tx.sql "ANALYZE streams; ANALYZE stream_events; ANALYZE events"))
+
 commandScenarioBench :: Store.KirokuStore -> String -> ValidatedBenchEventStream -> Stream BenchEventStream -> BenchCommand -> Benchmark
 commandScenarioBench store benchmarkName validatedStream target command =
-  bench benchmarkName $ nfIO $ runStoreChecked store do
-    void (Lifecycle.hardDeleteStream (streamName target))
-    result <- runCommand defaultRunCommandOptions validatedStream target command
-    case result of
-      Right _ -> pure ()
-      Left err -> liftIO (fail ("unexpected command benchmark result: " <> show err))
+  selectedCounter label units (prepareCommand label units action) $ \counter ->
+    bench benchmarkName $ nfIO (action counter)
+  where
+    label = show (streamName target) <> "/legacy/" <> benchmarkName
+    units = commandUnits command
+    action counter = do
+      n <- nextIteration label units counter
+      let fresh = iterationTarget (tagTarget target "legacy") n
+      runStoreChecked store do
+        result <- runCommand defaultRunCommandOptions validatedStream fresh command
+        case result of
+          Right value | value ^. #eventsAppended == eventCount command -> pure ()
+          other -> liftIO (fail ("unexpected command benchmark result: " <> show other))
 
 domainCommandScenarioBench :: Store.KirokuStore -> String -> DomainCommandHandler (HsPred '[] BenchCommand) '[] BenchState BenchCommand BenchEvent Text Text -> Stream BenchEventStream -> BenchCommand -> Benchmark
 domainCommandScenarioBench store benchmarkName handler target command =
-  bench benchmarkName $ nfIO $ runStoreChecked store do
-    void (Lifecycle.hardDeleteStream (streamName target))
-    result <- runDomainCommand defaultRunCommandOptions handler target command
-    case result of
-      Right DomainCommandOutcome {} -> pure ()
-      Left err -> liftIO (fail ("unexpected typed command benchmark result: " <> show err))
+  selectedCounter label units (prepareCommand label units action) $ \counter ->
+    bench benchmarkName $ nfIO (action counter)
+  where
+    label = show (streamName target) <> "/domain/" <> benchmarkName
+    units = commandUnits command
+    action counter = do
+      n <- nextIteration label units counter
+      let fresh = iterationTarget (tagTarget target ("domain-" <> Text.pack benchmarkName)) n
+      runStoreChecked store do
+        result <- runDomainCommand defaultRunCommandOptions handler fresh command
+        case result of
+          Right value | value ^. #result . #eventsAppended == eventCount command -> pure ()
+          other -> liftIO (fail ("unexpected typed command benchmark result: " <> show other))
+
+commandUnits :: BenchCommand -> Int
+commandUnits = max 1 . eventCount
+
+eventCount :: BenchCommand -> Int
+eventCount EmitOne = 1
+eventCount EmitLarge = largeCommandBatchSize
+eventCount SelectNoOp = 0
+
+tagTarget :: Stream eventStream -> Text -> Stream eventStream
+tagTarget target tag =
+  let StreamName name = streamName target
+   in stream (name <> "-" <> tag)
+
+iterationTarget :: Stream eventStream -> Int -> Stream eventStream
+iterationTarget target n =
+  let StreamName name = streamName target
+   in stream (name <> "-iteration-" <> Text.pack (show n))
+
+prepareCommand :: String -> Int -> (IORef Int -> IO ()) -> IO (IORef Int)
+prepareCommand label units action = do
+  counter <- freshCounter label units
+  setupTrace "command" label "warm-up invocations=3"
+  replicateM_ 3 (action counter)
+  pure counter
 
 -- * Projection rebuild benchmark fixtures ---------------------------------
 
@@ -640,32 +715,43 @@ rebuildEventsPerCategory = 200
 rebuildPageSize :: Int32
 rebuildPageSize = 16
 
-rebuildScenarioBench :: Store.KirokuStore -> IORef Int -> Benchmark
-rebuildScenarioBench store runCounter =
-  bench "three-categories-200" $ nfIO $ runStoreChecked store do
-    traverse_ (void . Lifecycle.hardDeleteStream) rebuildStreams
-    traverse_ seedRebuildStream rebuildStreams
-    registered <- registerProjectionCatalog rebuildCatalog
-    case registered of
-      Left err -> liftIO (fail ("unexpected rebuild catalog registration result: " <> show err))
-      Right _ -> pure ()
-    runNumber <- liftIO $ atomicModifyIORef' runCounter (\current -> let next = current + 1 in (next, next))
-    let request =
-          RebuildRequest
-            { rebuildRunId = benchmarkRebuildRunId runNumber,
-              requestedBy = "keiro-bench",
-              requestReason = "measure buffered projection replay",
-              replayFrom = GlobalPosition 0
-            }
-        options =
-          (defaultRebuildOptions request)
-            { replayPageSize = rebuildPageSize
-            }
-    startCatalogRebuild rebuildCatalog benchmarkRebuildGroupId options >>= \case
-      Left err -> liftIO (fail ("unexpected rebuild benchmark result: " <> show err))
-      Right report
-        | report ^. #runStatus == RebuildRunPromoted -> pure ()
-        | otherwise -> liftIO (fail ("rebuild benchmark did not promote: " <> show (report ^. #runStatus)))
+rebuildScenarioBench :: Store.KirokuStore -> Benchmark
+rebuildScenarioBench store =
+  selectedCounter "rebuild" 600 setup $ \runCounter -> bench "three-categories-200" $ nfIO (runRebuild False runCounter)
+  where
+    setup = do
+      setupTrace "rebuild" "three-categories-200" "schema source_events=600"
+      runStoreChecked store do
+        Store.runTransaction (Tx.sql rebuildBenchSql)
+        traverse_ seedRebuildStream rebuildStreams
+        registerProjectionCatalog rebuildCatalog >>= \case
+          Left err -> liftIO (fail (show err))
+          Right _ -> pure ()
+      counter <- newIORef 0
+      setupTrace "rebuild" "three-categories-200" "warm-up invocations=3 source_events_per_invocation=600"
+      replicateM_ 3 (runRebuild True counter)
+      probe <- lookupEnv "KEIRO_BENCH_REBUILD_PROBE"
+      when (probe == Just "1") (replicateM_ 3 (runRebuild True counter))
+      pure counter
+    runRebuild probe runCounter = do
+      runNumber <- nextIteration "rebuild" 600 runCounter
+      runStoreChecked store do
+        let request =
+              RebuildRequest
+                { rebuildRunId = benchmarkRebuildRunId runNumber,
+                  requestedBy = "keiro-bench",
+                  requestReason = "measure buffered projection replay",
+                  replayFrom = GlobalPosition 0
+                }
+            options = (defaultRebuildOptions request) {replayPageSize = rebuildPageSize}
+        startCatalogRebuild rebuildCatalog benchmarkRebuildGroupId options >>= \case
+          Left err -> liftIO (fail ("unexpected rebuild benchmark result: " <> show err))
+          Right report
+            | report ^. #runStatus == RebuildRunPromoted -> do
+                let sourceEvents = sum [sourceProgress ^. #eventCount | sourceProgress <- report ^. #sources]
+                unless (sourceEvents == 600) (liftIO (fail ("rebuild source count changed: " <> show sourceEvents)))
+                when probe (liftIO (setupTrace "rebuild" (show runNumber) ("source_events=" <> show sourceEvents)))
+            | otherwise -> liftIO (fail ("rebuild benchmark did not promote: " <> show (report ^. #runStatus)))
 
 seedRebuildStream :: (Store :> es) => StreamName -> Eff es ()
 seedRebuildStream streamName' =
@@ -911,30 +997,46 @@ coordinatorFanouts = [10, 100, 1000]
 
 domainRouterFanoutBench :: StoreRunner -> Int -> Benchmark
 domainRouterFanoutBench runner fanout =
-  bench (show fanout) $ nfIO $ do
-    let correlationId = "router-" <> Text.pack (show fanout)
-        input = FanoutInput correlationId fanout
-    runResourceStoreChecked runner do
-      resetFanoutTargets "router" correlationId fanout
-      runDomainRouterWorker
-        defaultRunCommandOptions
-        fanoutDomainRouter
-        (fanoutAdapter input)
-        (\message -> Just (fanoutSourceEvent, message))
+  selectedCounter label fanout (prepareCommand label fanout action) $ \counter -> bench (show fanout) $ nfIO (action counter)
+  where
+    label = "router-" <> show fanout
+    action counter = do
+      n <- nextIteration label fanout counter
+      let correlationId = Text.pack label <> "-" <> Text.pack (show n)
+          input = FanoutInput correlationId fanout
+      runResourceStoreChecked runner do
+        runDomainRouterWorker
+          defaultRunCommandOptions
+          fanoutDomainRouter
+          (fanoutAdapter input)
+          (\message -> Just (iterationSourceEvent n, message))
+        when (n <= 3) (verifyFanout "router" correlationId fanout)
 
 domainProcessManagerFanoutBench :: StoreRunner -> Int -> Benchmark
 domainProcessManagerFanoutBench runner fanout =
-  bench (show fanout) $ nfIO $ do
-    let correlationId = "process-manager-" <> Text.pack (show fanout)
-        input = FanoutInput correlationId fanout
-    runResourceStoreChecked runner do
-      resetFanoutTargets "process-manager" correlationId fanout
-      void (Lifecycle.hardDeleteStream (StreamName ("bench-command-domain-process-manager:" <> correlationId)))
-      runDomainProcessManagerWorker
-        defaultRunCommandOptions
-        fanoutDomainProcessManager
-        (fanoutAdapter input)
-        (\message -> Just (fanoutSourceEvent, message))
+  selectedCounter label fanout (prepareCommand label fanout action) $ \counter -> bench (show fanout) $ nfIO (action counter)
+  where
+    label = "process-manager-" <> show fanout
+    action counter = do
+      n <- nextIteration label fanout counter
+      let correlationId = Text.pack label <> "-" <> Text.pack (show n)
+          input = FanoutInput correlationId fanout
+      runResourceStoreChecked runner do
+        runDomainProcessManagerWorker
+          defaultRunCommandOptions
+          fanoutDomainProcessManager
+          (fanoutAdapter input)
+          (\message -> Just (iterationSourceEvent n, message))
+        when (n <= 3) (verifyFanout "process-manager" correlationId fanout)
+
+verifyFanout :: (IOE :> es, Store :> es) => Text -> Text -> Int -> Eff es ()
+verifyFanout coordinator correlationId fanout =
+  for_ [0 .. fanout - 1] \targetIndex -> do
+    rows <- Store.readStreamForward (StreamName (fanoutTargetName coordinator correlationId targetIndex)) (StreamVersion 0) 2
+    unless (Vector.length rows == 1) (liftIO (fail "fan-out benchmark did not append exactly one event per fresh target"))
+
+iterationSourceEvent :: Int -> RecordedEvent
+iterationSourceEvent n = fanoutSourceEvent & #eventId .~ EventId (UUID.fromWords 0 0 1 (fromIntegral n))
 
 fanoutDomainRouter ::
   DomainRouter
@@ -1005,12 +1107,6 @@ fanoutTargetName coordinator correlationId targetIndex =
     <> ":"
     <> Text.pack (show targetIndex)
 
-resetFanoutTargets :: (Store :> es) => Text -> Text -> Int -> Eff es ()
-resetFanoutTargets coordinator correlationId fanout =
-  traverse_
-    (\targetIndex -> void (Lifecycle.hardDeleteStream (StreamName (fanoutTargetName coordinator correlationId targetIndex))))
-    [0 .. fanout - 1]
-
 fanoutSourceEvent :: RecordedEvent
 fanoutSourceEvent =
   RecordedEvent
@@ -1066,3 +1162,39 @@ runStoreChecked store action = do
   case result of
     Left err -> fail (show err)
     Right value -> pure value
+
+-- A plain-IO diagnostic: it never contributes a tasty-bench timing or baseline.
+runCommandGrowthProbe :: Store.KirokuStore -> IO ()
+runCommandGrowthProbe store = do
+  sample "empty" 0
+  for_ [1 .. 5000 :: Int] $ \n -> append n
+  sample "grown-5000-before-analyze" 5000
+  runStoreChecked store (Store.runTransaction (Tx.sql "ANALYZE streams; ANALYZE stream_events; ANALYZE events"))
+  sample "grown-5000-after-analyze" 5000
+  for_ [5001 .. 10000 :: Int] $ \n -> append n
+  sample "grown-10000" 10000
+  for_ [10001 .. 100000 :: Int] $ \n -> append n
+  sample "grown-100000" 100000
+  for_ [100001 .. 1205000 :: Int] $ \n -> append n
+  sample "grown-1205000" 1205000
+  where
+    append n = runStoreChecked store $ do
+      result <- runDomainCommand defaultRunCommandOptions domainAcceptedOneHandler (stream ("bench-probe-" <> Text.pack (show n))) EmitOne
+      case result of
+        Right value | value ^. #result . #eventsAppended == 1 -> pure ()
+        other -> liftIO (fail (show other))
+    sample :: Text -> Int -> IO ()
+    sample label n = do
+      commandPlanProbe store label
+      started <- getMonotonicTimeNSec
+      replicateM_ 100 $ runStoreChecked store $ do
+        result <- runDomainCommand defaultRunCommandOptions domainNoOpHandler (stream "bench-probe-absent") SelectNoOp
+        case result of
+          Right value | value ^. #result . #eventsAppended == 0 -> pure ()
+          other -> liftIO (fail (show other))
+      stopped <- getMonotonicTimeNSec
+      freshStarted <- getMonotonicTimeNSec
+      for_ [1 .. 100 :: Int] $ \sampleIndex -> append (10000000 + n * 100 + (if label == "grown-5000-after-analyze" then 100 else 0) + sampleIndex)
+      freshStopped <- getMonotonicTimeNSec
+      putStrLn ("FRESH_PROBE label=" <> Text.unpack label <> " mean_ns=" <> show ((freshStopped - freshStarted) `div` 100))
+      putStrLn ("NOOP_PROBE label=" <> Text.unpack label <> " events=" <> show n <> " mean_ns=" <> show ((stopped - started) `div` 100))
