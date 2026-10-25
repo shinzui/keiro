@@ -70,27 +70,26 @@ the runner and release policy ADR. Success is three serial all-guard passes endi
       unconditional delegated preparation reduced 1,000-target rows to 662/777 ms and
       accepted-large to 4.69 ms. The specific eager-100k-history explanation is withdrawn;
       scenario counters and remaining order anomalies are plan 321 acceptance work.
-- [ ] M3: After plan 321 is Complete, record and reproduce the command baseline from five
-      serial runs with retained raw CSVs and a README naming harness revision and environment.
-      Audit all five CSV guards for workload changes caused by isolation, and re-record any
-      affected baseline with its own attributed evidence, even if it previously passed.
-- [ ] M4: Measure the producer fresh-path overhead and resolve its 1.10 ratio guard with
-      attributable evidence. Fresh inserts execute one statement; conflict lookup cost is
-      measured separately and cannot justify changing the fresh guard.
-- [ ] M5: Record the inbox baseline on the accepted isolated/warmed harness, then retain
-      three consecutive inbox-guard passes. No further warm-up implementation belongs here.
+- [x] M3 (2026-10-25): Retained all 25 serial recordings on accepted source `b8695a0d`.
+      Median aggregation preserves all 78 rows across all five affected CSVs. The named
+      command/inbox subset and all five CSV guards pass in three complete runner controls.
+- [ ] M4: Actual fresh/replay counts and paired preparation/SQL measurements are retained.
+      The normal precision run passed (1.05× batch, 0.96× per event), but the third full
+      control fails fresh batch at 46.6/42.2 ms (>1.10×). Resolve the measured fresh margin;
+      retain that failure, attribute any policy change and demonstrate a negative control.
+- [x] M5 (2026-10-25): Five isolated inbox recordings and four consecutive inbox-guard
+      passes are retained (named subset plus three complete runner invocations).
+
 - [ ] M6: Retain three consecutive full `just bench-regression` passes on a quiet machine.
 
-Current handoff (2026-10-25): plan 321 is Complete at `fb241994`, accepting benchmark
-source `ee2f2667`. All five CSVs are affected by the durable isolated/selected/checkpoint
-boundary and will be re-recorded; no old green row is exempt. The opt-in producer probe
-adds diagnostics on its existing clone without changing normal actions or warm-up. It
-verifies 1,000 fresh inserts / zero conflict reads, 1,000 replay inserts / 1,000 locked
-reads, retained row counts and equivalent preparation against the real factory. Five
-alternating component pairs distinguish identity/envelope preparation, same-input SQL
-and native identity layout. The normal 1.10 precision guard and five serial CSV recordings
-remain open. Recording/aggregation scripts and attributed raw evidence are prepared under
-`keiro/bench/results/baseline-recording-v2/` and `producer-attribution-v2/`.
+Current handoff (2026-10-25): plan 321 is Complete at `fb241994`. Source `b8695a0d`
+records all 25 samples and all five median baselines. All five CSV guards pass in each of
+three complete runner invocations, but only the first two full summaries pass: the third
+refuses producer fresh batch at just over 1.10×. M3/M5 are accepted; M4/M6 remain open.
+The failed third run is retained, not discarded or counted as a consecutive pass.
+Further actual-factory alternating pairs will test the small fresh margin before any policy
+change. Evidence is under `keiro/bench/results/baseline-recording-v2/`, each `*-v2/` group
+and `producer-attribution-v2/`.
 
 M3–M6 require plan 321 Complete. M1/M2 completion means the observations below are recorded;
 it does not require the abandoned micro-driver, a passing August control, or a named upstream
@@ -163,6 +162,15 @@ an ADR-backed absolute allowance were incorrect.
   Rationale: Conflict-only SQL cannot explain a successful fresh insert. No existing ADR
   promises an absolute millisecond allowance.
   Date: 2026-10-21
+
+- Decision: Preserve the producer failure and extend actual-factory attribution before
+  resolving its guard. No threshold is changed at this checkpoint.
+  Rationale: Actual fresh calls perform 1,000 inserts and zero locked lookups; replay
+  performs 1,000 attempted inserts plus 1,000 locked lookups. Five component pairs show
+  about 9% native-layout batch SQL overhead, and the full batch guard varies from 1.05×
+  to just over 1.10× legacy. Separate phases cannot be summed into an exact full budget;
+  passing the first two controls does not establish three consecutive full passes.
+  Date: 2026-10-25
 
 Revision note (2026-10-21): Reconciled completed observations with acceptance and the EP-7
 split, corrected history/producer mechanisms, and retained measurements without asserting a

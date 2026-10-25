@@ -35,5 +35,9 @@ from a ratio. These separately sampled phases must not be summed into an exact f
 budget. Conflict lookup/comparison cost cannot justify a fresh-path allowance, and ADR-42
 provides no millisecond allowance. No threshold or quantity is replaced by this investigation.
 
-The normal precision guard and three complete six-guard passes remain acceptance work;
-probe timings alone are not passing release evidence.
+`precision-guard.txt` records the normal one-percent/120-second guard at committed
+source `b8695a0d`: all six cases passed, batch fresh 1.05× legacy and per-event fresh
+0.96×, with `GUARD(producer-identity)=0` and process exit zero. The first two complete controls pass at 1.09×/1.08× batch. The third fails at
+46.6/42.2 ms (>1.10×), with the other five guards passing. That failure remains in
+`../baseline-recording-v2/control-full-3.txt`; the three-pass acceptance is not met.
+Actual full-factory alternating pairs will extend attribution. No ceiling has moved.

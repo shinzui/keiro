@@ -20,6 +20,36 @@ controls are adjacent and its P95 sampler is selection-specific. Thus even an ol
 row must be re-recorded. These changes and the new machine prevent interpreting CSV movement
 as a production before/after speedup.
 
+All 25 processes completed at source `b8695a0d` between 08:56 and 09:16 UTC on
+2026-10-25. `environment.txt` records the Apple M5 Ultra (36 logical CPUs, 256 GiB),
+GHC 9.12.4, Cabal 3.16.1.0, PostgreSQL 18.6, binary/lock hashes and initial load.
+`record.sh` is the exact invocation. The durable fixture has `fsync`,
+`synchronous_commit` and `full_page_writes` enabled, with default checkpoint and
+autovacuum behavior; selected setup checkpoints precede final warm-up. Seven migrated
+clones separate logical workloads while sharing the disposable PostgreSQL server.
+
+The accepted [harness evidence](../harness-isolation-v1/README.md) specifies the bounds
+and retained growth/count probes. Command seeds 5,000 singleton streams; each fresh
+single-event case allows 100,000 calls, each 100-event case 10,000, each fan-out case
+100,000 emitted events and each silent case 1,000,000 calls. Rebuild uses the same
+600 source events on every call, with 10,000 bookkeeping runs allowed. Read-model
+setup seeds 25,000 events across 5,000 streams, with shared limits of 500,000 inline
+commands, 1,000,000 async deliveries and 10,000 promotions. Reset-based outbox/inbox
+actions retain their fixed per-call workload. Bound failures invalidate a sample.
+
+Aggregation validated all selected names (15 command, 3 outbox, 49 inbox, 12 projection,
+10 read-model) and preserved the existing baseline inventories (15/3/38/12/10).
+`candidate-baseline.csv` and `summary.md` retain the resulting 78 medians and ranges;
+`original-baseline.csv` retains every replaced row. No failed recording was discarded.
+`controls.sh` runs the named command/inbox subset and then three serial complete guards
+on the same benchmark source, recording binary/baseline hashes and process statuses.
+The subset passes with exactly command/inbox statuses. All five CSV guards pass in each
+of `control-full-1.txt`, `control-full-2.txt` and `control-full-3.txt`, establishing
+same-source CSV reproduction and four consecutive inbox passes. Full-1/full-2 pass all
+six guards; full-3 refuses producer fresh batch at 46.6/42.2 ms (>1.10×), with every
+other guard zero and process exit 1. Preserve that failed cohort. Producer resolution and
+three consecutive all-green summaries remain open; no CSV changes follow from that failure.
+
 Build with `nix develop -c cabal build keiro:bench:keiro-bench`, then run `record.sh` inside
 `nix develop`. After all 25 processes complete, run `aggregate.py` there to inspect the
 candidates and then `aggregate.py --apply`. The recording revision must reproduce the new

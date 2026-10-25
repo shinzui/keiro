@@ -7,7 +7,8 @@ runner selection/settings, with source revision, binary and machine in `environm
 See [the recording protocol](../baseline-recording-v2/README.md). `summary.md` reports each
 row's median mean, median two-standard-deviation spread and range. `candidate-baseline.csv`
 is derived without changing the guard's 25% ceiling; `original-baseline.csv` preserves the
-replaced data. Recording and same-source control acceptance are initially pending.
+replaced data. All five recording processes completed successfully at `b8695a0d`; the same-source guard
+passes in all three full runner controls. The common protocol records durability and bounds.
 
 The fixture boundary and machine changed. Old and new absolute values are not a controlled
 production performance comparison. No baseline moves solely because an old guard was red.

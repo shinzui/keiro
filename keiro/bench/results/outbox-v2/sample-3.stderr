@@ -1,0 +1,6 @@
+BENCH_SETUP group=outbox scenario=hot-key checkpoint=before-warm-up
+BENCH_SETUP group=outbox scenario=hot-key warm-up invocations=3 timed_reset=TRUNCATE
+BENCH_SETUP group=outbox scenario=hot-key-nolatency checkpoint=before-warm-up
+BENCH_SETUP group=outbox scenario=hot-key-nolatency warm-up invocations=3 timed_reset=TRUNCATE
+BENCH_SETUP group=outbox scenario=multi-key checkpoint=before-warm-up
+BENCH_SETUP group=outbox scenario=multi-key warm-up invocations=3 timed_reset=TRUNCATE

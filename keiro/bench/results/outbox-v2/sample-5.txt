@@ -1,0 +1,11 @@
+All
+  outbox
+    hot-key:           OK
+      500  ms ±  14 ms
+    hot-key-nolatency: OK
+      268  ms ± 9.9 ms
+    multi-key:         OK
+      357  ms ±  12 ms
+
+All 3 tests passed (17.43s)
+PROCESS_EXIT=0

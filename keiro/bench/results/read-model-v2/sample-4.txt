@@ -1,0 +1,31 @@
+All
+  read-model-lifecycle
+    serving-binding
+      legacy-three:                       OK
+        61.6 μs ± 3.7 μs
+      versioned-three:                    OK
+        65.2 μs ± 4.5 μs
+    promotion
+      three-target-end-to-end:            OK
+        13.0 ms ± 5.1 ms
+    repair
+      10:                                 OK
+        387  μs ±  26 μs
+      100:                                OK
+        2.19 ms ± 136 μs
+      1000:                               OK
+        27.2 ms ± 2.2 ms
+  read-model-reads
+    status
+      list-1000-synthetic-groups:         OK
+        7.55 ms ± 473 μs
+      lookup-among-1000-synthetic-groups: OK
+        60.6 μs ± 3.3 μs
+    guarded
+      all-rows-100:                       OK
+        167  μs ±  13 μs
+      keyed-10000:                        OK
+        62.4 μs ± 3.6 μs
+
+All 10 tests passed (25.96s)
+PROCESS_EXIT=0

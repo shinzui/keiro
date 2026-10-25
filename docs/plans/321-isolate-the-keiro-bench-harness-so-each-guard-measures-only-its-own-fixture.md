@@ -92,7 +92,7 @@ A prior three-pair cohort had a late fresh-inbox outlier and slower small append
 instrumented run does not directly reconstruct that older outlier's server state; it proves
 the remaining cross-scenario mechanism. `checkpoint-full-1.*` completes prior checkpoint
 work before final selected warm-up and records zero busy/outstanding checkpoints across
-114 snapshots, with every fresh twin within 4.41%. New unprobed pairs remain required.
+114 snapshots, with every fresh twin within 4.41%. The subsequent unprobed pairs below establish acceptance.
 
 The first complete release gate passed correctness but refused producer and projection.
 Projection's sequential one-target rows diverged 2.43x, while its alternating three-target
@@ -103,7 +103,7 @@ actual prepared plans. A tighter follow-up still failed when it measured five le
 cases before five versioned cases. Adjacent controls preserve every benchmark name and
 ceiling while comparing nearer retained populations. The instrumented adjacent run passes
 all 12 cases; the separate unprobed run also passes (inline 1.01–1.04x, async 1.06x).
-Replacement command pairs remain acceptance work; five-block growth spread passes.
+The later checkpoint-settled pairs replace that intermediate cohort; five-block growth spread passes.
 Diagnostic runs are not accepted timing measurements.
 
 The first durable rebuild probe correctly aborted at 167 invocations: its counter

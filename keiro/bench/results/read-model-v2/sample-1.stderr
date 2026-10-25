@@ -1,0 +1,4 @@
+BENCH_SETUP group=read-model scenario=shared schema history=25000
+BENCH_SETUP group=read-model scenario=shared seed_streams=5000 seed_events=25000 analyze=once-before-warm-up
+BENCH_SETUP group=counts scenario=read-model command_events=0 command_budget=500000 async_operations=0 async_budget=1000000 promotion_runs=511 promotion_budget=10000
+BENCH_SETUP group=counts scenario=read-model command_events=0 command_budget=500000 async_operations=0 async_budget=1000000 promotion_runs=511 promotion_budget=10000

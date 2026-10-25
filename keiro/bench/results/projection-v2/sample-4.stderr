@@ -1,0 +1,27 @@
+BENCH_SETUP group=read-model scenario=shared schema history=25000
+BENCH_SETUP group=read-model scenario=shared seed_streams=5000 seed_events=25000 analyze=once-before-warm-up
+BENCH_SETUP group=read-model scenario=bench-legacy-one checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-legacy-one warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-versioned-one checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-versioned-one warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-legacy-three checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-legacy-three warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-versioned-three checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-versioned-three warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-legacy-groups checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-legacy-groups warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-versioned-groups checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-versioned-groups warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-legacy-many-revisions checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-legacy-many-revisions warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-versioned-many-revisions checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-versioned-many-revisions warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-legacy-mixed checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-legacy-mixed warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-versioned-mixed checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-versioned-mixed warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-legacy-mixed-async checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-legacy-mixed-async warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-versioned-mixed-async checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-versioned-mixed-async warm-up invocations=3
+BENCH_SETUP group=counts scenario=read-model command_events=78798 command_budget=500000 async_operations=49156 async_budget=1000000 promotion_runs=0 promotion_budget=10000
