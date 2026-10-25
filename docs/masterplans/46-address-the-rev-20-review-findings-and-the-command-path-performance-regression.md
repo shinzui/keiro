@@ -146,7 +146,7 @@ implementation evidence, with contributions from EP-1 and EP-7.
 | 4 | Harden the HTTP operational surface against cross-site mutations and permit exhaustion | docs/plans/318-harden-the-http-operational-surface-against-cross-site-mutations-and-permit-exhaustion.md | None | None | Complete |
 | 5 | Inspect reaction process managers and label legacy inspection before 1.0 | docs/plans/319-inspect-reaction-process-managers-and-label-legacy-inspection-before-1-0.md | None | None | Complete |
 | 6 | Reconcile the 0.22.0.0 release surface and the 0.21.0.0 edge with the REV-20 findings | docs/plans/320-reconcile-the-0-22-0-0-release-surface-and-the-0-21-0-0-edge-with-the-rev-20-findings.md | M1/M4 final acceptance: EP-3 Complete, EP-4 Complete, EP-5 M3 | EP-5 M1/M2 | Complete |
-| 7 | Isolate the keiro-bench harness so each guard measures only its own fixture | docs/plans/321-isolate-the-keiro-bench-harness-so-each-guard-measures-only-its-own-fixture.md | None | None | In Progress |
+| 7 | Isolate the keiro-bench harness so each guard measures only its own fixture | docs/plans/321-isolate-the-keiro-bench-harness-so-each-guard-measures-only-its-own-fixture.md | None | None | Complete |
 
 EP-1's M3 to M6 (re-recording the baselines and proving the gate green) require EP-7 to be
 Complete; EP-1's M1/M2 observations are already recorded and had no prerequisite.
@@ -162,7 +162,7 @@ accepted output is needed, name it explicitly (e.g., EP-1 M1) and explain it bel
 
 EP-7 must be Complete before EP-1 M3–M6 begin. EP-1 M1/M2 record the existing
 sweep and preparation-sensitivity experiment; they do not prove absence of every runtime
-regression. EP-7 is the next implementation plan. EP-3, EP-4, and EP-5 may proceed
+regression. EP-7 is Complete; EP-1 recording is now the next implementation work. EP-3, EP-4, and EP-5 may proceed
 independently, subject to the shared-file ownership below. EP-5 executes M3 (labelling)
 first, then M1/M2 (state inspection with explicitly unavailable reaction provenance).
 
@@ -218,6 +218,7 @@ whatever EP-3 ships in the changelogs. EP-3 owns the workflow envelope text in
 `docs/user/process-managers-and-timers.md`, and `scripts/inspection-query-evidence.hs`.
 EP-3 owns removal of the workflow error mapping in `Application.hs`; EP-4 owns request
 admission/delivery in that same file and consumes the final mapping in shared HTTP tests.
+EP-3 removed the obsolete wide-split error and constants above.
 The HTTP routes in `keiro-ops-http/src/Keiro/Ops/Http/Route.hs` consume the cursor as an opaque
 string and need no change.
 
@@ -248,23 +249,20 @@ planned changes already ship.
 ## Progress
 
 
-Phase 1 remains open. EP-3 is Complete with cursor/class/wide-key tests, strict
-documentation validation and 136 retained v2 query plans. EP-4 is Complete: 49 HTTP examples pass, including wire origin/media refusals,
-actual stalled-socket termination, fresh-feed and retirement recovery. Strict
-ADR and documentation validation passes for both children. EP-7 is In Progress with static selected
-fixtures, fixed 600-event rebuilds and accepted five-block growth through 3,005,000 seed events;
-reset/durable-fixture and actual work-count diagnostics are retained;
-paired full/filtered timing acceptance remains open. An earlier cohort passes command
-medians but contains a late inbox outlier. EP-7 now settles shared cluster checkpoint
-work before final selected warm-up; instrumented full/count runs pass and new unprobed
-pairs remain required. A full release-gate run on clean
-`847b395c` passed correctness, attempted all six guards and refused producer/projection.
-Its noisy producer timings are exploratory; this is not passing release evidence.
-EP-1 M3–M6 wait for EP-7 Complete. EP-2's passing release demonstration still waits
-for EP-1 Complete. EP-5 and EP-6 are Complete: reaction state inspection passes 46 library and
-54 ops examples, legacy-only capture is explicit, and release/upgrade metadata
-passes scoped history-preserving, blueprint, manifest and documentation checks. No release is authorized by
-this initiative, and all final-candidate/integration gates remain mandatory.
+EP-3, EP-4, EP-5, EP-6 and EP-7 are Complete. Inspection changes retain cursor/query,
+HTTP wire/cancellation/feed and handwritten reaction-consumer evidence, with strict
+metadata/documentation checks. The harness handoff at `ee2f2667` passes three alternating
+pairs: command median differences at most 6.03%, fresh inbox twins at most 4.42%, and
+silent rows below 17 us. Actual counts, fixed 600-event rebuilds, settled resets and
+five-block growth through 3,005,000 seed events are retained. Historical failed cohorts
+remain explicit. No CSV baseline or producer ceiling has moved.
+
+EP-1 M3–M6 may now proceed on the accepted harness. EP-2's passing release demonstration
+still requires EP-1 Complete. An earlier full release gate passed correctness and reported
+all six guards before refusing producer/projection; its noisy producer timings are exploratory.
+Current baseline recording, fresh producer attribution, three all-guard passes and final
+red/green release demonstrations remain open. Plan 303's release and independent final-candidate
+integration prerequisites remain mandatory; this initiative performs no release cut.
 
 
 ## Surprises & Discoveries

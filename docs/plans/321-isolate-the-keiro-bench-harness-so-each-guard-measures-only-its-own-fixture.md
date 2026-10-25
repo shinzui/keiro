@@ -57,62 +57,31 @@ records new baselines.
 ## Progress
 
 
-- [ ] M1: Separate clones and static benchmark trees keep selected setup isolated. A command
-      filter executes no delegated setup/duplicate seeding/warm-up; listing benchmark names
-      executes no workload preparation. Filtered/full command measurements agree within noise.
-- [x] M2 (2026-10-25): Fresh command/fan-out identities and 64 actual-count reports verify
-      expected stored work without timed hard deletes. Rebuild runs retain exactly 600 source
-      events and persisted bookkeeping matches run counts. Five durable growth blocks through
-      3,005,000 seeded events differ by 1.65% fresh / 4.67% no-op from 100,000 events;
-      actual late plans remain indexed. Reset alternatives retain fixed row counts and
-      measured costs in `harness-isolation-v1/reset-probe.txt`; growth spreads/counts are in
-      `harness-isolation-v1/growth-summary.txt`.
-- [ ] M3: Representative setup warm-up resolves first-run/order effects. First inbox fresh
-      rows stay within 25% of their metrics twin, fan-out scales with target count, and command
-      no-op/rejected rows meet the under-200-us target on the recorded environment. The
-      previously observed 21-ms and small-fan-out anomalies have attributed evidence.
-- [ ] M4: Retain setup traces, source/workload counts, paired timing samples, environment and
-      revision under `keiro/bench/results/harness-isolation-v1/`; annotate old evidence READMEs
-      with the new fixture boundary and hand accepted evidence to plan 315.
+- [x] M1 (2026-10-25): Seven migrated clones and static selected setup preserve all 96
+      names. Listing performs no workload setup; all three command-only traces contain
+      no delegated, read-model, outbox, inbox or rebuild preparation. Three alternating
+      filtered/full pairs pass every command median comparison, maximum 6.03%.
+- [x] M2 (2026-10-25): Actual-count diagnostics pass all 96 cases / 64 count reports,
+      including every command/fan-out prefix and 13 persisted rebuild runs with 39 source
+      rows and exactly 600 events. Five durable blocks through 3,005,000 seed events differ
+      by 1.65% fresh / 4.67% no-op from 100,000 events, with indexed lookup. Settled reset
+      alternatives and enforced event/operation/bookkeeping bounds are retained.
+- [x] M3 (2026-10-25): Representative warm-up, established statistics, adjacent projection
+      controls and settled checkpoint preparation remove the measured order mechanisms.
+      All fresh inbox twins in the accepted full runs differ by at most 4.42%; fan-out
+      scales monotonically in both selections. No-op/rejected rows remain below 17 us.
+      Earlier anomalous/failed cohorts and actual prepared/maintenance probes are retained.
+- [x] M4 (2026-10-25): Accepted source `ee2f2667`, environment, binary identity, all six
+      raw CSV/log/trace sets and sample spreads are retained under
+      `keiro/bench/results/harness-isolation-v1/`. Both analyzers pass. Historical producer
+      and delegated-inbox READMEs identify the changed fixture boundary. Plan 315 may
+      begin recording; no baseline or ratio ceiling changed in this plan.
 
+The [acceptance README](../../keiro/bench/results/harness-isolation-v1/README.md) is the
+handoff to plan 315. `paired-summary.txt` applies the stated median comparison to every
+command row and checks every fresh metrics twin; `growth-summary.txt` retains all five
+checkpoint blocks and ranges. Failed attempts remain separately labelled.
 
-Implementation status (2026-10-25): The isolated static-tree harness builds in the Nix
-shell. `harness-isolation-v1/list-tests.log` has no setup events; the rebuild probe records
-six successive 600-event reports. A one-second command smoke run is deliberately not
-acceptance: the two largest fan-outs time out and accepted-1 drifts across scenario order.
-`KEIRO_BENCH_COMMAND_PROBE=1` diagnoses actual prepared stream-read plans and growth before
-recording. No baseline or ratio threshold has changed. The growth probe remains indexed through
-1,205,500 events (including diagnostic rows), with fresh/no-op means of 140/24 us
-at the late population. The ordinary entry point now uses the existing durable
-benchmark fixture rather than fast correctness settings. Durable growth through 1.2 million events and reset alternatives are retained.
-The first paired attempt was stopped after explicit 100,000-unit counter failures
-and delegated-inbox drift; it is not acceptance. Silent commands now have a finite
-one-million-operation budget without pretending they retain event rows; large batches
-allow 10,000 invocations (one million events), while one-event/fan-out rows retain
-100,000-event budgets. The aggregate command store is bounded at 3,005,000 events.
-Selected delegated setup ANALYZEs after its first representative warm-up, then warms
-twice more. Actual prepared existence plans are probed before/after that schedule.
-Actual count diagnostics now complete all 96 cases with no mismatches, including
-command/fan-out prefixes, delegated/history inputs, fixed rebuild sources and persisted
-bookkeeping. The first full release gate exposed a read-model order effect despite its
-passing alternating latency sampler. Its unchanged 25,000 seed events now span 5,000
-streams; one fixture-wide ANALYZE precedes selected three-invocation warm-up. Read-model
-command/async/promotion growth was initially bounded at 100,000/100,000/10,000.
-The tighter run reached 84,942 command and 65,540 async operations. Current finite caps
-are 500,000 command events, one million async operations and 10,000 promotion runs,
-so correctly fast adaptive samples do not exhaust those initial budgets.
-`work-counts.*` and its exact source patch retain the diagnostic. The single-block durable probe is followed by five checkpoint blocks through
-3,005,000 seed events. Fresh/no-op medians at the maximum are 145.18/20.60 us,
-within 1.65%/4.67% of the 100,000-event checkpoint, with actual indexed plans,
-counts and durable settings. The first replacement pairs at `cfc57046` pass every command median (maximum 6.66%)
-but a later inbox row has a 59.30% metrics-twin outlier in the third full run.
-`attempt-2/` retains all three pairs and is not final acceptance. Maintenance snapshots
-show cluster checkpoints spanning cloned databases and selected scenarios. The candidate
-now finishes prior checkpoint work before final selected warm-up. Its instrumented full
-run passes 96 cases, all fresh twins within 4.41%, and all 114 maintenance snapshots show
-an idle checkpointer with no outstanding request. Final work counts also pass all 96 diagnostic cases / 64 actual reports,
-including persisted fixed rebuild inputs; settled reset alternatives and the 96-name
-zero-setup listing pass. Only unprobed pairs on that boundary remain open.
 
 ## Surprises & Discoveries
 
@@ -210,51 +179,61 @@ isolation with preparation/workload counters. Plan 315 retains baseline/threshol
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The isolated harness is accepted at `ee2f2667`. All three filtered runs pass 15 cases and
+all three full runs pass 96. Every command median difference is at most 6.03%, every fresh
+inbox twin at most 4.42%, and silent rows stay below 17 us. Actual counts establish fresh
+work rather than accidental deduplication; repeated rebuilds retain exactly 600 source events.
+The conservative growth probe reaches more than three million streams with stable indexed
+lookup and retained five-block spreads.
+
+The investigation required more than logical clones: statistics, sequential control placement
+and cluster checkpoint state all affected the measurement. Earlier counter failures, outliers
+and partial runs remain auditable rather than being relabelled as acceptance. ADR-58 carries
+those durable lessons. Baseline and producer policy ownership now passes to plan 315; release
+acceptance remains plan 316's separate obligation.
 
 
 ## Context and Orientation
 
 
-`keiro/bench/Main.hs:ordinaryMain` runs `withMigratedSuite` and two
-`withFreshResourceStore` brackets. One store is shared by command, outbox, inbox/downstream,
-projection and producer-identity; read-model already uses a second. Before `defaultMain`,
-rebuild SQL, read-model setup, delegated preparation and optional evidence hooks run.
-`keiro-test-support/src/Keiro/Test/Postgres.hs` owns these disposable fixtures.
+`keiro/bench/Main.hs:ordinaryMain` uses `withMigratedBenchmarkSuite` and seven bracket-owned
+clones for command, outbox, ordinary inbox, delegated inbox, producer identity, rebuild and
+read-model work. `keiro-test-support/src/Keiro/Test/Postgres.hs` owns those disposable
+resources and `checkpointBenchmarkStore`, which executes a cluster checkpoint outside a
+transaction before final selected warm-up. Durability and autovacuum remain enabled.
+`BenchSetup.hs` keeps a static tree and acquires workload handles only for selected cases.
+Read-model setup is memoized across its three selected top-level groups.
 
-The benchmark tree and names are public guard inputs. `scripts/bench-regression.sh` runs six
-guards; five match `keiro/bench/baseline-*.csv`, while producer-identity compares two rows in
-one process. Preserve names including All.inbox.downstream.* when splitting its store.
-`InboxDelegatedBench.hs` currently returns IO [Benchmark]; separate its pure scenario/name
-specifications from acquired fixture data so selecting or listing the tree never forces IO
-to discover names. Read the installed tasty-bench API through Mori before changing resource
-combinators. Use its existing env pattern only for data/setup, not dynamic tree discovery.
+The guard names are public inputs: five CSV baselines and the same-process producer ratio
+use them. All 96 names are preserved. `InboxDelegatedBench.hs` declares pure scenario names;
+selected setup creates its table, duplicate seed and warm-up. The history fixture already
+used selected setup before this plan. It was never valid evidence of newly deferred work.
 
-`commandScenarioBench`, `domainCommandScenarioBench`, `domainRouterFanoutBench` and
-`domainProcessManagerFanoutBench` currently time target hard deletes. The fan-out identity
-also includes correlation/source inputs; fresh target spelling alone must not accidentally
-reuse a command identity and measure deduplication. The producer benchmark truncates its
-outbox before each fresh batch, requiring every enqueue to return ProducerInserted.
+Command and fan-out actions mint fresh identities and enforce finite counters; accepted
+results and diagnostic stored prefixes verify the expected work. Rebuild setup seeds three
+category streams once, with 200 events each, and registers the catalog. Every supported
+rebuild replays those same 600 events and retains its real ClearBeforeReplay reset.
+Bookkeeping has a separate 10,000-run budget. Fixed-size outbox/inbox/producer actions retain
+TRUNCATE, with measured reset exceptions rather than an assumption that additive costs cancel.
 
-`rebuildScenarioBench` currently deletes/reseeds three streams, registers the catalog and
-rebuilds. `rebuildCatalogDeclaration` sources are whole categories, and the request replays
-from zero. `keiro/src/Keiro/ReadModel/Rebuild/Runner.hs` reads CategorySource with readCategory;
-new group IDs cannot exclude old category events. Move its three-stream seed and catalog
-registration into selected setup, retaining the supported repeated rebuild operation.
+Actual prepared stream/existence/group plans, checkpoint activity and relation counts explain
+fixture behavior. Empty statistics retain sequential lookup plans; many seed events in one
+stream do not establish stream cardinality. Logical clones also share checkpoint work.
+Selected setup establishes statistics and settles prior checkpoint work before final warm-up;
+projection controls are adjacent while its alternating sampler retains the separate p95/
+throughput contract. Timing acceptance disables all probes and uses serial wall time,
+`--stdev 5 --timeout 10s +RTS -N2 -RTS`.
 
-Plan `docs/plans/315-attribute-the-command-path-append-slowdown-and-restore-trustworthy-benchmark-guards.md`
-records HEAD router/process-manager fan-out at 2.01/1.96 s with preparation versus 662/777 ms
-without it; accepted-large was 44.2 versus 4.69 ms. The same experiment gave anomalous no-op
-21.4 ms and fan-out 10/100 at 229/3500 ms. These are investigation inputs, not target values
-after removing deletes. [ADR-48](../adr/0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md)
-provides the isolated-leg and discarded warm-up precedent. Plan 316 owns [ADR-58](../adr/0058-benchmark-release-gates-require-isolated-fixed-workloads-and-attributed-baselines.md)
-and consumes this plan's fixture evidence; no cross-repository ADR is required.
+Plan [315](315-attribute-the-command-path-append-slowdown-and-restore-trustworthy-benchmark-guards.md)
+owns recording and producer policy after this accepted handoff. [ADR-48](../adr/0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md)
+provides the isolated-leg precedent; [ADR-58](../adr/0058-benchmark-release-gates-require-isolated-fixed-workloads-and-attributed-baselines.md)
+retains the durable measurement rules. No serving SQL, index or dependency bound changed here.
 
 
 ## Plan of Work
 
 
-M1 keeps `withMigratedSuite` and opens separate bracket-owned clones for command, outbox,
+M1 uses the durable `withMigratedBenchmarkSuite` and opens separate bracket-owned clones for command, outbox,
 ordinary inbox, delegated inbox/downstream, producer-identity, projection and read-model.
 Keep store handles in closures with the same lifetime as defaultMain. Move table/fixture
 preparation into selected env setup, preserving a pure list of group/scenario names. In
@@ -320,8 +299,8 @@ From the repository root inside `nix develop`, after implementing setup tracing:
 ```bash
 cabal build keiro:bench:keiro-bench
 KEIRO_BENCH_SETUP_TRACE=1 cabal bench keiro-bench --benchmark-options='--list-tests'
-KEIRO_BENCH_SETUP_TRACE=1 cabal bench keiro-bench --benchmark-options='-p command -j1 --time-mode wall --hide-progress --csv /tmp/command-alone.csv'
-KEIRO_BENCH_SETUP_TRACE=1 cabal bench keiro-bench --benchmark-options='-j1 --time-mode wall --hide-progress --csv /tmp/all.csv'
+KEIRO_BENCH_SETUP_TRACE=1 cabal bench keiro-bench --benchmark-options='-p command -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --csv /tmp/command-alone.csv +RTS -N2 -RTS'
+KEIRO_BENCH_SETUP_TRACE=1 cabal bench keiro-bench --benchmark-options='-j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --csv /tmp/all.csv +RTS -N2 -RTS'
 python3 - <<'PY_COMPARE'
 import csv
 

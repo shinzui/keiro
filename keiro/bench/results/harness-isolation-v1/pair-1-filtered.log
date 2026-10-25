@@ -1,0 +1,45 @@
+All
+  command
+    legacy
+      accepted-1:     OK
+        155  μs ± 5.4 μs
+    control
+      accepted-1:     OK
+        149  μs ±  13 μs
+    domain-warmup
+      accepted-1:     OK
+        150  μs ±  14 μs
+    domain
+      accepted-1:     OK
+        157  μs ± 6.9 μs, 1.05x
+    legacy
+      accepted-large: OK
+        1.51 ms ± 149 μs
+    domain
+      accepted-large: OK
+        1.54 ms ±  29 μs, 1.02x
+    legacy
+      no-op:          OK
+        16.3 μs ± 1.0 μs
+    domain
+      rejected:       OK
+        16.3 μs ± 1.2 μs, 1.00x
+      no-op:          OK
+        16.4 μs ± 1.5 μs, 1.01x
+      router-fanout
+        10:           OK
+          2.19 ms ± 145 μs
+        100:          OK
+          21.6 ms ± 1.8 ms
+        1000:         OK
+          211  ms ±  14 ms
+      process-manager-fanout
+        10:           OK
+          2.16 ms ± 105 μs
+        100:          OK
+          20.5 ms ± 1.6 ms
+        1000:         OK
+          202  ms ±  19 ms
+
+All 15 tests passed (39.41s)
+PROCESS_EXIT=0

@@ -1,0 +1,342 @@
+BENCH_SETUP group=outbox scenario=hot-key checkpoint=before-warm-up
+BENCH_SETUP group=outbox scenario=hot-key warm-up invocations=3 timed_reset=TRUNCATE
+BENCH_SETUP group=outbox scenario=hot-key-nolatency checkpoint=before-warm-up
+BENCH_SETUP group=outbox scenario=hot-key-nolatency warm-up invocations=3 timed_reset=TRUNCATE
+BENCH_SETUP group=outbox scenario=multi-key checkpoint=before-warm-up
+BENCH_SETUP group=outbox scenario=multi-key warm-up invocations=3 timed_reset=TRUNCATE
+BENCH_SETUP group=inbox scenario=single-full checkpoint=before-warm-up
+BENCH_SETUP group=inbox scenario=single-full warm-up invocations=3 timed_reset=TRUNCATE
+BENCH_SETUP group=inbox scenario=single-nometrics checkpoint=before-warm-up
+BENCH_SETUP group=inbox scenario=single-nometrics warm-up invocations=3 timed_reset=TRUNCATE
+BENCH_SETUP group=inbox scenario=batch-100 checkpoint=before-warm-up
+BENCH_SETUP group=inbox scenario=batch-100 warm-up invocations=3 timed_reset=TRUNCATE
+BENCH_SETUP group=inbox scenario=single-slim checkpoint=before-warm-up
+BENCH_SETUP group=inbox scenario=single-slim warm-up invocations=3 timed_reset=TRUNCATE
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-fresh-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-fresh-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-fresh-metrics-off analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-fresh-metrics-off checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=table-downstream-single-fresh-metrics-off iterations=6 expected_events=12000
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-fresh-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-fresh-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-fresh-metrics-on analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-fresh-metrics-on checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=table-downstream-single-fresh-metrics-on iterations=6 expected_events=12000
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-repeated-key-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-repeated-key-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-repeated-key-metrics-off analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-repeated-key-metrics-off checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=table-downstream-single-repeated-key-metrics-off iterations=10 expected_events=10
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-repeated-key-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-repeated-key-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-repeated-key-metrics-on analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-repeated-key-metrics-on checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=table-downstream-single-repeated-key-metrics-on iterations=10 expected_events=10
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-all-duplicate-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-all-duplicate-metrics-off duplicate-seed deliveries=2000
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-all-duplicate-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-all-duplicate-metrics-off analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-all-duplicate-metrics-off checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=table-downstream-single-all-duplicate-metrics-off iterations=10 expected_events=1
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-all-duplicate-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-all-duplicate-metrics-on duplicate-seed deliveries=2000
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-all-duplicate-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-all-duplicate-metrics-on analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-all-duplicate-metrics-on checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=table-downstream-single-all-duplicate-metrics-on iterations=10 expected_events=1
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-fresh-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-fresh-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-fresh-metrics-off analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-fresh-metrics-off checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-single-fresh-metrics-off iterations=6 expected_events=12000
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-fresh-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-fresh-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-fresh-metrics-on analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-fresh-metrics-on checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-single-fresh-metrics-on iterations=6 expected_events=12000
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-repeated-key-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-repeated-key-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-repeated-key-metrics-off analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-repeated-key-metrics-off checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-single-repeated-key-metrics-off iterations=66 expected_events=66
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-repeated-key-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-repeated-key-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-repeated-key-metrics-on analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-repeated-key-metrics-on checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-single-repeated-key-metrics-on iterations=66 expected_events=66
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-all-duplicate-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-all-duplicate-metrics-off duplicate-seed deliveries=2000
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-all-duplicate-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-all-duplicate-metrics-off analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-all-duplicate-metrics-off checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-single-all-duplicate-metrics-off iterations=66 expected_events=1
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-all-duplicate-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-all-duplicate-metrics-on duplicate-seed deliveries=2000
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-all-duplicate-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-all-duplicate-metrics-on analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-all-duplicate-metrics-on checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-single-all-duplicate-metrics-on iterations=66 expected_events=1
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-fresh-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-fresh-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-fresh-metrics-off analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-fresh-metrics-off checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-direct-single-fresh-metrics-off iterations=18 expected_events=36000
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-fresh-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-fresh-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-fresh-metrics-on analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-fresh-metrics-on checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-direct-single-fresh-metrics-on iterations=6 expected_events=12000
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-repeated-key-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-repeated-key-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-repeated-key-metrics-off analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-repeated-key-metrics-off checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-direct-single-repeated-key-metrics-off iterations=66 expected_events=66
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-repeated-key-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-repeated-key-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-repeated-key-metrics-on analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-repeated-key-metrics-on checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-direct-single-repeated-key-metrics-on iterations=66 expected_events=66
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-all-duplicate-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-all-duplicate-metrics-off duplicate-seed deliveries=2000
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-all-duplicate-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-all-duplicate-metrics-off analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-all-duplicate-metrics-off checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-direct-single-all-duplicate-metrics-off iterations=66 expected_events=1
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-all-duplicate-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-all-duplicate-metrics-on duplicate-seed deliveries=2000
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-all-duplicate-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-all-duplicate-metrics-on analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-direct-single-all-duplicate-metrics-on checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-direct-single-all-duplicate-metrics-on iterations=66 expected_events=1
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-fresh-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-fresh-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-fresh-metrics-off analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-fresh-metrics-off checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=table-downstream-batch-100-fresh-metrics-off iterations=10 expected_events=20000
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-fresh-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-fresh-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-fresh-metrics-on analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-fresh-metrics-on checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=table-downstream-batch-100-fresh-metrics-on iterations=10 expected_events=20000
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-repeated-key-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-repeated-key-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-repeated-key-metrics-off analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-repeated-key-metrics-off checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=table-downstream-batch-100-repeated-key-metrics-off iterations=1026 expected_events=1026
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-repeated-key-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-repeated-key-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-repeated-key-metrics-on analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-repeated-key-metrics-on checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=table-downstream-batch-100-repeated-key-metrics-on iterations=514 expected_events=514
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-all-duplicate-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-all-duplicate-metrics-off duplicate-seed deliveries=2000
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-all-duplicate-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-all-duplicate-metrics-off analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-all-duplicate-metrics-off checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=table-downstream-batch-100-all-duplicate-metrics-off iterations=1026 expected_events=1
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-all-duplicate-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-all-duplicate-metrics-on duplicate-seed deliveries=2000
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-all-duplicate-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-all-duplicate-metrics-on analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-100-all-duplicate-metrics-on checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=table-downstream-batch-100-all-duplicate-metrics-on iterations=514 expected_events=1
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-fresh-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-fresh-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-fresh-metrics-off analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-fresh-metrics-off checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-batch-100-fresh-metrics-off iterations=6 expected_events=12000
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-fresh-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-fresh-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-fresh-metrics-on analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-fresh-metrics-on checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-batch-100-fresh-metrics-on iterations=10 expected_events=20000
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-repeated-key-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-repeated-key-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-repeated-key-metrics-off analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-repeated-key-metrics-off checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-batch-100-repeated-key-metrics-off iterations=4098 expected_events=4098
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-repeated-key-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-repeated-key-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-repeated-key-metrics-on analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-repeated-key-metrics-on checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-batch-100-repeated-key-metrics-on iterations=1026 expected_events=1026
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-all-duplicate-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-all-duplicate-metrics-off duplicate-seed deliveries=2000
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-all-duplicate-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-all-duplicate-metrics-off analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-all-duplicate-metrics-off checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-batch-100-all-duplicate-metrics-off iterations=8194 expected_events=1
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-all-duplicate-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-all-duplicate-metrics-on duplicate-seed deliveries=2000
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-all-duplicate-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-all-duplicate-metrics-on analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-100-all-duplicate-metrics-on checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-batch-100-all-duplicate-metrics-on iterations=1026 expected_events=1
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-fresh-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-fresh-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-fresh-metrics-off analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-fresh-metrics-off checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=table-downstream-batch-1000-fresh-metrics-off iterations=6 expected_events=12000
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-fresh-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-fresh-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-fresh-metrics-on analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-fresh-metrics-on checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=table-downstream-batch-1000-fresh-metrics-on iterations=6 expected_events=12000
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-repeated-key-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-repeated-key-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-repeated-key-metrics-off analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-repeated-key-metrics-off checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=table-downstream-batch-1000-repeated-key-metrics-off iterations=4098 expected_events=4098
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-repeated-key-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-repeated-key-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-repeated-key-metrics-on analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-repeated-key-metrics-on checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=table-downstream-batch-1000-repeated-key-metrics-on iterations=1026 expected_events=1026
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-all-duplicate-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-all-duplicate-metrics-off duplicate-seed deliveries=2000
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-all-duplicate-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-all-duplicate-metrics-off analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-all-duplicate-metrics-off checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=table-downstream-batch-1000-all-duplicate-metrics-off iterations=4098 expected_events=1
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-all-duplicate-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-all-duplicate-metrics-on duplicate-seed deliveries=2000
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-all-duplicate-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-all-duplicate-metrics-on analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-batch-1000-all-duplicate-metrics-on checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=table-downstream-batch-1000-all-duplicate-metrics-on iterations=1026 expected_events=1
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-fresh-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-fresh-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-fresh-metrics-off analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-fresh-metrics-off checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-batch-1000-fresh-metrics-off iterations=6 expected_events=12000
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-fresh-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-fresh-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-fresh-metrics-on analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-fresh-metrics-on checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-batch-1000-fresh-metrics-on iterations=6 expected_events=12000
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-repeated-key-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-repeated-key-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-repeated-key-metrics-off analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-repeated-key-metrics-off checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-batch-1000-repeated-key-metrics-off iterations=8194 expected_events=8194
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-repeated-key-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-repeated-key-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-repeated-key-metrics-on analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-repeated-key-metrics-on checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-batch-1000-repeated-key-metrics-on iterations=2050 expected_events=2050
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-all-duplicate-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-all-duplicate-metrics-off duplicate-seed deliveries=2000
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-all-duplicate-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-all-duplicate-metrics-off analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-all-duplicate-metrics-off checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-batch-1000-all-duplicate-metrics-off iterations=32770 expected_events=1
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-all-duplicate-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-all-duplicate-metrics-on duplicate-seed deliveries=2000
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-all-duplicate-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-all-duplicate-metrics-on analyze=after-first-warm-up remaining_warm_up=2
+BENCH_SETUP group=delegated-inbox scenario=delegated-batch-1000-all-duplicate-metrics-on checkpoint=before-final-two-warm-ups
+BENCH_SETUP group=counts scenario=delegated-batch-1000-all-duplicate-metrics-on iterations=2050 expected_events=1
+BENCH_SETUP group=delegated-inbox scenario=events-10 history source_events=10
+BENCH_SETUP group=delegated-inbox scenario=events-1000 history source_events=1000
+BENCH_SETUP group=delegated-inbox scenario=events-100000 history source_events=100000
+BENCH_SETUP group=command scenario=shared schema seed_streams=5000 seed_events=5000 analyze=once-before-warm-up
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-1"/legacy/accepted-1 counter budget_iterations=100000 events_per_iteration=1
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-1"/legacy/accepted-1 checkpoint=before-warm-up
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-1"/legacy/accepted-1 warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-accepted-1"/legacy/accepted-1 iterations=8194 units=8194
+BENCH_SETUP group=command scenario=StreamName "bench-command-control"/legacy/accepted-1 counter budget_iterations=100000 events_per_iteration=1
+BENCH_SETUP group=command scenario=StreamName "bench-command-control"/legacy/accepted-1 checkpoint=before-warm-up
+BENCH_SETUP group=command scenario=StreamName "bench-command-control"/legacy/accepted-1 warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-control"/legacy/accepted-1 iterations=16386 units=16386
+BENCH_SETUP group=command scenario=StreamName "bench-command-domain-warmup"/domain/accepted-1 counter budget_iterations=100000 events_per_iteration=1
+BENCH_SETUP group=command scenario=StreamName "bench-command-domain-warmup"/domain/accepted-1 checkpoint=before-warm-up
+BENCH_SETUP group=command scenario=StreamName "bench-command-domain-warmup"/domain/accepted-1 warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-domain-warmup"/domain/accepted-1 iterations=8194 units=8194
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-1"/domain/accepted-1 counter budget_iterations=100000 events_per_iteration=1
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-1"/domain/accepted-1 checkpoint=before-warm-up
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-1"/domain/accepted-1 warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-accepted-1"/domain/accepted-1 iterations=8194 units=8194
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-large"/legacy/accepted-large counter budget_iterations=10000 events_per_iteration=100
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-large"/legacy/accepted-large checkpoint=before-warm-up
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-large"/legacy/accepted-large warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-accepted-large"/legacy/accepted-large iterations=2050 units=205000
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-large"/domain/accepted-large counter budget_iterations=10000 events_per_iteration=100
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-large"/domain/accepted-large checkpoint=before-warm-up
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-large"/domain/accepted-large warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-accepted-large"/domain/accepted-large iterations=2050 units=205000
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/legacy/no-op counter budget_iterations=1000000 events_per_iteration=0
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/legacy/no-op checkpoint=before-warm-up
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/legacy/no-op warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-no-op"/legacy/no-op iterations=131074 units=0
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/domain/rejected counter budget_iterations=1000000 events_per_iteration=0
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/domain/rejected checkpoint=before-warm-up
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/domain/rejected warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-no-op"/domain/rejected iterations=131074 units=0
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/domain/no-op counter budget_iterations=1000000 events_per_iteration=0
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/domain/no-op checkpoint=before-warm-up
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/domain/no-op warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-no-op"/domain/no-op iterations=131074 units=0
+BENCH_SETUP group=command scenario=router-10 counter budget_iterations=10000 events_per_iteration=10
+BENCH_SETUP group=command scenario=router-10 checkpoint=before-warm-up
+BENCH_SETUP group=command scenario=router-10 warm-up invocations=3
+BENCH_SETUP group=counts scenario=router-10 iterations=1026 units=10260
+BENCH_SETUP group=command scenario=router-100 counter budget_iterations=1000 events_per_iteration=100
+BENCH_SETUP group=command scenario=router-100 checkpoint=before-warm-up
+BENCH_SETUP group=command scenario=router-100 warm-up invocations=3
+BENCH_SETUP group=counts scenario=router-100 iterations=66 units=6600
+BENCH_SETUP group=command scenario=router-1000 counter budget_iterations=100 events_per_iteration=1000
+BENCH_SETUP group=command scenario=router-1000 checkpoint=before-warm-up
+BENCH_SETUP group=command scenario=router-1000 warm-up invocations=3
+BENCH_SETUP group=counts scenario=router-1000 iterations=10 units=10000
+BENCH_SETUP group=command scenario=process-manager-10 counter budget_iterations=10000 events_per_iteration=10
+BENCH_SETUP group=command scenario=process-manager-10 checkpoint=before-warm-up
+BENCH_SETUP group=command scenario=process-manager-10 warm-up invocations=3
+BENCH_SETUP group=counts scenario=process-manager-10 iterations=2050 units=20500
+BENCH_SETUP group=command scenario=process-manager-100 counter budget_iterations=1000 events_per_iteration=100
+BENCH_SETUP group=command scenario=process-manager-100 checkpoint=before-warm-up
+BENCH_SETUP group=command scenario=process-manager-100 warm-up invocations=3
+BENCH_SETUP group=counts scenario=process-manager-100 iterations=66 units=6600
+BENCH_SETUP group=command scenario=process-manager-1000 counter budget_iterations=100 events_per_iteration=1000
+BENCH_SETUP group=command scenario=process-manager-1000 checkpoint=before-warm-up
+BENCH_SETUP group=command scenario=process-manager-1000 warm-up invocations=3
+BENCH_SETUP group=counts scenario=process-manager-1000 iterations=18 units=18000
+BENCH_SETUP group=rebuild scenario=three-categories-200 schema source_events=600 bookkeeping_run_budget=10000
+BENCH_SETUP group=rebuild scenario=three-categories-200 checkpoint=before-warm-up warm-up invocations=3 source_events_per_invocation=600
+BENCH_SETUP group=rebuild scenario=1 source_events=600
+BENCH_SETUP group=rebuild scenario=2 source_events=600
+BENCH_SETUP group=rebuild scenario=3 source_events=600
+BENCH_SETUP group=counts scenario=rebuild iterations=130 units=78000
+BENCH_SETUP group=read-model scenario=shared schema history=25000
+BENCH_SETUP group=read-model scenario=shared seed_streams=5000 seed_events=25000 analyze=once-before-warm-up
+BENCH_SETUP group=read-model scenario=bench-legacy-one checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-legacy-one warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-versioned-one checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-versioned-one warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-legacy-three checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-legacy-three warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-versioned-three checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-versioned-three warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-legacy-groups checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-legacy-groups warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-versioned-groups checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-versioned-groups warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-legacy-many-revisions checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-legacy-many-revisions warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-versioned-many-revisions checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-versioned-many-revisions warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-legacy-mixed checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-legacy-mixed warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-versioned-mixed checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-versioned-mixed warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-legacy-mixed-async checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-legacy-mixed-async warm-up invocations=3
+BENCH_SETUP group=read-model scenario=bench-versioned-mixed-async checkpoint=before-warm-up
+BENCH_SETUP group=read-model scenario=bench-versioned-mixed-async warm-up invocations=3
+BENCH_SETUP group=counts scenario=read-model command_events=73748 command_budget=500000 async_operations=49156 async_budget=1000000 promotion_runs=0 promotion_budget=10000
+BENCH_SETUP group=counts scenario=read-model command_events=73748 command_budget=500000 async_operations=49156 async_budget=1000000 promotion_runs=511 promotion_budget=10000
+BENCH_SETUP group=counts scenario=read-model command_events=73748 command_budget=500000 async_operations=49156 async_budget=1000000 promotion_runs=511 promotion_budget=10000
+BENCH_SETUP group=producer-identity scenario=legacy-fresh-1000 checkpoint=before-warm-up warm-up invocations=3 timed_reset=TRUNCATE
+BENCH_SETUP group=producer-identity scenario=deterministic-fresh-1000 checkpoint=before-warm-up warm-up invocations=3 timed_reset=TRUNCATE
+BENCH_SETUP group=producer-identity scenario=deterministic-fresh-and-replay-1000 checkpoint=before-warm-up warm-up invocations=3 timed_reset=TRUNCATE
+BENCH_SETUP group=producer-identity scenario=legacy-single-tx-per-event-1000 checkpoint=before-warm-up warm-up invocations=3 timed_reset=TRUNCATE
+BENCH_SETUP group=producer-identity scenario=deterministic-single-tx-per-event-1000 checkpoint=before-warm-up warm-up invocations=3 timed_reset=TRUNCATE

@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Benchmark release gates require isolated fixed workloads and attributed baselines
 description: Release benchmark evidence uses isolated fixtures, fixed measured work, explicit growth bounds and reproducible baselines whose changes have attributed causes.
-timestamp: 2026-10-25T07:40:00Z
+timestamp: 2026-10-25T08:07:52Z
 docId: ADR-58
 status: Accepted
 date: 2026-10-21
@@ -73,8 +73,10 @@ allowance.
 
 Plan 316 owns this policy and its red/green release-gate demonstrations. Plan 321 owns fixture
 isolation and fixed-workload evidence. Plan 315 owns attribution, recording and threshold evidence.
-This is an accepted design; the runner is present, but remaining plan checkboxes and benchmark
-acceptance are open. This ADR is not a claim of completed measurements or green release status.
+Fixture acceptance is demonstrated at `ee2f2667`: three alternating filtered/full pairs,
+all 96 names, actual stored counts, fixed rebuild inputs, settled reset probes and five-block
+growth evidence are retained. Baseline/producer attribution and the passing release gate remain
+open in plans 315/316; fixture acceptance alone is not green release status.
 
 ## Consequences
 
@@ -89,7 +91,7 @@ Timing-sensitive release evidence is run on a quiet machine independently of dev
 - [Plan 315](../plans/315-attribute-the-command-path-append-slowdown-and-restore-trustworthy-benchmark-guards.md).
 - [Plan 316](../plans/316-run-the-benchmark-regression-guards-in-the-release-gate.md).
 - [Plan 321](../plans/321-isolate-the-keiro-bench-harness-so-each-guard-measures-only-its-own-fixture.md).
-- [Harness diagnostics](../../keiro/bench/results/harness-isolation-v1/README.md) retain actual counts, prepared plans, rejected order samples and the adjacent-control investigation; final paired acceptance remains open.
+- [Harness diagnostics](../../keiro/bench/results/harness-isolation-v1/README.md) retain accepted actual counts, prepared plans, growth spreads, settled checkpoint boundaries and three alternating pairs; rejected cohorts remain separate.
 - [Refusing gate](../../keiro/bench/results/release-gates/README.md) records correctness success and all-guard continuation; passing release acceptance remains open.
 - [ADR-42](0042-producer-outbox-identity-is-a-versioned-source-event-contract.md).
 - [ADR-48](0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md).

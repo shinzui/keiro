@@ -1,0 +1,40 @@
+| Command row | filtered means ±2σ (us) | full means ±2σ (us) | median absolute paired difference |
+|---|---|---|---|
+| control.accepted-1 | 149.3 ±13.1, 154.6 ±13.9, 158.2 ±14.0 | 145.7 ±13.6, 145.5 ±8.9, 146.2 ±13.5 | 5.90% |
+| domain-warmup.accepted-1 | 149.6 ±14.1, 154.1 ±13.5, 149.1 ±13.5 | 144.1 ±13.4, 147.5 ±13.6, 144.1 ±7.3 | 3.69% |
+| domain.accepted-1 | 156.9 ±6.9, 148.2 ±7.4, 149.2 ±14.1 | 147.4 ±10.0, 144.4 ±14.2, 143.8 ±13.2 | 3.62% |
+| domain.accepted-large | 1536.7 ±28.7, 1502.4 ±131.5, 1516.8 ±144.4 | 1537.1 ±128.0, 1563.1 ±118.6, 1527.9 ±112.2 | 0.73% |
+| domain.no-op | 16.4 ±1.5, 15.5 ±0.9, 16.2 ±1.1 | 15.0 ±0.8, 15.4 ±1.2, 16.6 ±1.2 | 2.49% |
+| domain.process-manager-fanout.10 | 2160.3 ±105.1, 2103.2 ±115.8, 2076.7 ±113.5 | 2084.4 ±121.4, 2099.4 ±87.6, 2128.2 ±174.3 | 2.48% |
+| domain.process-manager-fanout.100 | 20478.7 ±1555.5, 20531.8 ±1797.6, 20310.6 ±1959.6 | 23105.0 ±6522.3, 20086.4 ±1685.5, 20152.5 ±1953.7 | 2.17% |
+| domain.process-manager-fanout.1000 | 201559.4 ±19327.2, 209888.9 ±14086.3, 202561.8 ±14212.0 | 206475.0 ±14724.5, 205294.6 ±18465.7, 207977.3 ±17715.9 | 2.44% |
+| domain.rejected | 16.3 ±1.2, 15.5 ±1.1, 16.2 ±0.9 | 16.2 ±1.0, 16.3 ±0.9, 16.5 ±0.9 | 1.60% |
+| domain.router-fanout.10 | 2187.0 ±145.2, 2141.3 ±124.5, 2156.3 ±164.2 | 2193.7 ±172.9, 2171.0 ±168.9, 2184.8 ±211.4 | 1.33% |
+| domain.router-fanout.100 | 21590.3 ±1793.6, 22225.0 ±1864.1, 21563.6 ±1806.5 | 21198.0 ±1770.7, 21440.9 ±1739.6, 23194.3 ±2732.7 | 3.53% |
+| domain.router-fanout.1000 | 211292.4 ±14153.0, 214690.7 ±13501.8, 224171.6 ±22031.1 | 225725.1 ±15191.0, 211661.1 ±19385.4, 210664.5 ±14521.0 | 6.03% |
+| legacy.accepted-1 | 155.1 ±5.4, 154.5 ±11.9, 150.0 ±11.3 | 145.6 ±13.9, 146.7 ±14.0, 142.4 ±6.6 | 5.06% |
+| legacy.accepted-large | 1508.4 ±149.3, 1509.9 ±104.9, 1520.4 ±131.3 | 1523.9 ±113.9, 1578.6 ±115.5, 1572.7 ±131.1 | 3.44% |
+| legacy.no-op | 16.3 ±1.0, 15.4 ±0.8, 16.2 ±0.9 | 16.4 ±1.3, 16.2 ±1.1, 15.3 ±0.9 | 5.06% |
+PAIR_ACCEPTED=true
+INBOX_TWIN pair=1 scenario=All.inbox.downstream.delegated-batch-100.fresh.metrics-off difference=0.90%
+INBOX_TWIN pair=1 scenario=All.inbox.downstream.delegated-batch-1000.fresh.metrics-off difference=2.57%
+INBOX_TWIN pair=1 scenario=All.inbox.downstream.delegated-direct-single.fresh.metrics-off difference=1.60%
+INBOX_TWIN pair=1 scenario=All.inbox.downstream.delegated-single.fresh.metrics-off difference=2.74%
+INBOX_TWIN pair=1 scenario=All.inbox.downstream.table-downstream-batch-100.fresh.metrics-off difference=0.80%
+INBOX_TWIN pair=1 scenario=All.inbox.downstream.table-downstream-batch-1000.fresh.metrics-off difference=0.87%
+INBOX_TWIN pair=1 scenario=All.inbox.downstream.table-downstream-single.fresh.metrics-off difference=0.25%
+INBOX_TWIN pair=2 scenario=All.inbox.downstream.delegated-batch-100.fresh.metrics-off difference=4.29%
+INBOX_TWIN pair=2 scenario=All.inbox.downstream.delegated-batch-1000.fresh.metrics-off difference=1.30%
+INBOX_TWIN pair=2 scenario=All.inbox.downstream.delegated-direct-single.fresh.metrics-off difference=1.51%
+INBOX_TWIN pair=2 scenario=All.inbox.downstream.delegated-single.fresh.metrics-off difference=4.42%
+INBOX_TWIN pair=2 scenario=All.inbox.downstream.table-downstream-batch-100.fresh.metrics-off difference=0.58%
+INBOX_TWIN pair=2 scenario=All.inbox.downstream.table-downstream-batch-1000.fresh.metrics-off difference=0.30%
+INBOX_TWIN pair=2 scenario=All.inbox.downstream.table-downstream-single.fresh.metrics-off difference=4.03%
+INBOX_TWIN pair=3 scenario=All.inbox.downstream.delegated-batch-100.fresh.metrics-off difference=0.49%
+INBOX_TWIN pair=3 scenario=All.inbox.downstream.delegated-batch-1000.fresh.metrics-off difference=1.60%
+INBOX_TWIN pair=3 scenario=All.inbox.downstream.delegated-direct-single.fresh.metrics-off difference=1.65%
+INBOX_TWIN pair=3 scenario=All.inbox.downstream.delegated-single.fresh.metrics-off difference=0.87%
+INBOX_TWIN pair=3 scenario=All.inbox.downstream.table-downstream-batch-100.fresh.metrics-off difference=0.78%
+INBOX_TWIN pair=3 scenario=All.inbox.downstream.table-downstream-batch-1000.fresh.metrics-off difference=0.16%
+INBOX_TWIN pair=3 scenario=All.inbox.downstream.table-downstream-single.fresh.metrics-off difference=1.96%
+HARNESS_TIMING_ACCEPTED=true

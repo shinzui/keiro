@@ -1,8 +1,20 @@
 # Harness isolation evidence
 
-Work in progress for [plan 321](../../../../docs/plans/321-isolate-the-keiro-bench-harness-so-each-guard-measures-only-its-own-fixture.md).
-No baseline or producer threshold is changed here. Exploratory logs below precede
-acceptance and must not be represented as passing baseline measurements.
+Accepted harness for [plan 321](../../../../docs/plans/321-isolate-the-keiro-bench-harness-so-each-guard-measures-only-its-own-fixture.md).
+No baseline or producer threshold changed in plan 321. The accepted source is `ee2f2667`;
+`paired-environment.txt` records the exact environment and `paired-binary.txt` the executable
+identity. All six processes pass: each filtered selection has 15 rows and each full selection
+96 rows. All command median absolute paired differences are at most 6.03%, every fresh
+inbox metrics twin at most 4.42%, and silent rows below 17 us. `paired-summary.txt` includes
+each mean and two-standard-deviation spread. `growth-summary.txt` passes five-block early/late
+comparisons at 3,005,000 seed events (1.65% fresh / 4.67% no-op differences).
+
+Run the retained `analyze-pairs.py` and `analyze-growth.py` inside `nix develop` to verify
+these committed inputs. Recording scripts protect existing output names; use new names/directories
+for a fresh cohort. Selected setup uses checkpoint barriers before final warm-up; measurement
+keeps all probes disabled. The source and settings below document that boundary. Plan 315
+owns subsequent baseline/producer policy evidence. Earlier logs below are historical diagnostics
+and must not be represented as baseline recordings.
 
 `list-tests.log` lists every name in all five committed CSVs and contains no
 `BENCH_SETUP` events. `rebuild-probe.log` reports six successive rebuilds of exactly
@@ -20,7 +32,7 @@ read belongs to `mori://shinzui/kiroku/packages/kiroku-store`.
 
 The no-op probe means are 25.7 us empty, 171.7 us at 5,000 before ANALYZE, 27.6 us
 after ANALYZE, and 21.2 us at 10,000. These explain the direction of the smoke drift;
-final growth and paired-run evidence is still required.
+the final five-block and paired evidence above supplies acceptance.
 
 The harness now seeds 5,000 unrelated singleton streams and ANALYZEs streams,
 stream_events and events once in selected command-group setup, before any timed
@@ -103,12 +115,12 @@ No serving SQL, baseline, or ratio ceiling changes in this step.
 `record-pairs.sh` runs the three alternating serial pairs inside `nix develop`, refuses to
 overwrite existing CSVs, and separates setup traces. `analyze-pairs.py` checks complete
 command names, median absolute paired differences, no-op/rejected latency, monotone fan-out
-and fresh inbox metrics twins. The replacement pairs and extended growth probe remain open.
+and fresh inbox metrics twins. The final replacement pairs and extended growth probe are accepted above.
 
 
 `command-growth-durable-3m.*` runs the unchanged growth driver at `3eca8197` through
 3,005,000 seed events (diagnostic events are additional). The late fresh/no-op means are
-172.6/24.8 us with indexed lookup. These are single 100-operation blocks; the next driver
+172.6/24.8 us with indexed lookup. These are single 100-operation blocks; the accepted later driver
 records five blocks at each checkpoint to retain spread rather than infer stationarity
 from one point.
 
@@ -121,7 +133,7 @@ sequential tripwire unchanged. `projection-adjacent.*` retains the instrumented 
 `projection-adjacent-source.patch` identifies its exact source against `3eca8197`.
 All 12 cases pass, with actual prepared group/stream plans after each case. A separate
 `projection-adjacent-timed.*` run disables plan/count probes. No CSV baseline or producer
-ceiling has changed. Final alternating command pairs remain required.
+ceiling has changed. Final alternating command pairs are retained and accepted above.
 
 
 The three alternating pairs at `cfc57046` are preserved in `attempt-2/`. Every command
@@ -155,4 +167,4 @@ producer/1,000; DELETE medians are 0.323/0.324/0.213 ms. Both leave zero live ro
 TRUNCATE supplies a fresh physical fixture boundary, while DELETE retains allocated pages.
 The common additive reset is reported separately and does not cancel from a ratio.
 `checkpoint-list-tests.*` lists the same 96 names with no workload setup. Final unprobed
-pairs remain open. No baseline or ceiling has moved.
+pairs pass as summarized above. No baseline or ceiling moved in this plan.
