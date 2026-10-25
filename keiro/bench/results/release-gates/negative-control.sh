@@ -10,7 +10,7 @@ target=keiro/bench/baseline-command.csv
 for artifact in negative-control.txt negative-control.patch negative-control-source.txt; do
   if [ -e "$folder/$artifact" ]; then echo "Refusing to overwrite $artifact" >&2; exit 2; fi
 done
-backup="$(mktemp -t keiro-release-command-baseline)"
+backup="$(mktemp -t keiro-release-command-baseline.XXXXXX)"
 cp "$target" "$backup"
 restore_baseline() {
   cp "$backup" "$target"

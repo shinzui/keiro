@@ -7,7 +7,7 @@ git diff --cached --quiet
 folder="$PWD/keiro/bench/results/producer-attribution-v2"
 target=keiro/bench/ProducerIdentityBench.hs
 if [ -e "$folder/negative-control.txt" ]; then echo 'Refusing to overwrite negative control' >&2; exit 2; fi
-backup="$(mktemp -t keiro-producer-negative-control)"
+backup="$(mktemp -t keiro-producer-negative-control.XXXXXX)"
 cp "$target" "$backup"
 restore_source() {
   cp "$backup" "$target"
