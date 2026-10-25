@@ -2,7 +2,7 @@
 type: Runbook
 title: Operations
 description: Deploy and operate Keiro applications, workers, rebuilds, retries, and production checks.
-timestamp: 2026-10-21T03:23:25Z
+timestamp: 2026-10-25T05:14:38Z
 docId: DOC-15
 tags: [keiro, operations, deployment, runbook]
 generated:
@@ -144,7 +144,9 @@ keiro-ops pgmq dlq archive --queue billing --limit 100
 keiro-ops pgmq dlq purge --queue billing
 ```
 
-`read` is read-only and decodes visible entries; `--json` includes the
+`read` reserves visible entries for 30 seconds and changes read counts; it is a
+mutation and needs `--force` to execute. Without force it previews queue depth
+and exits 1. `--json` includes the
 preserved `original_headers`. `redrive`, `archive`, and `purge` are mutations: without
 `--force` they preview the affected depth and print the `--force`
 reinvocation. Reading, redriving, and count-based archiving hide each

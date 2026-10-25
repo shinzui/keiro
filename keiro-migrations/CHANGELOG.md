@@ -6,19 +6,7 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## [Unreleased]
 
-### Other Changes
-
-- Keep workflow classification and browsing on the read side. No inspection-specific generated column, index, or migration changes ordinary writer work.
-
-### Performance
-
-- Compare live schema observations in PostgreSQL and return differences only,
-  retaining per-call verification, registry permissions, and drift diagnostics.
-
 ### New Features
-
-
-### Added
 
 - Export verifyExpectedSchemaSession for fail-closed verification on an existing pool, preserving managed-object handling.
 
@@ -26,6 +14,14 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 - Preserve multiline generated/default expressions in schema fingerprints so
   pooled and full-snapshot comparisons agree.
+
+### Other Changes
+
+- Keep workflow classification and browsing on the read side. No inspection-specific generated column, index, or migration changes ordinary writer work.
+
+
+- Compare live schema observations in PostgreSQL and return differences only,
+  retaining per-call verification, registry permissions, and drift diagnostics.
 
 ## 0.21.0.0 — 2026-10-14
 

@@ -6,6 +6,14 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Direct `RunCommandOptions` records must supply `inspectionProvenance`; updates of `defaultRunCommandOptions` retain the disabled policy. Direct `AppHooks` records must supply `aggregates` and `processManagers`; `emptyAppHooks` leaves both unmounted.
+- `OpsOutcome` adds `InspectionFailed`, requiring exhaustive matches in embedders to handle structured inspection failures. `wf show`, `wf steps` and `wf journal` now use it for typed inspection errors.
+- Direct `InspectionLimits` records must supply `deliveryDeadlineSeconds` (default 30). Direct `ProcessManagerInspector` records must supply `provenanceMode`.
+
+### New Features
+
 - Compose allocated inspection applications under stable `/keiro`, `/kiroku`,
   `/shibuya` and `/pgmq` prefixes with preserved raw paths, shared CORS policy
   and a flag-guarded example using released Kiroku metrics.
@@ -25,11 +33,25 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   pending-timer pages with filter-bound cursors, and database-clock shard
   ownership/listing. Reads add no worker queries, polling tasks or migrations.
   Embedded `pm show/list` uses the additive `AppHooks.processManagers` field;
-  direct record constructors must supply it, while `emptyAppHooks` leaves it off.
+  `emptyAppHooks` leaves this optional catalog off.
 
-### Other Changes
 
-- Keep workflow classification and browsing on the read side. No inspection-specific generated column, index, or migration changes ordinary writer work.
+- Explicit, bounded legacy manager provenance through
+  `RunCommandOptions.inspectionProvenance` (default `NoInspectionProvenance`).
+  Capture records intended source/target evidence under `keiro.pm`, capped at
+  64 targets, 64 timer ids and 16 KiB, with an explicit truncation marker.
+  Existing updates of defaultRunCommandOptions remain disabled.
+
+- Application-owned aggregate inspection catalogs, source-reporting hydration, bounded aggregate pages and embedded read-only ops commands.
+
+- Add bounded workflow pages and `wf inspect`, canonical status classes, and the shared cursor codec.
+- Add `keiro-ops-http`, an opt-in HTTP transport with bounded inspection, per-request schema verification, and preview/confirm mutations.
+
+
+- `reactiveProcessManagerInspector` mounts reaction state, live input candidates and timers through the existing `pm show/list` commands. Modern reaction provenance is explicitly unavailable; `legacy-positional-v1` capture remains positional-only and that legacy API retires with Languages 1–5 before 1.0.
+- `wf list/show` JSON adds `status_class`; `wf steps` entries add `recorded_at`. `wf show` orders awakeables by `(created_at, awakeable_id)` and children by `(created_at, child_id, child_name)` from their owning tables.
+- `shard status` adds `observed_at`, `heartbeat_at`, `updated_at` and `lease_age_seconds` from database-clock observations.
+- `Keiro.Migrations.SchemaCheck.verifyExpectedSchemaSession` enables fail-closed verification on an existing inspection pool.
 
 ### Bug Fixes
 
@@ -39,26 +61,25 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 - Fail oversized workflow continuations explicitly instead of returning a cursor
   that the next request cannot decode.
 
-### Performance
+
+- `pgmq dlq read` reserves messages for 30 seconds. It previews and exits 1 without `--force`; HTTP uses POST and explicit JSON confirmation.
+- Default workflow inspection follows `(workflow_id, workflow_name)` with `wf-key2` cursors, rejecting old default tokens and removing the obsolete wide-key split/refusal. Legacy listing and creation-order cursors retain their contracts. Sparse/absent filters and creation sorting still require host deadlines and measured cadence.
+- HTTP mutations reject foreign/malformed/multiple origins with 403 `origin_not_allowed` before body reads, and nonempty non-JSON confirmations with 415 `unsupported_media_type`. HTTP, CORS and sockets share normalized scheme/host/effective-port comparisons; TLS proxies explicitly allow-list the public HTTPS origin.
+- Delivery expiry terminates an incomplete response and returns shared admission without a second response. Health recovers after cancellation. Feeds retain fresh schema checks and clock-bearing snapshots; retiring views return `view_retiring` until cleanup joins.
+
+### Other Changes
+
+- Keep workflow classification and browsing on the read side. No inspection-specific generated column, index, or migration changes ordinary writer work.
+
 
 - Bound workflow header presentation reuse while checking the complete current row and live schema on every request.
 
 - Compare live schema observations in PostgreSQL, bound pure read parsing reuse,
   and reuse request threads for inspection deadlines.
 
-### New Features
 
-- Explicit, bounded legacy manager provenance through
-  `RunCommandOptions.inspectionProvenance` (default `NoInspectionProvenance`).
-  Capture records intended source/target evidence under `keiro.pm`, capped at
-  64 targets, 64 timer ids and 16 KiB, with an explicit truncation marker.
-  Direct RunCommandOptions record constructors must supply the new field;
-  existing updates of defaultRunCommandOptions remain disabled.
-
-- Application-owned aggregate inspection catalogs, source-reporting hydration, bounded aggregate pages and embedded read-only ops commands.
-
-- Add bounded workflow pages and `wf inspect`, canonical status classes, and the shared cursor codec.
-- Add `keiro-ops-http`, an opt-in HTTP transport with bounded inspection, per-request schema verification, and preview/confirm mutations.
+- `just release-gate` runs correctness and all six benchmark guards with retained per-guard statuses. Benchmark setup is selected and isolated, sources are fixed, and durable PostgreSQL settings are explicit; replacement baselines require attributed recording evidence.
+- The 0.21.0.0 DSL upgrade guidance now describes all regenerated behavior contracts and previously omitted API changes; see the Unreleased erratum in `keiro-dsl/CHANGELOG.md`.
 
 ## 0.21.0.0 — 2026-10-14
 

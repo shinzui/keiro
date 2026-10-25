@@ -1,7 +1,7 @@
 ---
 type: Reference
 title: API Reference
-timestamp: 2026-10-21T03:57:45Z
+timestamp: 2026-10-25T05:14:38Z
 description: Map Keiro's public modules and their user-facing interfaces.
 docId: DOC-2
 tags: [keiro, api, modules, reference]
@@ -1180,7 +1180,16 @@ child and awakeable pages. `Keiro.Inspection.Aggregate` reads application-descri
 state and snapshot health. `Keiro.ProcessManager.Inspect` supplies manager
 state, live input candidates and optional legacy provenance. Capture is explicit
 through `RunCommandOptions.inspectionProvenance`; the default preserves the
-ordinary metadata path. Modern reaction provenance remains unavailable.
+ordinary metadata path. `processManagerInspector` and
+`domainProcessManagerInspector` cover legacy positional managers;
+`reactiveProcessManagerInspector` supplies reaction state, live input candidates
+and pending timers through the same command catalog. Direct inspector records
+require `provenanceMode`: legacy helpers use `ReadLegacyProvenance` and reaction
+helpers use `NoReactionProvenance`, with no legacy metadata decode or evidence
+probes. Legacy retirement alongside Languages 1–5 is scheduled before 1.0 under
+[ADR-49](../adr/0049-language-6-is-the-sole-pre-1-0-coverage-and-data-support-baseline.md).
+The capture family is `legacy-positional-v1` and is legacy-only independently of
+constructor coverage. Modern reaction provenance remains unavailable.
 
 `Keiro.Timer` supplies pending-timer pages; `Keiro.ReadModel.Rebuild` supplies
 bounded projection-group status pages. Shard observations report lease state

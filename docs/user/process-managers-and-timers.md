@@ -2,7 +2,7 @@
 type: Explanation
 title: Process Managers And Timers
 description: Explain event-sourced coordination, deterministic command IDs, and durable timer workers.
-timestamp: 2026-10-25T04:48:05Z
+timestamp: 2026-10-25T05:14:38Z
 docId: DOC-17
 tags: [keiro, process-managers, timers, coordination]
 generated:
@@ -464,6 +464,16 @@ ID-only API signatures remain source-compatible.
 `ProcessManagerInspector`. `processManagerInspector` and
 `domainProcessManagerInspector` supply labels and candidate live input shapes for
 `HsPred` machines; the application supplies a category and display encoder.
+`reactiveProcessManagerInspector` adapts a reaction manager's `sagaHandler`,
+name and stream mapping for the same `pm show/list` catalog. The two original
+constructors inspect the legacy positional manager API, which is scheduled for
+retirement alongside Languages 1–5 before 1.0; see
+[ADR-49](../adr/0049-language-6-is-the-sole-pre-1-0-coverage-and-data-support-baseline.md).
+Direct `ProcessManagerInspector` records must supply `provenanceMode`. Legacy
+helpers select `ReadLegacyProvenance`; the reaction helper selects
+`NoReactionProvenance`, ignoring legacy-looking metadata and doing no source or
+target evidence lookups. It reports `provenance_status: "unavailable"` with null
+provenance. The last persisted saga event can precede a silent delivery.
 Custom membership mappings must round-trip through `streamFor` and the event
 stream's name resolver. Mount the catalog in `AppHooks.processManagers` to expose
 `pm show` and `pm list` through the embedded console and inspection HTTP app.
@@ -477,7 +487,8 @@ one cross-stream snapshot. Deleted journals return lifecycle metadata and null
 state. `waiting_for` lists candidate live input shapes; it does not evaluate
 command guards or promise a future reaction.
 
-Legacy reactions record intended dispatches only when the application explicitly
+Only legacy positional reactions record the `legacy-positional-v1` intended
+dispatch evidence, and only when the application explicitly
 sets `inspectionProvenance = CaptureInspectionProvenance` in command options.
 The default is `NoInspectionProvenance`, independently of whether inspection is
 mounted. Capture preserves caller metadata validation and deterministic ids,

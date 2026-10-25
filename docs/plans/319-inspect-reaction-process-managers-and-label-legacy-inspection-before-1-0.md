@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-21T13:49:51Z
       mode: "update"
       note: "Replace unsupported derived witnesses with explicit unavailable provenance; define descriptor mode and early labelling gate."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T04:57:06Z
+      mode: "implement"
+      note: "Complete legacy labelling before reaction state-inspector implementation."
 ---
 
 # Inspect reaction process managers and label legacy inspection before 1.0
@@ -49,20 +54,27 @@ following release, but remain required to complete this child and MasterPlan 46.
 ## Progress
 
 
-- [ ] M1: `reactiveProcessManagerInspector` adapts the reaction manager's `sagaHandler` event
-      stream, name and `streamFor`. Library tests prove state, input candidates and timers;
-      an embedded ops test registers it and exercises `pm show`/`pm list`.
-- [ ] M2: Reaction inspection reports `provenance_status: "unavailable"` and null provenance
-      for persisted saga events, without legacy-family decoding or inferred target probes.
-      Tests cover input-dependent/repeated targets, multi-event acceptance and silent reactions.
-- [ ] M3: Legacy-only capture/constructor wording is present in the manager and API guides,
-      and changelog wording is handed to plan 320. Run this milestone before M1/M2 so release
-      labelling does not wait for the optional-for-this-tag extension.
+- [x] M1 (2026-10-25): `reactiveProcessManagerInspector` adapts saga handler/name/stream
+      mapping. Library state/version/candidate/timer/list/deletion checks pass; a handwritten
+      ops fixture mounts it through AppHooks and executes both `pm show` and `pm list`.
+- [x] M2 (2026-10-25): Explicit `NoReactionProvenance` branches before legacy metadata
+      decoding and evidence probes. Multi-event acceptance, repeated input-selected targets,
+      silent/no-advance delivery and valid-looking legacy metadata retain unavailable/null
+      provenance. Existing legacy capture tests pass: 46 library and 54 ops examples.
+- [x] M3 (2026-10-25): Manager/API guides label existing constructors and
+      `legacy-positional-v1` capture as positional-only, with ADR-49 retirement wording.
+      Strict user/guide validation passes. Plan 320 consumes this wording; capture remains
+      legacy-only when the state extension lands.
 
-No implementation milestone is completed by this plan revision.
+M3 was accepted before beginning M1/M2.
 
 
 ## Surprises & Discoveries
+
+The handwritten ops fixture adds a test-only dependency on
+`mori://shinzui/keiki/packages/keiki`. Its local source was discovered through Mori;
+the official registry and upstream v0.9.1.0 tag were verified before selecting
+the tested `>=0.9.1 && <0.10` bound. It imports no DSL-generated test component.
 
 
 The proposed derived-witness design cannot recover its inputs. `ReactiveProcessManager.react`
@@ -101,7 +113,18 @@ milestone and package test boundaries concrete.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Both manager APIs now use the same owner-read/catalog/command path for state, candidate
+inputs, pending timers and bounded raw journal listing. The reaction descriptor exposes the
+last persisted event at the hydrated version, with explicitly unavailable provenance. It
+never decodes a legacy frame or infers source/targets from deterministic UUIDs. Legacy helpers
+retain bounded opt-in positional provenance.
+
+M3 was accepted first, independently of the extension. The extension then passed 46 library
+and 54 ops examples, including a handwritten reaction producer consumed by pm show/list.
+Direct inspector records require provenanceMode. ADR-55 retains that durable distinction and
+its evidence limits; API/manager guides and plan 320 describe accepted constructor coverage.
+No reaction write, dispatch identity, timer worker, schema or metadata capture path changed.
+
 
 
 ## Context and Orientation

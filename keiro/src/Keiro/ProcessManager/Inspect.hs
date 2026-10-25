@@ -9,6 +9,8 @@ module Keiro.ProcessManager.Inspect
     ProcessManagerInspectors,
     processManagerInspector,
     domainProcessManagerInspector,
+    reactiveProcessManagerInspector,
+    ProcessManagerProvenanceMode (..),
     EnabledInput (..),
     ReactionProvenance (..),
     encodeReactionProvenance,
@@ -52,11 +54,17 @@ import Keiro.Inspection.Cursor
 import Keiro.Prelude hiding ((.=))
 import Keiro.ProcessManager (DomainProcessManager, ProcessManager, deterministicCommandIdProbes, firstExistingEventId)
 import Keiro.ProcessManager.Provenance
+import Keiro.ProcessManager.Reaction (ReactiveProcessManager)
 import Keiro.Stream (Stream, StreamCategory, categoryName, categoryText)
 import Keiro.Timer
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Read (getStream, listStreams, lookupStreamName, readStreamForward)
 import Kiroku.Store.Types hiding (categoryName)
+
+-- | Select the persisted evidence family explicitly; state inspection alone
+-- does not authorize interpreting legacy metadata as modern reaction evidence.
+data ProcessManagerProvenanceMode = ReadLegacyProvenance | NoReactionProvenance
+  deriving stock (Generic, Eq, Show)
 
 -- | Encoders and membership mappings belong to the application. A custom
 -- mapping must round-trip through streamFor and resolveStreamName.
@@ -68,15 +76,16 @@ data ProcessManagerInspector phi rs s ci co = ProcessManagerInspector
     correlationOf :: !(StreamName -> Maybe Text),
     displayState :: !(s -> RegFile rs -> Value),
     stateLabel :: !(s -> Text),
-    enabledInputs :: !(s -> [EnabledInput])
+    enabledInputs :: !(s -> [EnabledInput]),
+    provenanceMode :: !ProcessManagerProvenanceMode
   }
   deriving stock (Generic)
 
 data EnabledInput = EnabledInput {input :: !(Maybe Text), targetState :: !Text}
   deriving stock (Generic, Eq, Show)
 
-mkInspector :: (Show s) => Text -> ValidatedEventStream (HsPred rs ci) rs s ci co -> (Text -> Stream (EventStream (HsPred rs ci) rs s ci co)) -> StreamCategory (EventStream (HsPred rs ci) rs s ci co) -> (s -> RegFile rs -> Value) -> ProcessManagerInspector (HsPred rs ci) rs s ci co
-mkInspector name definition streamFor category displayState =
+mkInspector :: (Show s) => ProcessManagerProvenanceMode -> Text -> ValidatedEventStream (HsPred rs ci) rs s ci co -> (Text -> Stream (EventStream (HsPred rs ci) rs s ci co)) -> StreamCategory (EventStream (HsPred rs ci) rs s ci co) -> (s -> RegFile rs -> Value) -> ProcessManagerInspector (HsPred rs ci) rs s ci co
+mkInspector provenanceMode name definition streamFor category displayState =
   ProcessManagerInspector
     name
     definition
@@ -91,12 +100,18 @@ mkInspector name definition streamFor category displayState =
           Keiki.mode edge == Keiki.Live
         ]
     )
+    provenanceMode
 
 processManagerInspector :: (Show s) => ProcessManager input (HsPred rs ci) rs s ci co tPhi tRs tS tCi tCo -> StreamCategory (EventStream (HsPred rs ci) rs s ci co) -> (s -> RegFile rs -> Value) -> ProcessManagerInspector (HsPred rs ci) rs s ci co
-processManagerInspector manager = mkInspector (manager ^. #name) (manager ^. #eventStream) (manager ^. #streamFor)
+processManagerInspector manager = mkInspector ReadLegacyProvenance (manager ^. #name) (manager ^. #eventStream) (manager ^. #streamFor)
 
 domainProcessManagerInspector :: (Show s) => DomainProcessManager input (HsPred rs ci) rs s ci co tPhi tRs tS tCi tCo rej noOp -> StreamCategory (EventStream (HsPred rs ci) rs s ci co) -> (s -> RegFile rs -> Value) -> ProcessManagerInspector (HsPred rs ci) rs s ci co
-domainProcessManagerInspector manager = mkInspector (manager ^. #name) (manager ^. #eventStream) (manager ^. #streamFor)
+domainProcessManagerInspector manager = mkInspector ReadLegacyProvenance (manager ^. #name) (manager ^. #eventStream) (manager ^. #streamFor)
+
+-- | State inspection for the surviving reaction API. Persisted events do not
+-- retain enough input/source information to infer modern dispatch provenance.
+reactiveProcessManagerInspector :: (Show s) => ReactiveProcessManager input (HsPred rs ci) rs s ci co tPhi tRs tS tCi tCo rej noOp -> StreamCategory (EventStream (HsPred rs ci) rs s ci co) -> (s -> RegFile rs -> Value) -> ProcessManagerInspector (HsPred rs ci) rs s ci co
+reactiveProcessManagerInspector manager = mkInspector NoReactionProvenance (manager ^. #name) (manager ^. #sagaHandler . #eventStream) (manager ^. #streamFor)
 
 data SomeProcessManagerInspector where
   SomeProcessManagerInspector :: (BoolAlg phi (RegFile rs, ci), Eq co) => ProcessManagerInspector phi rs s ci co -> SomeProcessManagerInspector
@@ -205,7 +220,10 @@ inspectProcessManagerInstance inspector request correlation
     streamName = physicalName inspector correlation
     timerFilter = PendingTimerFilter (Just inspector.name) (Just correlation)
     timerRequest = PendingTimerPageRequest request.timerPageSize Nothing
-    observeReaction event = do
+    observeReaction event = case inspector.provenanceMode of
+      NoReactionProvenance -> pure (LastReaction event.eventId event.eventType event.streamVersion event.globalPosition event.createdAt Nothing Nothing [])
+      ReadLegacyProvenance -> observeLegacyReaction event
+    observeLegacyReaction event = do
       let provenance = event.metadata >>= (\case Aeson.Object fields -> KeyMap.lookup "keiro.pm" fields; _ -> Nothing) >>= decodeReactionProvenance
       sourceName <- maybe (pure Nothing) (lookupStreamName . (.sourceStreamId)) provenance
       statuses <- maybe (pure []) (\record -> traverse (probe record) record.dispatched) provenance

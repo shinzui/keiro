@@ -5362,6 +5362,61 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       map (^. #correlationId) (second ^. #items) `shouldBe` ["c"]
       second ^. #next `shouldBe` Nothing
 
+    it "inspects modern reaction state without inventing input-dependent dispatch provenance" $ \(storeHandle, StoreRunner runner) -> do
+      let manager = counterReactionManager {Reaction.name = "inspection-reaction", Reaction.streamFor = \cid -> stream ("inspectionreaction-" <> cid)}
+          inspector = PMInspection.reactiveProcessManagerInspector manager (categoryUnsafe "inspectionreaction") (\state _ -> Aeson.toJSON (show state))
+          source = recordedFromEventId (EventId sampleUuid) (CounterAdded 5)
+          target = stream "inspection-target-dependent" :: Stream CounterCommand
+          timer = counterTimerRequest & #processManagerName .~ "inspection-reaction" & #correlationId .~ "one"
+          legacy = PMInspection.ReactionProvenance (source ^. #eventId) (source ^. #globalPosition) (source ^. #originalStreamId) [(0, StreamName "fictional-target")] [] "legacy-positional-v1" False
+          options = defaultRunCommandOptions & #metadata ?~ object ["keiro.pm" Aeson..= PMInspection.encodeReactionProvenance legacy]
+          plan = Reaction.AdvanceReaction (Add 5) [] [Reaction.FollowDispatch (PMCommand target (Add 2)), Reaction.FollowDispatch (PMCommand target (Add 3)), Reaction.FollowSchedule Reaction.Once timer]
+          inspect cid = runner (PMInspection.inspectProcessManagerInstance inspector (PMInspection.InstanceViewRequest 20) cid)
+      Right (Right _) <- runner (Reaction.runReactiveProcessManagerOnce options manager source ("one", plan))
+      Right targetEvents <- runner (Store.readStreamForward (StreamName "inspection-target-dependent") (StreamVersion 0) 10)
+      Vector.length targetEvents `shouldBe` 2
+      Right (Right rebuilt) <- runner (hydrateFull inspectionRunCommandOptions (unvalidated multiCounterEventStream) ((manager ^. #streamFor) "one"))
+      Right (Right (Just view)) <- inspect "one"
+      view ^. #state `shouldBe` Just (Aeson.toJSON (show (rebuilt ^. #state)))
+      view ^. #streamVersion `shouldBe` StreamVersion 2
+      view ^. #waitingFor `shouldSatisfy` (not . null)
+      length (view ^. #pendingTimers . #timers) `shouldBe` 1
+      Just last <- pure (view ^. #lastReaction)
+      last ^. #streamVersion `shouldBe` StreamVersion 2
+      last ^. #provenance `shouldBe` Nothing
+      last ^. #sourceStreamName `shouldBe` Nothing
+      last ^. #dispatchedCommands `shouldBe` []
+      -- Even a valid legacy-looking frame on the latest persisted event is ignored.
+      Right events <- runner (Store.readStreamForward (StreamName "inspectionreaction-one") (StreamVersion 0) 10)
+      (Vector.last events ^. #metadata) `shouldSatisfy` isJust
+      let json = PMInspection.processManagerViewJson view
+      case json of
+        Aeson.Object fields -> case KeyMap.lookup "last_reaction" fields of
+          Just (Aeson.Object reaction) -> do
+            KeyMap.lookup "provenance_status" reaction `shouldBe` Just (Aeson.String "unavailable")
+            KeyMap.lookup "provenance" reaction `shouldBe` Just Aeson.Null
+          other -> expectationFailure (show other)
+        other -> expectationFailure (show other)
+      Right (Right _) <- runner (Reaction.runReactiveProcessManagerOnce defaultRunCommandOptions manager (recordedFromEventId (EventId sampleUuid2) (CounterAdded 1)) ("one", Reaction.NoAdvance []))
+      Right (Right (Just unchanged)) <- inspect "one"
+      unchanged ^. #lastReaction `shouldBe` view ^. #lastReaction
+      Right (Right _) <- runner (Reaction.runReactiveProcessManagerOnce defaultRunCommandOptions manager (recordedFromEventId (EventId sampleUuid3) (CounterAdded 1)) ("two", Reaction.AdvanceReaction (Add 1) [] []))
+      Right (Right page) <- runner (PMInspection.listProcessManagerInstances inspector (PMInspection.InstanceListRequest 1 Nothing))
+      map (^. #correlationId) (page ^. #items) `shouldBe` ["one"]
+      Right (Right next) <- runner (PMInspection.listProcessManagerInstances inspector (PMInspection.InstanceListRequest 1 (page ^. #next)))
+      map (^. #correlationId) (next ^. #items) `shouldBe` ["two"]
+      let silentManager = silentReactionManager {Reaction.name = "inspection-silent", Reaction.streamFor = \cid -> stream ("inspectionsilent-" <> cid)}
+          silentInspector = PMInspection.reactiveProcessManagerInspector silentManager (categoryUnsafe "inspectionsilent") (\state _ -> Aeson.toJSON (show state))
+      Right (Right _) <- runner (Reaction.runReactiveProcessManagerOnce defaultRunCommandOptions silentManager source ("one", Reaction.AdvanceReaction NoOpSilently [] []))
+      Right silent <- runner (PMInspection.inspectProcessManagerInstance silentInspector (PMInspection.InstanceViewRequest 20) "one")
+      silent `shouldBe` Right Nothing
+      Right absent <- inspect "missing"
+      absent `shouldBe` Right Nothing
+      Right _ <- Store.runStoreIO storeHandle (Store.softDeleteStream (StreamName "inspectionreaction-one"))
+      Right (Right (Just deleted)) <- inspect "one"
+      deleted ^. #state `shouldBe` Nothing
+      deleted ^. #lastReaction `shouldBe` Nothing
+
     it "records source provenance for explicit inspection capture" $ \(_, StoreRunner runner) -> do
       let source = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
       let options = defaultRunCommandOptions & #inspectionProvenance .~ CaptureInspectionProvenance & #metadata ?~ Aeson.object ["actor" Aeson..= ("ops" :: Text)]

@@ -6,6 +6,37 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Other Changes
+
+- 0.21.0.0 erratum: regeneration rewrites every generated aggregate
+  `BehaviorContract.hs` (new `behaviorObligationReport` export and
+  `coverageReportFor`), including aggregates without hole-owned initial edges.
+  Harness changes additionally affect Language 2 and later services with
+  hole-owned live initial transitions. Preserve application holes and real
+  history-backed witnesses.
+- The 0.21.0.0 API notes omitted `TypedScalarNode` constructors `TypedMappedLift`
+  and `TypedMappedInitial`; `ExpressionDiagnosticCode` constructors
+  `ScalarMappedLiftUnsupported`, `ScalarMappedLiftProjectionUnsupported`,
+  `ScalarWriteInitialUnsupported`, `ScalarWriteInitialShadowed`;
+  `LanguageFeature` constructors `MappedRegisterConstructionSyntax` and
+  `ContractListFieldSyntax`; and `MappedDeclError.InvalidMappedWriteLift`.
+- `DiagnosticCode` inserted `ContractListFieldUsedAsKey`,
+  `AggregateExpressionMappedLiftUnsupported`,
+  `AggregateExpressionMappedLiftProjectionUnsupported`, `MappedWriteLiftInvalid`,
+  `AggregateExpressionWriteInitialUnsupported`,
+  `AggregateExpressionWriteInitialShadowed`, `MappedWriteLiftChanged` and
+  `MappedWriteLiftFixturesChanged`. Enum/Bounded ordinals after
+  `ContractTypeIdDomainChanged` and `AggGuardRemedyUnavailable` shift.
+- `MappingIdentity` ledger JSON adds optional `writeLift`;
+  `Scaffold.behaviorRequirementsFor` is newly exported and partial;
+  `ScaffoldRun.pureRefusalsForService` adds the
+  `generatedImportResolutionViolations` refusal class. Same-prefix
+  literal-to-declared ID-domain transitions predating `ContractIdDomainTypeIdV7`
+  are reclassified from advisory to breaking. The corrected
+  `0.20.0.0-to-0.21.0.0` upgrade edge lists consumer adaptations.
+
+
+
 ## 0.21.0.0 — 2026-10-14
 
 ### Breaking Changes

@@ -144,8 +144,8 @@ implementation evidence, with contributions from EP-1 and EP-7.
 | 2 | Run the benchmark regression guards in the release gate | docs/plans/316-run-the-benchmark-regression-guards-in-the-release-gate.md | M2 passing run: EP-1 Complete | EP-1 during investigation | In Progress |
 | 3 | Bound the workflow listing cost without the withdrawn inspection indexes | docs/plans/317-bound-the-workflow-listing-cost-without-the-withdrawn-inspection-indexes.md | None | None | Complete |
 | 4 | Harden the HTTP operational surface against cross-site mutations and permit exhaustion | docs/plans/318-harden-the-http-operational-surface-against-cross-site-mutations-and-permit-exhaustion.md | None | None | Complete |
-| 5 | Inspect reaction process managers and label legacy inspection before 1.0 | docs/plans/319-inspect-reaction-process-managers-and-label-legacy-inspection-before-1-0.md | None | None | Not Started |
-| 6 | Reconcile the 0.22.0.0 release surface and the 0.21.0.0 edge with the REV-20 findings | docs/plans/320-reconcile-the-0-22-0-0-release-surface-and-the-0-21-0-0-edge-with-the-rev-20-findings.md | M1/M4 final acceptance: EP-3 Complete, EP-4 Complete, EP-5 M3 | EP-5 M1/M2 | Not Started |
+| 5 | Inspect reaction process managers and label legacy inspection before 1.0 | docs/plans/319-inspect-reaction-process-managers-and-label-legacy-inspection-before-1-0.md | None | None | Complete |
+| 6 | Reconcile the 0.22.0.0 release surface and the 0.21.0.0 edge with the REV-20 findings | docs/plans/320-reconcile-the-0-22-0-0-release-surface-and-the-0-21-0-0-edge-with-the-rev-20-findings.md | M1/M4 final acceptance: EP-3 Complete, EP-4 Complete, EP-5 M3 | EP-5 M1/M2 | Complete |
 | 7 | Isolate the keiro-bench harness so each guard measures only its own fixture | docs/plans/321-isolate-the-keiro-bench-harness-so-each-guard-measures-only-its-own-fixture.md | None | None | In Progress |
 
 EP-1's M3 to M6 (re-recording the baselines and proving the gate green) require EP-7 to be
@@ -255,8 +255,9 @@ ADR and documentation validation passes for both children. EP-7 is In Progress w
 fixtures, fixed 600-event rebuilds and a growth probe through 1.2 million events;
 paired full/filtered measurements and reset/durable-fixture evidence remain open.
 EP-1 M3–M6 wait for EP-7 Complete. EP-2's passing release demonstration still waits
-for EP-1 Complete. EP-5 and EP-6 are Not Started; EP-6 final acceptance requires
-EP-4 Complete and EP-5 M3 in addition to accepted EP-3. No release is authorized by
+for EP-1 Complete. EP-5 and EP-6 are Complete: reaction state inspection passes 46 library and
+54 ops examples, legacy-only capture is explicit, and release/upgrade metadata
+passes scoped history-preserving, blueprint, manifest and documentation checks. No release is authorized by
 this initiative, and all final-candidate/integration gates remain mandatory.
 
 

@@ -59,7 +59,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some ">=2.6 && <2.7"
+              , versionConstraint = Some ">=2.6 && <2.8"
               }
           , Schema.Dependency.WithAugmentation
               { name = "effectful/effectful:effectful-core"
@@ -68,7 +68,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some ">=2.6 && <2.7"
+              , versionConstraint = Some ">=2.6 && <2.7 || >=2.7.1.1 && <2.8"
               }
           , Schema.Dependency.WithAugmentation
               { name = "hasql/hasql:hasql"
@@ -139,7 +139,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some ">=2.6"
+              , versionConstraint = Some ">=2.6 && <2.8"
               }
           , Schema.Dependency.WithAugmentation
               { name = "hasql/hasql:hasql"
@@ -192,7 +192,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some ">=2.6 && <2.7"
+              , versionConstraint = Some ">=2.6 && <2.7 || >=2.7.1.1 && <2.8"
               }
           , Schema.Dependency.WithAugmentation
               { name = "hasql/hasql:hasql"
@@ -399,7 +399,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some ">=2.6 && <2.7"
+              , versionConstraint = Some ">=2.6 && <2.8"
               }
           , Schema.Dependency.WithAugmentation
               { name = "effectful/effectful:effectful-core"
@@ -408,7 +408,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some ">=2.6 && <2.7"
+              , versionConstraint = Some ">=2.6 && <2.7 || >=2.7.1.1 && <2.8"
               }
           , Schema.Dependency.WithAugmentation
               { name = "hasql/hasql:hasql"

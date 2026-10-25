@@ -6,6 +6,13 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Direct `AppHooks` records must supply `aggregates` and `processManagers`; `emptyAppHooks` leaves them disabled. `OpsOutcome` adds `InspectionFailed`, requiring exhaustive consumers to handle structured codes.
+- `wf show/steps/journal` return `InspectionFailed` for typed inspection errors. `pgmq dlq read` requires `--force` to reserve rows; an unforced invocation previews and exits 1.
+
+### New Features
+
 - Add bounded projection-status pages and `projection status`, preserving the
   frozen v1 relation and complete-list compatibility API. Page keys precede
   correlated status reads; no writer index is added. HTTP feed protocol and
@@ -15,9 +22,8 @@ All notable changes to `keiro-ops` are recorded here. The format follows
   pending-timer pages with filter-bound cursors, and database-clock shard
   ownership/listing. Reads add no worker queries, polling tasks or migrations.
   Embedded `pm show/list` uses the additive `AppHooks.processManagers` field;
-  direct record constructors must supply it, while `emptyAppHooks` leaves it off.
+  `emptyAppHooks` leaves this optional catalog off.
 
-### New Features
 
 - An optional `AppHooks.aggregates` catalog mounts read-only `aggregate types|list|show|snapshot` commands. Snapshot show adds `observed_at` and `age_seconds`.
 
@@ -25,13 +31,19 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 - Bounded `wf inspect` commands and typed inspection errors; shared workflow rendering and paged compatibility reads.
 
-### Changed
+
+- Export the authoritative command grammar, classifier, runner, and invocation fields for alternative front ends.
+
+
+- `pm show/list` accepts reaction-state descriptors with explicitly unavailable provenance. Capture and `legacy-positional-v1` remain legacy positional features scheduled for retirement before 1.0.
+- Workflow list/show JSON includes `status_class`; step rows include `recorded_at`. Show uses owner-table creation-key ordering for children and awakeables. Shard status includes database `observed_at`, `heartbeat_at`, `updated_at` and `lease_age_seconds`.
+
+### Bug Fixes
 
 - Treat `pgmq dlq read` as a mutation because it reserves messages for 30 seconds. It now previews by default and requires `--force` to read; the HTTP surface uses POST with explicit confirmation.
 
-### Added
 
-- Export the authoritative command grammar, classifier, runner, and invocation fields for alternative front ends.
+- Default workflow inspection consumes primary-key `wf-key2` pages; old default tokens fail closed and the obsolete exceptional-key refusal is removed. Filtered and creation-order reads retain host deadlines.
 
 ## 0.21.0.0 — 2026-10-14
 

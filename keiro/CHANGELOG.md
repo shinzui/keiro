@@ -6,6 +6,12 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Direct `RunCommandOptions` records must supply `inspectionProvenance`; updates of defaults remain disabled. Direct `ProcessManagerInspector` records must supply `provenanceMode` (`ReadLegacyProvenance` or `NoReactionProvenance`).
+
+### New Features
+
 - Add bounded projection-status pages and `projection status`, preserving the
   frozen v1 relation and complete-list compatibility API. Page keys precede
   correlated status reads; no writer index is added. HTTP feed protocol and
@@ -15,31 +21,35 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   pending-timer pages with filter-bound cursors, and database-clock shard
   ownership/listing. Reads add no worker queries, polling tasks or migrations.
   Embedded `pm show/list` uses the additive `AppHooks.processManagers` field;
-  direct record constructors must supply it, while `emptyAppHooks` leaves it off.
+  `emptyAppHooks` leaves this optional catalog off.
 
-### Other Changes
-
-- Keep workflow classification and browsing on the read side. No inspection-specific generated column, index, or migration changes ordinary writer work.
-
-### Bug Fixes
-
-- Fail oversized workflow continuations explicitly instead of returning a cursor
-  that the next request cannot decode.
-
-### New Features
 
 - Explicit, bounded legacy manager provenance through
   `RunCommandOptions.inspectionProvenance` (default `NoInspectionProvenance`).
   Capture records intended source/target evidence under `keiro.pm`, capped at
   64 targets, 64 timer ids and 16 KiB, with an explicit truncation marker.
-  Direct RunCommandOptions record constructors must supply the new field;
-  existing updates of defaultRunCommandOptions remain disabled.
+  Existing updates of defaultRunCommandOptions remain disabled.
 
 - `Keiro.Inspection.Aggregate` exposes folded aggregate state, snapshot health and cursor pages through explicit application descriptors. `hydrateWithSource` reports the existing hydration algorithm’s source; ordinary hydration constructs no diagnostic result. `observeSnapshotRow` adds a database observation clock without changing runtime snapshot lookup.
 
 - Exact, bounded conditional workflow header sessions and reusable single-SELECT point reads.
 
 - Bounded workflow inspection pages, canonical status classes and JSON, pure validation, and opaque cursors.
+
+
+- `reactiveProcessManagerInspector` adapts `ReactiveProcessManager.sagaHandler` for state, live input candidates, pending timers and journal listing. Persisted reaction events report unavailable/null provenance without interpreting legacy metadata or probing invented targets. Legacy positional capture remains opt-in and scheduled for retirement with Languages 1–5 before 1.0.
+
+### Bug Fixes
+
+- Fail oversized workflow continuations explicitly instead of returning a cursor
+  that the next request cannot decode.
+
+
+- Unfiltered workflow pages range over the existing `(workflow_id, workflow_name)` primary key with `wf-key2` cursors. Remove the withdrawn-index wide split, `InspectionWorkLimitExceeded`, `maxIndexedWorkflowKeyBytes`, `maxWideWorkflowCandidates` and `maxWideWorkflowKeyBytes`. Valid wide keys retain byte-capped continuations. The released legacy listing and `wf-created` contract are unchanged; arbitrary filters retain measured deadlines/cost limits.
+
+### Other Changes
+
+- Keep workflow classification and browsing on the read side. No inspection-specific generated column, index, or migration changes ordinary writer work.
 
 ## 0.21.0.0 — 2026-10-14
 

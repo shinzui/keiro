@@ -75,6 +75,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types
 import Options.Applicative qualified as Optparse
 import Pgmq.Migration qualified as PgmqMigration
+import ReactionInspectionSpec qualified
 import System.Exit (ExitCode (..))
 import System.Process (readProcessWithExitCode)
 import Test.Hspec
@@ -114,6 +115,7 @@ isParseFailure _ = False
 
 spec :: Fixture -> Spec
 spec fixture = do
+  ReactionInspectionSpec.spec fixture
   describe "embedded command tree" do
     it "omits code-dependent commands from the standalone tree" do
       isParseSuccess (parseOps Ops.emptyAppHooks ["pm", "show", "--name", "test", "--correlation", "one"]) `shouldBe` False

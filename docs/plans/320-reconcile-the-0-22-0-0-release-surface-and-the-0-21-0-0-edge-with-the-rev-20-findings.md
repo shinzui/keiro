@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-21T13:49:51Z
       mode: "update"
       note: "Scope heading checks to Unreleased; reconcile owner-authored guides, local manifest bounds and hard release-closure prerequisites."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T05:08:16Z
+      mode: "implement"
+      note: "Reconcile changelogs, dependency metadata, upgrade erratum and reservation wording."
 ---
 
 # Reconcile the 0.22.0.0 release surface and the 0.21.0.0 edge with the REV-20 findings
@@ -47,27 +52,28 @@ Plan 303 then cuts 0.22.0.0 from a reconciled surface.
 
 ## Progress
 
-- [ ] M1: Changelogs are normalized and complete. The `[Unreleased]` sections of
-      `CHANGELOG.md`, `keiro/CHANGELOG.md`, `keiro-migrations/CHANGELOG.md`,
-      `keiro-ops/CHANGELOG.md`, and `keiro-ops-http/CHANGELOG.md` use only `### Breaking
-      Changes`, `### New Features`, `### Bug Fixes`, and `### Other Changes`, carry no bullet
-      outside a heading, and include the entries listed in Context; what plans 317, 318, and
-      319 ship is described as shipped.
-- [ ] M2: The release skill's dependency scan and the registry are correct. The regex in
-      `agents/skills/release/SKILL.md` step 3 matches `keiro-ops` and `keiro-ops-http`, and
-      `mori.dhall`'s `effectful` and `effectful-core` constraints equal the cabal bounds.
-- [ ] M3: The 0.21.0.0 record is corrected. `blueprints/keiro-upgrade/migrations/0.20.0.0-to-0.21.0.0.md`
-      states the real regeneration scope and the API changes; `keiro-dsl/CHANGELOG.md` carries
-      an erratum under `[Unreleased]` for the 0.21.0.0 section; `seihou validate-blueprint
-      blueprints/keiro-upgrade` passes.
-- [ ] M4: User documentation lines are fixed. `docs/user/operations.md` describes `pgmq dlq
-      read` as a reservation that needs `--force`; the workflow/timer guides carry the accepted cost envelopes from plan 317;
-      the manager/API guides carry plan 319 M3 labelling and the actual constructor coverage; `just user-documentation-validate` passes.
+- [x] M1 (2026-10-25): All six Unreleased sections use the four allowed headings,
+      contain the reviewed CLI/JSON/record/API changes and accepted plans 317–319 behavior.
+      The scoped Nix check confirms historical sections are byte-for-byte unchanged.
+- [x] M2 (2026-10-25): Release scanning names both ops packages and includes jitsurei.
+      Seven local effectful records mirror their package Cabal declarations, retaining
+      the disjoint core range and the DSL's intentionally unbounded test dependency.
+      `mori show --full` validates the local manifest.
+- [x] M3 (2026-10-25): The 0.20→0.21 edge and Unreleased DSL erratum describe all behavior
+      contract regeneration and omitted API/refusal/ordinal/ledger changes. Seihou blueprint
+      validation passes without changing the blueprint version or published sections.
+- [x] M4 (2026-10-25): Operations describes DLQ reservation/force behavior. Owner guides
+      reflect accepted workflow envelopes, HTTP delivery/origin policy and reaction state
+      inspection with legacy-only capture. Strict user/guide/ADR checks pass.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+Current Cabal test-support bounds are explicitly `<2.8`, so local metadata mirrors that
+bound. The DSL's bare test-only effectful-core declaration remains `None Text`; copying
+one regular-library range into it would change the recorded dependency contract. The
+release scan must include jitsurei as a search root as well as matching ops names.
+
 
 
 ## Decision Log
@@ -88,7 +94,20 @@ made required inspection fixes explicit final-acceptance prerequisites.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The release surface now describes the working implementation: primary-key browsing,
+HTTP mutation/delivery refusals, fresh feed behavior and accepted reaction state
+inspection with unavailable provenance. Required record fields and OpsOutcome matching
+changes appear under Breaking Changes. DLQ reservation is consistent across CLI, HTTP
+and the reference. Seven local dependency records agree with current Cabal contracts.
+
+Published changelog sections remain byte-for-byte unchanged. The corrected upgrade
+prompt and Unreleased erratum tell consumers that regeneration rewrites every generated
+behavior contract, independently of hole-owned initial transitions, and enumerate the
+previously omitted API changes. Relevant ADR-16/49/53 context remains applicable; this
+is a documentation correction, not a new language or identity policy. No release version,
+tag, upload or deployment was performed. Plan 303 still consumes mandatory benchmark
+completions and final-candidate gates.
+
 
 
 ## Context and Orientation

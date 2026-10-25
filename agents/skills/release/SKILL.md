@@ -165,12 +165,14 @@ Leave `jitsurei` as it is unless you deliberately choose to bump it for
 consistency (it is not published).
 
 #### Internal dependency bounds
-Find every internal dependency first — do not work from a remembered list:
+Find every internal dependency first — do not work from a remembered list.
+`keiro-ops` and `keiro-ops-http` need explicit alternatives: the whole-word
+`keiro` alternative does not match their hyphenated names. Include jitsurei:
 
 ```bash
 rg -n -g '*.cabal' \
-  'keiro-core|keiro-migrations|keiro-pgmq|keiro-test-support|(^|[ ,])keiro([ ,]|$)' \
-  keiro-core keiro keiro-pgmq keiro-migrations keiro-test-support keiro-dsl keiro-ops keiro-ops-http
+  'keiro-core|keiro-migrations|keiro-pgmq|keiro-test-support|keiro-ops-http|keiro-ops|(^|[ ,])keiro([ ,]|$)' \
+  keiro-core keiro keiro-pgmq keiro-migrations keiro-test-support keiro-dsl keiro-ops keiro-ops-http jitsurei
 ```
 
 **Read the matches, do not blind-replace them.** A bulk

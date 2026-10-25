@@ -1,6 +1,8 @@
 # Keiro User Documentation Log
 
 ## 2026-10-25
+* **Update**: Document reaction state inspector modes and correct DLQ reservation/force behavior.
+* **Update**: Label positional manager inspection and legacy-only provenance with the pre-1.0 retirement boundary.
 * **Update**: Clarify timer read cadence and search costs.
 * **Update**: Describe primary-key workflow browsing and filtered read deadlines.
 

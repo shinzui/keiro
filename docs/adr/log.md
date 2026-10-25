@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-25
+* **Update**: Record accepted reaction state inspection with explicit unavailable provenance and no inferred witnesses.
 * **Update**: Record fresh timer resubscription, per-view schema refusal and distinct retirement cleanup behavior.
 * **Update**: Record parsed mutation origins, JSON confirmation and bounded response delivery with Warp cancellation evidence.
 * **Update**: Record accepted v2 unfiltered range evidence and the filtered-work boundary.
