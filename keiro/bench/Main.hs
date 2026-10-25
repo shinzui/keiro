@@ -6,7 +6,7 @@ module Main
   )
 where
 
-import BenchSetup (freshCounter, memoSetup, nextBoundedIteration, nextIteration, selected, selectedCounter, setupTrace)
+import BenchSetup (memoSetup, nextBoundedIteration, nextIteration, selected, selectedCounter, setupTrace)
 import CommandProbe (commandPlanProbe, tableResetProbe)
 import Control.Concurrent (threadDelay)
 import Control.Monad (replicateM_)
@@ -656,13 +656,13 @@ prepareCommandStore store = do
 
 commandScenarioBench :: Store.KirokuStore -> String -> ValidatedBenchEventStream -> Stream BenchEventStream -> BenchCommand -> Benchmark
 commandScenarioBench store benchmarkName validatedStream target command =
-  selectedCounter label units (prepareCommand label units action) $ \counter ->
+  selectedCounter label units (prepareCommand label units (commandBudget command) action) $ \counter ->
     bench benchmarkName $ nfIO (action counter)
   where
     label = show (streamName target) <> "/legacy/" <> benchmarkName
     units = commandUnits command
     action counter = do
-      n <- nextIteration label units counter
+      n <- nextBoundedIteration label (commandBudget command) counter
       let fresh = iterationTarget (tagTarget target "legacy") n
       runStoreChecked store do
         result <- runCommand defaultRunCommandOptions validatedStream fresh command
@@ -672,13 +672,13 @@ commandScenarioBench store benchmarkName validatedStream target command =
 
 domainCommandScenarioBench :: Store.KirokuStore -> String -> DomainCommandHandler (HsPred '[] BenchCommand) '[] BenchState BenchCommand BenchEvent Text Text -> Stream BenchEventStream -> BenchCommand -> Benchmark
 domainCommandScenarioBench store benchmarkName handler target command =
-  selectedCounter label units (prepareCommand label units action) $ \counter ->
+  selectedCounter label units (prepareCommand label units (commandBudget command) action) $ \counter ->
     bench benchmarkName $ nfIO (action counter)
   where
     label = show (streamName target) <> "/domain/" <> benchmarkName
     units = commandUnits command
     action counter = do
-      n <- nextIteration label units counter
+      n <- nextBoundedIteration label (commandBudget command) counter
       let fresh = iterationTarget (tagTarget target ("domain-" <> Text.pack benchmarkName)) n
       runStoreChecked store do
         result <- runDomainCommand defaultRunCommandOptions handler fresh command
@@ -687,7 +687,12 @@ domainCommandScenarioBench store benchmarkName handler target command =
           other -> liftIO (fail ("unexpected typed command benchmark result: " <> show other))
 
 commandUnits :: BenchCommand -> Int
-commandUnits = max 1 . eventCount
+commandUnits = eventCount
+
+commandBudget :: BenchCommand -> Int
+commandBudget EmitOne = 100000
+commandBudget EmitLarge = 10000
+commandBudget SelectNoOp = 1000000
 
 eventCount :: BenchCommand -> Int
 eventCount EmitOne = 1
@@ -704,9 +709,10 @@ iterationTarget target n =
   let StreamName name = streamName target
    in stream (name <> "-iteration-" <> Text.pack (show n))
 
-prepareCommand :: String -> Int -> (IORef Int -> IO ()) -> IO (IORef Int)
-prepareCommand label units action = do
-  counter <- freshCounter label units
+prepareCommand :: String -> Int -> Int -> (IORef Int -> IO ()) -> IO (IORef Int)
+prepareCommand label units budget action = do
+  setupTrace "command" label ("counter budget_iterations=" <> show budget <> " events_per_iteration=" <> show units)
+  counter <- newIORef 0
   setupTrace "command" label "warm-up invocations=3"
   replicateM_ 3 (action counter)
   pure counter
@@ -1001,7 +1007,7 @@ coordinatorFanouts = [10, 100, 1000]
 
 domainRouterFanoutBench :: StoreRunner -> Int -> Benchmark
 domainRouterFanoutBench runner fanout =
-  selectedCounter label fanout (prepareCommand label fanout action) $ \counter -> bench (show fanout) $ nfIO (action counter)
+  selectedCounter label fanout (prepareCommand label fanout (100000 `div` fanout) action) $ \counter -> bench (show fanout) $ nfIO (action counter)
   where
     label = "router-" <> show fanout
     action counter = do
@@ -1018,7 +1024,7 @@ domainRouterFanoutBench runner fanout =
 
 domainProcessManagerFanoutBench :: StoreRunner -> Int -> Benchmark
 domainProcessManagerFanoutBench runner fanout =
-  selectedCounter label fanout (prepareCommand label fanout action) $ \counter -> bench (show fanout) $ nfIO (action counter)
+  selectedCounter label fanout (prepareCommand label fanout (100000 `div` fanout) action) $ \counter -> bench (show fanout) $ nfIO (action counter)
   where
     label = "process-manager-" <> show fanout
     action counter = do
@@ -1179,8 +1185,8 @@ runCommandGrowthProbe store = do
   sample "grown-10000" 10000
   for_ [10001 .. 100000 :: Int] $ \n -> append n
   sample "grown-100000" 100000
-  for_ [100001 .. 1205000 :: Int] $ \n -> append n
-  sample "grown-1205000" 1205000
+  for_ [100001 .. 3005000 :: Int] $ \n -> append n
+  sample "grown-3005000" 3005000
   where
     append n = runStoreChecked store $ do
       result <- runDomainCommand defaultRunCommandOptions domainAcceptedOneHandler (stream ("bench-probe-" <> Text.pack (show n))) EmitOne

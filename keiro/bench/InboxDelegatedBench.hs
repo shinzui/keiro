@@ -8,6 +8,7 @@ module InboxDelegatedBench
 where
 
 import BenchSetup (nextIteration, selected, setupTrace)
+import CommandProbe (delegatedPlanProbe)
 import Control.DeepSeq (NFData (..))
 import Control.Monad (replicateM_)
 import Data.Aeson qualified as Aeson
@@ -195,7 +196,13 @@ prepareScenario store name mode chunkSize traffic metrics = do
     _ -> pure Nothing
   let scenario = Scenario {name, mode, chunkSize, traffic, metrics, runNumber, duplicateRun}
   setupTrace "delegated-inbox" label "warm-up invocations=3"
-  replicateM_ 3 (runScenario store scenario)
+  runScenario store scenario
+  probe <- lookupEnv "KEIRO_BENCH_INBOX_PLAN_PROBE"
+  when (probe == Just "1") (delegatedPlanProbe store (Text.pack label <> "-before-analyze"))
+  setupTrace "delegated-inbox" label "analyze=after-first-warm-up remaining_warm_up=2"
+  runStoreChecked store $ Store.runTransaction (Tx.sql "ANALYZE streams; ANALYZE stream_events; ANALYZE events; ANALYZE keiro.keiro_inbox")
+  when (probe == Just "1") (delegatedPlanProbe store (Text.pack label <> "-after-analyze"))
+  replicateM_ 2 (runScenario store scenario)
   pure scenario
 
 runScenario :: Store.KirokuStore -> Scenario -> IO ()
@@ -405,8 +412,8 @@ historyBenchmark store historySize =
   env (prepareHistoryRun store historySize) $ \downstreamRun ->
     bench ("events-" <> show historySize) $
       nfIO $
-        runStoreChecked store $
-          traverse_ (runDelegatedSingle Nothing downstreamRun.workByMessageId) downstreamRun.deliveries
+        downstreamRun `seq`
+          runStoreChecked store (traverse_ (runDelegatedSingle Nothing downstreamRun.workByMessageId) downstreamRun.deliveries)
 
 prepareHistoryRun :: Store.KirokuStore -> Int -> IO DownstreamRun
 prepareHistoryRun store historySize = do

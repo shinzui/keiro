@@ -1,13 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- | Inspect the actual stream-read prepared plan on a disposable benchmark store.
-module CommandProbe (commandPlanProbe, tableResetProbe) where
+module CommandProbe (commandPlanProbe, delegatedPlanProbe, tableResetProbe) where
 
 import Control.Monad (replicateM)
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy.Char8 qualified as Lazy
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
+import Data.UUID qualified as UUID
 import GHC.Clock (getMonotonicTimeNSec)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -15,6 +16,7 @@ import Hasql.Statement (preparable)
 import Keiro.Prelude
 import Kiroku.Store qualified as Store
 import Kiroku.Store.SQL qualified as SQL
+import System.IO (stderr)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 commandPlanProbe :: Store.KirokuStore -> Text -> IO ()
@@ -73,3 +75,23 @@ tableResetProbe store table expected seed = do
                 (D.singleRow ((,) <$> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8)))
             )
         )
+
+delegatedPlanProbe :: Store.KirokuStore -> Text -> IO ()
+delegatedPlanProbe store label = do
+  result <- Store.runStoreIO store $ Store.runTransaction $ do
+    _ <- Tx.statement ("bench-probe-absent", UUID.nil) SQL.eventExistsInStreamStmt
+    names <-
+      Tx.statement () $
+        preparable
+          "SELECT name FROM pg_prepared_statements WHERE statement LIKE 'SELECT EXISTS (%' AND statement LIKE '%FROM stream_events se%' AND statement LIKE '%stream_name = $1%'"
+          E.noParams
+          (D.rowList (D.column (D.nonNullable D.text)))
+    name <- case names of [name] -> pure name; _ -> error ("expected delegated prepared statement: " <> show names)
+    plan <-
+      Tx.statement () $
+        preparable
+          ("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) EXECUTE \"" <> Text.replace "\"" "\"\"" name <> "\"('bench-probe-absent','00000000-0000-0000-0000-000000000000'::uuid)")
+          E.noParams
+          (D.singleRow (D.column (D.nonNullable D.json)))
+    pure (Aeson.object ["label" Aeson..= label, "plan" Aeson..= (plan :: Aeson.Value)])
+  either (fail . show) (Lazy.hPutStrLn stderr . Aeson.encode) result

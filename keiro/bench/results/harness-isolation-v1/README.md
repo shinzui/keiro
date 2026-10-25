@@ -58,3 +58,20 @@ The first durable rebuild probe aborted at run 167 because fixed replay work was
 charged as retained growth. It is retained as a failed probe. The corrected
 harness limits rebuild bookkeeping to 10,000 runs independently of the fixed
 600-event source; command fresh-event budgets remain unchanged.
+
+The first filtered/full pair attempt at `c4901cd6` is invalid: 100,000-unit caps
+aborted accepted-large and silent command rows, and delegated fresh rows drifted
+or timed out. It was stopped, not used as acceptance. Those files remain in
+`attempt-1/`. Normalized guard settings use `-j1`, wall time and `-N2` for every
+CSV group (5% requested deviation, ten-second timeout); producer identity keeps
+its 1%/120-second same-process comparison. A timeout is still inconclusive.
+
+Revised budgets distinguish retained events from silent operations: one-event
+and fan-out scenarios cap at 100,000 events each; each accepted-large scenario
+caps at 10,000 batches / one million events; silent scenarios cap at one million
+operations with no stream creation. The aggregate command growth bound is
+3,005,000 events including the 5,000 seed. Rebuilds separately cap at 10,000 run
+records with fixed 600-event source input. Delegated setup warms one batch,
+ANALYZEs streams/stream_events/events/inbox once, then warms two more batches.
+`KEIRO_BENCH_INBOX_PLAN_PROBE=1` retains the actual prepared existence lookup's
+plans around that schedule without affecting normal timed runs.

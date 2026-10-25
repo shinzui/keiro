@@ -1,0 +1,17 @@
+Name,Mean (ps),2*Stdev (ps)
+All.outbox.hot-key,490011100031,30713735310
+All.outbox.hot-key-nolatency,269857500006,19534289908
+All.outbox.multi-key,375580199987,34961370156
+All.inbox.single-full,125613400006,6928232964
+All.inbox.single-nometrics,126113774998,8488337634
+All.inbox.batch-100,55565074998,3537571364
+All.inbox.single-slim,122280199993,7894885192
+All.inbox.downstream.table-downstream-single.fresh.metrics-off,1827094600012,847634337960
+All.inbox.downstream.table-downstream-single.repeated-key.metrics-off,165142700006,14397594550
+All.inbox.downstream.table-downstream-single.repeated-key.metrics-on,168110599974,16653339810
+All.inbox.downstream.table-downstream-single.all-duplicate.metrics-off,184831900006,17561183524
+All.inbox.downstream.table-downstream-single.all-duplicate.metrics-on,175784499993,15258927820
+All.inbox.downstream.delegated-single.fresh.metrics-on,401452000012,14550094358
+All.inbox.downstream.delegated-single.repeated-key.metrics-off,25197537502,1742959082
+All.inbox.downstream.delegated-single.repeated-key.metrics-on,26037200001,1806575216
+All.inbox.downstream.delegated-single.all-duplicate.metrics-off,23939950001,1968690144

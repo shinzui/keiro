@@ -1,0 +1,7 @@
+keiro-bench: Uncaught exception ghc-internal:GHC.Internal.Exception.ErrorCall:
+
+expected actual stream read statement: ["4","3"]
+
+HasCallStack backtrace:
+  throwIO, called at src/library/Hasql/Pool.hs:219:11 in hsql-pl-1.4.2.3-18afb8b7:Hasql.Pool
+

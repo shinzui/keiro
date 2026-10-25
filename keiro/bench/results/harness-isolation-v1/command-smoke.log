@@ -1,0 +1,93 @@
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-1"/legacy/accepted-1 counter budget_iterations=1000000 units_per_iteration=1
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-1"/legacy/accepted-1 warm-up invocations=3
+All
+  command
+    legacy
+      accepted-1:     BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-accepted-1"/legacy/accepted-1 iterations=2050 units=2050
+BENCH_SETUP group=command scenario=StreamName "bench-commanOK
+d        234  μs ± 159 μs
+-    control
+c      accepted-1:     ontrol"/legacy/accepted-1 counter budget_iterations=1000000 units_per_iteration=1
+BENCH_SETUP group=command scenario=StreamName "bench-command-control"/legacy/accepted-1 warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-control"/legacy/accepted-1 iterations=2050 units=2050
+BENCH_SETUP group=command scenOK
+a        382  μs ± 136 μs
+ri    domain-warmup
+o      accepted-1:     =StreamName "bench-command-domain-warmup"/domain/accepted-1 counter budget_iterations=1000000 units_per_iteration=1
+BENCH_SETUP group=command scenario=StreamName "bench-command-domain-warmup"/domain/accepted-1 warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-domain-warmup"/domain/accepted-1 iterations=1026 units=1026
+BENCH_SETUP group=command scenaOK
+r        474  μs ± 136 μs
+i    domain
+o      accepted-1:     =StreamName "bench-command-legacy-accepted-1"/domain/accepted-1 counter budget_iterations=1000000 units_per_iteration=1
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-1"/domain/accepted-1 warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-accepted-1"/domain/accepted-1 iterations=1026 units=1026
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-large"/legacy/accepted-large counter budget_iterations=10000 units_per_iteration=100
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-large"/legacy/accepted-large warm-up invocations=3
+FAIL
+        545  μs ± 159 μs, 1.43x
+        Use -p '/command/&&/domain.accepted-1/' to rerun this test only.
+    legacy
+      accepted-large: BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-accepted-large"/legacy/accepted-large iterations=34 units=3400
+BENOK
+C        14.4 ms ± 4.3 ms
+    domain
+      accepted-large: H_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-large"/domain/accepted-large counter budget_iterations=10000 units_per_iteration=100
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-large"/domain/accepted-large warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-accepted-large"/domain/accepted-large iterations=34 units=3400
+BENOK
+        14.4 ms ± 3.5 ms, 1.00x
+    legacy
+C      no-op:          H_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/legacy/no-op counter budget_iterations=1000000 units_per_iteration=1
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/legacy/no-op warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-no-op"/legacy/no-op iterations=4098 units=4098
+BENCOK
+H        200  μs ±  27 μs
+    domain
+_SE      rejected:       TUP group=command scenario=StreamName "bench-command-legacy-no-op"/domain/rejected counter budget_iterations=1000000 units_per_iteration=1
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/domain/rejected warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-no-op"/domain/rejected iterations=4098 units=4098
+BENCOK
+        208  μs ±  42 μs, 1.04x
+      no-op:          H_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/domain/no-op counter budget_iterations=1000000 units_per_iteration=1
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/domain/no-op warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-no-op"/domain/no-op iterations=4098 units=4098
+BENCOK
+        200  μs ±  31 μs, 1.00x
+      router-fanout
+H_        10:           SETUP group=command scenario=router-10 counter budget_iterations=100000 units_per_iteration=10
+BENCH_SETUP group=command scenario=router-10 warm-up invocations=3
+BENCH_SETUP group=counts scenario=router-10 iterations=66 units=660
+BENCHOK
+          6.61 ms ± 2.0 ms
+_        100:          SETUP group=command scenario=router-100 counter budget_iterations=10000 units_per_iteration=100
+BENCH_SETUP group=command scenario=router-100 warm-up invocations=3
+BENCH_SETUP group=counts scenario=router-100 iterations=10 units=1000
+BENCH_SOK
+E          76.5 ms ±  37 ms
+T        1000:         UP group=command scenario=router-1000 counter budget_iterations=1000 units_per_iteration=1000
+BENCH_SETUP group=command scenario=router-1000 warm-up invocations=3
+BENCH_SETUP group=counts scenario=router-1000 iterations=5 units=5000
+BENCH_SETUTIMEOUT
+P          Timed out after 1s
+          Use -p '/command/&&/router-fanout.1000/' to rerun this test only.
+ group=com      process-manager-fanout
+m        10:           and scenario=process-manager-10 counter budget_iterations=100000 units_per_iteration=10
+BENCH_SETUP group=command scenario=process-manager-10 warm-up invocations=3
+BENCH_SETUP group=counts scenario=process-manager-10 iterations=66 units=660
+BENCOK
+          7.38 ms ± 1.8 ms
+        100:          H_SETUP group=command scenario=process-manager-100 counter budget_iterations=10000 units_per_iteration=100
+BENCH_SETUP group=command scenario=process-manager-100 warm-up invocations=3
+BENCH_SETUP group=counts scenario=process-manager-100 iterations=10 units=1000
+BENCOK
+H_SETUP group=command s          78.8 ms ±  17 ms
+c        1000:         enario=process-manager-1000 counter budget_iterations=1000 units_per_iteration=1000
+BENCH_SETUP group=command scenario=process-manager-1000 warm-up invocations=3
+BENCH_SETUP group=counts scenario=process-manager-1000 iterations=4 units=4000
+TIMEOUT
+          Timed out after 1s
+          Use -p '/command/&&/process-manager-fanout.1000/' to rerun this test only.
+
+3 out of 15 tests failed (17.72s)
+PROCESS_EXIT=1

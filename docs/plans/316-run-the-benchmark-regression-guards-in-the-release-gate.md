@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-21T13:49:51Z
       mode: "update"
       note: "Make passing-run dependency explicit, reconcile release preflight, and link ADR-58 policy and remaining implementation evidence."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T05:17:09Z
+      mode: "implement"
+      note: "Align all guard invocations with serial fixed RTS measurement settings before recording."
 ---
 
 # Run the benchmark regression guards in the release gate
@@ -66,7 +71,12 @@ several releases because the procedure never required it.
 
 ## Surprises & Discoveries
 
-(None yet.)
+The initial runner fixed `-j1`/`-N2` only for producer identity; CSV guards inherited
+all host capabilities. It now uses serial wall-clock measurements at `-N2` for every
+guard, with a five-percent requested deviation and ten-second CSV timeout. Producer
+identity retains its one-percent/120-second ratio setting. Plan 315 records baselines
+with these same options. A timeout or growth-budget failure remains inconclusive.
+
 
 
 ## Decision Log

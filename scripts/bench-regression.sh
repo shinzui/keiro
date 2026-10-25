@@ -39,19 +39,19 @@ for guard in "${wanted[@]}"; do
       run_guard producer-identity cabal bench keiro-bench --benchmark-options="-p producer-identity -j1 --time-mode wall --hide-progress --stdev 1 --timeout 120s +RTS -N2 -RTS"
       ;;
     outbox)
-      run_guard outbox cabal bench keiro-bench --benchmark-options="-p outbox --time-mode wall --baseline bench/baseline-outbox.csv --fail-if-slower 25"
+      run_guard outbox cabal bench keiro-bench --benchmark-options="-p outbox -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --baseline bench/baseline-outbox.csv --fail-if-slower 25 +RTS -N2 -RTS"
       ;;
     inbox)
-      run_guard inbox cabal bench keiro-bench --benchmark-options="-p inbox --time-mode wall --baseline bench/baseline-inbox.csv --fail-if-slower 25"
+      run_guard inbox cabal bench keiro-bench --benchmark-options="-p inbox -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --baseline bench/baseline-inbox.csv --fail-if-slower 25 +RTS -N2 -RTS"
       ;;
     command)
-      run_guard command cabal bench keiro-bench --benchmark-options="-p command --time-mode wall --hide-progress --baseline bench/baseline-command.csv --fail-if-slower 25"
+      run_guard command cabal bench keiro-bench --benchmark-options="-p command -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --baseline bench/baseline-command.csv --fail-if-slower 25 +RTS -N2 -RTS"
       ;;
     projection)
-      KEIRO_READ_MODEL_P95=1 run_guard projection cabal bench keiro-bench --benchmark-options="-p projection --time-mode wall --hide-progress --timeout 1 --baseline bench/baseline-projection.csv --fail-if-slower 25"
+      KEIRO_READ_MODEL_P95=1 run_guard projection cabal bench keiro-bench --benchmark-options="-p projection -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --baseline bench/baseline-projection.csv --fail-if-slower 25 +RTS -N2 -RTS"
       ;;
     read-model)
-      run_guard read-model cabal bench keiro-bench --benchmark-options="-p read-model --time-mode wall --hide-progress --timeout 1 --baseline bench/baseline-read-model.csv --fail-if-slower 25"
+      run_guard read-model cabal bench keiro-bench --benchmark-options="-p read-model -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --baseline bench/baseline-read-model.csv --fail-if-slower 25 +RTS -N2 -RTS"
       ;;
     *)
       echo "unknown guard: $guard" >&2

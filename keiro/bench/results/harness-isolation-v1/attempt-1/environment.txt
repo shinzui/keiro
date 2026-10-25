@@ -1,0 +1,21 @@
+2026-10-25T05:02:49Z
+c4901cd6311dff408268bc7fcf8ae28c45721992
+ ...-and-the-command-path-performance-regression.md |  2 +-
+ ...agers-and-label-legacy-inspection-before-1-0.md | 14 ++++--
+ docs/user/api-reference.md                         |  9 +++-
+ docs/user/log.md                                   |  1 +
+ docs/user/process-managers-and-timers.md           |  9 +++-
+ keiro-ops/keiro-ops.cabal                          |  2 +
+ keiro-ops/test/Main.hs                             |  2 +
+ keiro/src/Keiro/ProcessManager/Inspect.hs          | 28 +++++++++---
+ keiro/test/Main.hs                                 | 53 ++++++++++++++++++++++
+ 9 files changed, 105 insertions(+), 15 deletions(-)
+Darwin yujin 27.0.0 Darwin Kernel Version 27.0.0: Tue Aug 11 21:06:40 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6050 arm64 arm Darwin
+Apple M5 Ultra
+274877906944
+36
+The Glorious Glasgow Haskell Compilation System, version 9.12.4
+cabal-install version 3.16.1.0 
+compiled using version 3.16.1.0 of the Cabal library (in-tree)
+postgres (PostgreSQL) 18.6
+ 22:02:49  up 11 days  1:01,  3 users,  load average: 4.11, 5.04, 5.36

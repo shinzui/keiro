@@ -1,0 +1,50 @@
+All
+  command
+    legacy
+      accepted-1:     OK
+        160  μs ±  18 μs
+    control
+      accepted-1:     OK
+        159  μs ± 8.0 μs
+    domain-warmup
+      accepted-1:     OK
+        160  μs ±  15 μs
+    domain
+      accepted-1:     OK
+        154  μs ± 8.6 μs, 0.97x
+    legacy
+      accepted-large: FAIL
+        Exception: user error (benchmark fixture growth budget exceeded: StreamName "bench-command-legacy-accepted-large"/legacy/accepted-large iterations=1001)
+        Use -p '/command/&&/legacy.accepted-large/' to rerun this test only.
+    domain
+      accepted-large: SKIP
+        
+        Use -p '/command/&&/domain.accepted-large/' to rerun this test only.
+    legacy
+      no-op:          FAIL
+        Exception: user error (benchmark fixture growth budget exceeded: StreamName "bench-command-legacy-no-op"/legacy/no-op iterations=100001)
+        Use -p '/command/&&/legacy.no-op/' to rerun this test only.
+    domain
+      rejected:       SKIP
+        
+        Use -p '/command/&&/rejected/' to rerun this test only.
+      no-op:          SKIP
+        
+        Use -p '/command/&&/domain.no-op/' to rerun this test only.
+      router-fanout
+        10:           OK
+          2.20 ms ± 121 μs
+        100:          OK
+          22.0 ms ± 1.8 ms
+        1000:         OK
+          215  ms ±  16 ms
+      process-manager-fanout
+        10:           OK
+          2.12 ms ± 184 μs
+        100:          OK
+          20.9 ms ± 1.8 ms
+        1000:         OK
+          207  ms ±  15 ms
+
+5 out of 15 tests failed (28.30s)
+PROCESS_EXIT=1

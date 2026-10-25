@@ -1,0 +1,9 @@
+BENCH_SETUP group=rebuild scenario=three-categories-200 schema source_events=600 bookkeeping_run_budget=10000
+BENCH_SETUP group=rebuild scenario=three-categories-200 warm-up invocations=3 source_events_per_invocation=600
+BENCH_SETUP group=rebuild scenario=1 source_events=600
+BENCH_SETUP group=rebuild scenario=2 source_events=600
+BENCH_SETUP group=rebuild scenario=3 source_events=600
+BENCH_SETUP group=rebuild scenario=4 source_events=600
+BENCH_SETUP group=rebuild scenario=5 source_events=600
+BENCH_SETUP group=rebuild scenario=6 source_events=600
+BENCH_SETUP group=counts scenario=rebuild iterations=261 units=156600

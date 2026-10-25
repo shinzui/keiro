@@ -1,0 +1,6 @@
+All
+  rebuild
+    three-categories-200: FAIL
+      Exception: user error (benchmark fixture growth budget exceeded: rebuild iterations=167)
+
+1 out of 1 tests failed (2.23s)

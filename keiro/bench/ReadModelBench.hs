@@ -1439,4 +1439,4 @@ runResourceStoreChecked (StoreRunner runner) action =
 
 runStoreChecked :: Store.KirokuStore -> Eff '[Store, Error Store.StoreError, IOE] value -> IO value
 runStoreChecked store action =
-  Store.runStoreIO store action >>= either (fail . show) pure
+  store `seq` Store.runStoreIO store action >>= either (fail . show) pure

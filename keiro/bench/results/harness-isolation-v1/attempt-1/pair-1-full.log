@@ -1,0 +1,51 @@
+All
+  outbox
+    hot-key:                                OK
+      490  ms ±  31 ms
+    hot-key-nolatency:                      OK
+      270  ms ±  20 ms
+    multi-key:                              OK
+      376  ms ±  35 ms
+  inbox
+    single-full:                            OK
+      126  ms ± 6.9 ms
+    single-nometrics:                       OK
+      126  ms ± 8.5 ms
+    batch-100:                              OK
+      55.6 ms ± 3.5 ms
+    single-slim:                            OK
+      122  ms ± 7.9 ms
+    downstream
+      table-downstream-single
+        fresh
+          metrics-off:                      OK
+            1.827 s ± 848 ms
+          metrics-on:                       TIMEOUT
+            Timed out after 10s
+            Use -p '/table-downstream-single.fresh.metrics-on/' to rerun this test only.
+        repeated-key
+          metrics-off:                      OK
+            165  ms ±  14 ms
+          metrics-on:                       OK
+            168  ms ±  17 ms
+        all-duplicate
+          metrics-off:                      OK
+            185  ms ±  18 ms
+          metrics-on:                       OK
+            176  ms ±  15 ms
+      delegated-single
+        fresh
+          metrics-off:                      TIMEOUT
+            Timed out after 10s
+            Use -p '/delegated-single.fresh.metrics-off/' to rerun this test only.
+          metrics-on:                       OK
+            401  ms ±  15 ms
+        repeated-key
+          metrics-off:                      OK
+            25.2 ms ± 1.7 ms
+          metrics-on:                       OK
+            26.0 ms ± 1.8 ms
+        all-duplicate
+          metrics-off:                      OK
+            23.9 ms ± 2.0 ms
+          metrics-on:                       

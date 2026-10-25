@@ -80,8 +80,15 @@ acceptance: the two largest fan-outs time out and accepted-1 drifts across scena
 recording. No baseline or ratio threshold has changed. The growth probe remains indexed through
 1,205,500 events (including diagnostic rows), with fresh/no-op means of 140/24 us
 at the late population. The ordinary entry point now uses the existing durable
-benchmark fixture rather than fast correctness settings. Final durable growth,
-reset-alternative probes and alternating pairs remain acceptance work.
+benchmark fixture rather than fast correctness settings. Durable growth through 1.2 million events and reset alternatives are retained.
+The first paired attempt was stopped after explicit 100,000-unit counter failures
+and delegated-inbox drift; it is not acceptance. Silent commands now have a finite
+one-million-operation budget without pretending they retain event rows; large batches
+allow 10,000 invocations (one million events), while one-event/fan-out rows retain
+100,000-event budgets. The aggregate command store is bounded at 3,005,000 events.
+Selected delegated setup ANALYZEs after its first representative warm-up, then warms
+twice more. Actual prepared existence plans are probed before/after that schedule.
+The extended growth and replacement alternating pairs remain open.
 
 ## Surprises & Discoveries
 

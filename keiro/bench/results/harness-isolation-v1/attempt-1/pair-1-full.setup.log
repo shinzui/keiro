@@ -1,0 +1,35 @@
+BENCH_SETUP group=outbox scenario=hot-key warm-up invocations=3 timed_reset=TRUNCATE
+BENCH_SETUP group=outbox scenario=hot-key-nolatency warm-up invocations=3 timed_reset=TRUNCATE
+BENCH_SETUP group=outbox scenario=multi-key warm-up invocations=3 timed_reset=TRUNCATE
+BENCH_SETUP group=inbox scenario=single-full warm-up invocations=3 timed_reset=TRUNCATE
+BENCH_SETUP group=inbox scenario=single-nometrics warm-up invocations=3 timed_reset=TRUNCATE
+BENCH_SETUP group=inbox scenario=batch-100 warm-up invocations=3 timed_reset=TRUNCATE
+BENCH_SETUP group=inbox scenario=single-slim warm-up invocations=3 timed_reset=TRUNCATE
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-fresh-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-fresh-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-fresh-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-fresh-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-repeated-key-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-repeated-key-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-repeated-key-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-repeated-key-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-all-duplicate-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-all-duplicate-metrics-off duplicate-seed deliveries=2000
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-all-duplicate-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-all-duplicate-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-all-duplicate-metrics-on duplicate-seed deliveries=2000
+BENCH_SETUP group=delegated-inbox scenario=table-downstream-single-all-duplicate-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-fresh-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-fresh-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-fresh-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-fresh-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-repeated-key-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-repeated-key-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-repeated-key-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-repeated-key-metrics-on warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-all-duplicate-metrics-off schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-all-duplicate-metrics-off duplicate-seed deliveries=2000
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-all-duplicate-metrics-off warm-up invocations=3
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-all-duplicate-metrics-on schema
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-all-duplicate-metrics-on duplicate-seed deliveries=2000
+BENCH_SETUP group=delegated-inbox scenario=delegated-single-all-duplicate-metrics-on warm-up invocations=3
