@@ -22,6 +22,11 @@ provenance:
       at: 2026-10-21T13:49:51Z
       mode: "update"
       note: "Reconcile completed observations and EP-7 handoff; correct fresh producer/history mechanisms and baseline acceptance."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T08:17:35Z
+      mode: "implement"
+      note: "Record baselines and attribute producer fresh work after plan 321 acceptance."
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -75,6 +80,17 @@ the runner and release policy ADR. Success is three serial all-guard passes endi
 - [ ] M5: Record the inbox baseline on the accepted isolated/warmed harness, then retain
       three consecutive inbox-guard passes. No further warm-up implementation belongs here.
 - [ ] M6: Retain three consecutive full `just bench-regression` passes on a quiet machine.
+
+Current handoff (2026-10-25): plan 321 is Complete at `fb241994`, accepting benchmark
+source `ee2f2667`. All five CSVs are affected by the durable isolated/selected/checkpoint
+boundary and will be re-recorded; no old green row is exempt. The opt-in producer probe
+adds diagnostics on its existing clone without changing normal actions or warm-up. It
+verifies 1,000 fresh inserts / zero conflict reads, 1,000 replay inserts / 1,000 locked
+reads, retained row counts and equivalent preparation against the real factory. Five
+alternating component pairs distinguish identity/envelope preparation, same-input SQL
+and native identity layout. The normal 1.10 precision guard and five serial CSV recordings
+remain open. Recording/aggregation scripts and attributed raw evidence are prepared under
+`keiro/bench/results/baseline-recording-v2/` and `producer-attribution-v2/`.
 
 M3–M6 require plan 321 Complete. M1/M2 completion means the observations below are recorded;
 it does not require the abandoned micro-driver, a passing August control, or a named upstream
@@ -165,8 +181,10 @@ universal runtime conclusion. No raw results or baseline numbers were changed by
 inbox, projection, and read-model groups with `keiro/bench/baseline-*.csv`. The sixth guard,
 producer-identity, compares fresh deterministic and legacy enqueue in the same process.
 `scripts/bench-regression.sh` selects the groups and emits per-guard exit status plus an
-aggregate result. The current command actions time hard deletes as well as dispatch; the
-shared-store fixture also prepares unselected groups. Plan 321 changes those workload boundaries.
+aggregate result. The accepted command actions now use fresh bounded identities, selected preparation and
+settled checkpoints. Seven clones isolate logical groups. Plan 321 retains actual counts,
+three alternating filtered/full pairs, five growth blocks and earlier rejected cohorts;
+its changed durable workload boundary requires recording every affected CSV.
 
 The original review is `docs/reviews/keiro-0-20-0-21-unreleased-review.md`. The control CSV was
 recorded at `2477a5aa`; the existing sweep and HEAD experiment are summarized above. Relevant

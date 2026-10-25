@@ -98,7 +98,7 @@ import Kiroku.Store.Types
 import OpenTelemetry.MeterProvider (createMeterProvider, defaultSdkMeterProviderOptions)
 import OpenTelemetry.Metric.Core (getMeter)
 import OpenTelemetry.Resource (emptyMaterializedResources)
-import ProducerIdentityBench (producerIdentityBenchmarks)
+import ProducerIdentityBench (producerIdentityBenchmarks, runProducerIdentityProbe)
 import ReadModelBench
   ( probeReadModelCounts,
     readModelBenchmarks,
@@ -178,19 +178,23 @@ ordinaryMain =
                     runReadModelLatencyEvidenceIfRequested model
                     pure model
                   runInboxDelegatedExplainIfRequested delegatedStore
+                  producerProbe <- lookupEnv "KEIRO_BENCH_PRODUCER_PROBE"
                   resetProbe <- lookupEnv "KEIRO_BENCH_RESET_PROBE"
                   probe <- lookupEnv "KEIRO_BENCH_COMMAND_PROBE"
-                  if probe == Just "1"
-                    then runCommandGrowthProbe store
+                  if producerProbe == Just "1"
+                    then runProducerIdentityProbe producerStore
                     else
-                      if resetProbe == Just "1"
-                        then runResetProbes outboxStore inboxStore producerStore
+                      if probe == Just "1"
+                        then runCommandGrowthProbe store
                         else
-                          defaultMain
-                            ( benchmarks store runner outboxStore inboxStore rebuildStore metrics (inboxDelegatedBenchmarks delegatedStore metrics)
-                                <> [selectedWithCleanup readModelSetup probeReadModelCounts (\model -> readModelBenchmarks model !! groupIndex) | groupIndex <- [0 .. 2]]
-                                <> producerIdentityBenchmarks producerStore producerCounter
-                            )
+                          if resetProbe == Just "1"
+                            then runResetProbes outboxStore inboxStore producerStore
+                            else
+                              defaultMain
+                                ( benchmarks store runner outboxStore inboxStore rebuildStore metrics (inboxDelegatedBenchmarks delegatedStore metrics)
+                                    <> [selectedWithCleanup readModelSetup probeReadModelCounts (\model -> readModelBenchmarks model !! groupIndex) | groupIndex <- [0 .. 2]]
+                                    <> producerIdentityBenchmarks producerStore producerCounter
+                                )
 
 benchmarks :: Store.KirokuStore -> StoreRunner -> Store.KirokuStore -> Store.KirokuStore -> Store.KirokuStore -> Telemetry.KeiroMetrics -> [Benchmark] -> [Benchmark]
 benchmarks store runner outboxStore inboxStore rebuildStore metrics delegatedInboxBenchmarks =
