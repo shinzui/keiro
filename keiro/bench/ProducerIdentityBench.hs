@@ -12,6 +12,7 @@ import Data.UUID qualified as UUID
 import Keiro.Integration.Event
 import Keiro.Outbox
 import Keiro.Prelude
+import Keiro.Test.Postgres (checkpointBenchmarkStore)
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Types (EventId (..), EventType (..), GlobalPosition (..), RecordedEvent (..), StreamId (..), StreamVersion (..))
 import Test.Tasty.Bench (Benchmark, bcompareWithin, bench, bgroup, nf, nfIO)
@@ -30,7 +31,7 @@ producerIdentityBenchmarks store sequenceRef =
       ]
   ]
   where
-    sqlBench name action = selected (setupTrace "producer-identity" name "warm-up invocations=3 timed_reset=TRUNCATE" >> replicateM_ 3 action) $ \_ -> bench name (nfIO action)
+    sqlBench name action = selected (setupTrace "producer-identity" name "checkpoint=before-warm-up warm-up invocations=3 timed_reset=TRUNCATE" >> checkpointBenchmarkStore store >> replicateM_ 3 action) $ \_ -> bench name (nfIO action)
     run batch deterministic replay = do
       generation <- atomicModifyIORef' sequenceRef (\n -> (n + 1, n + 1))
       result <- Store.runStoreIO store $ do

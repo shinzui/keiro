@@ -1,0 +1,320 @@
+diff --git a/keiro-test-support/src/Keiro/Test/Postgres.hs b/keiro-test-support/src/Keiro/Test/Postgres.hs
+index 9e90b44a..244491b9 100644
+--- a/keiro-test-support/src/Keiro/Test/Postgres.hs
++++ b/keiro-test-support/src/Keiro/Test/Postgres.hs
+@@ -26,6 +26,7 @@ module Keiro.Test.Postgres
+     withMigratedSuite,
+     withMigratedSuiteWith,
+     withMigratedBenchmarkSuite,
++    checkpointBenchmarkStore,
+     withFreshDatabase,
+     withFreshStore,
+     withFreshStoreWith,
+@@ -149,6 +150,13 @@ withMigratedBenchmarkSuite action =
+             (\_ -> runSqlOn connection ("DROP DATABASE " <> quoteIdentifier template <> " WITH (FORCE)"))
+             action
+ 
++-- | Finish prior cluster checkpoint work before warming a selected benchmark.
++-- This is a privileged, cluster-wide operation for disposable serial fixtures;
++-- it is not part of a measured command and changes no business rows.
++checkpointBenchmarkStore :: Store.KirokuStore -> IO ()
++checkpointBenchmarkStore store =
++  store `seq` (Pool.use store.pool (Session.script "CHECKPOINT") >>= either (fail . show) pure)
++
+ withConfiguredSuite :: Pg.Config -> [MigrationComponent] -> (Fixture -> IO a) -> IO a
+ withConfiguredSuite config extraComponents action = do
+   started <- Pg.startCached config Pg.defaultCacheConfig
+diff --git a/keiro/bench/CommandProbe.hs b/keiro/bench/CommandProbe.hs
+index 2b7eb55e..ff00ae22 100644
+--- a/keiro/bench/CommandProbe.hs
++++ b/keiro/bench/CommandProbe.hs
+@@ -1,7 +1,7 @@
+ {-# LANGUAGE OverloadedStrings #-}
+ 
+ -- | Inspect the actual stream-read prepared plan on a disposable benchmark store.
+-module CommandProbe (commandPlanProbe, delegatedPlanProbe, tableResetProbe, workCountProbe, rebuildCountProbe) where
++module CommandProbe (commandPlanProbe, delegatedPlanProbe, tableResetProbe, workCountProbe, rebuildCountProbe, maintenanceProbe) where
+ 
+ import Control.Monad (replicateM)
+ import Data.Aeson qualified as Aeson
+@@ -131,3 +131,17 @@ rebuildCountProbe store expectedRuns = do
+     unless (runs == fromIntegral expectedRuns && sources == fromIntegral (3 * expectedRuns) && events == 600) $
+       fail ("rebuild work-count mismatch: " <> show (runs, sources, events))
+     Lazy.hPutStrLn stderr (Aeson.encode (Aeson.object ["label" Aeson..= ("rebuild" :: Text), "runs" Aeson..= runs, "sources" Aeson..= sources, "events" Aeson..= events, "bookkeeping" Aeson..= (bookkeeping :: Aeson.Value)]))
++
++
++-- Cluster maintenance is shared across database clones. Record it outside timing.
++maintenanceProbe :: Store.KirokuStore -> Text -> IO ()
++maintenanceProbe store label = do
++  enabled <- lookupEnv "KEIRO_BENCH_MAINTENANCE_PROBE"
++  when (enabled == Just "1") $ do
++    result <- Store.runStoreIO store $ Store.runTransaction $
++      Tx.statement () $ preparable
++        "SELECT jsonb_build_object('at',clock_timestamp(),'checkpoint',(SELECT to_jsonb(c) FROM pg_stat_checkpointer c),'wal',(SELECT to_jsonb(w) FROM pg_stat_wal w),'lsn',pg_current_wal_lsn(),'max_wal_size',current_setting('max_wal_size'),'checkpoint_timeout',current_setting('checkpoint_timeout'),'shared_buffers',current_setting('shared_buffers'),'activity',(SELECT jsonb_agg(jsonb_build_object('type',backend_type,'database',datname,'state',state,'wait_type',wait_event_type,'wait',wait_event)) FROM pg_stat_activity WHERE backend_type IN ('checkpointer','autovacuum worker','background writer','walwriter','io worker')),'tables',(SELECT jsonb_agg(jsonb_build_object('table',relname,'live',n_live_tup,'dead',n_dead_tup,'vacuum',vacuum_count,'autovacuum',autovacuum_count,'last_autovacuum',last_autovacuum,'analyze',analyze_count,'last_autoanalyze',last_autoanalyze)) FROM pg_stat_user_tables WHERE relname IN ('streams','stream_events','events','keiro_inbox','keiro_inbox_delegated_bench_effect')))"
++        E.noParams
++        (D.singleRow (D.column (D.nonNullable D.jsonb)))
++    snapshot <- either (fail . show) pure result
++    Lazy.hPutStrLn stderr (Aeson.encode (Aeson.object ["maintenance" Aeson..= label, "snapshot" Aeson..= (snapshot :: Aeson.Value)]))
+diff --git a/keiro/bench/InboxDelegatedBench.hs b/keiro/bench/InboxDelegatedBench.hs
+index 0fa1250b..3f0e92e7 100644
+--- a/keiro/bench/InboxDelegatedBench.hs
++++ b/keiro/bench/InboxDelegatedBench.hs
+@@ -8,7 +8,7 @@ module InboxDelegatedBench
+ where
+ 
+ import BenchSetup (nextIteration, selectedWithCleanup, setupTrace)
+-import CommandProbe (delegatedPlanProbe, workCountProbe)
++import CommandProbe (delegatedPlanProbe, maintenanceProbe, workCountProbe)
+ import Control.DeepSeq (NFData (..))
+ import Control.Monad (replicateM_)
+ import Data.Aeson qualified as Aeson
+@@ -45,6 +45,7 @@ import Keiro.Integration.Event (IntegrationContentType (ApplicationJson), Integr
+ import Keiro.Prelude
+ import Keiro.Stream (Stream, stream)
+ import Keiro.Telemetry (KeiroMetrics)
++import Keiro.Test.Postgres (checkpointBenchmarkStore)
+ import Kiroku.Store qualified as Store
+ import Kiroku.Store.Effect (PreparedEvent, Store)
+ import Kiroku.Store.SQL qualified as StoreSQL
+@@ -202,7 +203,10 @@ prepareScenario store name mode chunkSize traffic metrics = do
+   setupTrace "delegated-inbox" label "analyze=after-first-warm-up remaining_warm_up=2"
+   runStoreChecked store $ Store.runTransaction (Tx.sql "ANALYZE streams; ANALYZE stream_events; ANALYZE events; ANALYZE keiro.keiro_inbox")
+   when (probe == Just "1") (delegatedPlanProbe store (Text.pack label <> "-after-analyze"))
++  setupTrace "delegated-inbox" label "checkpoint=before-final-two-warm-ups"
++  checkpointBenchmarkStore store
+   replicateM_ 2 (runScenario store scenario)
++  maintenanceProbe store (Text.pack label <> "-ready")
+   pure scenario
+ 
+ runScenario :: Store.KirokuStore -> Scenario -> IO ()
+@@ -226,6 +230,7 @@ checkScenarioCounts store scenario = do
+         DuplicateTraffic -> 1
+   setupTrace "counts" (Text.unpack prefix) ("iterations=" <> show n <> " expected_events=" <> show expected)
+   workCountProbe store prefix ("benchInbox-" <> prefix <> "-") expected expected
++  maintenanceProbe store (prefix <> "-finished")
+ 
+ runDownstream :: (IOE :> es, Store :> es) => Scenario -> DownstreamRun -> Eff es ()
+ runDownstream scenario downstreamRun =
+diff --git a/keiro/bench/Main.hs b/keiro/bench/Main.hs
+index 41b08b7c..e4d9e754 100644
+--- a/keiro/bench/Main.hs
++++ b/keiro/bench/Main.hs
+@@ -7,7 +7,7 @@ module Main
+ where
+ 
+ import BenchSetup (memoSetup, nextBoundedIteration, nextIteration, selected, selectedCounterWithCleanup, selectedWithCleanup, setupTrace)
+-import CommandProbe (commandPlanProbe, rebuildCountProbe, tableResetProbe, workCountProbe)
++import CommandProbe (commandPlanProbe, maintenanceProbe, rebuildCountProbe, tableResetProbe, workCountProbe)
+ import Control.Concurrent (threadDelay)
+ import Control.Monad (replicateM_)
+ import Data.Aeson qualified as Aeson
+@@ -80,7 +80,7 @@ import Keiro.ReadModel.Rebuild
+     startCatalogRebuild,
+   )
+ import Keiro.Telemetry qualified as Telemetry
+-import Keiro.Test.Postgres (StoreRunner (..), withFreshResourceStore, withMigratedBenchmarkSuite)
++import Keiro.Test.Postgres (StoreRunner (..), checkpointBenchmarkStore, withFreshResourceStore, withMigratedBenchmarkSuite)
+ import Kiroku.Store qualified as Store
+ import Kiroku.Store.Effect (Store)
+ import Kiroku.Store.Effect.Resource (KirokuStoreResource)
+@@ -312,11 +312,13 @@ benchmarks store runner outboxStore inboxStore rebuildStore metrics delegatedInb
+ 
+ scenarioBench :: Store.KirokuStore -> OutboxScenario -> Benchmark
+ scenarioBench store scenario =
+-  selected (warmAction "outbox" (Text.unpack scenario.scenarioName) (runScenario store scenario)) $ \_ ->
++  selected (warmAction store "outbox" (Text.unpack scenario.scenarioName) (runScenario store scenario)) $ \_ ->
+     bench (Text.unpack scenario.scenarioName) $ nfIO (runScenario store scenario)
+ 
+-warmAction :: String -> String -> IO () -> IO ()
+-warmAction group name action = do
++warmAction :: Store.KirokuStore -> String -> String -> IO () -> IO ()
++warmAction store group name action = do
++  setupTrace group name "checkpoint=before-warm-up"
++  checkpointBenchmarkStore store
+   setupTrace group name "warm-up invocations=3 timed_reset=TRUNCATE"
+   replicateM_ 3 action
+ 
+@@ -329,7 +331,7 @@ runScenario store scenario = do
+ 
+ inboxScenarioBench :: Store.KirokuStore -> InboxScenario -> Benchmark
+ inboxScenarioBench store scenario =
+-  selected (warmAction "inbox" (Text.unpack scenario.inboxScenarioName) (runInboxScenario store scenario)) $ \_ ->
++  selected (warmAction store "inbox" (Text.unpack scenario.inboxScenarioName) (runInboxScenario store scenario)) $ \_ ->
+     bench (Text.unpack scenario.inboxScenarioName) $ nfIO (runInboxScenario store scenario)
+ 
+ runInboxScenario :: Store.KirokuStore -> InboxScenario -> IO ()
+@@ -658,13 +660,14 @@ prepareCommandStore store = do
+ 
+ commandScenarioBench :: Store.KirokuStore -> String -> ValidatedBenchEventStream -> Stream BenchEventStream -> BenchCommand -> Benchmark
+ commandScenarioBench store benchmarkName validatedStream target command =
+-  selectedCounterWithCleanup label units (prepareCommand label units (commandBudget command) action) checkCounts $ \counter ->
++  selectedCounterWithCleanup label units (prepareCommand store label units (commandBudget command) action) checkCounts $ \counter ->
+     bench benchmarkName $ nfIO (action counter)
+   where
+     label = show (streamName target) <> "/legacy/" <> benchmarkName
+-    checkCounts n =
++    checkCounts n = do
++      maintenanceProbe store (Text.pack label <> "-finished")
+       let StreamName prefix = streamName (tagTarget target "legacy")
+-       in workCountProbe store (Text.pack label) (prefix <> "-iteration-") (if units == 0 then 0 else n) (n * units)
++      workCountProbe store (Text.pack label) (prefix <> "-iteration-") (if units == 0 then 0 else n) (n * units)
+     units = commandUnits command
+     action counter = do
+       n <- nextBoundedIteration label (commandBudget command) counter
+@@ -677,13 +680,14 @@ commandScenarioBench store benchmarkName validatedStream target command =
+ 
+ domainCommandScenarioBench :: Store.KirokuStore -> String -> DomainCommandHandler (HsPred '[] BenchCommand) '[] BenchState BenchCommand BenchEvent Text Text -> Stream BenchEventStream -> BenchCommand -> Benchmark
+ domainCommandScenarioBench store benchmarkName handler target command =
+-  selectedCounterWithCleanup label units (prepareCommand label units (commandBudget command) action) checkCounts $ \counter ->
++  selectedCounterWithCleanup label units (prepareCommand store label units (commandBudget command) action) checkCounts $ \counter ->
+     bench benchmarkName $ nfIO (action counter)
+   where
+     label = show (streamName target) <> "/domain/" <> benchmarkName
+-    checkCounts n =
++    checkCounts n = do
++      maintenanceProbe store (Text.pack label <> "-finished")
+       let StreamName prefix = streamName (tagTarget target ("domain-" <> Text.pack benchmarkName))
+-       in workCountProbe store (Text.pack label) (prefix <> "-iteration-") (if units == 0 then 0 else n) (n * units)
++      workCountProbe store (Text.pack label) (prefix <> "-iteration-") (if units == 0 then 0 else n) (n * units)
+     units = commandUnits command
+     action counter = do
+       n <- nextBoundedIteration label (commandBudget command) counter
+@@ -717,12 +721,15 @@ iterationTarget target n =
+   let StreamName name = streamName target
+    in stream (name <> "-iteration-" <> Text.pack (show n))
+ 
+-prepareCommand :: String -> Int -> Int -> (IORef Int -> IO ()) -> IO (IORef Int)
+-prepareCommand label units budget action = do
++prepareCommand :: Store.KirokuStore -> String -> Int -> Int -> (IORef Int -> IO ()) -> IO (IORef Int)
++prepareCommand store label units budget action = do
+   setupTrace "command" label ("counter budget_iterations=" <> show budget <> " events_per_iteration=" <> show units)
+   counter <- newIORef 0
++  setupTrace "command" label "checkpoint=before-warm-up"
++  checkpointBenchmarkStore store
+   setupTrace "command" label "warm-up invocations=3"
+   replicateM_ 3 (action counter)
++  maintenanceProbe store (Text.pack label <> "-ready")
+   pure counter
+ 
+ -- * Projection rebuild benchmark fixtures ---------------------------------
+@@ -746,7 +753,8 @@ rebuildScenarioBench store =
+           Left err -> liftIO (fail (show err))
+           Right _ -> pure ()
+       counter <- newIORef 0
+-      setupTrace "rebuild" "three-categories-200" "warm-up invocations=3 source_events_per_invocation=600"
++      checkpointBenchmarkStore store
++      setupTrace "rebuild" "three-categories-200" "checkpoint=before-warm-up warm-up invocations=3 source_events_per_invocation=600"
+       replicateM_ 3 (runRebuild True counter)
+       probe <- lookupEnv "KEIRO_BENCH_REBUILD_PROBE"
+       when (probe == Just "1") (replicateM_ 3 (runRebuild True counter))
+@@ -1015,10 +1023,12 @@ coordinatorFanouts = [10, 100, 1000]
+ 
+ domainRouterFanoutBench :: Store.KirokuStore -> StoreRunner -> Int -> Benchmark
+ domainRouterFanoutBench store runner fanout =
+-  selectedCounterWithCleanup label fanout (prepareCommand label fanout (100000 `div` fanout) action) checkCounts $ \counter -> bench (show fanout) $ nfIO (action counter)
++  selectedCounterWithCleanup label fanout (prepareCommand store label fanout (100000 `div` fanout) action) checkCounts $ \counter -> bench (show fanout) $ nfIO (action counter)
+   where
+     label = "router-" <> show fanout
+-    checkCounts n = workCountProbe store (Text.pack label) ("bench-command-domain-router:" <> Text.pack label <> "-") (n * fanout) (n * fanout)
++    checkCounts n = do
++      maintenanceProbe store (Text.pack label <> "-finished")
++      workCountProbe store (Text.pack label) ("bench-command-domain-router:" <> Text.pack label <> "-") (n * fanout) (n * fanout)
+     action counter = do
+       n <- nextIteration label fanout counter
+       let correlationId = Text.pack label <> "-" <> Text.pack (show n)
+@@ -1033,10 +1043,12 @@ domainRouterFanoutBench store runner fanout =
+ 
+ domainProcessManagerFanoutBench :: Store.KirokuStore -> StoreRunner -> Int -> Benchmark
+ domainProcessManagerFanoutBench store runner fanout =
+-  selectedCounterWithCleanup label fanout (prepareCommand label fanout (100000 `div` fanout) action) checkCounts $ \counter -> bench (show fanout) $ nfIO (action counter)
++  selectedCounterWithCleanup label fanout (prepareCommand store label fanout (100000 `div` fanout) action) checkCounts $ \counter -> bench (show fanout) $ nfIO (action counter)
+   where
+     label = "process-manager-" <> show fanout
+-    checkCounts n = workCountProbe store (Text.pack label) ("bench-command-domain-process-manager:" <> Text.pack label <> "-") (n * fanout) (n * fanout)
++    checkCounts n = do
++      maintenanceProbe store (Text.pack label <> "-finished")
++      workCountProbe store (Text.pack label) ("bench-command-domain-process-manager:" <> Text.pack label <> "-") (n * fanout) (n * fanout)
+     action counter = do
+       n <- nextIteration label fanout counter
+       let correlationId = Text.pack label <> "-" <> Text.pack (show n)
+@@ -1225,6 +1237,7 @@ runCommandGrowthProbe store = do
+ 
+ runResetProbes :: Store.KirokuStore -> Store.KirokuStore -> Store.KirokuStore -> IO ()
+ runResetProbes outboxStore inboxStore producerStore = do
++  checkpointBenchmarkStore outboxStore
+   let outboxSeed store count = do
+         runStoreChecked store (Store.runTransaction (Tx.sql "TRUNCATE keiro.keiro_outbox"))
+         seedOutbox store (take count (scenarioMessages (const Nothing)))
+diff --git a/keiro/bench/ProducerIdentityBench.hs b/keiro/bench/ProducerIdentityBench.hs
+index 2b41b7f3..2b08ea5a 100644
+--- a/keiro/bench/ProducerIdentityBench.hs
++++ b/keiro/bench/ProducerIdentityBench.hs
+@@ -12,6 +12,7 @@ import Data.UUID qualified as UUID
+ import Keiro.Integration.Event
+ import Keiro.Outbox
+ import Keiro.Prelude
++import Keiro.Test.Postgres (checkpointBenchmarkStore)
+ import Kiroku.Store qualified as Store
+ import Kiroku.Store.Types (EventId (..), EventType (..), GlobalPosition (..), RecordedEvent (..), StreamId (..), StreamVersion (..))
+ import Test.Tasty.Bench (Benchmark, bcompareWithin, bench, bgroup, nf, nfIO)
+@@ -30,7 +31,7 @@ producerIdentityBenchmarks store sequenceRef =
+       ]
+   ]
+   where
+-    sqlBench name action = selected (setupTrace "producer-identity" name "warm-up invocations=3 timed_reset=TRUNCATE" >> replicateM_ 3 action) $ \_ -> bench name (nfIO action)
++    sqlBench name action = selected (setupTrace "producer-identity" name "checkpoint=before-warm-up warm-up invocations=3 timed_reset=TRUNCATE" >> checkpointBenchmarkStore store >> replicateM_ 3 action) $ \_ -> bench name (nfIO action)
+     run batch deterministic replay = do
+       generation <- atomicModifyIORef' sequenceRef (\n -> (n + 1, n + 1))
+       result <- Store.runStoreIO store $ do
+diff --git a/keiro/bench/ReadModelBench.hs b/keiro/bench/ReadModelBench.hs
+index 38da47c0..6ac5016b 100644
+--- a/keiro/bench/ReadModelBench.hs
++++ b/keiro/bench/ReadModelBench.hs
+@@ -83,7 +83,7 @@ import Keiro.ReadModel.Rebuild
+     resumeVersionedRebuild,
+   )
+ import Keiro.Stream qualified as Keiro.Stream
+-import Keiro.Test.Postgres (StoreRunner (..))
++import Keiro.Test.Postgres (StoreRunner (..), checkpointBenchmarkStore)
+ import Kiroku.Store qualified as Store
+ import Kiroku.Store.Effect (Store)
+ import Kiroku.Store.Effect.Resource (KirokuStoreResource)
+@@ -195,6 +195,7 @@ setupReadModelBench store runner = do
+   setupTrace "read-model" "shared" "seed_streams=5000 seed_events=25000 analyze=once-before-warm-up"
+   runStoreChecked store (Store.runTransaction (Tx.sql "ANALYZE"))
+   when (probe == Just "1") (commandPlanProbe store "read-model-after-analyze")
++  checkpointBenchmarkStore store
+   commandCounter <- newIORef 0
+   asyncCounter <- newIORef 0
+   runCounter <- newIORef 0
+@@ -335,7 +336,7 @@ asyncLegacyPattern =
+ 
+ inlineScenarioBench :: ReadModelBenchFixture -> String -> Text -> Benchmark
+ inlineScenarioBench fixture benchmarkName scenarioKey =
+-  selectedWithCleanup (warmScenario scenarioKey (runInlineScenario fixture scenarioKey)) (const (probeScenarioPlans fixture scenarioKey)) $ \_ ->
++  selectedWithCleanup (warmScenario fixture.store scenarioKey (runInlineScenario fixture scenarioKey)) (const (probeScenarioPlans fixture scenarioKey)) $ \_ ->
+     bench benchmarkName $ nfIO (runInlineScenario fixture scenarioKey)
+ 
+ runInlineScenario :: ReadModelBenchFixture -> Text -> IO ()
+@@ -358,7 +359,7 @@ runInlineScenario fixture scenarioKey = do
+ 
+ asyncScenarioBench :: ReadModelBenchFixture -> String -> Text -> Benchmark
+ asyncScenarioBench fixture benchmarkName scenarioKey =
+-  selectedWithCleanup (warmScenario (scenarioKey <> "-async") (runAsyncScenario fixture scenarioKey)) (const (probeScenarioPlans fixture scenarioKey)) $ \_ ->
++  selectedWithCleanup (warmScenario fixture.store (scenarioKey <> "-async") (runAsyncScenario fixture scenarioKey)) (const (probeScenarioPlans fixture scenarioKey)) $ \_ ->
+     bench benchmarkName $ nfIO (runAsyncScenario fixture scenarioKey)
+ 
+ runAsyncScenario :: ReadModelBenchFixture -> Text -> IO ()
+@@ -1443,8 +1444,10 @@ nextCounter label budget counter = do
+   when (next > budget) (fail ("benchmark fixture growth budget exceeded: " <> label <> " iterations=" <> show next))
+   pure next
+ 
+-warmScenario :: Text -> IO () -> IO ()
+-warmScenario label action = do
++warmScenario :: Store.KirokuStore -> Text -> IO () -> IO ()
++warmScenario store label action = do
++  setupTrace "read-model" (Text.unpack label) "checkpoint=before-warm-up"
++  checkpointBenchmarkStore store
+   setupTrace "read-model" (Text.unpack label) "warm-up invocations=3"
+   replicateM_ 3 action
+ 

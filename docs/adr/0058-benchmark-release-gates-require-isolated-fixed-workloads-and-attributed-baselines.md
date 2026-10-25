@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Benchmark release gates require isolated fixed workloads and attributed baselines
 description: Release benchmark evidence uses isolated fixtures, fixed measured work, explicit growth bounds and reproducible baselines whose changes have attributed causes.
-timestamp: 2026-10-25T06:32:22Z
+timestamp: 2026-10-25T07:40:00Z
 docId: ADR-58
 status: Accepted
 date: 2026-10-21
@@ -37,6 +37,14 @@ Timed actions measure a stated workload. Irrelevant fixture deletion must not ma
 command cost, and fresh identities must not turn intended fresh commands into duplicate probes.
 Growth in streams, events or bookkeeping has an explicit bound and stability evidence; exceeding
 the bound invalidates the sample rather than producing a truncated successful timing.
+
+Database clones share server-wide checkpoint work. Selected serial benchmark setup finishes
+prior checkpoint work outside timing, then performs final representative warm-up. This
+settles the fixture boundary without changing command SQL, event counts or durable commit
+settings. OS and autovacuum activity remain part of the recorded environment. Retain
+maintenance snapshots when investigating cross-scenario effects: logical data isolation alone
+cannot establish physical independence. PostgreSQL documents the shared checkpoint I/O and
+its WAL/time triggers in its [WAL configuration guide](https://www.postgresql.org/docs/18/wal-configuration.html).
 
 Control comparisons must see nearby retained populations. Placing every legacy case before
 every versioned case in a growing store can compare different points in that growth, even

@@ -1,5 +1,13 @@
 # Delegated inbox benchmark evidence
 
+Historical fixture note (2026-10-25): the current harness gives delegated inbox its own
+durable clone and defers schema, duplicate seeding and three representative warm-up runs
+to selected scenarios. It ANALYZEs after the first warm-up. The 100,000-event history was
+already selection-aware; this change must not be described as newly making that setup lazy.
+The original fast-fixture measurements below remain historical evidence. See
+[harness acceptance](../harness-isolation-v1/README.md) for actual counts, current boundaries
+and alternating full/filtered comparisons.
+
 Measured on 2026-09-15 from commit `256b2595` plus the uncommitted Milestone-6
 benchmark change. Each row is 2,000 deliveries. The table and delegated variants
 use the same 1 KiB integration payload, indexed downstream receipt probe, one

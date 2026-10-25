@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- | Inspect the actual stream-read prepared plan on a disposable benchmark store.
-module CommandProbe (commandPlanProbe, delegatedPlanProbe, tableResetProbe, workCountProbe, rebuildCountProbe) where
+module CommandProbe (commandPlanProbe, delegatedPlanProbe, tableResetProbe, workCountProbe, rebuildCountProbe, maintenanceProbe) where
 
 import Control.Monad (replicateM)
 import Data.Aeson qualified as Aeson
@@ -131,3 +131,19 @@ rebuildCountProbe store expectedRuns = do
     unless (runs == fromIntegral expectedRuns && sources == fromIntegral (3 * expectedRuns) && events == 600) $
       fail ("rebuild work-count mismatch: " <> show (runs, sources, events))
     Lazy.hPutStrLn stderr (Aeson.encode (Aeson.object ["label" Aeson..= ("rebuild" :: Text), "runs" Aeson..= runs, "sources" Aeson..= sources, "events" Aeson..= events, "bookkeeping" Aeson..= (bookkeeping :: Aeson.Value)]))
+
+-- Cluster maintenance is shared across database clones. Record it outside timing.
+maintenanceProbe :: Store.KirokuStore -> Text -> IO ()
+maintenanceProbe store label = do
+  enabled <- lookupEnv "KEIRO_BENCH_MAINTENANCE_PROBE"
+  when (enabled == Just "1") $ do
+    result <-
+      Store.runStoreIO store $
+        Store.runTransaction $
+          Tx.statement () $
+            preparable
+              "SELECT jsonb_build_object('at',clock_timestamp(),'checkpoint',(SELECT to_jsonb(c) FROM pg_stat_checkpointer c),'wal',(SELECT to_jsonb(w) FROM pg_stat_wal w),'lsn',pg_current_wal_lsn(),'max_wal_size',current_setting('max_wal_size'),'checkpoint_timeout',current_setting('checkpoint_timeout'),'shared_buffers',current_setting('shared_buffers'),'activity',(SELECT jsonb_agg(jsonb_build_object('type',backend_type,'database',datname,'state',state,'wait_type',wait_event_type,'wait',wait_event)) FROM pg_stat_activity WHERE backend_type IN ('checkpointer','autovacuum worker','background writer','walwriter','io worker')),'tables',(SELECT jsonb_agg(jsonb_build_object('table',relname,'live',n_live_tup,'dead',n_dead_tup,'vacuum',vacuum_count,'autovacuum',autovacuum_count,'last_autovacuum',last_autovacuum,'analyze',analyze_count,'last_autoanalyze',last_autoanalyze)) FROM pg_stat_user_tables WHERE relname IN ('streams','stream_events','events','keiro_inbox','keiro_inbox_delegated_bench_effect')))"
+              E.noParams
+              (D.singleRow (D.column (D.nonNullable D.jsonb)))
+    snapshot <- either (fail . show) pure result
+    Lazy.hPutStrLn stderr (Aeson.encode (Aeson.object ["maintenance" Aeson..= label, "snapshot" Aeson..= (snapshot :: Aeson.Value)]))

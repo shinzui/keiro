@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-25
+* **Update**: Record shared checkpoint coupling and selected preparation barriers in [ADR-58](0058-benchmark-release-gates-require-isolated-fixed-workloads-and-attributed-baselines.md), retaining raw diagnostics and pending unprobed acceptance.
 * **Update**: Require adjacent sequential controls and representative stream cardinality in [ADR-58](0058-benchmark-release-gates-require-isolated-fixed-workloads-and-attributed-baselines.md); retain actual-count and refusing-gate diagnostics while final acceptance remains open.
 * **Update**: Record accepted reaction state inspection with explicit unavailable provenance and no inferred witnesses.
 * **Update**: Record fresh timer resubscription, per-view schema refusal and distinct retirement cleanup behavior.

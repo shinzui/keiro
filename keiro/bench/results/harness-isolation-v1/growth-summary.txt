@@ -1,0 +1,11 @@
+| Population | fresh median [range] (us) | no-op median [range] (us) |
+|---|---|---|
+| empty | 182.45 [160.13, 238.45] | 24.50 [22.96, 32.45] |
+| grown-5000-before-analyze | 554.45 [545.93, 592.00] | 191.02 [184.53, 195.97] |
+| grown-5000-after-analyze | 142.90 [142.05, 151.51] | 19.30 [18.82, 23.39] |
+| grown-10000 | 143.05 [142.26, 169.55] | 18.74 [18.61, 19.88] |
+| grown-100000 | 147.62 [146.30, 153.97] | 19.68 [19.21, 20.98] |
+| grown-3005000 | 145.18 [143.21, 162.24] | 20.60 [19.62, 24.14] |
+FRESH_EARLY_LATE_DIFFERENCE=1.65%
+NOOP_EARLY_LATE_DIFFERENCE=4.67%
+GROWTH_ACCEPTED=true

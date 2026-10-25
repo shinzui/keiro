@@ -252,9 +252,12 @@ Phase 1 remains open. EP-3 is Complete with cursor/class/wide-key tests, strict
 documentation validation and 136 retained v2 query plans. EP-4 is Complete: 49 HTTP examples pass, including wire origin/media refusals,
 actual stalled-socket termination, fresh-feed and retirement recovery. Strict
 ADR and documentation validation passes for both children. EP-7 is In Progress with static selected
-fixtures, fixed 600-event rebuilds and a growth probe through 1.2 million events;
-reset/durable-fixture and actual work-count diagnostics are retained; extended growth and
-paired full/filtered timing acceptance remain open. A full release-gate run on clean
+fixtures, fixed 600-event rebuilds and accepted five-block growth through 3,005,000 seed events;
+reset/durable-fixture and actual work-count diagnostics are retained;
+paired full/filtered timing acceptance remains open. An earlier cohort passes command
+medians but contains a late inbox outlier. EP-7 now settles shared cluster checkpoint
+work before final selected warm-up; instrumented full/count runs pass and new unprobed
+pairs remain required. A full release-gate run on clean
 `847b395c` passed correctness, attempted all six guards and refused producer/projection.
 Its noisy producer timings are exploratory; this is not passing release evidence.
 EP-1 M3–M6 wait for EP-7 Complete. EP-2's passing release demonstration still waits

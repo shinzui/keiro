@@ -122,3 +122,37 @@ sequential tripwire unchanged. `projection-adjacent.*` retains the instrumented 
 All 12 cases pass, with actual prepared group/stream plans after each case. A separate
 `projection-adjacent-timed.*` run disables plan/count probes. No CSV baseline or producer
 ceiling has changed. Final alternating command pairs remain required.
+
+
+The three alternating pairs at `cfc57046` are preserved in `attempt-2/`. Every command
+median difference is below 10% (maximum 6.66%), and all six processes pass their cases.
+The third full run nevertheless has a 59.30% late delegated-batch-1000 fresh metrics-twin
+outlier and slower small command appends; that cohort is not final acceptance.
+
+`maintenance-full-1.*`, source `cfc57046` plus `maintenance-source.patch`, captures cluster
+checkpoint/WAL/activity/table statistics outside timed actions. A checkpoint is active from
+first delegated setup through multiple command cases. Defaults are `max_wal_size=1GB`,
+`checkpoint_timeout=5min`. PostgreSQL describes the I/O and triggers in its
+[WAL guide](https://www.postgresql.org/docs/18/wal-configuration.html), and the cluster-wide
+counters in its [statistics reference](https://www.postgresql.org/docs/18/monitoring-stats.html#MONITORING-PG-STAT-CHECKPOINTER-VIEW).
+This identifies remaining cross-scenario coupling, rather than proving the exact server
+state of the older uninstrumented outlier.
+
+The candidate adds `checkpointBenchmarkStore` to test support. It uses the existing pool's
+session API outside a transaction to wait for a cluster checkpoint. Selected setup then
+warms the measured path; delegated intake uses one warm-up, ANALYZE, checkpoint, then two
+more warm-ups. Command/ordinary inbox/outbox/producer/rebuild/read-model paths settle prior
+checkpoint work before their final warm-up. Business rows and timed supported operations
+are unchanged; durable settings and autovacuum stay enabled. `checkpoint-full-1.*`, exact
+source `checkpoint-source.patch` against `cfc57046`, passes all 96 cases. Its 114 snapshots
+have no busy/outstanding checkpoint and fresh twins differ by at most 4.41%. The subsequent
+explicit handle-forcing/reset-probe adjustment is in `checkpoint-final-source.patch`.
+`checkpoint-work-counts.*` then completes all 96 diagnostic cases and all 64 actual
+count reports, including 13 persisted rebuild runs / 39 source rows / exactly 600 events.
+`checkpoint-reset.*` repeats five alternatives per reset from a settled checkpoint;
+TRUNCATE medians are 1.515 ms outbox/2,000, 0.937 ms inbox/2,000 and 1.400 ms
+producer/1,000; DELETE medians are 0.323/0.324/0.213 ms. Both leave zero live rows;
+TRUNCATE supplies a fresh physical fixture boundary, while DELETE retains allocated pages.
+The common additive reset is reported separately and does not cancel from a ratio.
+`checkpoint-list-tests.*` lists the same 96 names with no workload setup. Final unprobed
+pairs remain open. No baseline or ceiling has moved.

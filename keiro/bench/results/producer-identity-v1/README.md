@@ -1,5 +1,12 @@
 # Producer identity performance evidence
 
+Historical fixture note (2026-10-25): these measurements and source revisions remain
+unchanged. The ordinary benchmark now uses separate durable group fixtures, selected setup
+and representative warm-up; current absolute times are not comparable with these older
+machine/fixture values. See [harness acceptance](../harness-isolation-v1/README.md) for the
+new boundary and retained failed attempts. The producer 1.10 same-process ceiling remains
+unchanged; plan 315 owns its fresh-path attribution and current acceptance.
+
 Recorded 2026-09-15 for [plan 164](../../../../docs/plans/164-make-producer-outbox-identity-deterministic-and-replay-safe.md).
 
 ## Setup

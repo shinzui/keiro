@@ -6,6 +6,11 @@ All notable changes to `keiro-test-support` are recorded here. The format follow
 
 ## [Unreleased]
 
+### New Features
+
+- Add `checkpointBenchmarkStore` for disposable serial benchmark preparation,
+  so a selected scenario can finish prior cluster checkpoint work before warm-up.
+
 ## 0.21.0.0 — 2026-10-14
 
 ### Other Changes

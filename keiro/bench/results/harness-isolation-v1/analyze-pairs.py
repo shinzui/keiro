@@ -10,8 +10,23 @@ def rows(path):
 pairs=[(rows(root/f'pair-{p}-filtered.csv'),rows(root/f'pair-{p}-full.csv')) for p in [1,2,3]]
 expected={r[0] for r in csv.reader(open('keiro/bench/baseline-command.csv')) if r and r[0].startswith('All.command.')}
 assert len(expected)==15
+inventory=set((root/'accepted-list-tests.txt').read_text().splitlines())
+assert len(inventory)==96, ('inventory',len(inventory))
+previous={line.strip() for line in (root/'final-list-tests-v2.txt').read_text().splitlines() if line.strip().startswith('All.')}
+assert inventory==previous, ('renamed cases',previous-inventory,inventory-previous)
+for baseline in Path('keiro/bench').glob('baseline-*.csv'):
+    required={r[0] for r in csv.reader(baseline.open()) if r and r[0].startswith('All.')}
+    assert required<=inventory, ('missing baseline names',baseline,required-inventory)
+for pair,(filtered,full) in enumerate(pairs,1):
+    assert filtered.keys()==expected, ('filtered names',pair,expected-filtered.keys(),filtered.keys()-expected)
+    assert full.keys()==inventory, ('full names',pair,inventory-full.keys(),full.keys()-inventory)
+    setup=(root/f'pair-{pair}-filtered.setup.log').read_text()
+    assert all('group='+group not in setup for group in ['delegated-inbox','read-model','inbox','outbox','rebuild','producer-identity']), ('unselected setup',pair)
+    for selection in ['filtered','full']:
+        assert not any(line.startswith('{') for line in (root/f'pair-{pair}-{selection}.setup.log').read_text().splitlines()), ('timed probes enabled',pair,selection)
+
 accepted=True
-print('| Command row | filtered means (us) | full means (us) | median absolute paired difference |')
+print('| Command row | filtered means ±2σ (us) | full means ±2σ (us) | median absolute paired difference |')
 print('|---|---|---|---|')
 for name in sorted(expected):
     for a,b in pairs:
@@ -20,14 +35,15 @@ for name in sorted(expected):
     differences=[abs(b/a-1)*100 for a,b in zip(filtered,full)]
     difference=statistics.median(differences)
     accepted &= difference<=10
-    print('|',name.removeprefix('All.command.'),'|',', '.join(f'{x/1e6:.1f}' for x in filtered),'|',', '.join(f'{x/1e6:.1f}' for x in full),'|',f'{difference:.2f}%','|')
+    print('|',name.removeprefix('All.command.'),'|',', '.join(f'{a[name][0]/1e6:.1f} ±{a[name][1]/1e6:.1f}' for a,b in pairs),'|',', '.join(f'{b[name][0]/1e6:.1f} ±{b[name][1]/1e6:.1f}' for a,b in pairs),'|',f'{difference:.2f}%','|')
     if name.endswith(('no-op','rejected')):
         accepted &= max(filtered+full)<200e6
 print('PAIR_ACCEPTED='+str(accepted).lower())
 for a,b in pairs:
     for coordinator in ['router','process-manager']:
-        times=[a[f'All.command.domain.{coordinator}-fanout.{n}'][0] for n in [10,100,1000]]
-        assert times==sorted(times),(coordinator,times)
+        for selected in [a,b]:
+            times=[selected[f'All.command.domain.{coordinator}-fanout.{n}'][0] for n in [10,100,1000]]
+            assert times==sorted(times),(coordinator,times)
 for p,(_,full) in enumerate(pairs,1):
     for name in sorted(full):
         if '.fresh.metrics-off' in name:

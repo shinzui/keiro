@@ -60,9 +60,13 @@ records new baselines.
 - [ ] M1: Separate clones and static benchmark trees keep selected setup isolated. A command
       filter executes no delegated setup/duplicate seeding/warm-up; listing benchmark names
       executes no workload preparation. Filtered/full command measurements agree within noise.
-- [ ] M2: Command/fan-out actions use unique iteration identities without timed hard deletes.
-      Projection setup seeds exactly 600 category events once; every repeated rebuild scans
-      those same 600 events. Other reset choices and growth bounds have measured rationale.
+- [x] M2 (2026-10-25): Fresh command/fan-out identities and 64 actual-count reports verify
+      expected stored work without timed hard deletes. Rebuild runs retain exactly 600 source
+      events and persisted bookkeeping matches run counts. Five durable growth blocks through
+      3,005,000 seeded events differ by 1.65% fresh / 4.67% no-op from 100,000 events;
+      actual late plans remain indexed. Reset alternatives retain fixed row counts and
+      measured costs in `harness-isolation-v1/reset-probe.txt`; growth spreads/counts are in
+      `harness-isolation-v1/growth-summary.txt`.
 - [ ] M3: Representative setup warm-up resolves first-run/order effects. First inbox fresh
       rows stay within 25% of their metrics twin, fan-out scales with target count, and command
       no-op/rejected rows meet the under-200-us target on the recorded environment. The
@@ -97,11 +101,29 @@ command/async/promotion growth was initially bounded at 100,000/100,000/10,000.
 The tighter run reached 84,942 command and 65,540 async operations. Current finite caps
 are 500,000 command events, one million async operations and 10,000 promotion runs,
 so correctly fast adaptive samples do not exhaust those initial budgets.
-`work-counts.*` and its exact source patch retain the diagnostic. A single-block durable probe reaches 3,005,000 seeded events with indexed lookup,
-173-us fresh and 24.8-us no-op means. Five-block checkpoint sampling will establish
-spread before accepting stationarity. Replacement alternating pairs remain open.
+`work-counts.*` and its exact source patch retain the diagnostic. The single-block durable probe is followed by five checkpoint blocks through
+3,005,000 seed events. Fresh/no-op medians at the maximum are 145.18/20.60 us,
+within 1.65%/4.67% of the 100,000-event checkpoint, with actual indexed plans,
+counts and durable settings. The first replacement pairs at `cfc57046` pass every command median (maximum 6.66%)
+but a later inbox row has a 59.30% metrics-twin outlier in the third full run.
+`attempt-2/` retains all three pairs and is not final acceptance. Maintenance snapshots
+show cluster checkpoints spanning cloned databases and selected scenarios. The candidate
+now finishes prior checkpoint work before final selected warm-up. Its instrumented full
+run passes 96 cases, all fresh twins within 4.41%, and all 114 maintenance snapshots show
+an idle checkpointer with no outstanding request. Final work counts also pass all 96 diagnostic cases / 64 actual reports,
+including persisted fixed rebuild inputs; settled reset alternatives and the 96-name
+zero-setup listing pass. Only unprobed pairs on that boundary remain open.
 
 ## Surprises & Discoveries
+
+Logical clones still share PostgreSQL's checkpointer. `maintenance-full-1.*` records
+in-progress cluster checkpoints from early delegated intake into command scenarios
+(`CheckpointWriteDelay`, requested greater than completed), with 1-GB/5-minute defaults.
+A prior three-pair cohort had a late fresh-inbox outlier and slower small appends. The
+instrumented run does not directly reconstruct that older outlier's server state; it proves
+the remaining cross-scenario mechanism. `checkpoint-full-1.*` completes prior checkpoint
+work before final selected warm-up and records zero busy/outstanding checkpoints across
+114 snapshots, with every fresh twin within 4.41%. New unprobed pairs remain required.
 
 The first complete release gate passed correctness but refused producer and projection.
 Projection's sequential one-target rows diverged 2.43x, while its alternating three-target
@@ -112,7 +134,7 @@ actual prepared plans. A tighter follow-up still failed when it measured five le
 cases before five versioned cases. Adjacent controls preserve every benchmark name and
 ceiling while comparing nearer retained populations. The instrumented adjacent run passes
 all 12 cases; the separate unprobed run also passes (inline 1.01–1.04x, async 1.06x).
-Replacement command pairs and five-block growth spread remain acceptance work.
+Replacement command pairs remain acceptance work; five-block growth spread passes.
 Diagnostic runs are not accepted timing measurements.
 
 The first durable rebuild probe correctly aborted at 167 invocations: its counter
@@ -146,6 +168,14 @@ preserved as such. The tasty-bench CSV uses picoseconds, correcting this plan's
 original nanosecond conversion.
 
 ## Decision Log
+
+- Decision: Finish prior cluster checkpoint work before final selected warm-up using
+  `checkpointBenchmarkStore` from test support; retain server maintenance probes.
+  Rationale: Separate database clones share the checkpointer. Captured requests remain
+  in progress across unrelated scenarios; explicit preparation makes the selected
+  checkpoint boundary reproducible while preserving durable settings and business work.
+  The barrier is untimed; supported business resets stay timed. ADR-58 records the rule.
+  Date: 2026-10-25
 
 - Decision: Seed 5,000 unrelated singleton streams and ANALYZE the three event-store
   relations once during selected command-group setup. One-event and fan-out rows cap at

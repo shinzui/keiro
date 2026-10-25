@@ -83,7 +83,7 @@ import Keiro.ReadModel.Rebuild
     resumeVersionedRebuild,
   )
 import Keiro.Stream qualified as Keiro.Stream
-import Keiro.Test.Postgres (StoreRunner (..))
+import Keiro.Test.Postgres (StoreRunner (..), checkpointBenchmarkStore)
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
@@ -195,6 +195,7 @@ setupReadModelBench store runner = do
   setupTrace "read-model" "shared" "seed_streams=5000 seed_events=25000 analyze=once-before-warm-up"
   runStoreChecked store (Store.runTransaction (Tx.sql "ANALYZE"))
   when (probe == Just "1") (commandPlanProbe store "read-model-after-analyze")
+  checkpointBenchmarkStore store
   commandCounter <- newIORef 0
   asyncCounter <- newIORef 0
   runCounter <- newIORef 0
@@ -335,7 +336,7 @@ asyncLegacyPattern =
 
 inlineScenarioBench :: ReadModelBenchFixture -> String -> Text -> Benchmark
 inlineScenarioBench fixture benchmarkName scenarioKey =
-  selectedWithCleanup (warmScenario scenarioKey (runInlineScenario fixture scenarioKey)) (const (probeScenarioPlans fixture scenarioKey)) $ \_ ->
+  selectedWithCleanup (warmScenario fixture.store scenarioKey (runInlineScenario fixture scenarioKey)) (const (probeScenarioPlans fixture scenarioKey)) $ \_ ->
     bench benchmarkName $ nfIO (runInlineScenario fixture scenarioKey)
 
 runInlineScenario :: ReadModelBenchFixture -> Text -> IO ()
@@ -358,7 +359,7 @@ runInlineScenario fixture scenarioKey = do
 
 asyncScenarioBench :: ReadModelBenchFixture -> String -> Text -> Benchmark
 asyncScenarioBench fixture benchmarkName scenarioKey =
-  selectedWithCleanup (warmScenario (scenarioKey <> "-async") (runAsyncScenario fixture scenarioKey)) (const (probeScenarioPlans fixture scenarioKey)) $ \_ ->
+  selectedWithCleanup (warmScenario fixture.store (scenarioKey <> "-async") (runAsyncScenario fixture scenarioKey)) (const (probeScenarioPlans fixture scenarioKey)) $ \_ ->
     bench benchmarkName $ nfIO (runAsyncScenario fixture scenarioKey)
 
 runAsyncScenario :: ReadModelBenchFixture -> Text -> IO ()
@@ -1443,8 +1444,10 @@ nextCounter label budget counter = do
   when (next > budget) (fail ("benchmark fixture growth budget exceeded: " <> label <> " iterations=" <> show next))
   pure next
 
-warmScenario :: Text -> IO () -> IO ()
-warmScenario label action = do
+warmScenario :: Store.KirokuStore -> Text -> IO () -> IO ()
+warmScenario store label action = do
+  setupTrace "read-model" (Text.unpack label) "checkpoint=before-warm-up"
+  checkpointBenchmarkStore store
   setupTrace "read-model" (Text.unpack label) "warm-up invocations=3"
   replicateM_ 3 action
 

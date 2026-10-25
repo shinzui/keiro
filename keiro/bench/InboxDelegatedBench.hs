@@ -8,7 +8,7 @@ module InboxDelegatedBench
 where
 
 import BenchSetup (nextIteration, selectedWithCleanup, setupTrace)
-import CommandProbe (delegatedPlanProbe, workCountProbe)
+import CommandProbe (delegatedPlanProbe, maintenanceProbe, workCountProbe)
 import Control.DeepSeq (NFData (..))
 import Control.Monad (replicateM_)
 import Data.Aeson qualified as Aeson
@@ -45,6 +45,7 @@ import Keiro.Integration.Event (IntegrationContentType (ApplicationJson), Integr
 import Keiro.Prelude
 import Keiro.Stream (Stream, stream)
 import Keiro.Telemetry (KeiroMetrics)
+import Keiro.Test.Postgres (checkpointBenchmarkStore)
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect (PreparedEvent, Store)
 import Kiroku.Store.SQL qualified as StoreSQL
@@ -202,7 +203,10 @@ prepareScenario store name mode chunkSize traffic metrics = do
   setupTrace "delegated-inbox" label "analyze=after-first-warm-up remaining_warm_up=2"
   runStoreChecked store $ Store.runTransaction (Tx.sql "ANALYZE streams; ANALYZE stream_events; ANALYZE events; ANALYZE keiro.keiro_inbox")
   when (probe == Just "1") (delegatedPlanProbe store (Text.pack label <> "-after-analyze"))
+  setupTrace "delegated-inbox" label "checkpoint=before-final-two-warm-ups"
+  checkpointBenchmarkStore store
   replicateM_ 2 (runScenario store scenario)
+  maintenanceProbe store (Text.pack label <> "-ready")
   pure scenario
 
 runScenario :: Store.KirokuStore -> Scenario -> IO ()
@@ -226,6 +230,7 @@ checkScenarioCounts store scenario = do
         DuplicateTraffic -> 1
   setupTrace "counts" (Text.unpack prefix) ("iterations=" <> show n <> " expected_events=" <> show expected)
   workCountProbe store prefix ("benchInbox-" <> prefix <> "-") expected expected
+  maintenanceProbe store (prefix <> "-finished")
 
 runDownstream :: (IOE :> es, Store :> es) => Scenario -> DownstreamRun -> Eff es ()
 runDownstream scenario downstreamRun =

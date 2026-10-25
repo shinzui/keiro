@@ -26,6 +26,7 @@ module Keiro.Test.Postgres
     withMigratedSuite,
     withMigratedSuiteWith,
     withMigratedBenchmarkSuite,
+    checkpointBenchmarkStore,
     withFreshDatabase,
     withFreshStore,
     withFreshStoreWith,
@@ -148,6 +149,13 @@ withMigratedBenchmarkSuite action =
             )
             (\_ -> runSqlOn connection ("DROP DATABASE " <> quoteIdentifier template <> " WITH (FORCE)"))
             action
+
+-- | Finish prior cluster checkpoint work before warming a selected benchmark.
+-- This is a privileged, cluster-wide operation for disposable serial fixtures;
+-- it is not part of a measured command and changes no business rows.
+checkpointBenchmarkStore :: Store.KirokuStore -> IO ()
+checkpointBenchmarkStore store =
+  store `seq` (Pool.use store.pool (Session.script "CHECKPOINT") >>= either (fail . show) pure)
 
 withConfiguredSuite :: Pg.Config -> [MigrationComponent] -> (Fixture -> IO a) -> IO a
 withConfiguredSuite config extraComponents action = do

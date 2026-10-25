@@ -1,0 +1,263 @@
+All
+  outbox
+    hot-key:                                OK
+      498  ms ±  34 ms
+    hot-key-nolatency:                      OK
+      265  ms ±  28 ms
+    multi-key:                              OK
+      399  ms ±  68 ms
+  inbox
+    single-full:                            OK
+      123  ms ±  34 ms
+    single-nometrics:                       OK
+      122  ms ±  29 ms
+    batch-100:                              OK
+      54.4 ms ±  28 ms
+    single-slim:                            OK
+      122  ms ±  28 ms
+    downstream
+      table-downstream-single
+        fresh
+          metrics-off:                      OK
+            438  ms ±  46 ms
+          metrics-on:                       OK
+            421  ms ±  28 ms
+        repeated-key
+          metrics-off:                      OK
+            166  ms ±  35 ms
+          metrics-on:                       OK
+            166  ms ±  28 ms
+        all-duplicate
+          metrics-off:                      OK
+            165  ms ±  27 ms
+          metrics-on:                       OK
+            166  ms ±  27 ms
+      delegated-single
+        fresh
+          metrics-off:                      OK
+            410  ms ±  85 ms
+          metrics-on:                       OK
+            371  ms ±  27 ms
+        repeated-key
+          metrics-off:                      OK
+            27.4 ms ±  29 ms
+          metrics-on:                       OK
+            28.0 ms ±  28 ms
+        all-duplicate
+          metrics-off:                      OK
+            25.5 ms ±  28 ms
+          metrics-on:                       OK
+            26.6 ms ±  27 ms
+      delegated-direct-single
+        fresh
+          metrics-off:                      OK
+            378  ms ±  28 ms
+          metrics-on:                       OK
+            388  ms ±  28 ms
+        repeated-key
+          metrics-off:                      OK
+            27.3 ms ±  30 ms
+          metrics-on:                       OK
+            26.8 ms ±  27 ms
+        all-duplicate
+          metrics-off:                      OK
+            25.6 ms ±  27 ms
+          metrics-on:                       OK
+            25.7 ms ±  28 ms
+      table-downstream-batch-100
+        fresh
+          metrics-off:                      OK
+            281  ms ±  31 ms
+          metrics-on:                       OK
+            284  ms ±  39 ms
+        repeated-key
+          metrics-off:                      OK
+            2.02 ms ± 3.5 ms
+          metrics-on:                       OK
+            3.04 ms ± 3.4 ms
+        all-duplicate
+          metrics-off:                      OK
+            1.83 ms ± 3.4 ms
+          metrics-on:                       OK
+            2.84 ms ± 3.4 ms
+      delegated-batch-100
+        fresh
+          metrics-off:                      OK
+            399  ms ±  64 ms
+          metrics-on:                       OK
+            389  ms ±  27 ms
+        repeated-key
+          metrics-off:                      OK
+            550  μs ± 849 μs
+          metrics-on:                       OK
+            1.53 ms ± 1.7 ms
+        all-duplicate
+          metrics-off:                      OK
+            322  μs ± 426 μs
+          metrics-on:                       OK
+            1.35 ms ± 1.7 ms
+      table-downstream-batch-1000
+        fresh
+          metrics-off:                      OK
+            398  ms ±  34 ms
+          metrics-on:                       OK
+            406  ms ±  30 ms
+        repeated-key
+          metrics-off:                      OK
+            579  μs ± 851 μs
+          metrics-on:                       OK
+            1.57 ms ± 1.7 ms
+        all-duplicate
+          metrics-off:                      OK
+            327  μs ± 434 μs
+          metrics-on:                       OK
+            1.37 ms ± 1.8 ms
+      delegated-batch-1000
+        fresh
+          metrics-off:                      OK
+            388  ms ±  34 ms
+          metrics-on:                       OK
+            392  ms ±  29 ms
+        repeated-key
+          metrics-off:                      OK
+            272  μs ± 429 μs
+          metrics-on:                       OK
+            1.32 ms ± 1.7 ms
+        all-duplicate
+          metrics-off:                      OK
+            87.9 μs ± 106 μs
+          metrics-on:                       OK
+            1.09 ms ± 1.7 ms
+      delegated-history-duplicate
+        events-10:                          OK
+          25.6 ms ±  28 ms
+        events-1000:                        OK
+          25.8 ms ±  33 ms
+        events-100000:                      OK
+          25.5 ms ±  30 ms
+  command
+    legacy
+      accepted-1:                           OK
+        156  μs ± 219 μs
+    control
+      accepted-1:                           OK
+        150  μs ± 211 μs
+    domain-warmup
+      accepted-1:                           OK
+        150  μs ± 221 μs
+    domain
+      accepted-1:                           OK
+        149  μs ± 220 μs, 0.99x
+    legacy
+      accepted-large:                       OK
+        1.47 ms ± 1.7 ms
+    domain
+      accepted-large:                       OK
+        1.50 ms ± 1.7 ms, 1.02x
+    legacy
+      no-op:                                OK
+        16.8 μs ±  27 μs
+    domain
+      rejected:                             OK
+        16.3 μs ±  28 μs, 0.97x
+      no-op:                                OK
+        16.4 μs ±  26 μs, 0.97x
+      router-fanout
+        10:                                 OK
+          2.13 ms ± 3.4 ms
+        100:                                OK
+          21.2 ms ±  27 ms
+        1000:                               OK
+          210  ms ±  29 ms
+      process-manager-fanout
+        10:                                 OK
+          2.05 ms ± 3.4 ms
+        100:                                OK
+          19.9 ms ±  27 ms
+        1000:                               OK
+          212  ms ±  30 ms
+  rebuild
+    three-categories-200:                   OK
+      10.8 ms ±  14 ms
+  projection
+    inline
+      legacy
+        one-target:                         OK
+          236  μs ± 433 μs
+      versioned
+        one-target:                         OK
+          236  μs ± 420 μs, 1.00x
+      legacy
+        three-target:                       OK
+          262  μs ± 436 μs
+      versioned
+        three-target:                       OK
+          268  μs ± 425 μs, 1.02x
+      legacy
+        three-groups:                       OK
+          317  μs ± 425 μs
+      versioned
+        three-groups:                       OK
+          325  μs ± 421 μs, 1.02x
+      legacy
+        many-revisions:                     OK
+          232  μs ± 434 μs
+      versioned
+        many-revisions:                     OK
+          238  μs ± 420 μs, 1.02x
+      legacy
+        mixed-delivery:                     OK
+          249  μs ± 426 μs
+      versioned
+        mixed-delivery:                     OK
+          260  μs ± 424 μs, 1.04x
+    async
+      legacy
+        mixed-delivery:                     OK
+          94.4 μs ± 113 μs
+      versioned
+        mixed-delivery:                     OK
+          109  μs ± 214 μs, 1.16x
+  read-model-lifecycle
+    serving-binding
+      legacy-three:                         OK
+        66.8 μs ± 111 μs
+      versioned-three:                      OK
+        65.9 μs ± 106 μs
+    promotion
+      three-target-end-to-end:              OK
+        9.64 ms ±  15 ms
+    repair
+      10:                                   OK
+        400  μs ± 443 μs
+      100:                                  OK
+        2.23 ms ± 3.4 ms
+      1000:                                 OK
+        28.0 ms ±  28 ms
+  read-model-reads
+    status
+      list-1000-synthetic-groups:           OK
+        7.59 ms ±  15 ms
+      lookup-among-1000-synthetic-groups:   OK
+        68.9 μs ± 107 μs
+    guarded
+      all-rows-100:                         OK
+        163  μs ± 217 μs
+      keyed-10000:                          OK
+        65.6 μs ± 110 μs
+  producer-identity
+    derive-v1:                              OK
+      556  ns ± 829 ns
+    legacy-fresh-1000:                      OK
+      42.5 ms ±  29 ms
+    deterministic-fresh-1000:               OK
+      45.3 ms ±  28 ms, 1.07x
+    deterministic-fresh-and-replay-1000:    OK
+      294  ms ±  35 ms
+    legacy-single-tx-per-event-1000:        OK
+      88.3 ms ±  30 ms
+    deterministic-single-tx-per-event-1000: OK
+      88.4 ms ±  31 ms, 1.00x
+
+All 96 tests passed (75.32s)
+PROCESS_EXIT=0

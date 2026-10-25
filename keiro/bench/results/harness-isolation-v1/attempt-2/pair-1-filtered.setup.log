@@ -1,0 +1,46 @@
+BENCH_SETUP group=command scenario=shared schema seed_streams=5000 seed_events=5000 analyze=once-before-warm-up
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-1"/legacy/accepted-1 counter budget_iterations=100000 events_per_iteration=1
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-1"/legacy/accepted-1 warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-accepted-1"/legacy/accepted-1 iterations=16386 units=16386
+BENCH_SETUP group=command scenario=StreamName "bench-command-control"/legacy/accepted-1 counter budget_iterations=100000 events_per_iteration=1
+BENCH_SETUP group=command scenario=StreamName "bench-command-control"/legacy/accepted-1 warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-control"/legacy/accepted-1 iterations=16386 units=16386
+BENCH_SETUP group=command scenario=StreamName "bench-command-domain-warmup"/domain/accepted-1 counter budget_iterations=100000 events_per_iteration=1
+BENCH_SETUP group=command scenario=StreamName "bench-command-domain-warmup"/domain/accepted-1 warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-domain-warmup"/domain/accepted-1 iterations=8194 units=8194
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-1"/domain/accepted-1 counter budget_iterations=100000 events_per_iteration=1
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-1"/domain/accepted-1 warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-accepted-1"/domain/accepted-1 iterations=8194 units=8194
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-large"/legacy/accepted-large counter budget_iterations=10000 events_per_iteration=100
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-large"/legacy/accepted-large warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-accepted-large"/legacy/accepted-large iterations=1026 units=102600
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-large"/domain/accepted-large counter budget_iterations=10000 events_per_iteration=100
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-accepted-large"/domain/accepted-large warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-accepted-large"/domain/accepted-large iterations=1026 units=102600
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/legacy/no-op counter budget_iterations=1000000 events_per_iteration=0
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/legacy/no-op warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-no-op"/legacy/no-op iterations=131074 units=0
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/domain/rejected counter budget_iterations=1000000 events_per_iteration=0
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/domain/rejected warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-no-op"/domain/rejected iterations=131074 units=0
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/domain/no-op counter budget_iterations=1000000 events_per_iteration=0
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/domain/no-op warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-no-op"/domain/no-op iterations=131074 units=0
+BENCH_SETUP group=command scenario=router-10 counter budget_iterations=10000 events_per_iteration=10
+BENCH_SETUP group=command scenario=router-10 warm-up invocations=3
+BENCH_SETUP group=counts scenario=router-10 iterations=1026 units=10260
+BENCH_SETUP group=command scenario=router-100 counter budget_iterations=1000 events_per_iteration=100
+BENCH_SETUP group=command scenario=router-100 warm-up invocations=3
+BENCH_SETUP group=counts scenario=router-100 iterations=66 units=6600
+BENCH_SETUP group=command scenario=router-1000 counter budget_iterations=100 events_per_iteration=1000
+BENCH_SETUP group=command scenario=router-1000 warm-up invocations=3
+BENCH_SETUP group=counts scenario=router-1000 iterations=18 units=18000
+BENCH_SETUP group=command scenario=process-manager-10 counter budget_iterations=10000 events_per_iteration=10
+BENCH_SETUP group=command scenario=process-manager-10 warm-up invocations=3
+BENCH_SETUP group=counts scenario=process-manager-10 iterations=1026 units=10260
+BENCH_SETUP group=command scenario=process-manager-100 counter budget_iterations=1000 events_per_iteration=100
+BENCH_SETUP group=command scenario=process-manager-100 warm-up invocations=3
+BENCH_SETUP group=counts scenario=process-manager-100 iterations=130 units=13000
+BENCH_SETUP group=command scenario=process-manager-1000 counter budget_iterations=100 events_per_iteration=1000
+BENCH_SETUP group=command scenario=process-manager-1000 warm-up invocations=3
+BENCH_SETUP group=counts scenario=process-manager-1000 iterations=10 units=10000

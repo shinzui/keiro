@@ -1,0 +1,12 @@
+2026-10-25T06:38:22Z
+cfc5704639804fa34623a15efa10afee08bed0b1
+b7920dbf8ebc18044eb1edcfeafde83d9d7a0e4c5b42872b16fa3905e4cbfc22  /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench
+Darwin yujin 27.0.0 Darwin Kernel Version 27.0.0: Tue Aug 11 21:06:40 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6050 arm64 arm Darwin
+Apple M5 Ultra
+274877906944
+36
+The Glorious Glasgow Haskell Compilation System, version 9.12.4
+cabal-install version 3.16.1.0 
+compiled using version 3.16.1.0 of the Cabal library (in-tree)
+postgres (PostgreSQL) 18.6
+ 23:38:22  up 11 days  2:37,  3 users,  load average: 0.94, 1.62, 2.87
