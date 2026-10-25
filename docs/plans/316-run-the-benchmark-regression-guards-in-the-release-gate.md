@@ -61,7 +61,7 @@ several releases because the procedure never required it.
       whose log under `keiro/bench/results/release-gates/` carries `VERIFY_EXIT=`,
       `BENCH_EXIT=`, and the guard lines, and whose exit status is 1 for a known failing guard (the demonstration that the gate stops)
       and 0 after plan 315 is Complete. The failing demonstration may run earlier.
-- [ ] M3: The release procedure requires the gate. `agents/skills/release/SKILL.md` step 4
+- [x] M3 (2026-10-25): The release procedure requires the gate. `agents/skills/release/SKILL.md` step 4
       names `just release-gate`, the quiet-machine rule, the log-in-the-release-commit rule, and
       the no-re-recording rule; `docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md`
       Milestone 1 lists the gate log and all MasterPlan 46 mandatory prerequisites among its preflight artifacts.
@@ -70,6 +70,14 @@ several releases because the procedure never required it.
 
 
 ## Surprises & Discoveries
+
+The first full run on clean `847b395c` records `VERIFY_EXIT=0`, all six guard statuses,
+`BENCH_EXIT=1`, and recipe exit 1 in
+`keiro/bench/results/release-gates/20261025T053433Z-847b395c.log`.
+Producer and projection failed; outbox/inbox/command/read-model passed. This proves refusal
+and all-guard continuation mechanically. External solver/test activity appeared during
+producer sampling, so its timings are exploratory and do not establish quiet-machine
+acceptance. A quiet passing release gate and accepted recording/fixture evidence remain open.
 
 The initial runner fixed `-j1`/`-N2` only for producer identity; CSV guards inherited
 all host capabilities. It now uses serial wall-clock measurements at `-N2` for every

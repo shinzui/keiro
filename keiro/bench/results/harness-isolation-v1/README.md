@@ -24,9 +24,9 @@ final growth and paired-run evidence is still required.
 
 The harness now seeds 5,000 unrelated singleton streams and ANALYZEs streams,
 stream_events and events once in selected command-group setup, before any timed
-command lookup is prepared. Every command scenario has a fresh counter and a hard
-100,000-unit budget (an event for eventful scenarios; an operation for silent ones).
-Twelve eventful scenarios plus the seed bound the command store at 1,205,000 events.
+command lookup is prepared. The initial version gave every scenario a 100,000-unit budget and bounded the
+command store at 1,205,000 events. That budget was rejected by attempt 1 below;
+the revised retained-event/operation budgets are the current protocol.
 Counters include three warm-up invocations and fail on excess work. All rebuild
 sources remain fixed; only supported rebuild bookkeeping grows. Outbox, ordinary
 inbox and producer samples retain their TRUNCATE boundaries and fixed batch sizes.
@@ -75,3 +75,32 @@ records with fixed 600-event source input. Delegated setup warms one batch,
 ANALYZEs streams/stream_events/events/inbox once, then warms two more batches.
 `KEIRO_BENCH_INBOX_PLAN_PROBE=1` retains the actual prepared existence lookup's
 plans around that schedule without affecting normal timed runs.
+
+
+`work-counts.*` checks actual retained work, with timing probes enabled and a deliberately
+loose 100% requested deviation; these are count/plan diagnostics, not timing acceptance.
+The tested source is parent `847b395c` plus `work-counts-source.patch`.
+All 96 benchmark cases completed with process exit zero. Cleanup probes check each command
+and fan-out prefix against its counter, each delegated prefix against fresh/repeated/duplicate
+semantics, each history population, fixed rebuild events and persisted run/source rows,
+and the read-model command prefix. Relation sizes are included. Opt in with
+`KEIRO_BENCH_WORK_COUNTS=1`; timed acceptance must leave it unset.
+The full diagnostic also sets `KEIRO_BENCH_SETUP_TRACE=1`,
+`KEIRO_BENCH_REBUILD_PROBE=1`, `KEIRO_BENCH_INBOX_PLAN_PROBE=1` and
+`KEIRO_BENCH_READ_MODEL_PLAN_PROBE=1`, with `-j1 --time-mode wall --hide-progress
+--timeout 10s --stdev 100 +RTS -N2 -RTS`. Stdout and stderr are separate.
+
+The first release-gate run on `847b395c` passed correctness and reported all six guards,
+then refused producer and projection. Its log is retained under
+[release-gates](../release-gates/README.md). The projection sequential diagnostic diverged
+2.43x while its alternating three-target sampler measured 1.026x median p95 and 0.975x
+throughput. Its old seed was 25,000 events in one stream. The revised read-model seed keeps
+25,000 events across 5,000 streams, ANALYZEs the disposable fixture once before selected
+three-invocation warm-up, and bounds command events at 100,000, async invocations at 100,000
+and promotion runs at 10,000. Plan probes record the actual lookup around ANALYZE.
+No serving SQL, baseline, or ratio ceiling changes in this step.
+
+`record-pairs.sh` runs the three alternating serial pairs inside `nix develop`, refuses to
+overwrite existing CSVs, and separates setup traces. `analyze-pairs.py` checks complete
+command names, median absolute paired differences, no-op/rejected latency, monotone fan-out
+and fresh inbox metrics twins. The replacement pairs and extended growth probe remain open.

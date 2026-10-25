@@ -1,0 +1,257 @@
+All
+  outbox
+    hot-key:                                OK
+      519  ms ±  67 ms
+    hot-key-nolatency:                      OK
+      372  ms ±  92 ms
+    multi-key:                              OK
+      384  ms ±  41 ms
+  inbox
+    single-full:                            OK
+      162  ms ±  76 ms
+    single-nometrics:                       OK
+      186  ms ±  49 ms
+    batch-100:                              OK
+      90.3 ms ±  28 ms
+    single-slim:                            OK
+      175  ms ±  35 ms
+    downstream
+      table-downstream-single
+        fresh
+          metrics-off:                      OK
+            652  ms ±  54 ms
+          metrics-on:                       OK
+            626  ms ± 108 ms
+        repeated-key
+          metrics-off:                      OK
+            206  ms ±  55 ms
+          metrics-on:                       OK
+            187  ms ±  73 ms
+        all-duplicate
+          metrics-off:                      OK
+            178  ms ±  30 ms
+          metrics-on:                       OK
+            211  ms ±  31 ms
+      delegated-single
+        fresh
+          metrics-off:                      OK
+            553  ms ±  83 ms
+          metrics-on:                       OK
+            559  ms ±  77 ms
+        repeated-key
+          metrics-off:                      OK
+            44.0 ms ±  32 ms
+          metrics-on:                       OK
+            29.7 ms ±  37 ms
+        all-duplicate
+          metrics-off:                      OK
+            31.1 ms ±  28 ms
+          metrics-on:                       OK
+            29.1 ms ±  30 ms
+      delegated-direct-single
+        fresh
+          metrics-off:                      OK
+            563  ms ±  61 ms
+          metrics-on:                       OK
+            465  ms ±  56 ms
+        repeated-key
+          metrics-off:                      OK
+            32.1 ms ±  30 ms
+          metrics-on:                       OK
+            27.1 ms ±  27 ms
+        all-duplicate
+          metrics-off:                      OK
+            26.1 ms ±  27 ms
+          metrics-on:                       OK
+            25.5 ms ±  28 ms
+      table-downstream-batch-100
+        fresh
+          metrics-off:                      OK
+            326  ms ±  80 ms
+          metrics-on:                       OK
+            307  ms ±  31 ms
+        repeated-key
+          metrics-off:                      OK
+            2.41 ms ± 3.6 ms
+          metrics-on:                       OK
+            3.40 ms ± 6.7 ms
+        all-duplicate
+          metrics-off:                      OK
+            1.96 ms ± 3.4 ms
+          metrics-on:                       OK
+            3.03 ms ± 3.5 ms
+      delegated-batch-100
+        fresh
+          metrics-off:                      OK
+            411  ms ±  29 ms
+          metrics-on:                       OK
+            428  ms ± 166 ms
+        repeated-key
+          metrics-off:                      OK
+            539  μs ± 845 μs
+          metrics-on:                       OK
+            1.56 ms ± 1.8 ms
+        all-duplicate
+          metrics-off:                      OK
+            325  μs ± 457 μs
+          metrics-on:                       OK
+            1.37 ms ± 1.7 ms
+      table-downstream-batch-1000
+        fresh
+          metrics-off:                      OK
+            417  ms ±  28 ms
+          metrics-on:                       OK
+            425  ms ±  30 ms
+        repeated-key
+          metrics-off:                      OK
+            585  μs ± 898 μs
+          metrics-on:                       OK
+            1.63 ms ± 1.7 ms
+        all-duplicate
+          metrics-off:                      OK
+            355  μs ± 426 μs
+          metrics-on:                       OK
+            1.33 ms ± 1.7 ms
+      delegated-batch-1000
+        fresh
+          metrics-off:                      OK
+            414  ms ±  30 ms
+          metrics-on:                       OK
+            428  ms ±  49 ms
+        repeated-key
+          metrics-off:                      OK
+            291  μs ± 434 μs
+          metrics-on:                       OK
+            1.35 ms ± 1.7 ms
+        all-duplicate
+          metrics-off:                      OK
+            90.0 μs ± 106 μs
+          metrics-on:                       OK
+            1.09 ms ± 1.7 ms
+      delegated-history-duplicate
+        events-10:                          OK
+          24.8 ms ±  28 ms
+        events-1000:                        OK
+          24.9 ms ±  28 ms
+        events-100000:                      OK
+          25.5 ms ±  28 ms
+  command
+    legacy
+      accepted-1:                           OK
+        152  μs ± 215 μs
+    control
+      accepted-1:                           OK
+        158  μs ± 216 μs
+    domain-warmup
+      accepted-1:                           OK
+        152  μs ± 214 μs
+    domain
+      accepted-1:                           OK
+        151  μs ± 218 μs, 0.96x
+    legacy
+      accepted-large:                       OK
+        1.57 ms ± 2.0 ms
+    domain
+      accepted-large:                       OK
+        1.63 ms ± 1.9 ms, 1.03x
+    legacy
+      no-op:                                OK
+        17.4 μs ±  28 μs
+    domain
+      rejected:                             OK
+        17.0 μs ±  28 μs, 0.98x
+      no-op:                                OK
+        16.7 μs ±  27 μs, 0.96x
+      router-fanout
+        10:                                 OK
+          2.18 ms ± 3.4 ms
+        100:                                OK
+          22.1 ms ±  28 ms
+        1000:                               OK
+          216  ms ±  30 ms
+      process-manager-fanout
+        10:                                 OK
+          2.10 ms ± 3.5 ms
+        100:                                OK
+          20.7 ms ±  28 ms
+        1000:                               OK
+          201  ms ±  29 ms
+  rebuild
+    three-categories-200:                   OK
+      10.5 ms ±  14 ms
+  projection
+    inline
+      legacy
+        one-target:                         {"counts":{"autovacuum":"on","events":26110,"fsync":"on","full_page_writes":"on","relation_bytes":10510336,"server_version":"18.6","stream_events":52220,"streams":5004,"synchronous_commit":"on"},"label":"read-model-before-analyze","plan":[{"Execution Time":8.0e-3,"Plan":{"Actual Loops":1,"Actual Rows":0.0,"Actual Startup Time":2.0e-3,"Actual Total Time":2.0e-3,"Async Capable":false,"Disabled":false,"Local Dirtied Blocks":0,"Local Hit Blocks":0,"Local Read Blocks":0,"Local Written Blocks":0,"Node Type":"Limit","Parallel Aware":false,"Plan Rows":36,"Plan Width":184,"Plans":[{"Actual Loops":1,"Actual Rows":0.0,"Actual Startup Time":2.0e-3,"Actual Total Time":2.0e-3,"Async Capable":false,"Disabled":false,"Local Dirtied Blocks":0,"Local Hit Blocks":0,"Local Read Blocks":0,"Local Written Blocks":0,"Node Type":"Sort","Parallel Aware":false,"Parent Relationship":"Outer","Plan Rows":36,"Plan Width":184,"Plans":[{"Actual Loops":1,"Actual Rows":0.0,"Actual Startup Time":1.0e-3,"Actual Total Time":1.0e-3,"Async Capable":false,"Disabled":false,"Inner Unique":true,"Join Type":"Inner","Local Dirtied Blocks":0,"Local Hit Blocks":0,"Local Read Blocks":0,"Local Written Blocks":0,"Node Type":"Nested Loop","Parallel Aware":false,"Parent Relationship":"Outer","Plan Rows":36,"Plan Width":184,"Plans":[{"Actual Loops":1,"Actual Rows":0.0,"Actual Startup Time":1.0e-3,"Actual Total Time":1.0e-3,"Async Capable":false,"Disabled":false,"Inner Unique":false,"Join Type":"Inner","Local Dirtied Blocks":0,"Local Hit Blocks":0,"Local Read Blocks":0,"Local Written Blocks":0,"Node Type":"Nested Loop","Parallel Aware":false,"Parent Relationship":"Outer","Plan Rows":36,"Plan Width":40,"Plans":[{"Actual Loops":1,"Actual Rows":0.0,"Actual Startup Time":1.0e-3,"Actual Total Time":1.0e-3,"Alias":"s","Async Capable":false,"Disabled":false,"Filter":"(deleted_at IS NULL)","Index Cond":"(stream_name = 'bench-probe-absent'::text)","Index Name":"ix_streams_stream_name","Index Searches":1,"Local Dirtied Blocks":0,"Local Hit Blocks":0,"Local Read Blocks":0,"Local Written Blocks":0,"Node Type":"Index Scan","Parallel Aware":false,"Parent Relationship":"Outer","Plan Rows":1,"Plan Width":16,"Relation Name":"streams","Rows Removed by Filter":0,"Rows Removed by Index Recheck":0,"Scan Direction":"Forward","Shared Dirtied Blocks":0,"Shared Hit Blocks":2,"Shared Read Blocks":0,"Shared Written Blocks":0,"Startup Cost":0.27,"Temp Read Blocks":0,"Temp Written Blocks":0,"Total Cost":2.29},{"Actual Loops":0,"Actual Rows":0,"Actual Startup Time":0.0,"Actual Total Time":0.0,"Alias":"se","Async Capable":false,"Disabled":false,"Index Cond":"((stream_id = s.stream_id) AND (stream_version >= s.truncate_before) AND (stream_version > '0'::bigint))","Index Name":"ux_stream_events_stream_version","Index Searches":0,"Local Dirtied Blocks":0,"Local Hit Blocks":0,"Local Read Blocks":0,"Local Written Blocks":0,"Node Type":"Index Scan","Parallel Aware":false,"Parent Relationship":"Inner","Plan Rows":23,"Plan Width":48,"Relation Name":"stream_events","Rows Removed by Index Recheck":0,"Scan Direction":"Forward","Shared Dirtied Blocks":0,"Shared Hit Blocks":0,"Shared Read Blocks":0,"Shared Written Blocks":0,"Startup Cost":0.29,"Temp Read Blocks":0,"Temp Written Blocks":0,"Total Cost":24.81}],"Shared Dirtied Blocks":0,"Shared Hit Blocks":2,"Shared Read Blocks":0,"Shared Written Blocks":0,"Startup Cost":0.56,"Temp Read Blocks":0,"Temp Written Blocks":0,"Total Cost":27.32},{"Actual Loops":0,"Actual Rows":0,"Actual Startup Time":0.0,"Actual Total Time":0.0,"Alias":"e","Async Capable":false,"Disabled":false,"Index Cond":"(event_id = se.event_id)","Index Name":"events_pkey","Index Searches":0,"Local Dirtied Blocks":0,"Local Hit Blocks":0,"Local Read Blocks":0,"Local Written Blocks":0,"Node Type":"Index Scan","Parallel Aware":false,"Parent Relationship":"Inner","Plan Rows":1,"Plan Width":152,"Relation Name":"events","Rows Removed by Index Recheck":0,"Scan Direction":"Forward","Shared Dirtied Blocks":0,"Shared Hit Blocks":0,"Shared Read Blocks":0,"Shared Written Blocks":0,"Startup Cost":0.29,"Temp Read Blocks":0,"Temp Written Blocks":0,"Total Cost":0.33}],"Shared Dirtied Blocks":0,"Shared Hit Blocks":2,"Shared Read Blocks":0,"Shared Written Blocks":0,"Startup Cost":0.84,"Temp Read Blocks":0,"Temp Written Blocks":0,"Total Cost":39.14}],"Shared Dirtied Blocks":0,"Shared Hit Blocks":2,"Shared Read Blocks":0,"Shared Written Blocks":0,"Sort Key":["se.stream_version"],"Sort Method":"quicksort","Sort Space Type":"Memory","Sort Space Used":25,"Startup Cost":40.07,"Temp Read Blocks":0,"Temp Written Blocks":0,"Total Cost":40.16}],"Shared Dirtied Blocks":0,"Shared Hit Blocks":2,"Shared Read Blocks":0,"Shared Written Blocks":0,"Startup Cost":40.07,"Temp Read Blocks":0,"Temp Written Blocks":0,"Total Cost":40.16},"Planning":{"Local Dirtied Blocks":0,"Local Hit Blocks":0,"Local Read Blocks":0,"Local Written Blocks":0,"Shared Dirtied Blocks":0,"Shared Hit Blocks":2,"Shared Read Blocks":0,"Shared Written Blocks":0,"Temp Read Blocks":0,"Temp Written Blocks":0},"Planning Time":7.2e-2,"Triggers":[]}]}
+{"counts":{"autovacuum":"on","events":26110,"fsync":"on","full_page_writes":"on","relation_bytes":10510336,"server_version":"18.6","stream_events":52220,"streams":5004,"synchronous_commit":"on"},"label":"read-model-after-analyze","plan":[{"Execution Time":7.0e-3,"Plan":{"Actual Loops":1,"Actual Rows":0.0,"Actual Startup Time":1.0e-3,"Actual Total Time":2.0e-3,"Async Capable":false,"Disabled":false,"Local Dirtied Blocks":0,"Local Hit Blocks":0,"Local Read Blocks":0,"Local Written Blocks":0,"Node Type":"Limit","Parallel Aware":false,"Plan Rows":3,"Plan Width":144,"Plans":[{"Actual Loops":1,"Actual Rows":0.0,"Actual Startup Time":1.0e-3,"Actual Total Time":1.0e-3,"Async Capable":false,"Disabled":false,"Local Dirtied Blocks":0,"Local Hit Blocks":0,"Local Read Blocks":0,"Local Written Blocks":0,"Node Type":"Sort","Parallel Aware":false,"Parent Relationship":"Outer","Plan Rows":3,"Plan Width":144,"Plans":[{"Actual Loops":1,"Actual Rows":0.0,"Actual Startup Time":1.0e-3,"Actual Total Time":1.0e-3,"Async Capable":false,"Disabled":false,"Inner Unique":true,"Join Type":"Inner","Local Dirtied Blocks":0,"Local Hit Blocks":0,"Local Read Blocks":0,"Local Written Blocks":0,"Node Type":"Nested Loop","Parallel Aware":false,"Parent Relationship":"Outer","Plan Rows":3,"Plan Width":144,"Plans":[{"Actual Loops":1,"Actual Rows":0.0,"Actual Startup Time":1.0e-3,"Actual Total Time":1.0e-3,"Async Capable":false,"Disabled":false,"Inner Unique":false,"Join Type":"Inner","Local Dirtied Blocks":0,"Local Hit Blocks":0,"Local Read Blocks":0,"Local Written Blocks":0,"Node Type":"Nested Loop","Parallel Aware":false,"Parent Relationship":"Outer","Plan Rows":3,"Plan Width":40,"Plans":[{"Actual Loops":1,"Actual Rows":0.0,"Actual Startup Time":1.0e-3,"Actual Total Time":1.0e-3,"Alias":"s","Async Capable":false,"Disabled":false,"Filter":"(deleted_at IS NULL)","Index Cond":"(stream_name = 'bench-probe-absent'::text)","Index Name":"ix_streams_stream_name","Index Searches":1,"Local Dirtied Blocks":0,"Local Hit Blocks":0,"Local Read Blocks":0,"Local Written Blocks":0,"Node Type":"Index Scan","Parallel Aware":false,"Parent Relationship":"Outer","Plan Rows":1,"Plan Width":16,"Relation Name":"streams","Rows Removed by Filter":0,"Rows Removed by Index Recheck":0,"Scan Direction":"Forward","Shared Dirtied Blocks":0,"Shared Hit Blocks":2,"Shared Read Blocks":0,"Shared Written Blocks":0,"Startup Cost":0.28,"Temp Read Blocks":0,"Temp Written Blocks":0,"Total Cost":2.3},{"Actual Loops":0,"Actual Rows":0,"Actual Startup Time":0.0,"Actual Total Time":0.0,"Alias":"se","Async Capable":false,"Disabled":false,"Index Cond":"((stream_id = s.stream_id) AND (stream_version >= s.truncate_before) AND (stream_version > '0'::bigint))","Index Name":"ux_stream_events_stream_version","Index Searches":0,"Local Dirtied Blocks":0,"Local Hit Blocks":0,"Local Read Blocks":0,"Local Written Blocks":0,"Node Type":"Index Scan","Parallel Aware":false,"Parent Relationship":"Inner","Plan Rows":3,"Plan Width":48,"Relation Name":"stream_events","Rows Removed by Index Recheck":0,"Scan Direction":"Forward","Shared Dirtied Blocks":0,"Shared Hit Blocks":0,"Shared Read Blocks":0,"Shared Written Blocks":0,"Startup Cost":0.29,"Temp Read Blocks":0,"Temp Written Blocks":0,"Total Cost":4.07}],"Shared Dirtied Blocks":0,"Shared Hit Blocks":2,"Shared Read Blocks":0,"Shared Written Blocks":0,"Startup Cost":0.57,"Temp Read Blocks":0,"Temp Written Blocks":0,"Total Cost":6.4},{"Actual Loops":0,"Actual Rows":0,"Actual Startup Time":0.0,"Actual Total Time":0.0,"Alias":"e","Async Capable":false,"Disabled":false,"Index Cond":"(event_id = se.event_id)","Index Name":"events_pkey","Index Searches":0,"Local Dirtied Blocks":0,"Local Hit Blocks":0,"Local Read Blocks":0,"Local Written Blocks":0,"Node Type":"Index Scan","Parallel Aware":false,"Parent Relationship":"Inner","Plan Rows":1,"Plan Width":112,"Relation Name":"events","Rows Removed by Index Recheck":0,"Scan Direction":"Forward","Shared Dirtied Blocks":0,"Shared Hit Blocks":0,"Shared Read Blocks":0,"Shared Written Blocks":0,"Startup Cost":0.29,"Temp Read Blocks":0,"Temp Written Blocks":0,"Total Cost":0.31}],"Shared Dirtied Blocks":0,"Shared Hit Blocks":2,"Shared Read Blocks":0,"Shared Written Blocks":0,"Startup Cost":0.86,"Temp Read Blocks":0,"Temp Written Blocks":0,"Total Cost":7.34}],"Shared Dirtied Blocks":0,"Shared Hit Blocks":2,"Shared Read Blocks":0,"Shared Written Blocks":0,"Sort Key":["se.stream_version"],"Sort Method":"quicksort","Sort Space Type":"Memory","Sort Space Used":25,"Startup Cost":7.36,"Temp Read Blocks":0,"Temp Written Blocks":0,"Total Cost":7.37}],"Shared Dirtied Blocks":0,"Shared Hit Blocks":2,"Shared Read Blocks":0,"Shared Written Blocks":0,"Startup Cost":7.36,"Temp Read Blocks":0,"Temp Written Blocks":0,"Total Cost":7.37},"Planning":{"Local Dirtied Blocks":0,"Local Hit Blocks":0,"Local Read Blocks":0,"Local Written Blocks":0,"Shared Dirtied Blocks":0,"Shared Hit Blocks":26,"Shared Read Blocks":0,"Shared Written Blocks":0,"Temp Read Blocks":0,"Temp Written Blocks":0},"Planning Time":9.9e-2,"Triggers":[]}]}
+OK
+          237  μs ± 432 μs
+        three-target:                       OK
+          267  μs ± 424 μs
+        three-groups:                       OK
+          332  μs ± 441 μs
+        many-revisions:                     OK
+          246  μs ± 422 μs
+        mixed-delivery:                     OK
+          270  μs ± 478 μs
+      versioned
+        one-target:                         OK
+          247  μs ± 428 μs, 1.04x
+        three-target:                       OK
+          285  μs ± 419 μs, 1.07x
+        three-groups:                       OK
+          336  μs ± 466 μs, 1.01x
+        many-revisions:                     OK
+          243  μs ± 423 μs, 0.99x
+        mixed-delivery:                     OK
+          277  μs ± 429 μs, 1.02x
+    async
+      legacy
+        mixed-delivery:                     OK
+          116  μs ± 228 μs
+      versioned
+        mixed-delivery:                     OK
+          113  μs ± 219 μs, 0.98x
+  read-model-lifecycle
+    serving-binding
+      legacy-three:                         OK
+        63.4 μs ± 107 μs
+      versioned-three:                      OK
+        74.0 μs ± 121 μs
+    promotion
+      three-target-end-to-end:              OK
+        11.4 ms ±  13 ms
+    repair
+      10:                                   OK
+        427  μs ± 844 μs
+      100:                                  OK
+        2.39 ms ± 3.4 ms
+      1000:                                 OK
+        28.9 ms ±  28 ms
+  read-model-reads
+    status
+      list-1000-synthetic-groups:           OK
+        8.15 ms ±  14 ms
+      lookup-among-1000-synthetic-groups:   OK
+        69.4 μs ± 108 μs
+    guarded
+      all-rows-100:                         OK
+        183  μs ± 237 μs
+      keyed-10000:                          OK
+        71.5 μs ± 107 μs
+  producer-identity
+    derive-v1:                              OK
+      638  ns ± 839 ns
+    legacy-fresh-1000:                      OK
+      49.3 ms ±  29 ms
+    deterministic-fresh-1000:               OK
+      50.4 ms ±  30 ms, 1.02x
+    deterministic-fresh-and-replay-1000:    OK
+      282  ms ±  32 ms
+    legacy-single-tx-per-event-1000:        OK
+      96.9 ms ±  58 ms
+    deterministic-single-tx-per-event-1000: OK
+      92.8 ms ±  38 ms, 0.96x
+
+All 96 tests passed (86.19s)
+PROCESS_EXIT=0

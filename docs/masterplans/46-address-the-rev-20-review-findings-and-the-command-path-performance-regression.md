@@ -253,7 +253,10 @@ documentation validation and 136 retained v2 query plans. EP-4 is Complete: 49 H
 actual stalled-socket termination, fresh-feed and retirement recovery. Strict
 ADR and documentation validation passes for both children. EP-7 is In Progress with static selected
 fixtures, fixed 600-event rebuilds and a growth probe through 1.2 million events;
-paired full/filtered measurements and reset/durable-fixture evidence remain open.
+reset/durable-fixture and actual work-count diagnostics are retained; extended growth and
+paired full/filtered timing acceptance remain open. A full release-gate run on clean
+`847b395c` passed correctness, attempted all six guards and refused producer/projection.
+Its noisy producer timings are exploratory; this is not passing release evidence.
 EP-1 M3–M6 wait for EP-7 Complete. EP-2's passing release demonstration still waits
 for EP-1 Complete. EP-5 and EP-6 are Complete: reaction state inspection passes 46 library and
 54 ops examples, legacy-only capture is explicit, and release/upgrade metadata

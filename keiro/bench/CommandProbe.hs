@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- | Inspect the actual stream-read prepared plan on a disposable benchmark store.
-module CommandProbe (commandPlanProbe, delegatedPlanProbe, tableResetProbe) where
+module CommandProbe (commandPlanProbe, delegatedPlanProbe, tableResetProbe, workCountProbe, rebuildCountProbe) where
 
 import Control.Monad (replicateM)
 import Data.Aeson qualified as Aeson
@@ -16,6 +16,7 @@ import Hasql.Statement (preparable)
 import Keiro.Prelude
 import Kiroku.Store qualified as Store
 import Kiroku.Store.SQL qualified as SQL
+import System.Environment (lookupEnv)
 import System.IO (stderr)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 
@@ -95,3 +96,38 @@ delegatedPlanProbe store label = do
           (D.singleRow (D.column (D.nonNullable D.json)))
     pure (Aeson.object ["label" Aeson..= label, "plan" Aeson..= (plan :: Aeson.Value)])
   either (fail . show) (Lazy.hPutStrLn stderr . Aeson.encode) result
+
+-- Run only in diagnostic invocations: these reads must not change timed plans.
+workCountProbe :: Store.KirokuStore -> Text -> Text -> Int -> Int -> IO ()
+workCountProbe store label prefix expectedStreams expectedEvents = do
+  enabled <- lookupEnv "KEIRO_BENCH_WORK_COUNTS"
+  when (enabled == Just "1") $ do
+    result <-
+      Store.runStoreIO store $
+        Store.runTransaction $
+          Tx.statement prefix $
+            preparable
+              "SELECT count(DISTINCT s.stream_id), count(se.event_id), pg_total_relation_size('streams'), pg_total_relation_size('events'), pg_total_relation_size('stream_events') FROM streams s LEFT JOIN stream_events se USING (stream_id) WHERE left(s.stream_name, length($1)) = $1"
+              (E.param (E.nonNullable E.text))
+              (D.singleRow ((,,,,) <$> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8)))
+    (streams, events, streamBytes, eventBytes, linkBytes) <- either (fail . show) pure result
+    unless (streams == fromIntegral expectedStreams && events == fromIntegral expectedEvents) $
+      fail ("benchmark work-count mismatch: " <> Text.unpack label <> " expected=" <> show (expectedStreams, expectedEvents) <> " actual=" <> show (streams, events))
+    Lazy.hPutStrLn stderr (Aeson.encode (Aeson.object ["label" Aeson..= label, "prefix" Aeson..= prefix, "streams" Aeson..= streams, "events" Aeson..= events, "streams_bytes" Aeson..= streamBytes, "events_bytes" Aeson..= eventBytes, "stream_events_bytes" Aeson..= linkBytes]))
+
+rebuildCountProbe :: Store.KirokuStore -> Int -> IO ()
+rebuildCountProbe store expectedRuns = do
+  enabled <- lookupEnv "KEIRO_BENCH_WORK_COUNTS"
+  when (enabled == Just "1") $ do
+    result <-
+      Store.runStoreIO store $
+        Store.runTransaction $
+          Tx.statement () $
+            preparable
+              "SELECT (SELECT count(*) FROM keiro.keiro_projection_rebuild_runs), (SELECT count(*) FROM keiro.keiro_projection_rebuild_sources), (SELECT count(*) FROM events), jsonb_build_object('runs_bytes',pg_total_relation_size('keiro.keiro_projection_rebuild_runs'),'sources_bytes',pg_total_relation_size('keiro.keiro_projection_rebuild_sources'),'targets',(SELECT count(*) FROM keiro.keiro_projection_rebuild_run_targets),'adapters',(SELECT count(*) FROM keiro.keiro_projection_rebuild_adapters),'verifications',(SELECT count(*) FROM keiro.keiro_projection_rebuild_verifications))"
+              E.noParams
+              (D.singleRow ((,,,) <$> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.jsonb)))
+    (runs, sources, events, bookkeeping) <- either (fail . show) pure result
+    unless (runs == fromIntegral expectedRuns && sources == fromIntegral (3 * expectedRuns) && events == 600) $
+      fail ("rebuild work-count mismatch: " <> show (runs, sources, events))
+    Lazy.hPutStrLn stderr (Aeson.encode (Aeson.object ["label" Aeson..= ("rebuild" :: Text), "runs" Aeson..= runs, "sources" Aeson..= sources, "events" Aeson..= events, "bookkeeping" Aeson..= (bookkeeping :: Aeson.Value)]))

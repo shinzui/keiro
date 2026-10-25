@@ -88,9 +88,23 @@ allow 10,000 invocations (one million events), while one-event/fan-out rows reta
 100,000-event budgets. The aggregate command store is bounded at 3,005,000 events.
 Selected delegated setup ANALYZEs after its first representative warm-up, then warms
 twice more. Actual prepared existence plans are probed before/after that schedule.
-The extended growth and replacement alternating pairs remain open.
+Actual count diagnostics now complete all 96 cases with no mismatches, including
+command/fan-out prefixes, delegated/history inputs, fixed rebuild sources and persisted
+bookkeeping. The first full release gate exposed a read-model order effect despite its
+passing alternating latency sampler. Its unchanged 25,000 seed events now span 5,000
+streams; one fixture-wide ANALYZE precedes selected three-invocation warm-up. Read-model
+command/async/promotion growth is bounded at 100,000/100,000/10,000 operations.
+`work-counts.*` and its exact source patch retain the diagnostic. The extended command
+growth, tighter read-model comparison and replacement alternating pairs remain open.
 
 ## Surprises & Discoveries
+
+The first complete release gate passed correctness but refused producer and projection.
+Projection's sequential one-target rows diverged 2.43x, while its alternating three-target
+sampler measured median p95 1.026x and throughput 0.975x. The read-model seed had 25,000
+events in only one stream, so event volume did not establish representative stream-name
+statistics. The revised seed retains the event count across 5,000 streams and records
+actual prepared plans. Diagnostic runs are not accepted timing measurements.
 
 The first durable rebuild probe correctly aborted at 167 invocations: its counter
 was incorrectly charging fixed source replay as retained growth. Rebuilds now have
@@ -125,8 +139,9 @@ original nanosecond conversion.
 ## Decision Log
 
 - Decision: Seed 5,000 unrelated singleton streams and ANALYZE the three event-store
-  relations once during selected command-group setup; cap each eventful scenario at
-  100,000 appended events, including warm-up.
+  relations once during selected command-group setup. One-event and fan-out rows cap at
+  100,000 events, large rows at one million events, and silent rows at one million
+  operations, including warm-up.
   Rationale: The empty-fixture generic sequential plan explains observed growth drift.
   Established statistics select existing indexes before timing without changing serving
   SQL or adding indexes. Acceptance still requires growth and paired-run evidence.

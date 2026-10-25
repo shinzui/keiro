@@ -6,8 +6,8 @@ module Main
   )
 where
 
-import BenchSetup (memoSetup, nextBoundedIteration, nextIteration, selected, selectedCounter, setupTrace)
-import CommandProbe (commandPlanProbe, tableResetProbe)
+import BenchSetup (memoSetup, nextBoundedIteration, nextIteration, selected, selectedCounterWithCleanup, selectedWithCleanup, setupTrace)
+import CommandProbe (commandPlanProbe, rebuildCountProbe, tableResetProbe, workCountProbe)
 import Control.Concurrent (threadDelay)
 import Control.Monad (replicateM_)
 import Data.Aeson qualified as Aeson
@@ -100,7 +100,8 @@ import OpenTelemetry.Metric.Core (getMeter)
 import OpenTelemetry.Resource (emptyMaterializedResources)
 import ProducerIdentityBench (producerIdentityBenchmarks)
 import ReadModelBench
-  ( readModelBenchmarks,
+  ( probeReadModelCounts,
+    readModelBenchmarks,
     runReadModelExplainEvidenceIfRequested,
     runReadModelLatencyEvidenceIfRequested,
     setupReadModelBench,
@@ -186,7 +187,7 @@ ordinaryMain =
                         else
                           defaultMain
                             ( benchmarks store runner outboxStore inboxStore rebuildStore metrics (inboxDelegatedBenchmarks delegatedStore metrics)
-                                <> [selected readModelSetup (\model -> readModelBenchmarks model !! groupIndex) | groupIndex <- [0 .. 2]]
+                                <> [selectedWithCleanup readModelSetup probeReadModelCounts (\model -> readModelBenchmarks model !! groupIndex) | groupIndex <- [0 .. 2]]
                                 <> producerIdentityBenchmarks producerStore producerCounter
                             )
 
@@ -242,12 +243,12 @@ benchmarks store runner outboxStore inboxStore rebuildStore metrics delegatedInb
                 domainCommandScenarioBench store "no-op" domainNoOpHandler domainNoOpTarget SelectNoOp,
               bgroup
                 "router-fanout"
-                [ domainRouterFanoutBench runner fanout
+                [ domainRouterFanoutBench store runner fanout
                 | fanout <- coordinatorFanouts
                 ],
               bgroup
                 "process-manager-fanout"
-                [ domainProcessManagerFanoutBench runner fanout
+                [ domainProcessManagerFanoutBench store runner fanout
                 | fanout <- coordinatorFanouts
                 ]
             ]
@@ -656,10 +657,13 @@ prepareCommandStore store = do
 
 commandScenarioBench :: Store.KirokuStore -> String -> ValidatedBenchEventStream -> Stream BenchEventStream -> BenchCommand -> Benchmark
 commandScenarioBench store benchmarkName validatedStream target command =
-  selectedCounter label units (prepareCommand label units (commandBudget command) action) $ \counter ->
+  selectedCounterWithCleanup label units (prepareCommand label units (commandBudget command) action) checkCounts $ \counter ->
     bench benchmarkName $ nfIO (action counter)
   where
     label = show (streamName target) <> "/legacy/" <> benchmarkName
+    checkCounts n =
+      let StreamName prefix = streamName (tagTarget target "legacy")
+       in workCountProbe store (Text.pack label) (prefix <> "-iteration-") (if units == 0 then 0 else n) (n * units)
     units = commandUnits command
     action counter = do
       n <- nextBoundedIteration label (commandBudget command) counter
@@ -672,10 +676,13 @@ commandScenarioBench store benchmarkName validatedStream target command =
 
 domainCommandScenarioBench :: Store.KirokuStore -> String -> DomainCommandHandler (HsPred '[] BenchCommand) '[] BenchState BenchCommand BenchEvent Text Text -> Stream BenchEventStream -> BenchCommand -> Benchmark
 domainCommandScenarioBench store benchmarkName handler target command =
-  selectedCounter label units (prepareCommand label units (commandBudget command) action) $ \counter ->
+  selectedCounterWithCleanup label units (prepareCommand label units (commandBudget command) action) checkCounts $ \counter ->
     bench benchmarkName $ nfIO (action counter)
   where
     label = show (streamName target) <> "/domain/" <> benchmarkName
+    checkCounts n =
+      let StreamName prefix = streamName (tagTarget target ("domain-" <> Text.pack benchmarkName))
+       in workCountProbe store (Text.pack label) (prefix <> "-iteration-") (if units == 0 then 0 else n) (n * units)
     units = commandUnits command
     action counter = do
       n <- nextBoundedIteration label (commandBudget command) counter
@@ -727,7 +734,7 @@ rebuildPageSize = 16
 
 rebuildScenarioBench :: Store.KirokuStore -> Benchmark
 rebuildScenarioBench store =
-  selectedCounter "rebuild" 600 setup $ \runCounter -> bench "three-categories-200" $ nfIO (runRebuild False runCounter)
+  selectedCounterWithCleanup "rebuild" 600 setup (rebuildCountProbe store) $ \runCounter -> bench "three-categories-200" $ nfIO (runRebuild False runCounter)
   where
     setup = do
       setupTrace "rebuild" "three-categories-200" "schema source_events=600 bookkeeping_run_budget=10000"
@@ -1005,11 +1012,12 @@ fanoutPayload targetIndex =
 coordinatorFanouts :: [Int]
 coordinatorFanouts = [10, 100, 1000]
 
-domainRouterFanoutBench :: StoreRunner -> Int -> Benchmark
-domainRouterFanoutBench runner fanout =
-  selectedCounter label fanout (prepareCommand label fanout (100000 `div` fanout) action) $ \counter -> bench (show fanout) $ nfIO (action counter)
+domainRouterFanoutBench :: Store.KirokuStore -> StoreRunner -> Int -> Benchmark
+domainRouterFanoutBench store runner fanout =
+  selectedCounterWithCleanup label fanout (prepareCommand label fanout (100000 `div` fanout) action) checkCounts $ \counter -> bench (show fanout) $ nfIO (action counter)
   where
     label = "router-" <> show fanout
+    checkCounts n = workCountProbe store (Text.pack label) ("bench-command-domain-router:" <> Text.pack label <> "-") (n * fanout) (n * fanout)
     action counter = do
       n <- nextIteration label fanout counter
       let correlationId = Text.pack label <> "-" <> Text.pack (show n)
@@ -1022,11 +1030,12 @@ domainRouterFanoutBench runner fanout =
           (\message -> Just (iterationSourceEvent n, message))
         when (n <= 3) (verifyFanout "router" correlationId fanout)
 
-domainProcessManagerFanoutBench :: StoreRunner -> Int -> Benchmark
-domainProcessManagerFanoutBench runner fanout =
-  selectedCounter label fanout (prepareCommand label fanout (100000 `div` fanout) action) $ \counter -> bench (show fanout) $ nfIO (action counter)
+domainProcessManagerFanoutBench :: Store.KirokuStore -> StoreRunner -> Int -> Benchmark
+domainProcessManagerFanoutBench store runner fanout =
+  selectedCounterWithCleanup label fanout (prepareCommand label fanout (100000 `div` fanout) action) checkCounts $ \counter -> bench (show fanout) $ nfIO (action counter)
   where
     label = "process-manager-" <> show fanout
+    checkCounts n = workCountProbe store (Text.pack label) ("bench-command-domain-process-manager:" <> Text.pack label <> "-") (n * fanout) (n * fanout)
     action counter = do
       n <- nextIteration label fanout counter
       let correlationId = Text.pack label <> "-" <> Text.pack (show n)

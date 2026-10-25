@@ -7,14 +7,17 @@ module ReadModelBench
     runReadModelExplainEvidenceIfRequested,
     runReadModelLatencyEvidenceIfRequested,
     setupReadModelBench,
+    probeReadModelCounts,
   )
 where
 
+import BenchSetup (selected, setupTrace)
+import CommandProbe (commandPlanProbe, workCountProbe)
 import Control.Monad (forM, replicateM_)
 import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as ByteString
 import Data.Foldable (toList)
-import Data.IORef (IORef, atomicModifyIORef', newIORef)
+import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.List qualified as List
 import Data.Map.Strict qualified as Map
 import Data.Maybe (listToMaybe)
@@ -185,6 +188,11 @@ setupReadModelBench store runner = do
   runStoreChecked store (Store.runTransaction seedStatusScale)
   seedStabilizingHistory store
   seedRepairStreams store
+  probe <- lookupEnv "KEIRO_BENCH_READ_MODEL_PLAN_PROBE"
+  when (probe == Just "1") (commandPlanProbe store "read-model-before-analyze")
+  setupTrace "read-model" "shared" "seed_streams=5000 seed_events=25000 analyze=once-before-warm-up"
+  runStoreChecked store (Store.runTransaction (Tx.sql "ANALYZE"))
+  when (probe == Just "1") (commandPlanProbe store "read-model-after-analyze")
   commandCounter <- newIORef 0
   asyncCounter <- newIORef 0
   runCounter <- newIORef 0
@@ -328,12 +336,13 @@ asyncLegacyPattern =
 
 inlineScenarioBench :: ReadModelBenchFixture -> String -> Text -> Benchmark
 inlineScenarioBench fixture benchmarkName scenarioKey =
-  bench benchmarkName $ nfIO (runInlineScenario fixture scenarioKey)
+  selected (warmScenario scenarioKey (runInlineScenario fixture scenarioKey)) $ \_ ->
+    bench benchmarkName $ nfIO (runInlineScenario fixture scenarioKey)
 
 runInlineScenario :: ReadModelBenchFixture -> Text -> IO ()
 runInlineScenario fixture scenarioKey = do
   scenario <- requireScenario fixture scenarioKey
-  invocation <- nextCounter fixture.commandCounter
+  invocation <- nextCounter "read-model command events" 100000 fixture.commandCounter
   let target = stream ("bench-projection-command-" <> scenarioKey <> "-" <> Text.pack (show invocation))
   result <-
     runResourceStoreChecked fixture.runner $
@@ -350,14 +359,15 @@ runInlineScenario fixture scenarioKey = do
 
 asyncScenarioBench :: ReadModelBenchFixture -> String -> Text -> Benchmark
 asyncScenarioBench fixture benchmarkName scenarioKey =
-  bench benchmarkName $ nfIO (runAsyncScenario fixture scenarioKey)
+  selected (warmScenario (scenarioKey <> "-async") (runAsyncScenario fixture scenarioKey)) $ \_ ->
+    bench benchmarkName $ nfIO (runAsyncScenario fixture scenarioKey)
 
 runAsyncScenario :: ReadModelBenchFixture -> Text -> IO ()
 runAsyncScenario fixture scenarioKey = do
   scenario <- requireScenario fixture scenarioKey
   (projectionId, projection) <-
     maybe (fail ("scenario has no async delivery: " <> Text.unpack scenarioKey)) pure scenario.asyncDelivery
-  invocation <- nextCounter fixture.asyncCounter
+  invocation <- nextCounter "read-model async operations" 100000 fixture.asyncCounter
   outcome <-
     runStoreChecked fixture.store $
       Store.runTransaction
@@ -395,7 +405,7 @@ repairScenarioBench fixture eventCount =
 runPromotionScenario :: ReadModelBenchFixture -> IO ()
 runPromotionScenario fixture = do
   scenario <- requireScenario fixture "bench-versioned-three"
-  runNumber <- nextCounter fixture.runCounter
+  runNumber <- nextCounter "read-model promotion runs" 10000 fixture.runCounter
   promoteToV1 <- atomicModifyIORef' fixture.promotionRevision (\current -> (not current, current))
   let group = firstOrError "promotion scenario group" scenario.scenarioGroups
       revisionIds = map (^. #revisionId) group.revisions
@@ -1128,21 +1138,22 @@ stabilizingHistoryEventCount = 25_000
 
 seedStabilizingHistory :: Store.KirokuStore -> IO ()
 seedStabilizingHistory store =
-  runStoreChecked store $
-    void $
-      Store.appendToStream
-        (StreamName "benchseed-history")
-        NoStream
-        [ EventData
-            { eventId = Nothing,
-              eventType = EventType "BenchSeedEvent",
-              payload = Aeson.Null,
-              metadata = Nothing,
-              causationId = Nothing,
-              correlationId = Nothing
-            }
-        | _ <- [1 .. stabilizingHistoryEventCount]
-        ]
+  for_ [1 .. 5000 :: Int] $ \n ->
+    runStoreChecked store $
+      void $
+        Store.appendToStream
+          (StreamName ("benchseed-history-" <> Text.pack (show n)))
+          NoStream
+          [ EventData
+              { eventId = Nothing,
+                eventType = EventType "BenchSeedEvent",
+                payload = Aeson.Null,
+                metadata = Nothing,
+                causationId = Nothing,
+                correlationId = Nothing
+              }
+          | _ <- [1 .. stabilizingHistoryEventCount `div` 5000]
+          ]
 
 repairStreamName :: Int -> StreamName
 repairStreamName count = StreamName ("benchrepair-" <> Text.pack (show count))
@@ -1427,8 +1438,24 @@ requireScenario :: ReadModelBenchFixture -> Text -> IO ProjectionScenario
 requireScenario fixture scenarioKey =
   maybe (fail ("unknown read-model benchmark scenario: " <> Text.unpack scenarioKey)) pure (Map.lookup scenarioKey fixture.scenarios)
 
-nextCounter :: IORef Int64 -> IO Int64
-nextCounter counter = atomicModifyIORef' counter (\current -> let next = current + 1 in (next, next))
+nextCounter :: String -> Int64 -> IORef Int64 -> IO Int64
+nextCounter label budget counter = do
+  next <- atomicModifyIORef' counter (\current -> let n = current + 1 in (n, n))
+  when (next > budget) (fail ("benchmark fixture growth budget exceeded: " <> label <> " iterations=" <> show next))
+  pure next
+
+warmScenario :: Text -> IO () -> IO ()
+warmScenario label action = do
+  setupTrace "read-model" (Text.unpack label) "warm-up invocations=3"
+  replicateM_ 3 action
+
+probeReadModelCounts :: ReadModelBenchFixture -> IO ()
+probeReadModelCounts fixture = do
+  commands <- readIORef fixture.commandCounter
+  asyncOperations <- readIORef fixture.asyncCounter
+  promotionRuns <- readIORef fixture.runCounter
+  setupTrace "counts" "read-model" ("command_events=" <> show commands <> " command_budget=100000 async_operations=" <> show asyncOperations <> " async_budget=100000 promotion_runs=" <> show promotionRuns <> " promotion_budget=10000")
+  workCountProbe fixture.store "read-model" "bench-projection-command-" (fromIntegral commands) (fromIntegral commands)
 
 fixedOccurredAt :: UTCTime
 fixedOccurredAt = UTCTime (ModifiedJulianDay 61000) (secondsToDiffTime 0)

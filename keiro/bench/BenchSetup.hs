@@ -1,5 +1,5 @@
 -- | Selection-aware fixture diagnostics shared by the benchmark groups.
-module BenchSetup (selected, memoSetup, setupTrace, freshCounter, nextIteration, nextBoundedIteration, selectedCounter) where
+module BenchSetup (selected, selectedWithCleanup, memoSetup, setupTrace, freshCounter, nextIteration, nextBoundedIteration, selectedCounter, selectedCounterWithCleanup) where
 
 import Control.Concurrent.MVar (modifyMVar, newMVar)
 import Control.DeepSeq (NFData (..))
@@ -16,8 +16,12 @@ instance NFData (Handle a) where
   rnf (Handle value) = value `seq` ()
 
 selected :: IO a -> (a -> Benchmark) -> Benchmark
-selected acquire build = envWithCleanup (Handle <$> acquire) (const (pure ())) $ \handle ->
-  build (case handle of Handle value -> value)
+selected acquire = selectedWithCleanup acquire (const (pure ()))
+
+selectedWithCleanup :: IO a -> (a -> IO ()) -> (a -> Benchmark) -> Benchmark
+selectedWithCleanup acquire cleanup build =
+  envWithCleanup (Handle <$> acquire) (\(Handle value) -> cleanup value) $ \handle ->
+    build (case handle of Handle value -> value)
 
 memoSetup :: IO a -> IO (IO a)
 memoSetup acquire = do
@@ -54,11 +58,15 @@ nextBoundedIteration label budget counter = do
     else pure next
 
 selectedCounter :: String -> Int -> IO (IORef Int) -> (IORef Int -> Benchmark) -> Benchmark
-selectedCounter label units acquire build =
+selectedCounter label units acquire = selectedCounterWithCleanup label units acquire (const (pure ()))
+
+selectedCounterWithCleanup :: String -> Int -> IO (IORef Int) -> (Int -> IO ()) -> (IORef Int -> Benchmark) -> Benchmark
+selectedCounterWithCleanup label units acquire cleanup build =
   envWithCleanup
     acquire
     ( \counter -> do
         n <- readIORef counter
         setupTrace "counts" label ("iterations=" <> show n <> " units=" <> show (n * units))
+        cleanup n
     )
     build

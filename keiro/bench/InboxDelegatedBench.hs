@@ -7,14 +7,14 @@ module InboxDelegatedBench
   )
 where
 
-import BenchSetup (nextIteration, selected, setupTrace)
-import CommandProbe (delegatedPlanProbe)
+import BenchSetup (nextIteration, selectedWithCleanup, setupTrace)
+import CommandProbe (delegatedPlanProbe, workCountProbe)
 import Control.DeepSeq (NFData (..))
 import Control.Monad (replicateM_)
 import Data.Aeson qualified as Aeson
 import Data.Bifunctor (first)
 import Data.ByteString qualified as ByteString
-import Data.IORef (IORef, newIORef)
+import Data.IORef (IORef, newIORef, readIORef)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
@@ -60,7 +60,7 @@ import Kiroku.Store.Types
 import System.Directory (createDirectoryIfMissing)
 import System.Environment (lookupEnv)
 import System.FilePath (takeDirectory)
-import Test.Tasty.Bench (Benchmark, bench, bgroup, env, nfIO)
+import Test.Tasty.Bench (Benchmark, bench, bgroup, nfIO)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Prelude
 
@@ -118,7 +118,7 @@ inboxDelegatedBenchmarks store metrics =
       (Text.unpack name)
       [ bgroup
           (trafficName traffic)
-          [ selected (prepareScenario store name mode chunkSize traffic mMetrics) $ \scenario ->
+          [ selectedWithCleanup (prepareScenario store name mode chunkSize traffic mMetrics) (checkScenarioCounts store) $ \scenario ->
               bench (metricsName mMetrics) (nfIO (scenario `seq` runScenario store scenario))
           | mMetrics <- [Nothing, Just metrics]
           ]
@@ -208,11 +208,24 @@ prepareScenario store name mode chunkSize traffic metrics = do
 runScenario :: Store.KirokuStore -> Scenario -> IO ()
 runScenario store scenario = do
   downstreamRun <- case scenario.duplicateRun of
-    Just prepared -> pure prepared
+    Just prepared -> do
+      _ <- nextIteration (Text.unpack scenario.name) 0 scenario.runNumber
+      pure prepared
     Nothing -> do
       invocation <- nextIteration (Text.unpack scenario.name) (if scenario.traffic == FreshTraffic then deliveryCount else 1) scenario.runNumber
       prepareDownstreamRun (scenarioPrefix scenario.name scenario.traffic scenario.metrics <> "-" <> Text.pack (show invocation)) scenario.traffic
   runStoreChecked store (runDownstream scenario downstreamRun)
+
+checkScenarioCounts :: Store.KirokuStore -> Scenario -> IO ()
+checkScenarioCounts store scenario = do
+  n <- readIORef scenario.runNumber
+  let prefix = scenarioPrefix scenario.name scenario.traffic scenario.metrics
+      expected = case scenario.traffic of
+        FreshTraffic -> n * deliveryCount
+        RepeatedTraffic -> n
+        DuplicateTraffic -> 1
+  setupTrace "counts" (Text.unpack prefix) ("iterations=" <> show n <> " expected_events=" <> show expected)
+  workCountProbe store prefix ("benchInbox-" <> prefix <> "-") expected expected
 
 runDownstream :: (IOE :> es, Store :> es) => Scenario -> DownstreamRun -> Eff es ()
 runDownstream scenario downstreamRun =
@@ -409,7 +422,7 @@ seedDuplicateRun store mode downstreamRun =
 
 historyBenchmark :: Store.KirokuStore -> Int -> Benchmark
 historyBenchmark store historySize =
-  env (prepareHistoryRun store historySize) $ \downstreamRun ->
+  selectedWithCleanup (prepareHistoryRun store historySize) (const (workCountProbe store ("history-" <> Text.pack (show historySize)) ("benchInbox-history-" <> Text.pack (show historySize) <> "-") 1 historySize)) $ \downstreamRun ->
     bench ("events-" <> show historySize) $
       nfIO $
         downstreamRun `seq`
