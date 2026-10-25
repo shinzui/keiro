@@ -94,7 +94,7 @@ headers. That would erase mutation authorization after this change. Composed chi
 retain the full policy; the outer middleware preserves the child's existing header. A
 composed preview test proves the allowed console succeeds and a foreign origin refuses.
 
-Mori has no registered network-uri source. The official Hackage version inventory and
+Mori has no registered source for `mori://haskell/network-uri/packages/network-uri`. The official Hackage version inventory and
 upstream tag both identify 2.6.4.2 as the latest nondeprecated release (2.7.0.0 is deprecated).
 Its source was inspected directly before adding the bounded `>=2.6.4.2 && <2.7` dependency
 for URI authority parsing. Warp source discovered through Mori brackets connection closure
