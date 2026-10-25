@@ -1,0 +1,355 @@
+2026-10-25T09:52:30Z
+4f2b4b69fdfd1231282e453b79ee95d1b5c36199
+3c5e61e98d9db8792bde55f9fc204ec640f496cb557fe9dd2a35f30aaed43c60  /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench
+c6a5097f1564a1f94454dfba00e168b6acebaec699936e9a729a749c2eebb3c6  keiro/bench/baseline-command.csv
+17a8971053098922783bb00c2c02cc6e4c4fdfc9d54edd8ff8a8b78f8ed8558f  keiro/bench/baseline-inbox.csv
+4b659a9b681a4fc23dd9200b318afa1e757b363a71a15e1d1e13ecdc46bc6ce6  keiro/bench/baseline-outbox.csv
+45f64e738fe523fd9fb86622151ad650a9e4b7b5c2d33ab317b98ea2f5546789  keiro/bench/baseline-projection.csv
+3b45470d1df9e44881e2a4c2e78761b45609a9fde759443361a6ecb86b2481e5  keiro/bench/baseline-read-model.csv
+ 02:52:31  up 11 days  5:51,  3 users,  load average: 1.52, 1.56, 1.65
+scripts/bench-regression.sh 
+##### guard producer-identity 2026-10-25T09:52:31Z
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.21.0.0 (bench:keiro-bench) (ephemeral targets)
+Preprocessing benchmark 'keiro-bench' for keiro-0.21.0.0...
+Building benchmark 'keiro-bench' for keiro-0.21.0.0...
+Running 1 benchmarks...
+Benchmark keiro-bench: RUNNING...
+All
+  producer-identity
+    derive-v1:                              OK
+      625  ns ± 8.6 ns
+    legacy-fresh-1000:                      OK
+      42.4 ms ± 310 μs
+    deterministic-fresh-1000:               {"batch":true,"ceiling":1.1,"median_ratio":1.0567668811833637,"pairs_ns_legacy_deterministic":[[42835000,44843000],[41908000,45312000],[42455000,44691000],[42248000,45744000],[41939000,44665000],[42108000,45515000],[47855000,48134000],[41677000,60592000],[41850000,43069000],[41708000,44331000],[41775000,43464000],[41463000,44609000],[41635000,43964000],[41699000,43902000],[41644000,44008000]],"phase":"producer-fresh-ratio"}
+OK
+      45.8 ms ± 737 μs
+    deterministic-fresh-and-replay-1000:    OK
+      262  ms ± 5.1 ms
+    legacy-single-tx-per-event-1000:        OK
+      78.6 ms ± 1.1 ms
+    deterministic-single-tx-per-event-1000: {"batch":false,"ceiling":1.1,"median_ratio":0.9607540413606995,"pairs_ns_legacy_deterministic":[[80229000,74847000],[77402000,74169000],[77889000,75046000],[77689000,75397000],[76861000,74714000],[77519000,76290000],[77078000,74053000],[77603000,75639000],[77870000,74624000],[77816000,74730000],[77669000,77681000],[78148000,74970000],[77701000,74042000],[78055000,74793000],[77031000,75075000]],"phase":"producer-fresh-ratio"}
+OK
+      75.7 ms ± 1.1 ms
+
+All 6 tests passed (188.69s)
+Benchmark keiro-bench: FINISH
+##### guard outbox 2026-10-25T09:55:43Z
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.21.0.0 (bench:keiro-bench) (ephemeral targets)
+Preprocessing benchmark 'keiro-bench' for keiro-0.21.0.0...
+Building benchmark 'keiro-bench' for keiro-0.21.0.0...
+Running 1 benchmarks...
+Benchmark keiro-bench: RUNNING...
+All
+  outbox
+    hot-key:           OK
+      492  ms ±  42 ms,       same as baseline
+    hot-key-nolatency: OK
+      269  ms ±  21 ms,       same as baseline
+    multi-key:         OK
+      365  ms ±  29 ms,       same as baseline
+
+All 3 tests passed (12.56s)
+Benchmark keiro-bench: FINISH
+##### guard inbox 2026-10-25T09:55:59Z
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.21.0.0 (bench:keiro-bench) (ephemeral targets)
+Preprocessing benchmark 'keiro-bench' for keiro-0.21.0.0...
+Building benchmark 'keiro-bench' for keiro-0.21.0.0...
+Running 1 benchmarks...
+Benchmark keiro-bench: RUNNING...
+All
+  inbox
+    single-full:       OK
+      124  ms ± 5.7 ms,       same as baseline
+    single-nometrics:  OK
+      123  ms ± 7.6 ms,       same as baseline
+    batch-100:         OK
+      55.0 ms ± 5.4 ms,       same as baseline
+    single-slim:       OK
+      120  ms ± 6.8 ms,       same as baseline
+    downstream
+      table-downstream-single
+        fresh
+          metrics-off: OK
+            440  ms ±  27 ms,       same as baseline
+          metrics-on:  OK
+            436  ms ±  30 ms,       same as baseline
+        repeated-key
+          metrics-off: OK
+            162  ms ±  14 ms,       same as baseline
+          metrics-on:  OK
+            164  ms ±  14 ms,       same as baseline
+        all-duplicate
+          metrics-off: OK
+            165  ms ±  14 ms,       same as baseline
+          metrics-on:  OK
+            163  ms ±  15 ms
+      delegated-single
+        fresh
+          metrics-off: OK
+            386  ms ±  37 ms,       same as baseline
+          metrics-on:  OK
+            382  ms ±  28 ms,       same as baseline
+        repeated-key
+          metrics-off: OK
+            24.7 ms ± 2.5 ms,       same as baseline
+          metrics-on:  OK
+            25.6 ms ± 2.4 ms,       same as baseline
+        all-duplicate
+          metrics-off: OK
+            23.5 ms ± 910 μs,       same as baseline
+          metrics-on:  OK
+            24.6 ms ± 862 μs
+      delegated-direct-single
+        fresh
+          metrics-off: OK
+            387  ms ±  21 ms,       same as baseline
+          metrics-on:  OK
+            391  ms ±  14 ms
+        repeated-key
+          metrics-off: OK
+            24.3 ms ± 859 μs
+          metrics-on:  OK
+            24.4 ms ± 1.8 ms
+        all-duplicate
+          metrics-off: OK
+            23.7 ms ± 1.4 ms
+          metrics-on:  OK
+            23.7 ms ± 2.4 ms
+      table-downstream-batch-100
+        fresh
+          metrics-off: OK
+            284  ms ±  15 ms,       same as baseline
+          metrics-on:  OK
+            285  ms ±  15 ms
+        repeated-key
+          metrics-off: OK
+            2.14 ms ±  97 μs, 10% more than baseline
+          metrics-on:  OK
+            2.99 ms ± 254 μs,       same as baseline
+        all-duplicate
+          metrics-off: OK
+            1.81 ms ± 106 μs,       same as baseline
+          metrics-on:  OK
+            2.83 ms ± 223 μs,       same as baseline
+      delegated-batch-100
+        fresh
+          metrics-off: OK
+            385  ms ±  31 ms,       same as baseline
+          metrics-on:  OK
+            396  ms ±  34 ms
+        repeated-key
+          metrics-off: OK
+            519  μs ±  30 μs,       same as baseline
+          metrics-on:  OK
+            1.49 ms ± 110 μs,       same as baseline
+        all-duplicate
+          metrics-off: OK
+            290  μs ±  15 μs,       same as baseline
+          metrics-on:  OK
+            1.32 ms ± 113 μs,       same as baseline
+      table-downstream-batch-1000
+        fresh
+          metrics-off: OK
+            401  ms ±  34 ms,       same as baseline
+          metrics-on:  OK
+            404  ms ±  35 ms
+        repeated-key
+          metrics-off: OK
+            577  μs ±  27 μs,       same as baseline
+          metrics-on:  OK
+            1.56 ms ±  86 μs,       same as baseline
+        all-duplicate
+          metrics-off: OK
+            314  μs ±  17 μs,       same as baseline
+          metrics-on:  OK
+            1.27 ms ± 116 μs,       same as baseline
+      delegated-batch-1000
+        fresh
+          metrics-off: OK
+            393  ms ±  31 ms,       same as baseline
+          metrics-on:  OK
+            400  ms ±  16 ms
+        repeated-key
+          metrics-off: OK
+            266  μs ±  14 μs,       same as baseline
+          metrics-on:  OK
+            1.30 ms ± 121 μs,       same as baseline
+        all-duplicate
+          metrics-off: OK
+            84.8 μs ± 8.4 μs,       same as baseline
+          metrics-on:  OK
+            1.07 ms ± 107 μs,       same as baseline
+      delegated-history-duplicate
+        events-10:     OK
+          23.7 ms ± 2.0 ms,       same as baseline
+        events-1000:   OK
+          23.3 ms ± 1.7 ms,       same as baseline
+        events-100000: OK
+          24.0 ms ± 1.9 ms,       same as baseline
+
+All 49 tests passed (138.74s)
+Benchmark keiro-bench: FINISH
+##### guard command 2026-10-25T09:58:21Z
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.21.0.0 (bench:keiro-bench) (ephemeral targets)
+Preprocessing benchmark 'keiro-bench' for keiro-0.21.0.0...
+Building benchmark 'keiro-bench' for keiro-0.21.0.0...
+Running 1 benchmarks...
+Benchmark keiro-bench: RUNNING...
+All
+  command
+    legacy
+      accepted-1:     OK
+        151  μs ±  11 μs,       same as baseline
+    control
+      accepted-1:     OK
+        156  μs ±  14 μs,       same as baseline
+    domain-warmup
+      accepted-1:     OK
+        150  μs ± 7.3 μs,       same as baseline
+    domain
+      accepted-1:     OK
+        150  μs ±  14 μs, 0.96x,       same as baseline
+    legacy
+      accepted-large: OK
+        1.52 ms ± 112 μs,       same as baseline
+    domain
+      accepted-large: OK
+        1.52 ms ± 130 μs, 1.00x,       same as baseline
+    legacy
+      no-op:          OK
+        16.3 μs ± 923 ns,       same as baseline
+    domain
+      rejected:       OK
+        16.3 μs ± 943 ns, 1.00x,       same as baseline
+      no-op:          OK
+        16.2 μs ± 824 ns, 1.00x,       same as baseline
+      router-fanout
+        10:           OK
+          2.21 ms ± 214 μs,       same as baseline
+        100:          OK
+          21.7 ms ± 1.8 ms,       same as baseline
+        1000:         OK
+          223  ms ±  15 ms,       same as baseline
+      process-manager-fanout
+        10:           OK
+          2.10 ms ± 127 μs,       same as baseline
+        100:          OK
+          20.5 ms ± 1.9 ms,       same as baseline
+        1000:         OK
+          204  ms ±  15 ms,       same as baseline
+
+All 15 tests passed (32.46s)
+Benchmark keiro-bench: FINISH
+##### guard projection 2026-10-25T09:58:57Z
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.21.0.0 (bench:keiro-bench) (ephemeral targets)
+Preprocessing benchmark 'keiro-bench' for keiro-0.21.0.0...
+Building benchmark 'keiro-bench' for keiro-0.21.0.0...
+Running 1 benchmarks...
+Benchmark keiro-bench: RUNNING...
+All
+  projection
+    inline
+      legacy
+        one-target:     read-model-latency-run=1 samples=500 legacy_p95_ns=494000 versioned_p95_ns=530000 p95_ratio=1.0728744939271255 throughput_ratio=0.9400784777938533
+read-model-latency-run=2 samples=500 legacy_p95_ns=499000 versioned_p95_ns=536000 p95_ratio=1.0741482965931863 throughput_ratio=0.9694443980468468
+read-model-latency-run=3 samples=500 legacy_p95_ns=468000 versioned_p95_ns=444000 p95_ratio=0.9487179487179487 throughput_ratio=0.9990271974496164
+read-model-latency-run=4 samples=500 legacy_p95_ns=376000 versioned_p95_ns=385000 p95_ratio=1.023936170212766 throughput_ratio=0.9740234434464912
+read-model-latency-run=5 samples=500 legacy_p95_ns=372000 versioned_p95_ns=388000 p95_ratio=1.043010752688172 throughput_ratio=0.9626150132783244
+read-model-latency-median runs=5 samples_per_run=500 p95_ratio=1.043010752688172 p95_budget=1.25 throughput_ratio=0.9694443980468468 throughput_budget=0.90
+OK
+          230  μs ±  13 μs,       same as baseline
+      versioned
+        one-target:     OK
+          237  μs ±  14 μs, 1.03x,       same as baseline
+      legacy
+        three-target:   OK
+          257  μs ±  13 μs,       same as baseline
+      versioned
+        three-target:   OK
+          269  μs ±  14 μs, 1.05x,       same as baseline
+      legacy
+        three-groups:   OK
+          313  μs ±  28 μs,       same as baseline
+      versioned
+        three-groups:   OK
+          317  μs ±  11 μs, 1.01x,       same as baseline
+      legacy
+        many-revisions: OK
+          235  μs ±  17 μs,       same as baseline
+      versioned
+        many-revisions: OK
+          238  μs ±  14 μs, 1.01x,       same as baseline
+      legacy
+        mixed-delivery: OK
+          246  μs ±  18 μs,       same as baseline
+      versioned
+        mixed-delivery: OK
+          254  μs ±  17 μs, 1.03x,       same as baseline
+    async
+      legacy
+        mixed-delivery: OK
+          91.4 μs ± 7.7 μs,       same as baseline
+      versioned
+        mixed-delivery: OK
+          96.0 μs ± 8.1 μs, 1.05x,       same as baseline
+
+All 12 tests passed (30.77s)
+Benchmark keiro-bench: FINISH
+##### guard read-model 2026-10-25T09:59:31Z
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.21.0.0 (bench:keiro-bench) (ephemeral targets)
+Preprocessing benchmark 'keiro-bench' for keiro-0.21.0.0...
+Building benchmark 'keiro-bench' for keiro-0.21.0.0...
+Running 1 benchmarks...
+Benchmark keiro-bench: RUNNING...
+All
+  read-model-lifecycle
+    serving-binding
+      legacy-three:                       OK
+        61.8 μs ± 3.3 μs,       same as baseline
+      versioned-three:                    OK
+        65.6 μs ± 3.6 μs,       same as baseline
+    promotion
+      three-target-end-to-end:            OK
+        13.0 ms ± 5.4 ms,       same as baseline
+    repair
+      10:                                 OK
+        387  μs ±  29 μs,       same as baseline
+      100:                                OK
+        2.19 ms ± 126 μs,       same as baseline
+      1000:                               OK
+        27.3 ms ± 1.8 ms,       same as baseline
+  read-model-reads
+    status
+      list-1000-synthetic-groups:         OK
+        7.48 ms ± 430 μs,       same as baseline
+      lookup-among-1000-synthetic-groups: OK
+        60.5 μs ± 3.9 μs,       same as baseline
+    guarded
+      all-rows-100:                       OK
+        161  μs ±  14 μs,       same as baseline
+      keyed-10000:                        OK
+        62.2 μs ± 4.5 μs,       same as baseline
+
+All 10 tests passed (25.94s)
+Benchmark keiro-bench: FINISH
+##### guard summary 2026-10-25T10:00:00Z
+GUARD(producer-identity)=0
+GUARD(outbox)=0
+GUARD(inbox)=0
+GUARD(command)=0
+GUARD(projection)=0
+GUARD(read-model)=0
+BENCH_REGRESSION=PASSED
+PROCESS_EXIT=0

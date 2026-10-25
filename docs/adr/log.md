@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-25
+* **Update**: Link accepted five-sample baseline recording, actual producer attribution, added-cost refusal and three consecutive complete guard passes.
 * **Update**: Record fixed alternating full-workload producer ratio comparisons with the existing 1.10 ceiling and mandatory added-cost negative control.
 * **Update**: Accept the isolated fixture evidence in [ADR-58](0058-benchmark-release-gates-require-isolated-fixed-workloads-and-attributed-baselines.md): stored counts, fixed rebuilds, five growth blocks and three alternating pairs; baseline and release acceptance remain open.
 * **Update**: Record shared checkpoint coupling and selected preparation barriers in [ADR-58](0058-benchmark-release-gates-require-isolated-fixed-workloads-and-attributed-baselines.md), retaining raw diagnostics and pending unprobed acceptance.

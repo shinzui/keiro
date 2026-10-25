@@ -55,3 +55,16 @@ Build with `nix develop -c cabal build keiro:bench:keiro-bench`, then run `recor
 candidates and then `aggregate.py --apply`. The recording revision must reproduce the new
 rows under the unchanged 25% guard. Raw samples and source/environment evidence remain
 beside each group. Failed or incomplete recordings must be retained and investigated.
+
+## Accepted complete series
+
+`accepted-controls.sh` retains a fresh three-run series at `4f2b4b69` after the producer
+estimator correction and its added-cost refusal control. `accepted-full-1.txt` through
+`accepted-full-3.txt` finish at 10:00:00, 10:08:06 and 10:15:56 UTC on 2026-10-25.
+Each contains all six zero guard statuses, `BENCH_REGRESSION=PASSED` and `PROCESS_EXIT=0`.
+The wrapper independently recomputes every paired median from the emitted 15 raw pairs.
+Source, binary and all five baseline hashes are identical across the series. Batch paired
+medians are 1.0568, 1.0618 and 1.0593; per-event medians are below 1.0, with 1.10 retained
+for both. The older failed third control remains separate above. All CSVs remain the
+same five-sample medians; no row or threshold moved in response to that producer failure.
+This accepts plan 315, while plan 316's full release-gate red/green proof remains separate.

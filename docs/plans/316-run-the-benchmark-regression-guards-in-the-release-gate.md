@@ -52,10 +52,11 @@ several releases because the procedure never required it.
 
 ## Progress
 
-- [ ] M1: `just bench-regression` runs every guard even after one fails and ends with a
-      per-guard summary. `scripts/bench-regression.sh` and the recipe are committed; acceptance
-      is one full run on a quiet machine whose log ends in six `GUARD(name)=status` lines and a
-      `BENCH_REGRESSION=` line, with the exit status matching the summary.
+- [x] M1 (2026-10-25): Full runner logs retain all six statuses, continue after a
+      producer failure and return matching aggregate/process exits. The command/inbox
+      subset runs exactly those two. Evidence: `keiro/bench/results/baseline-recording-v2/`
+      (`control-subset.txt`, `control-full-1` through `control-full-3`, `accepted-full-1.txt`).
+
 - [ ] M2: `just release-gate` runs `just verify` then the guards into one retained log and
       exits non-zero when either half fails. The recipe is committed; acceptance is one run
       whose log under `keiro/bench/results/release-gates/` carries `VERIFY_EXIT=`,
@@ -82,7 +83,9 @@ acceptance. A quiet passing release gate and accepted recording/fixture evidence
 The initial runner fixed `-j1`/`-N2` only for producer identity; CSV guards inherited
 all host capabilities. It now uses serial wall-clock measurements at `-N2` for every
 guard, with a five-percent requested deviation and ten-second CSV timeout. Producer
-identity retains its one-percent/120-second ratio setting. Plan 315 records baselines
+identity retains one-percent/120-second standalone timing. Plan 315 changes its guard
+quantity to median of 15 fixed alternating actual-workload ratios at the same 1.10 ceiling,
+with every raw pair retained and a measured +20-ms/action refusal control. Plan 315 records baselines
 with these same options. A timeout or growth-budget failure remains inconclusive.
 
 

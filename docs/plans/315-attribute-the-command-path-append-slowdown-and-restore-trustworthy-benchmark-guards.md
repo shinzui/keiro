@@ -73,25 +73,27 @@ the runner and release policy ADR. Success is three serial all-guard passes endi
 - [x] M3 (2026-10-25): Retained all 25 serial recordings on accepted source `b8695a0d`.
       Median aggregation preserves all 78 rows across all five affected CSVs. The named
       command/inbox subset and all five CSV guards pass in three complete runner controls.
-- [ ] M4: Actual fresh/replay counts and paired preparation/SQL measurements are retained.
-      The normal precision run passed (1.05× batch, 0.96× per event), but the third full
-      control fails fresh batch at 46.6/42.2 ms (>1.10×). Resolve the measured fresh margin;
-      retain that failure, attribute any policy change and demonstrate a negative control.
+- [x] M4 (2026-10-25): Actual statement counts, paired preparation/SQL and 15-pair full
+      factory measurements attribute the fresh path. Median of 15 alternating full ratios
+      retains the 1.10 ceiling; +20-ms/action control refuses both shapes (1.606×/1.240×).
+      Restored normal guard passes (1.057× batch, 0.961× per event in the first full run).
+
 - [x] M5 (2026-10-25): Five isolated inbox recordings and four consecutive inbox-guard
       passes are retained (named subset plus three complete runner invocations).
 
-- [ ] M6: Retain three consecutive full `just bench-regression` passes on a quiet machine.
+- [x] M6 (2026-10-25): Three consecutive complete runs pass at `4f2b4b69`, ending
+      10:00:00, 10:08:06 and 10:15:56 UTC. Every run has six zero guard statuses,
+      `BENCH_REGRESSION=PASSED` and process exit zero. Source/binary/baseline hashes match.
 
-Current handoff (2026-10-25): plan 321 is Complete at `fb241994`. Source `b8695a0d`
-records all 25 samples and all five median baselines. All five CSV guards pass in each of
-three complete runner invocations, but only the first two full summaries pass: the third
-refuses producer fresh batch at just over 1.10×. M3/M5 are accepted; M4/M6 remain open.
-The failed third run is retained, not discarded or counted as a consecutive pass.
-Fifteen alternating actual full-factory pairs now measure median ratios 1.0496 batch
-and 0.9706 per-event, retaining a 3.1692 individual per-event pause. The fresh guard
-estimator changes to median of 15 alternating pairs while retaining its full action and
-1.10 ceiling. Added-cost negative control and a new three-full-pass series remain open. Evidence is under `keiro/bench/results/baseline-recording-v2/`, each `*-v2/` group
-and `producer-attribution-v2/`.
+Accepted handoff (2026-10-25): all milestones are complete. Source `b8695a0d` records
+all five affected CSVs from 25 successful serial processes and reproduces them in three
+controls. Producer attribution and the unchanged 1.10 paired ceiling are accepted after
+the +20-ms/action negative control. `accepted-full-1.txt` through `accepted-full-3.txt`
+pass all six guards on identical source/binary/baseline hashes at `4f2b4b69`. Batch paired
+medians are 1.0568/1.0618/1.0593; per-event medians are below legacy. The prior sequential
+failure remains auditable. Plan 316 now owns the remaining red/green release demonstrations.
+Evidence is under `keiro/bench/results/baseline-recording-v2/`, each `*-v2/` group and
+`producer-attribution-v2/`.
 
 M3–M6 require plan 321 Complete. M1/M2 completion means the observations below are recorded;
 it does not require the abandoned micro-driver, a passing August control, or a named upstream
@@ -190,7 +192,26 @@ universal runtime conclusion. No raw results or baseline numbers were changed by
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+All five affected baseline inventories are preserved and reproduced: 15 command,
+3 outbox, 38 inbox, 12 projection and 10 read-model rows. Five raw samples per group,
+median means/spreads, original CSVs, environment and exact scripts travel together.
+The named subset proves runner selection; three original controls reproduce every CSV,
+and the new three-run series passes all six guards. Inbox has more than its three
+required consecutive passes. The accepted series uses one source, binary and baseline set.
+
+Actual fresh producer calls execute one insert each and no conflict reads. Replay executes
+one attempted insert plus one locked read. Preparation, same-input SQL, native identity
+layout and actual full-factory pairs are measured separately; they are not an additive
+absolute budget. The original sequential estimator crossed 1.10 in its third control.
+Fixed alternating full-workload pairs retain that ceiling and every observation, with
+about 6% typical batch overhead in the accepted series. The +20-ms/action control refuses
+both shapes at 1.606×/1.240× and restores/rebuilds the source. This is a measured estimator
+correction, not an increased ceiling or invented ADR allowance.
+
+The historical baseline failure and preparation sensitivity do not establish a universal
+absence of production regressions. Fixture/statistics/checkpoint evidence belongs to plan
+321; ADR-58 retains the durable recording and comparison rules. Plan 316 consumes these
+accepted artifacts for the release-gate proof. No dependency or upstream code changed.
 
 
 ## Context and Orientation

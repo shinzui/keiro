@@ -74,4 +74,12 @@ No conflict-read cost or ADR-backed absolute allowance is asserted.
 records the exact source patch and executable, runs the real producer guard, requires both
 paired medians to exceed 1.10 and restores/rebuilds the original source. This adds roughly
 47% of the observed legacy batch and 26% of legacy per-event cost, beyond the measured
-headroom. Its execution and a fresh three-full-pass series remain acceptance work.
+headroom. `negative-control.txt` refuses both shapes at 1.6060× batch and 1.2401× per-event,
+returns `GUARD(producer-identity)=1`/process 1, and retains all raw pairs. The source
+patch, negative executable hash and successful restored build are retained. The script
+completes with `PRODUCER_NEGATIVE_CONTROL=PASSED` at clean source `4f2b4b69`.
+Three restored full six-guard runs pass at the same source/binary/baseline set:
+`../baseline-recording-v2/accepted-full-1.txt` through `accepted-full-3.txt`.
+Batch medians are 1.0568×/1.0618×/1.0593× and every per-event median is below legacy.
+Each full process exits zero. This accepts the producer policy and three-pass obligation;
+the full correctness-plus-performance release-gate demonstration belongs to plan 316.

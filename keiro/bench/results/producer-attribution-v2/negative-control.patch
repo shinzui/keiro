@@ -1,0 +1,20 @@
+diff --git a/keiro/bench/ProducerIdentityBench.hs b/keiro/bench/ProducerIdentityBench.hs
+index 806a2a18..6cf7c5a7 100644
+--- a/keiro/bench/ProducerIdentityBench.hs
++++ b/keiro/bench/ProducerIdentityBench.hs
+@@ -1,6 +1,7 @@
+ -- | Compare the pre-plan-164 fresh-ID path with deterministic producer writes.
+ module ProducerIdentityBench (producerIdentityBenchmarks, runProducerIdentityProbe) where
+ 
++import Control.Concurrent (threadDelay)
+ import BenchSetup (selected, setupTrace)
+ import Control.Exception (evaluate)
+ import Control.Monad (forM, forM_, replicateM_)
+@@ -50,6 +51,7 @@ producerIdentityBenchmarks store sequenceRef =
+ runProducerWorkload :: Store.KirokuStore -> IORef Int -> Bool -> Bool -> Bool -> IO ()
+ runProducerWorkload store sequenceRef batch deterministic replay = do
+   generation <- atomicModifyIORef' sequenceRef (\n -> (n + 1, n + 1))
++  when deterministic (threadDelay 20000)
+   result <- Store.runStoreIO store $ do
+     Store.runTransaction (Tx.sql "TRUNCATE keiro.keiro_outbox")
+     let recorded = [sourceEvent generation i | i <- [1 .. 1000]]
