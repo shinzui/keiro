@@ -7,7 +7,7 @@ module Main
 where
 
 import BenchSetup (freshCounter, memoSetup, nextIteration, selected, selectedCounter, setupTrace)
-import CommandProbe (commandPlanProbe)
+import CommandProbe (commandPlanProbe, tableResetProbe)
 import Control.Concurrent (threadDelay)
 import Control.Monad (replicateM_)
 import Data.Aeson qualified as Aeson
@@ -80,7 +80,7 @@ import Keiro.ReadModel.Rebuild
     startCatalogRebuild,
   )
 import Keiro.Telemetry qualified as Telemetry
-import Keiro.Test.Postgres (StoreRunner (..), withFreshResourceStore, withMigratedSuite)
+import Keiro.Test.Postgres (StoreRunner (..), withFreshResourceStore, withMigratedBenchmarkSuite)
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
@@ -157,7 +157,7 @@ main = do
 
 ordinaryMain :: IO ()
 ordinaryMain =
-  withMigratedSuite \fixture ->
+  withMigratedBenchmarkSuite \fixture ->
     withFreshResourceStore fixture \(store, runner) ->
       withFreshResourceStore fixture \(outboxStore, _) ->
         withFreshResourceStore fixture \(inboxStore, _) ->
@@ -176,15 +176,19 @@ ordinaryMain =
                     runReadModelLatencyEvidenceIfRequested model
                     pure model
                   runInboxDelegatedExplainIfRequested delegatedStore
+                  resetProbe <- lookupEnv "KEIRO_BENCH_RESET_PROBE"
                   probe <- lookupEnv "KEIRO_BENCH_COMMAND_PROBE"
                   if probe == Just "1"
                     then runCommandGrowthProbe store
                     else
-                      defaultMain
-                        ( benchmarks store runner outboxStore inboxStore rebuildStore metrics (inboxDelegatedBenchmarks delegatedStore metrics)
-                            <> [selected readModelSetup (\model -> readModelBenchmarks model !! groupIndex) | groupIndex <- [0 .. 2]]
-                            <> producerIdentityBenchmarks producerStore producerCounter
-                        )
+                      if resetProbe == Just "1"
+                        then runResetProbes outboxStore inboxStore producerStore
+                        else
+                          defaultMain
+                            ( benchmarks store runner outboxStore inboxStore rebuildStore metrics (inboxDelegatedBenchmarks delegatedStore metrics)
+                                <> [selected readModelSetup (\model -> readModelBenchmarks model !! groupIndex) | groupIndex <- [0 .. 2]]
+                                <> producerIdentityBenchmarks producerStore producerCounter
+                            )
 
 benchmarks :: Store.KirokuStore -> StoreRunner -> Store.KirokuStore -> Store.KirokuStore -> Store.KirokuStore -> Telemetry.KeiroMetrics -> [Benchmark] -> [Benchmark]
 benchmarks store runner outboxStore inboxStore rebuildStore metrics delegatedInboxBenchmarks =
@@ -1198,3 +1202,13 @@ runCommandGrowthProbe store = do
       freshStopped <- getMonotonicTimeNSec
       putStrLn ("FRESH_PROBE label=" <> Text.unpack label <> " mean_ns=" <> show ((freshStopped - freshStarted) `div` 100))
       putStrLn ("NOOP_PROBE label=" <> Text.unpack label <> " events=" <> show n <> " mean_ns=" <> show ((stopped - started) `div` 100))
+
+runResetProbes :: Store.KirokuStore -> Store.KirokuStore -> Store.KirokuStore -> IO ()
+runResetProbes outboxStore inboxStore producerStore = do
+  let outboxSeed store count = do
+        runStoreChecked store (Store.runTransaction (Tx.sql "TRUNCATE keiro.keiro_outbox"))
+        seedOutbox store (take count (scenarioMessages (const Nothing)))
+      inboxSeed = runInboxScenario inboxStore (InboxScenario "probe" Nothing PersistFullEnvelope Nothing inboxScenarioMessages)
+  tableResetProbe outboxStore "keiro.keiro_outbox" 2000 (outboxSeed outboxStore 2000)
+  tableResetProbe inboxStore "keiro.keiro_inbox" 2000 inboxSeed
+  tableResetProbe producerStore "keiro.keiro_outbox" 1000 (outboxSeed producerStore 1000)

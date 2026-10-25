@@ -77,7 +77,11 @@ shell. `harness-isolation-v1/list-tests.log` has no setup events; the rebuild pr
 six successive 600-event reports. A one-second command smoke run is deliberately not
 acceptance: the two largest fan-outs time out and accepted-1 drifts across scenario order.
 `KEIRO_BENCH_COMMAND_PROBE=1` diagnoses actual prepared stream-read plans and growth before
-recording. No baseline or ratio threshold has changed.
+recording. No baseline or ratio threshold has changed. The growth probe remains indexed through
+1,205,500 events (including diagnostic rows), with fresh/no-op means of 140/24 us
+at the late population. The ordinary entry point now uses the existing durable
+benchmark fixture rather than fast correctness settings. Final durable growth,
+reset-alternative probes and alternating pairs remain acceptance work.
 
 ## Surprises & Discoveries
 

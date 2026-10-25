@@ -1,11 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- | Inspect the actual stream-read prepared plan on a disposable benchmark store.
-module CommandProbe (commandPlanProbe) where
+module CommandProbe (commandPlanProbe, tableResetProbe) where
 
+import Control.Monad (replicateM)
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy.Char8 qualified as Lazy
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Text
+import GHC.Clock (getMonotonicTimeNSec)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (preparable)
@@ -36,8 +39,37 @@ commandPlanProbe store label = do
     counts <-
       Tx.statement () $
         preparable
-          "SELECT jsonb_build_object('streams',(SELECT count(*) FROM streams),'events',(SELECT count(*) FROM events),'stream_events',(SELECT count(*) FROM stream_events),'relation_bytes',pg_total_relation_size('stream_events'))"
+          "SELECT jsonb_build_object('streams',(SELECT count(*) FROM streams),'events',(SELECT count(*) FROM events),'stream_events',(SELECT count(*) FROM stream_events),'relation_bytes',pg_total_relation_size('stream_events'),'server_version',current_setting('server_version'),'fsync',current_setting('fsync'),'synchronous_commit',current_setting('synchronous_commit'),'full_page_writes',current_setting('full_page_writes'),'autovacuum',current_setting('autovacuum'))"
           E.noParams
           (D.singleRow (D.column (D.nonNullable D.jsonb)))
     pure (Aeson.object ["label" Aeson..= label, "counts" Aeson..= (counts :: Aeson.Value), "plan" Aeson..= (plan :: Aeson.Value)])
   either (fail . show) (Lazy.putStrLn . Aeson.encode) outcome
+
+-- Reset alternatives use the same populated row count on isolated group stores.
+tableResetProbe :: Store.KirokuStore -> Text -> Int -> IO () -> IO ()
+tableResetProbe store table expected seed = do
+  for_ ["TRUNCATE", "DELETE FROM"] $ \verb -> do
+    samples <- replicateM 5 $ do
+      seed
+      before <- info
+      unless (fst before == fromIntegral expected) (fail "reset probe seed count differs")
+      started <- getMonotonicTimeNSec
+      checked (Tx.sql (Text.encodeUtf8 (verb <> " " <> table)))
+      ended <- getMonotonicTimeNSec
+      after <- info
+      unless (fst after == 0) (fail "reset probe retained rows")
+      pure (Aeson.object ["elapsed_ns" Aeson..= (ended - started), "rows_before" Aeson..= fst before, "bytes_before" Aeson..= snd before, "rows_after" Aeson..= fst after, "bytes_after" Aeson..= snd after])
+    Lazy.putStrLn (Aeson.encode (Aeson.object ["table" Aeson..= table, "reset" Aeson..= verb, "samples" Aeson..= samples]))
+  where
+    checked :: Tx.Transaction a -> IO a
+    checked action = Store.runStoreIO store (Store.runTransaction action) >>= either (fail . show) pure
+    info =
+      checked
+        ( Tx.statement
+            ()
+            ( preparable
+                ("SELECT count(*), pg_total_relation_size('" <> table <> "') FROM " <> table)
+                E.noParams
+                (D.singleRow ((,) <$> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8)))
+            )
+        )

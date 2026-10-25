@@ -39,3 +39,17 @@ read installed by the library. Probe runs are never baseline samples.
 
 The installed tasty-bench CSV header says picoseconds. Convert means/spreads to
 milliseconds with 1e9; comparisons of raw rows remain unit independent.
+
+`command-growth-probe-v3.log` extends the exploratory fast-fixture probe through
+1,205,500 retained events (2,411,000 stream-event links, 455 MB for that relation).
+Fresh/no-op means after ANALYZE are 144/31 us at 5k, 127/21 us at 10k, 144/23 us
+at 100k and 140/24 us at the late population. The capped fresh workload remains
+indexed across its growth envelope. Final evidence uses the durable fixture below.
+
+The ordinary entry point now uses `withMigratedBenchmarkSuite`: fsync,
+synchronous_commit and full_page_writes are enabled, with their actual values
+included in the plan probe. Earlier exploratory logs used the old fast correctness
+fixture and do not establish durable baseline values. `KEIRO_BENCH_RESET_PROBE=1`
+compares five TRUNCATE and DELETE samples at fixed populated row counts for outbox
+(2,000), ordinary inbox (2,000) and producer outbox (1,000), including before/after
+counts and relation bytes. No timed command deletes have returned.
