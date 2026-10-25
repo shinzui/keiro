@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-25
+* **Addition**: IR-60 requests exact equality guards for mapped structural enums; Kotei continues with its checked native-enum adapter until upstream support is released.
+
 ## 2026-10-21
 * **Addition**: IR-59 requests the categories each projection consumes, filed by the keiro runtime console.
 * **Addition**: IR-58 requests workflow instance counts by status class, filed by the keiro runtime console.
