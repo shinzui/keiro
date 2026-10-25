@@ -1,7 +1,8 @@
 # Fresh producer attribution
 
 Plan 315 follows the accepted isolated/checkpoint-settled harness from plan 321.
-The normal benchmark actions, selected warm-up and 1.10 ceilings are unchanged.
+The full normal benchmark actions and 1.10 ceiling are retained. The guard estimator
+now uses 15 alternating full-workload pairs rather than two sequential adaptive means.
 The probe source is `fb241994` plus `source.patch`; `environment.txt` identifies the
 built executable and environment. Invoke it inside `nix develop` with
 `KEIRO_BENCH_PRODUCER_PROBE=1`, the built `keiro-bench` binary and `+RTS -N2 -RTS`.
@@ -41,3 +42,36 @@ source `b8695a0d`: all six cases passed, batch fresh 1.05× legacy and per-event
 46.6/42.2 ms (>1.10×), with the other five guards passing. That failure remains in
 `../baseline-recording-v2/control-full-3.txt`; the three-pass acceptance is not met.
 Actual full-factory alternating pairs will extend attribution. No ceiling has moved.
+
+`probe-3.jsonl` adds 15 alternating actual full-workload pairs per transaction shape;
+`full-factory-source.patch` applies to `dfa9944c`, and `full-factory-environment.txt`
+records its executable. All 113 records completed with process exit zero and empty stderr.
+`analyze-full.py` validates every pair and retained row count; `full-factory-summary.md`
+reports batch median ratio 1.0496 (range 1.0202–1.1101), per-event 0.9706 (range
+0.9155–3.1692). The large individual per-event pause remains in the data. Separate
+component estimates do not predict an exact full-path budget.
+
+The guard retains its 1.10 ceiling and full workload, but now enforces the median of
+15 adjacent full-workload ratios, alternating order by sample. It emits every raw pair
+and the median, checks 1,000 retained rows after each action and never repeats samples
+until green. This replaces comparison of sequential adaptive means: the accepted source
+varied from 1.05 to just above 1.10 even with small individual reported spreads, while
+actual paired data separates typical fresh overhead from occasional pauses. Ordinary
+six benchmark names and standalone timing actions remain available. Paired measurements
+are selected only for the two fresh comparisons and add fixed diagnostic work to those
+cases; other groups' workload setup and all five CSVs are unaffected.
+
+The known same-input statement difference is about 7.3% for batch SQL; each path's native
+identity layout measures about 9.1%. Production handles either unique identity through
+untargeted `ON CONFLICT DO NOTHING`, whereas the legacy helper targets `(source,message_id)`
+and discards row results. PostgreSQL [documents the arbiter scope](https://www.postgresql.org/docs/18/sql-insert.html).
+Those controlled SQL measurements include encoding/results and do not isolate each index
+or identifier byte individually. The actual full paired batch overhead is about 5%, giving
+about five percentage points to the existing ceiling; per-event median is below legacy.
+No conflict-read cost or ADR-backed absolute allowance is asserted.
+
+`negative-control.sh` temporarily adds 20 ms to each deterministic 1,000-event action,
+records the exact source patch and executable, runs the real producer guard, requires both
+paired medians to exceed 1.10 and restores/rebuilds the original source. This adds roughly
+47% of the observed legacy batch and 26% of legacy per-event cost, beyond the measured
+headroom. Its execution and a fresh three-full-pass series remain acceptance work.

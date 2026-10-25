@@ -87,8 +87,10 @@ records all 25 samples and all five median baselines. All five CSV guards pass i
 three complete runner invocations, but only the first two full summaries pass: the third
 refuses producer fresh batch at just over 1.10×. M3/M5 are accepted; M4/M6 remain open.
 The failed third run is retained, not discarded or counted as a consecutive pass.
-Further actual-factory alternating pairs will test the small fresh margin before any policy
-change. Evidence is under `keiro/bench/results/baseline-recording-v2/`, each `*-v2/` group
+Fifteen alternating actual full-factory pairs now measure median ratios 1.0496 batch
+and 0.9706 per-event, retaining a 3.1692 individual per-event pause. The fresh guard
+estimator changes to median of 15 alternating pairs while retaining its full action and
+1.10 ceiling. Added-cost negative control and a new three-full-pass series remain open. Evidence is under `keiro/bench/results/baseline-recording-v2/`, each `*-v2/` group
 and `producer-attribution-v2/`.
 
 M3–M6 require plan 321 Complete. M1/M2 completion means the observations below are recorded;
@@ -170,6 +172,15 @@ an ADR-backed absolute allowance were incorrect.
   about 9% native-layout batch SQL overhead, and the full batch guard varies from 1.05×
   to just over 1.10× legacy. Separate phases cannot be summed into an exact full budget;
   passing the first two controls does not establish three consecutive full passes.
+  Date: 2026-10-25
+- Decision: Replace the producer ratio of two sequential adaptive means with median of
+  15 adjacent alternating full-workload ratios; retain 1.10 separately for both shapes.
+  Rationale: The sequential batch ratio crosses the ceiling at small reported spreads,
+  while 15 actual pairs measure typical 1.0496× batch and 0.9706× per-event with retained
+  outliers. Both actual actions, preparation, reset and assertions are shared, with all
+  pairs printed and a fixed sample count. Roughly five percentage points of typical batch
+  headroom remain. No row is discarded and no ceiling is increased. A +20-ms/action
+  negative control must refuse before acceptance. ADR-58 records the durable estimator.
   Date: 2026-10-25
 
 Revision note (2026-10-21): Reconciled completed observations with acceptance and the EP-7

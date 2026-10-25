@@ -1,0 +1,118 @@
+diff --git a/keiro/bench/ProducerIdentityBench.hs b/keiro/bench/ProducerIdentityBench.hs
+index 56ae3e5a..f8ce3c18 100644
+--- a/keiro/bench/ProducerIdentityBench.hs
++++ b/keiro/bench/ProducerIdentityBench.hs
+@@ -7,7 +7,7 @@ import Control.Monad (forM, forM_, replicateM_)
+ import Data.Aeson qualified as Aeson
+ import Data.ByteString qualified as BS
+ import Data.ByteString.Lazy.Char8 qualified as Lazy
+-import Data.IORef (IORef, atomicModifyIORef')
++import Data.IORef (IORef, atomicModifyIORef', newIORef)
+ import Data.List (sortOn)
+ import Data.Text qualified as Text
+ import Data.Time (UTCTime (..), secondsToDiffTime)
+@@ -41,42 +41,48 @@ producerIdentityBenchmarks store sequenceRef =
+   ]
+   where
+     sqlBench name action = selected (setupTrace "producer-identity" name "checkpoint=before-warm-up warm-up invocations=3 timed_reset=TRUNCATE" >> checkpointBenchmarkStore store >> replicateM_ 3 action) $ \_ -> bench name (nfIO action)
+-    run batch deterministic replay = do
+-      generation <- atomicModifyIORef' sequenceRef (\n -> (n + 1, n + 1))
+-      result <- Store.runStoreIO store $ do
+-        Store.runTransaction (Tx.sql "TRUNCATE keiro.keiro_outbox")
+-        let recorded = [sourceEvent generation i | i <- [1 .. 1000]]
+-        if deterministic
++    run = runProducerWorkload store sequenceRef
++
++-- The diagnostic pairs call precisely the normal benchmark workload, including
++-- timed reset, preparation, insert-result checks and transaction boundaries.
++runProducerWorkload :: Store.KirokuStore -> IORef Int -> Bool -> Bool -> Bool -> IO ()
++runProducerWorkload store sequenceRef batch deterministic replay = do
++  generation <- atomicModifyIORef' sequenceRef (\n -> (n + 1, n + 1))
++  result <- Store.runStoreIO store $ do
++    Store.runTransaction (Tx.sql "TRUNCATE keiro.keiro_outbox")
++    let recorded = [sourceEvent generation i | i <- [1 .. 1000]]
++    if deterministic
++      then do
++        let actions = fmap (\event -> enqueueProducerEventTx producer event 0 draft) recorded
++        if batch
+           then do
+-            let actions = fmap (\event -> enqueueProducerEventTx producer event 0 draft) recorded
+-            if batch
+-              then do
+-                first <- Store.runTransaction (sequence actions)
+-                unless (all isInserted first) (error "producer benchmark failed to insert")
+-              else forM_ actions $ \action -> do
+-                outcome <- Store.runTransaction action
+-                unless (isInserted outcome) (error "producer benchmark failed to insert")
+-            when replay $ do
+-              second <- Store.runTransaction (sequence actions)
+-              unless (all isDuplicate second) (error "producer benchmark failed to replay")
+-          else do
+-            -- Match the old helper's preparation boundary: bulk preparation
+-            -- for bulk SQL, and preparation immediately before each individual
+-            -- transaction for the normal subscription path.
+-            let prepare event = do
+-                  oid <- freshOutboxId
+-                  envelope <- freshIntegrationEvent producer (draft & #sourceEventId ?~ event ^. #eventId & #sourceGlobalPosition ?~ event ^. #globalPosition)
+-                  pure (oid, envelope)
+-            if batch
+-              then do
+-                messages <- forM recorded prepare
+-                Store.runTransaction (traverse_ (uncurry enqueueIntegrationEventTx) messages)
+-              else forM_ recorded $ \event -> do
+-                message <- prepare event
+-                Store.runTransaction (uncurry enqueueIntegrationEventTx message)
+-      case result of
+-        Left err -> fail (show err)
+-        Right () -> pure ()
++            first <- Store.runTransaction (sequence actions)
++            unless (all isInserted first) (error "producer benchmark failed to insert")
++          else forM_ actions $ \action -> do
++            outcome <- Store.runTransaction action
++            unless (isInserted outcome) (error "producer benchmark failed to insert")
++        when replay $ do
++          second <- Store.runTransaction (sequence actions)
++          unless (all isDuplicate second) (error "producer benchmark failed to replay")
++      else do
++        -- Match the old helper's preparation boundary: bulk preparation
++        -- for bulk SQL, and preparation immediately before each individual
++        -- transaction for the normal subscription path.
++        let prepare event = do
++              oid <- freshOutboxId
++              envelope <- freshIntegrationEvent producer (draft & #sourceEventId ?~ event ^. #eventId & #sourceGlobalPosition ?~ event ^. #globalPosition)
++              pure (oid, envelope)
++        if batch
++          then do
++            messages <- forM recorded prepare
++            Store.runTransaction (traverse_ (uncurry enqueueIntegrationEventTx) messages)
++          else forM_ recorded $ \event -> do
++            message <- prepare event
++            Store.runTransaction (uncurry enqueueIntegrationEventTx message)
++  case result of
++    Left err -> fail (show err)
++    Right () -> pure ()
++  where
+     isInserted ProducerInserted {} = True
+     isInserted _ = False
+     isDuplicate ProducerDuplicateIdentical {} = True
+@@ -200,6 +206,20 @@ runProducerIdentityProbe store = do
+           rows <- probeTx store producerRows
+           unless (rows == 1000) (fail "prepared producer probe retained wrong rows")
+           emit "prepared-enqueue" (Aeson.object ["sample" Aeson..= sample, "identical_envelopes" Aeson..= identicalEnvelopes, "batch" Aeson..= batch, "deterministic" Aeson..= deterministic, "events" Aeson..= rows, "elapsed_ns" Aeson..= (ended - started)])
++  counter <- newIORef 0
++  for_ [True, False] $ \batch -> do
++    checkpointBenchmarkStore store
++    for_ [False, True] $ \deterministic ->
++      replicateM_ 3 (runProducerWorkload store counter batch deterministic False)
++    for_ [1 .. 15 :: Int] $ \sample ->
++      for_ (if even sample then [True, False] else [False, True]) $ \deterministic -> do
++        started <- getMonotonicTimeNSec
++        runProducerWorkload store counter batch deterministic False
++        ended <- getMonotonicTimeNSec
++        rows <- probeTx store producerRows
++        unless (rows == 1000) (fail "full producer probe retained wrong rows")
++        emit "full-factory" (Aeson.object ["sample" Aeson..= sample, "batch" Aeson..= batch, "deterministic" Aeson..= deterministic, "events" Aeson..= rows, "elapsed_ns" Aeson..= (ended - started)])
++
+   where
+     inserted ProducerInserted {} = True
+     inserted _ = False

@@ -7,8 +7,8 @@ import Control.Monad (forM, forM_, replicateM_)
 import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as BS
 import Data.ByteString.Lazy.Char8 qualified as Lazy
-import Data.IORef (IORef, atomicModifyIORef')
-import Data.List (sortOn)
+import Data.IORef (IORef, atomicModifyIORef', newIORef)
+import Data.List (sort, sortOn)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
@@ -24,7 +24,7 @@ import Keiro.Prelude
 import Keiro.Test.Postgres (checkpointBenchmarkStore)
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Types (EventId (..), EventType (..), GlobalPosition (..), RecordedEvent (..), StreamId (..), StreamVersion (..))
-import Test.Tasty.Bench (Benchmark, bcompareWithin, bench, bgroup, nf, nfIO)
+import Test.Tasty.Bench (Benchmark, bench, bgroup, nf, nfIO)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 producerIdentityBenchmarks :: Store.KirokuStore -> IORef Int -> [Benchmark]
@@ -33,50 +33,58 @@ producerIdentityBenchmarks store sequenceRef =
       "producer-identity"
       [ bench "derive-v1" $ nf identityText (ProducerEventKey (EventId (UUID.fromWords 0 0 0 1)) 0),
         sqlBench "legacy-fresh-1000" (run True False False),
-        bcompareWithin 0 1.10 "$0 == \"All.producer-identity.legacy-fresh-1000\"" $ sqlBench "deterministic-fresh-1000" (run True True False),
+        freshBench True "deterministic-fresh-1000" (run True True False),
         sqlBench "deterministic-fresh-and-replay-1000" (run True True True),
         sqlBench "legacy-single-tx-per-event-1000" (run False False False),
-        bcompareWithin 0 1.10 "$0 == \"All.producer-identity.legacy-single-tx-per-event-1000\"" $ sqlBench "deterministic-single-tx-per-event-1000" (run False True False)
+        freshBench False "deterministic-single-tx-per-event-1000" (run False True False)
       ]
   ]
   where
     sqlBench name action = selected (setupTrace "producer-identity" name "checkpoint=before-warm-up warm-up invocations=3 timed_reset=TRUNCATE" >> checkpointBenchmarkStore store >> replicateM_ 3 action) $ \_ -> bench name (nfIO action)
-    run batch deterministic replay = do
-      generation <- atomicModifyIORef' sequenceRef (\n -> (n + 1, n + 1))
-      result <- Store.runStoreIO store $ do
-        Store.runTransaction (Tx.sql "TRUNCATE keiro.keiro_outbox")
-        let recorded = [sourceEvent generation i | i <- [1 .. 1000]]
-        if deterministic
+    freshBench batch name action =
+      selected (checkFreshRatio store sequenceRef batch) $ \_ -> sqlBench name action
+    run = runProducerWorkload store sequenceRef
+
+-- The diagnostic pairs call precisely the normal benchmark workload, including
+-- timed reset, preparation, insert-result checks and transaction boundaries.
+runProducerWorkload :: Store.KirokuStore -> IORef Int -> Bool -> Bool -> Bool -> IO ()
+runProducerWorkload store sequenceRef batch deterministic replay = do
+  generation <- atomicModifyIORef' sequenceRef (\n -> (n + 1, n + 1))
+  result <- Store.runStoreIO store $ do
+    Store.runTransaction (Tx.sql "TRUNCATE keiro.keiro_outbox")
+    let recorded = [sourceEvent generation i | i <- [1 .. 1000]]
+    if deterministic
+      then do
+        let actions = fmap (\event -> enqueueProducerEventTx producer event 0 draft) recorded
+        if batch
           then do
-            let actions = fmap (\event -> enqueueProducerEventTx producer event 0 draft) recorded
-            if batch
-              then do
-                first <- Store.runTransaction (sequence actions)
-                unless (all isInserted first) (error "producer benchmark failed to insert")
-              else forM_ actions $ \action -> do
-                outcome <- Store.runTransaction action
-                unless (isInserted outcome) (error "producer benchmark failed to insert")
-            when replay $ do
-              second <- Store.runTransaction (sequence actions)
-              unless (all isDuplicate second) (error "producer benchmark failed to replay")
-          else do
-            -- Match the old helper's preparation boundary: bulk preparation
-            -- for bulk SQL, and preparation immediately before each individual
-            -- transaction for the normal subscription path.
-            let prepare event = do
-                  oid <- freshOutboxId
-                  envelope <- freshIntegrationEvent producer (draft & #sourceEventId ?~ event ^. #eventId & #sourceGlobalPosition ?~ event ^. #globalPosition)
-                  pure (oid, envelope)
-            if batch
-              then do
-                messages <- forM recorded prepare
-                Store.runTransaction (traverse_ (uncurry enqueueIntegrationEventTx) messages)
-              else forM_ recorded $ \event -> do
-                message <- prepare event
-                Store.runTransaction (uncurry enqueueIntegrationEventTx message)
-      case result of
-        Left err -> fail (show err)
-        Right () -> pure ()
+            first <- Store.runTransaction (sequence actions)
+            unless (all isInserted first) (error "producer benchmark failed to insert")
+          else forM_ actions $ \action -> do
+            outcome <- Store.runTransaction action
+            unless (isInserted outcome) (error "producer benchmark failed to insert")
+        when replay $ do
+          second <- Store.runTransaction (sequence actions)
+          unless (all isDuplicate second) (error "producer benchmark failed to replay")
+      else do
+        -- Match the old helper's preparation boundary: bulk preparation
+        -- for bulk SQL, and preparation immediately before each individual
+        -- transaction for the normal subscription path.
+        let prepare event = do
+              oid <- freshOutboxId
+              envelope <- freshIntegrationEvent producer (draft & #sourceEventId ?~ event ^. #eventId & #sourceGlobalPosition ?~ event ^. #globalPosition)
+              pure (oid, envelope)
+        if batch
+          then do
+            messages <- forM recorded prepare
+            Store.runTransaction (traverse_ (uncurry enqueueIntegrationEventTx) messages)
+          else forM_ recorded $ \event -> do
+            message <- prepare event
+            Store.runTransaction (uncurry enqueueIntegrationEventTx message)
+  case result of
+    Left err -> fail (show err)
+    Right () -> pure ()
+  where
     isInserted ProducerInserted {} = True
     isInserted _ = False
     isDuplicate ProducerDuplicateIdentical {} = True
@@ -127,7 +135,7 @@ identityText key =
    in (UUID.toText (unOutboxId (identity ^. #outboxId)), identity ^. #messageId)
 
 -- | Opt-in attribution on the existing isolated producer fixture. Normal
--- benchmark actions and their 1.10 comparisons remain unchanged.
+-- full workload and the 1.10 ceiling are shared with the paired guard.
 runProducerIdentityProbe :: Store.KirokuStore -> IO ()
 runProducerIdentityProbe store = do
   checkpointBenchmarkStore store
@@ -200,11 +208,51 @@ runProducerIdentityProbe store = do
           rows <- probeTx store producerRows
           unless (rows == 1000) (fail "prepared producer probe retained wrong rows")
           emit "prepared-enqueue" (Aeson.object ["sample" Aeson..= sample, "identical_envelopes" Aeson..= identicalEnvelopes, "batch" Aeson..= batch, "deterministic" Aeson..= deterministic, "events" Aeson..= rows, "elapsed_ns" Aeson..= (ended - started)])
+  counter <- newIORef 0
+  for_ [True, False] $ \batch -> do
+    pairs <- measureFreshPairs store counter batch
+    for_ (zip [1 .. freshPairSamples] pairs) $ \(sample, (legacy, deterministic)) ->
+      for_ [(False, legacy), (True, deterministic)] $ \(flag, elapsed) ->
+        emit "full-factory" (Aeson.object ["sample" Aeson..= sample, "batch" Aeson..= batch, "deterministic" Aeson..= flag, "events" Aeson..= (1000 :: Int), "elapsed_ns" Aeson..= elapsed])
   where
     inserted ProducerInserted {} = True
     inserted _ = False
     duplicate ProducerDuplicateIdentical {} = True
     duplicate _ = False
+
+-- Compare adjacent full actions in alternating order. Both include their normal
+-- reset/preparation/transaction boundaries; all fixed samples remain in the log.
+measureFreshPairs :: Store.KirokuStore -> IORef Int -> Bool -> IO [(Double, Double)]
+measureFreshPairs store counter batch = do
+  checkpointBenchmarkStore store
+  for_ [False, True] $ \deterministic ->
+    replicateM_ 3 (runProducerWorkload store counter batch deterministic False)
+  forM [1 .. freshPairSamples] $ \sample -> do
+    values <- forM (if even sample then [True, False] else [False, True]) $ \deterministic -> do
+      started <- getMonotonicTimeNSec
+      runProducerWorkload store counter batch deterministic False
+      ended <- getMonotonicTimeNSec
+      rows <- probeTx store producerRows
+      unless (rows == 1000 && ended > started) (fail "paired producer workload/count mismatch")
+      pure (deterministic, fromIntegral (ended - started))
+    case (lookup False values, lookup True values) of
+      (Just legacy, Just deterministic) -> pure (legacy, deterministic)
+      _ -> fail "paired producer measurement is incomplete"
+
+checkFreshRatio :: Store.KirokuStore -> IORef Int -> Bool -> IO ()
+checkFreshRatio store counter batch = do
+  pairs <- measureFreshPairs store counter batch
+  let ratios = [deterministic / legacy | (legacy, deterministic) <- pairs]
+      medianRatio = sort ratios !! (freshPairSamples `div` 2)
+  Lazy.putStrLn (Aeson.encode (Aeson.object ["phase" Aeson..= ("producer-fresh-ratio" :: Text), "batch" Aeson..= batch, "pairs_ns_legacy_deterministic" Aeson..= pairs, "median_ratio" Aeson..= medianRatio, "ceiling" Aeson..= freshRatioCeiling]))
+  unless (medianRatio <= freshRatioCeiling) $
+    fail ("producer fresh median paired ratio " <> show medianRatio <> " exceeds " <> show freshRatioCeiling)
+
+freshPairSamples :: Int
+freshPairSamples = 15
+
+freshRatioCeiling :: Double
+freshRatioCeiling = 1.10
 
 probeLegacyInputs :: Store.KirokuStore -> [RecordedEvent] -> IO [(OutboxId, IntegrationEvent)]
 probeLegacyInputs store inputs =

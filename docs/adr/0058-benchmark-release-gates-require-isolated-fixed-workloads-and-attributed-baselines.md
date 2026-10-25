@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Benchmark release gates require isolated fixed workloads and attributed baselines
 description: Release benchmark evidence uses isolated fixtures, fixed measured work, explicit growth bounds and reproducible baselines whose changes have attributed causes.
-timestamp: 2026-10-25T08:07:52Z
+timestamp: 2026-10-25T09:49:00Z
 docId: ADR-58
 status: Accepted
 date: 2026-10-21
@@ -69,7 +69,13 @@ The producer fresh-path guard must be attributed using actual fresh insert work.
 lookup in deterministic enqueue is conflict-only; it cannot justify a fresh-path budget.
 Threshold or quantity changes require measured rationale and a negative control demonstrating
 that excessive cost is still rejected. ADR-42 defines identity semantics, not a millisecond
-allowance.
+allowance. The fresh guard compares the median of 15 adjacent legacy/deterministic
+full-workload ratios in alternating order, separately for batch and per-event transactions,
+with the 1.10 ceiling retained. Every pair includes the actual preparation, timed reset,
+transaction boundaries and insert assertions, and verifies the retained 1,000 rows. Retain
+all pair timings. Sequential adaptive means put controls at different times even when their
+individual spreads are small; a fixed paired median reduces sensitivity to drift and rare
+maintenance pauses without deleting observations. Deliberate extra fresh cost must still fail.
 
 Plan 316 owns this policy and its red/green release-gate demonstrations. Plan 321 owns fixture
 isolation and fixed-workload evidence. Plan 315 owns attribution, recording and threshold evidence.
