@@ -1,0 +1,11 @@
+2026-10-25T10:42:59Z
+a4332cfe9d6160a69c2d57005892c5f03a8a9ef3
+3c5e61e98d9db8792bde55f9fc204ec640f496cb557fe9dd2a35f30aaed43c60  /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench
+e794dcfd6c385d254c5d28e4c0e61c3ded0fcf4548db6ee235167a73be211d55  flake.lock
+c6a5097f1564a1f94454dfba00e168b6acebaec699936e9a729a749c2eebb3c6  keiro/bench/baseline-command.csv
+17a8971053098922783bb00c2c02cc6e4c4fdfc9d54edd8ff8a8b78f8ed8558f  keiro/bench/baseline-inbox.csv
+4b659a9b681a4fc23dd9200b318afa1e757b363a71a15e1d1e13ecdc46bc6ce6  keiro/bench/baseline-outbox.csv
+45f64e738fe523fd9fb86622151ad650a9e4b7b5c2d33ab317b98ea2f5546789  keiro/bench/baseline-projection.csv
+3b45470d1df9e44881e2a4c2e78761b45609a9fde759443361a6ecb86b2481e5  keiro/bench/baseline-read-model.csv
+Z3 version 4.16.0 - 64 bit
+ 03:43:00  up 11 days  6:42,  3 users,  load average: 1.45, 1.80, 2.02

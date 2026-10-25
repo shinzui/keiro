@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Benchmark release gates require isolated fixed workloads and attributed baselines
 description: Release benchmark evidence uses isolated fixtures, fixed measured work, explicit growth bounds and reproducible baselines whose changes have attributed causes.
-timestamp: 2026-10-25T10:17:39Z
+timestamp: 2026-10-25T11:07:22Z
 docId: ADR-58
 status: Accepted
 date: 2026-10-21
@@ -86,8 +86,12 @@ samples at `b8695a0d`, preserving all 78 names. Same-source controls reproduce e
 Actual producer counts and preparation/SQL/full-factory pairs attribute fresh work; a
 +20-ms/action control refuses both transaction shapes. Three consecutive complete
 six-guard runs pass with identical source/binary/baseline hashes at `4f2b4b69` under the
-1.10 paired ceiling. The full red/green release demonstrations remain open in plan 316;
-benchmark acceptance alone is not full release status.
+1.10 paired ceiling. Plan 316 demonstrates the full release gate at `a4332cfe`: correctness
+passes in both complete runs, a retained impossible command baseline produces the sole guard
+failure and recipe exit 1, and exact restoration produces six passing guards and recipe exit 0.
+Both uninterrupted combined logs, the perturbation, source/binary/baseline identity and wrapper
+process statuses are retained. The final evidence/documentation commit preserves the tested
+implementation. A later release candidate still requires its own complete gate.
 
 ## Consequences
 
@@ -105,6 +109,8 @@ Timing-sensitive release evidence is run on a quiet machine independently of dev
 - [Harness diagnostics](../../keiro/bench/results/harness-isolation-v1/README.md) retain accepted actual counts, prepared plans, growth spreads, settled checkpoint boundaries and three alternating pairs; rejected cohorts remain separate.
 - [Baseline recording and accepted full controls](../../keiro/bench/results/baseline-recording-v2/README.md).
 - [Producer attribution and added-cost refusal](../../keiro/bench/results/producer-attribution-v2/README.md).
-- [Refusing gate](../../keiro/bench/results/release-gates/README.md) records correctness success and all-guard continuation; passing release acceptance remains open.
+- [Accepted red/green release evidence](../../keiro/bench/results/release-gates/README.md).
+- [Full refusing gate](../../keiro/bench/results/release-gates/20261025T101845Z-a4332cfe.log).
+- [Full passing gate](../../keiro/bench/results/release-gates/20261025T104300Z-a4332cfe.log).
 - [ADR-42](0042-producer-outbox-identity-is-a-versioned-source-event-contract.md).
 - [ADR-48](0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md).

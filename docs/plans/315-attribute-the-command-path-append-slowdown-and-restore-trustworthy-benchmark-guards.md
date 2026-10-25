@@ -91,7 +91,8 @@ controls. Producer attribution and the unchanged 1.10 paired ceiling are accepte
 the +20-ms/action negative control. `accepted-full-1.txt` through `accepted-full-3.txt`
 pass all six guards on identical source/binary/baseline hashes at `4f2b4b69`. Batch paired
 medians are 1.0568/1.0618/1.0593; per-event medians are below legacy. The prior sequential
-failure remains auditable. Plan 316 now owns the remaining red/green release demonstrations.
+failure remains auditable. Plan 316 consumes this handoff in its accepted full red/green release demonstrations
+at `a4332cfe`; their logs are under `keiro/bench/results/release-gates/`.
 Evidence is under `keiro/bench/results/baseline-recording-v2/`, each `*-v2/` group and
 `producer-attribution-v2/`.
 
@@ -281,25 +282,35 @@ unless new measurements actually identify an upstream serving-path regression.
 ## Concrete Steps
 
 
-From the repository root, after plan 321 is Complete, enter `nix develop` and run:
+The accepted recording at `b8695a0d` used these commands inside `nix develop`:
 
 ```bash
 cabal build keiro:bench:keiro-bench
-mkdir -p keiro/bench/results/command-v2
-for sample in 1 2 3 4 5; do
-  cabal bench keiro-bench --benchmark-options="-p command --time-mode wall --hide-progress --csv $PWD/keiro/bench/results/command-v2/sample-$sample.csv"
-done
-just bench-regression command
-just bench-regression producer-identity
-just bench-regression inbox
-just bench-regression
+bash keiro/bench/results/baseline-recording-v2/record.sh
+python3 keiro/bench/results/baseline-recording-v2/aggregate.py
+python3 keiro/bench/results/baseline-recording-v2/aggregate.py --apply
+bash keiro/bench/results/baseline-recording-v2/controls.sh
 ```
 
-The final four commands compare against committed/updated baselines; they must not be used
-to overwrite a CSV automatically. Record and aggregate the samples as M3 specifies, then
-repeat the inbox and full runs to meet M5/M6. Retain each run's output and process exit code.
-For additional baseline groups copy their runner options from `scripts/bench-regression.sh`,
-remove `--baseline`/`--fail-if-slower`, and add a unique absolute `--csv` path.
+The final original control refuses producer while reproducing every CSV. After the
+measured producer estimator correction (`03e76d10`) and portable control scripts
+(`4f2b4b69`), acceptance used:
+
+```bash
+bash keiro/bench/results/producer-attribution-v2/negative-control.sh
+bash keiro/bench/results/baseline-recording-v2/accepted-controls.sh
+```
+
+The recording script uses the exact runner selection/settings for all five groups;
+aggregation validates all raw samples before writing candidates. The first control script
+also proves the named `command inbox` subset. The accepted script requires three complete
+runs, recomputes every paired median from raw values and stops on any failure. The negative
+control restores and rebuilds the unperturbed source before acceptance.
+
+These scripts intentionally refuse to overwrite the retained committed evidence. A repeat
+cohort must use new artifact names/directories and retain its source/environment identity;
+see `keiro/bench/results/baseline-recording-v2/README.md` and the producer evidence README.
+Do not overwrite historical samples or move a CSV because a comparison fails.
 
 Expected passing summary:
 

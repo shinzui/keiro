@@ -57,17 +57,19 @@ several releases because the procedure never required it.
       subset runs exactly those two. Evidence: `keiro/bench/results/baseline-recording-v2/`
       (`control-subset.txt`, `control-full-1` through `control-full-3`, `accepted-full-1.txt`).
 
-- [ ] M2: `just release-gate` runs `just verify` then the guards into one retained log and
-      exits non-zero when either half fails. The recipe is committed; acceptance is one run
-      whose log under `keiro/bench/results/release-gates/` carries `VERIFY_EXIT=`,
-      `BENCH_EXIT=`, and the guard lines, and whose exit status is 1 for a known failing guard (the demonstration that the gate stops)
-      and 0 after plan 315 is Complete. The failing demonstration may run earlier.
+- [x] M2 (2026-10-25): Full refusing and green release gates run at `a4332cfe` after
+      plan 315 completion. Both pass correctness and run all six guards. The deliberate
+      1-ps command baseline makes only command fail (recipe exit 1); after exact restoration,
+      every guard passes (recipe exit 0). Combined logs, patches and wrapper statuses are
+      retained under `keiro/bench/results/release-gates/`; no partial logs are spliced.
+
 - [x] M3 (2026-10-25): The release procedure requires the gate. `agents/skills/release/SKILL.md` step 4
       names `just release-gate`, the quiet-machine rule, the log-in-the-release-commit rule, and
       the no-re-recording rule; `docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md`
       Milestone 1 lists the gate log and all MasterPlan 46 mandatory prerequisites among its preflight artifacts.
-- [ ] M4: ADR-58 records the rule; after plans 315/321 acceptance, link their retained
-      recording, threshold and fixture evidence and verify that implementation meets the policy.
+- [x] M4 (2026-10-25): ADR-58 links accepted plan 315/321 evidence and full red/green
+      logs. Its policy matches the implementation; strict profile/log enforcement passes
+      for all 58 ADR concepts after the final timestamp and log update.
 
 
 ## Surprises & Discoveries
@@ -78,15 +80,16 @@ The first full run on clean `847b395c` records `VERIFY_EXIT=0`, all six guard st
 Producer and projection failed; outbox/inbox/command/read-model passed. This proves refusal
 and all-guard continuation mechanically. External solver/test activity appeared during
 producer sampling, so its timings are exploratory and do not establish quiet-machine
-acceptance. A quiet passing release gate and accepted recording/fixture evidence remain open.
+acceptance. The later `a4332cfe` red/green cohort below supplies quiet acceptance after
+the fixture, recording and producer evidence are accepted.
 
 The initial runner fixed `-j1`/`-N2` only for producer identity; CSV guards inherited
 all host capabilities. It now uses serial wall-clock measurements at `-N2` for every
 guard, with a five-percent requested deviation and ten-second CSV timeout. Producer
 identity retains one-percent/120-second standalone timing. Plan 315 changes its guard
 quantity to median of 15 fixed alternating actual-workload ratios at the same 1.10 ceiling,
-with every raw pair retained and a measured +20-ms/action refusal control. Plan 315 records baselines
-with these same options. A timeout or growth-budget failure remains inconclusive.
+with every raw pair retained and a measured +20-ms/action refusal control. Plan 315
+records CSV baselines with the same CSV runner options. A timeout or growth-budget failure remains inconclusive.
 
 
 
@@ -112,7 +115,20 @@ preflight obligations, and assigned this plan sole ownership of the benchmark po
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The release gate is demonstrated end to end at `a4332cfe`, after plan 315 completion.
+`20261025T101845Z-a4332cfe.log` passes correctness and refuses a deliberately impossible
+command baseline while reporting every guard. `20261025T104300Z-a4332cfe.log` then passes
+correctness and all six guards on the restored tree, finishing 11:05:22 UTC. Their wrappers
+retain recipe exits 1/0; both logs carry matching `VERIFY_EXIT`/`BENCH_EXIT` values. The
+negative patch is retained and absent from the accepted CSV. No test or benchmark halves
+were spliced, and the tested implementation does not change in the evidence commit.
+
+The named subset and original failing full control establish selection and continuation.
+Accepted plan 315/321 artifacts establish fixture isolation, bounded work, attributed
+five-sample baselines and a producer comparison that still refuses deliberately added cost.
+ADR-58 records these durable rules and links their demonstrated implementation. The release
+skill and plan 303 require a fresh full gate on the final release candidate; this plan
+implements and verifies preflight but performs no release cut.
 
 
 ## Context and Orientation
@@ -122,8 +138,8 @@ the correctness gate: build, every test suite, the OKF documentation validators,
 scripts, and the mutation proofs. `bench-regression` runs the benchmark regression guards:
 six `cabal bench keiro-bench` invocations, five of which compare the `keiro-bench` scenarios
 in `keiro/bench/Main.hs` against committed baselines in `keiro/bench/baseline-*.csv` with
-`tasty-bench`'s `--fail-if-slower 25`, and one of which (`producer-identity`) compares two
-scenarios in the same process against a 1.10 ratio ceiling. A "guard" is one such invocation.
+`tasty-bench`'s `--fail-if-slower 25`, and one of which (`producer-identity`) compares 15 alternating full legacy/deterministic
+pairs for each fresh transaction shape against a 1.10 median-ratio ceiling. A "guard" is one such invocation.
 Until this plan, `bench-regression` was a recipe of six lines that stopped at the first failure,
 and nothing in the release procedure (`agents/skills/release/SKILL.md`) ran it; the retention
 suite is the precedent for a measured workload inside the gate (ADR-48,
@@ -137,9 +153,9 @@ recipe calls it and accepts guard names as arguments; the `release-gate` recipe 
 `just verify`, then `just bench-regression`, teeing both into
 `keiro/bench/results/release-gates/<UTC timestamp>-<short sha>.log` with `VERIFY_EXIT=` and
 `BENCH_EXIT=` lines, and exits non-zero unless both were 0. Step 4 of the release skill now
-names `just release-gate` as the gate. What remains is to run them for acceptance (the machine
-was busy with plan 315's sweep when they were written), verify the amended plan 303
-preflight, and finish implementation evidence for [ADR-58](../adr/0058-benchmark-release-gates-require-isolated-fixed-workloads-and-attributed-baselines.md).
+names `just release-gate` as the gate. Their accepted red/green runs and the plan 303
+preflight review are retained in `keiro/bench/results/release-gates/README.md`, with
+implementation evidence in [ADR-58](../adr/0058-benchmark-release-gates-require-isolated-fixed-workloads-and-attributed-baselines.md).
 
 The companion plan `docs/plans/315-attribute-the-command-path-append-slowdown-and-restore-trustworthy-benchmark-guards.md`
 owns the baselines and makes the guards green; this plan owns the runner, the recipes, and the
@@ -234,5 +250,6 @@ inside `release-gate`, fix the cause and rerun the whole recipe; do not splice a
 `docs/plans/303-...` Milestone 1; the OKF ADR bundle under `docs/adr/`. The output contract
 other work depends on is the `GUARD(<name>)=<status>` and `BENCH_REGRESSION=` lines, which
 plan 315 cites as acceptance and the release skill reads. No prerequisite blocks wiring or the red demonstration. M2 passing-run acceptance requires
-plan 315 Complete; this plan remains In Progress until then. That milestone dependency is
-recorded in the MasterPlan registry, with no cycle through the already available runner.
+plan 315 Complete. That prerequisite and all four milestones are now accepted, so this
+plan is Complete. The milestone dependency in the MasterPlan registry does not cycle
+through the independently available runner.

@@ -47,8 +47,8 @@ The review record `docs/reviews/keiro-0-20-0-21-unreleased-review.md` (REV-20, r
 commit `a62850d3` against the `keiro-0.19.0.1` tag) examined the 0.20.0.0 and 0.21.0.0
 releases and the unreleased inspection cohort with hot-path performance as its first question.
 It found the Keiro code on every runtime hot path unchanged or measured at zero cost, and it
-found five things that must change before the next tag. The committed command benchmark guard
-(`just bench-regression`, the `command` guard against `keiro/bench/baseline-command.csv`) is
+found five things that must change before the next tag. At review time, the committed command benchmark guard
+(`just bench-regression`, the `command` guard against `keiro/bench/baseline-command.csv`) was
 red: every scenario that appends events is 25% to 239% slower than its August 2026 baseline,
 the guard was already red at 0.19.0.1, and no release procedure ever ran it. The default
 `wf inspect list` page scans the whole `keiro.keiro_workflows` table twice for a wide-key
@@ -141,7 +141,7 @@ implementation evidence, with contributions from EP-1 and EP-7.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Attribute the command-path append slowdown and restore trustworthy benchmark guards | docs/plans/315-attribute-the-command-path-append-slowdown-and-restore-trustworthy-benchmark-guards.md | M3–M6: EP-7 Complete | None | Complete |
-| 2 | Run the benchmark regression guards in the release gate | docs/plans/316-run-the-benchmark-regression-guards-in-the-release-gate.md | M2 passing run: EP-1 Complete | EP-1 during investigation | In Progress |
+| 2 | Run the benchmark regression guards in the release gate | docs/plans/316-run-the-benchmark-regression-guards-in-the-release-gate.md | M2 passing run: EP-1 Complete | EP-1 during investigation | Complete |
 | 3 | Bound the workflow listing cost without the withdrawn inspection indexes | docs/plans/317-bound-the-workflow-listing-cost-without-the-withdrawn-inspection-indexes.md | None | None | Complete |
 | 4 | Harden the HTTP operational surface against cross-site mutations and permit exhaustion | docs/plans/318-harden-the-http-operational-surface-against-cross-site-mutations-and-permit-exhaustion.md | None | None | Complete |
 | 5 | Inspect reaction process managers and label legacy inspection before 1.0 | docs/plans/319-inspect-reaction-process-managers-and-label-legacy-inspection-before-1-0.md | None | None | Complete |
@@ -160,21 +160,17 @@ accepted output is needed, name it explicitly (e.g., EP-1 M1) and explain it bel
 ## Dependency Graph
 
 
-EP-7 must be Complete before EP-1 M3–M6 begin. EP-1 M1/M2 record the existing
-sweep and preparation-sensitivity experiment; they do not prove absence of every runtime
-regression. EP-7 and EP-1 are Complete; EP-2's release demonstrations are the next implementation work. EP-3, EP-4, and EP-5 may proceed
-independently, subject to the shared-file ownership below. EP-5 executes M3 (labelling)
-first, then M1/M2 (state inspection with explicitly unavailable reaction provenance).
+EP-7 completion is the prerequisite for EP-1 M3–M6. EP-1 M1/M2 retain the historical
+sweep and preparation-sensitivity observations, with no assertion that every serving path
+is unchanged. EP-7 and all EP-1 milestones are now accepted.
 
-EP-2 wiring and its failing-gate demonstration can proceed immediately. Its M2 passing-run
-acceptance requires EP-1 Complete, and EP-2 remains In Progress until both demonstrations
-and its other milestones are accepted. EP-1 consumes the already committed runner; it does
-not wait for EP-2 Complete. There is no dependency cycle.
+EP-2 wiring and its refusing demonstration are independent of EP-1 completion. Its passing
+release run requires EP-1 Complete; both full demonstrations are now accepted. EP-1 consumes
+the independently committed runner, so this is not a dependency cycle.
 
-EP-6 can draft changelogs and complete M2/M3 now. Its M1/M4 final acceptance requires
-EP-3 Complete, EP-4 Complete, and EP-5 M3 accepted. EP-5's state-inspector extension is
-optional for this release; EP-6 records whether it landed, while legacy provenance remains
-labelled in either case. This permits early documentation work without waiving release fixes.
+EP-3, EP-4 and EP-5 were independent subject to the ownership below. EP-5 completed required
+M3 labelling and the optional M1/M2 reaction-state extension. EP-6 final acceptance requires
+EP-3 Complete, EP-4 Complete and EP-5 M3; those prerequisites and EP-6 are fulfilled.
 
 Plan `docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md`
 must not tag until EP-1, EP-2, EP-3, EP-4, EP-6, and EP-7 are Complete and EP-5 M3 is
@@ -248,20 +244,19 @@ planned changes already ship.
 
 ## Progress
 
-EP-1, EP-3, EP-4, EP-5, EP-6 and EP-7 are Complete. Inspection changes retain
-cursor/query, HTTP wire/cancellation/feed and handwritten reaction-consumer evidence,
-with strict metadata/documentation checks. The accepted harness retains fixed workload,
-actual counts, growth, reset, checkpoint and three alternating filtered/full pairs.
-All five CSVs have five serial samples, preserved inventories, median aggregation and
-same-source reproduction. Producer attribution retains actual fresh/replay statements,
-component/full-path pairs, the 1.10 ceiling and a passing added-cost refusal control.
-Three consecutive full six-guard runs pass at identical `4f2b4b69` source/binary/baselines.
+All seven child plans are Complete. The accepted harness retains fixed workload,
+actual counts, growth/reset/checkpoint evidence and three alternating filtered/full pairs.
+All five affected CSVs retain five serial recordings, preserved inventories, median
+aggregation and same-source reproduction. Actual producer attribution retains the 1.10
+ceiling with a fixed paired estimator and a refusing added-cost control. Three consecutive
+six-guard runs pass on identical source/binary/baselines.
 
-EP-2 M1/M3 are accepted. Its remaining work is a quiet full correctness-plus-performance
-refusal demonstration, a full passing release gate and final ADR evidence. Earlier noisy
-release evidence and the failed sequential producer cohort remain retained. Plan 303's
-release and independent final-candidate integration prerequisites remain mandatory;
-this initiative performs no release cut.
+Full red/green release gates at `a4332cfe` pass correctness in both runs, refuse only the
+deliberately perturbed command baseline, then pass all six guards after restoration.
+The final green run ends 11:05:22 UTC with both exits zero. Inspection query, HTTP and
+reaction-state changes pass the full correctness gate; release documentation and strict
+ADR evidence are reconciled. Plan 303 retains the release cut and its independent
+final-candidate integration/gate prerequisites.
 
 
 ## Surprises & Discoveries
@@ -293,6 +288,12 @@ benchmark entry point also used the fast correctness fixture; EP-7 now selects t
 existing durable benchmark fixture so final evidence records fsync, synchronous
 commit and full-page writes enabled. EP-1 must audit/re-record every affected CSV,
 rather than preserving incomparable old rows that happen to pass.
+
+Sequential adaptive producer means still crossed 1.10 after fixture acceptance, despite
+small per-case spreads. Actual full-workload alternating pairs, retained outliers and a
++20-ms/action refusal control justify the fixed paired median while keeping the ceiling.
+This is a measured comparison correction; earlier failed cohorts remain auditable. ADR-58
+records the rule and accepted full release evidence.
 
 ## Decision Log
 
@@ -334,4 +335,24 @@ contracts. Earlier review entries remain historical records; no implementation i
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+REV-20 remediation is implemented and accepted across all seven plans. Benchmarks now
+measure selected, isolated, durable and explicitly bounded workloads; five-sample baselines
+reproduce at their recording source, and the producer guard measures actual fresh work.
+Three consecutive all-guard passes and uninterrupted full red/green release gates establish
+the release procedure behavior. The same compiled benchmark binary is identified in the
+accepted control series and both final release runs. Historical failed/noisy evidence is
+retained with its limits; CSV replacement is attributed to the changed fixture/environment
+rather than presented as a universal production speedup.
+
+Workflow key paging uses the primary-key order and retains measured filtered/creation
+operating envelopes. HTTP mutations enforce the origin/content/body contract, delivery
+cancellation returns permits within the configured lifecycle, and feed refresh/presentation
+semantics remain fresh. Reaction managers expose state through supported inspection while
+legacy provenance stays explicitly labelled. Changelogs, registry bounds, release preflight
+and the published upgrade-edge correction now agree with the implementation.
+
+ADR distillation is complete: ADR-28/40 retain the listing boundary, ADR-53/56 the HTTP/feed
+lifecycle, ADR-55 the state/provenance distinction, and ADR-58 the measurement and release
+rules. Upgrade guidance aligns with ADR-16/49. Task-local timings and rejected experiments
+remain in child plans/evidence. No release is cut here; plan 303 consumes these completions
+and still requires its independent integration checks and a gate on the final candidate.

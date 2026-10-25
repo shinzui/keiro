@@ -34,14 +34,15 @@ timings retain their reset and actual preparation boundaries. The settled produc
 probe is separately about 1.4 ms per 1,000-row batch; a common additive reset does not cancel
 from a ratio. These separately sampled phases must not be summed into an exact full-path
 budget. Conflict lookup/comparison cost cannot justify a fresh-path allowance, and ADR-42
-provides no millisecond allowance. No threshold or quantity is replaced by this investigation.
+provides no millisecond allowance. These component probes do not change the full-workload
+boundary or numerical ceiling; the estimator correction and its proof are recorded below.
 
 `precision-guard.txt` records the normal one-percent/120-second guard at committed
 source `b8695a0d`: all six cases passed, batch fresh 1.05× legacy and per-event fresh
 0.96×, with `GUARD(producer-identity)=0` and process exit zero. The first two complete controls pass at 1.09×/1.08× batch. The third fails at
 46.6/42.2 ms (>1.10×), with the other five guards passing. That failure remains in
-`../baseline-recording-v2/control-full-3.txt`; the three-pass acceptance is not met.
-Actual full-factory alternating pairs will extend attribution. No ceiling has moved.
+`../baseline-recording-v2/control-full-3.txt`; that cohort did not meet three-pass
+acceptance. The following full-factory pairs extend attribution. No ceiling moves.
 
 `probe-3.jsonl` adds 15 alternating actual full-workload pairs per transaction shape;
 `full-factory-source.patch` applies to `dfa9944c`, and `full-factory-environment.txt`
@@ -82,4 +83,5 @@ Three restored full six-guard runs pass at the same source/binary/baseline set:
 `../baseline-recording-v2/accepted-full-1.txt` through `accepted-full-3.txt`.
 Batch medians are 1.0568×/1.0618×/1.0593× and every per-event median is below legacy.
 Each full process exits zero. This accepts the producer policy and three-pass obligation;
-the full correctness-plus-performance release-gate demonstration belongs to plan 316.
+the accepted full correctness-plus-performance red/green release demonstrations are
+retained in [the release evidence](../release-gates/README.md).

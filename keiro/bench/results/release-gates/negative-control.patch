@@ -1,0 +1,11 @@
+diff --git a/keiro/bench/baseline-command.csv b/keiro/bench/baseline-command.csv
+index a855c3b2..6261423b 100644
+--- a/keiro/bench/baseline-command.csv
++++ b/keiro/bench/baseline-command.csv
+@@ -1,5 +1,5 @@
+ Name,Mean (ps),2*Stdev (ps)
+-All.command.legacy.accepted-1,150590722,13868206
++All.command.legacy.accepted-1,1,0
+ All.command.control.accepted-1,149106445,13538692
+ All.command.domain-warmup.accepted-1,155994677,9674486
+ All.command.domain.accepted-1,150189062,14225672
