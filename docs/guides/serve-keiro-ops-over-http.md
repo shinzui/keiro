@@ -2,7 +2,7 @@
 type: Runbook
 title: Serve Keiro Ops Over HTTP
 description: Mount bounded HTTP inspection and explicitly confirmed operator actions using the supported Keiro command tree.
-timestamp: 2026-10-20T23:50:22Z
+timestamp: 2026-10-25T04:48:05Z
 docId: DOC-30
 tags: [keiro, operations, http, inspection]
 generated:
@@ -58,7 +58,8 @@ reserved writer capacity, a uniform host timeout policy, and the initiative's
 interference tests.
 
 Defaults are four concurrent jobs, no waiting queue, a five-second read deadline,
-a two-second SQL statement timeout, a 30-second mutation deadline, a 16 KiB
+a two-second SQL statement timeout, a 30-second mutation deadline, a separate
+30-second delivery deadline, a 16 KiB
 path/query cap, a 1 KiB confirmation-body cap, and a 1 MiB encoded-result cap.
 Limits include schema verification and encoding. Work is cancelled and joined
 before its permit is released. A cancelled mutation has an unknown commit outcome;
@@ -127,12 +128,18 @@ Errors have `{"error":{"code":"...","message":"...","details":...}}`;
 |---|---|---|
 | 400 | `invalid_request` | Invalid path, option, UTF-8, or command grammar |
 | 400 | `invalid_confirmation` | Invalid confirmation object |
+| 400 | `invalid_aggregate_id`, `invalid_correlation_id` | Blank inspector identity |
+| 403 | `origin_not_allowed` | Mutation Origin is malformed, repeated, or outside the allowed/request origin |
 | 403 | `mutations_disabled` | Host has not enabled mutation routes |
 | 404 | `not_found` | No command at the root path |
 | 405 | `method_not_allowed` | Method disagrees with classification; see `Allow` |
+| 400 | `invalid_page_size` | Inspection page size is outside its supported range |
+| 400 | `invalid_cursor` | Invalid or obsolete inspection cursor |
+| 409 | `cursor_generation_mismatch` | Workflow rotated since the cursor was issued |
 | 409 | `schema_drift` | Live schema differs from the binary |
 | 413 | `inspection_request_too_large` | Path, query, or confirmation exceeds its cap |
-| 413 | `inspection_result_too_large` | Result, continuation, or work for large keys exceeds its cap |
+| 413 | `inspection_result_too_large` | Encoded result or required continuation exceeds its byte cap |
+| 415 | `unsupported_media_type` | A nonempty confirmation body requires application/json |
 | 422 | `command_failed` | Supported handler returned a failure |
 | 500 | `schema_verification_failed` | Verification could not run |
 | 500 | `internal_error` | Handler raised a synchronous exception |
@@ -145,7 +152,7 @@ Reads with a nonzero supported exit code retain their JSON value and carry
 `store_position`, `visible_store_head`, and global position distance; do not
 interpret those as event lag or backlog.
 
-CORS is disabled when `allowedOrigins` is empty. Exact allowed origins are
+CORS is disabled when `allowedOrigins` is empty. Allowed origins are compared by normalized scheme, host and effective port, then
 echoed with `Vary: Origin`; preflight returns 204. Credentials and wildcards
 are never enabled. A composition wrapper preserves existing CORS headers.
 
@@ -166,3 +173,24 @@ records the transport contract beneath
 [ADR-40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md).
 The integrated runtime interference and retention measurements remain release
 gates in [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md).
+
+Mutation origins are checked before reading the body, verification or command
+execution. No-Origin clients remain supported. A present Origin must be one
+serialized HTTP/HTTPS origin matching the configured allow-list or the request's
+own scheme/Host, with case-insensitive scheme/host and normalized default ports.
+Null, malformed and multiple origins are refused. Behind TLS termination, explicitly
+allow-list the public HTTPS origin; arbitrary forwarded headers are not trusted.
+CORS response headers do not themselves authorize a mutation.
+
+An empty confirmation body is a preview and needs no content type. Every nonempty
+body, including chunked transfer, must be application/json (parameters such as
+charset are accepted), within 1 KiB, and exactly the supported confirmation object.
+
+`deliveryDeadlineSeconds` defaults to 30 and must be positive and representable
+in microseconds. It bounds the response callback separately from verification,
+execution and encoding. On expiry the callback is cancelled, admission is returned,
+and the connection terminates; the application never attempts a second response.
+Health shares admission and may return `inspection_busy` while all slots are held.
+It recovers after delivery cancellation returns those permits. This is bounded
+recovery, not a reserved health slot or a promise that a 30-second delivery expires
+within the five-second computation deadline.

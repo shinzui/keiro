@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Inspection feeds own bounded shared drivers and an active-only wake cursor
 description: Inspection sockets share bounded owner-API reads per canonical view and release their wake cursor and tasks when no view remains.
-timestamp: 2026-10-21T13:47:46Z
+timestamp: 2026-10-25T04:48:05Z
 docId: ADR-56
 status: Accepted
 date: 2026-10-20
@@ -30,7 +30,9 @@ paired HTTP read for additional rows.
 
 One driver per canonical view shares initialization, latest successful state,
 sequence and encoded frames across subscribers. Initializing and retiring
-entries count against view capacity. A refused replacement retains the old
+entries count against view capacity. Reacquiring a zero-reference retiring view
+returns `view_retiring`, distinct from admission saturation; retry after its cleanup
+has joined. The registry lock is released while that cancellation joins. A refused replacement retains the old
 subscription; its queue purge and subscription replacement commit atomically.
 Initialization failure never creates an empty snapshot. Refresh failures keep
 the last known state and sequence, emit a coalesced error and retry.
@@ -74,8 +76,12 @@ Semantic equality controls delta publication, not presentation freshness. Even w
 has no semantic change, each successful refresh retains its new observation time and current
 countdown for subscribers joining afterward. Encoded snapshot reuse based only on unchanged
 semantic items is disallowed; the complete presentation must remain current to the latest
-successful read. Plan 318 preserves fresh snapshot preparation and tests resubscription
-separately from suppression of clock-only deltas.
+successful read. Plan 318 preserves fresh snapshot preparation. Its timer test waits for the actual
+five-second minimum cadence, observes no clock-only delta for an existing subscriber,
+and checks the new timestamp/countdown at sequence zero on resubscription. Two-view
+schema tests induce drift, require each driver to refuse publication, and restore
+publication only after the schema agrees again. A blocked-cleanup test proves the
+retiring slot remains accounted and acquisition succeeds after cancellation joins.
 
 ## Consequences
 

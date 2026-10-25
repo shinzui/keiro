@@ -142,8 +142,8 @@ implementation evidence, with contributions from EP-1 and EP-7.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Attribute the command-path append slowdown and restore trustworthy benchmark guards | docs/plans/315-attribute-the-command-path-append-slowdown-and-restore-trustworthy-benchmark-guards.md | M3–M6: EP-7 Complete | None | In Progress |
 | 2 | Run the benchmark regression guards in the release gate | docs/plans/316-run-the-benchmark-regression-guards-in-the-release-gate.md | M2 passing run: EP-1 Complete | EP-1 during investigation | In Progress |
-| 3 | Bound the workflow listing cost without the withdrawn inspection indexes | docs/plans/317-bound-the-workflow-listing-cost-without-the-withdrawn-inspection-indexes.md | None | None | Not Started |
-| 4 | Harden the HTTP operational surface against cross-site mutations and permit exhaustion | docs/plans/318-harden-the-http-operational-surface-against-cross-site-mutations-and-permit-exhaustion.md | None | None | Not Started |
+| 3 | Bound the workflow listing cost without the withdrawn inspection indexes | docs/plans/317-bound-the-workflow-listing-cost-without-the-withdrawn-inspection-indexes.md | None | None | Complete |
+| 4 | Harden the HTTP operational surface against cross-site mutations and permit exhaustion | docs/plans/318-harden-the-http-operational-surface-against-cross-site-mutations-and-permit-exhaustion.md | None | None | Complete |
 | 5 | Inspect reaction process managers and label legacy inspection before 1.0 | docs/plans/319-inspect-reaction-process-managers-and-label-legacy-inspection-before-1-0.md | None | None | Not Started |
 | 6 | Reconcile the 0.22.0.0 release surface and the 0.21.0.0 edge with the REV-20 findings | docs/plans/320-reconcile-the-0-22-0-0-release-surface-and-the-0-21-0-0-edge-with-the-rev-20-findings.md | M1/M4 final acceptance: EP-3 Complete, EP-4 Complete, EP-5 M3 | EP-5 M1/M2 | Not Started |
 | 7 | Isolate the keiro-bench harness so each guard measures only its own fixture | docs/plans/321-isolate-the-keiro-bench-harness-so-each-guard-measures-only-its-own-fixture.md | None | None | In Progress |
@@ -248,12 +248,16 @@ planned changes already ship.
 ## Progress
 
 
-Phase 1 remains open; this revision changes plans, not implementation status. EP-1 is
-In Progress with M1/M2's existing observations retained and M3–M6 blocked by EP-7. EP-7 is
-In Progress: selected isolated fixtures and fixed rebuild sources are being implemented. EP-2 wiring exists, but red/green acceptance and ADR-58 implementation evidence remain open; its passing run waits for EP-1 Complete. EP-3 to EP-6 are Not
-Started. EP-6 final acceptance waits for EP-3/EP-4 Complete and EP-5 M3. The release entry
-point now lists those mandatory prerequisites explicitly. EP-5 M1/M2 may follow the next
-tag, but must finish before this entire MasterPlan is Complete.
+Phase 1 remains open. EP-3 is Complete with cursor/class/wide-key tests, strict
+documentation validation and 136 retained v2 query plans. EP-4 is Complete: 49 HTTP examples pass, including wire origin/media refusals,
+actual stalled-socket termination, fresh-feed and retirement recovery. Strict
+ADR and documentation validation passes for both children. EP-7 is In Progress with static selected
+fixtures, fixed 600-event rebuilds and a growth probe through 1.2 million events;
+paired full/filtered measurements and reset/durable-fixture evidence remain open.
+EP-1 M3–M6 wait for EP-7 Complete. EP-2's passing release demonstration still waits
+for EP-1 Complete. EP-5 and EP-6 are Not Started; EP-6 final acceptance requires
+EP-4 Complete and EP-5 M3 in addition to accepted EP-3. No release is authorized by
+this initiative, and all final-candidate/integration gates remain mandatory.
 
 
 ## Surprises & Discoveries
@@ -277,6 +281,14 @@ accepted witnesses identify acceptance, not their source event or dynamic follow
 semantic equality excludes clock presentation fields. These constraints drive the corrected
 acceptance in EP-3, EP-4, and EP-5.
 
+
+The command growth probe identifies a stale empty-fixture generic sequential plan:
+5,001 stream rows are scanned until ANALYZE selects the existing name index. The
+indexed probe remains stable through roughly 1.2 million events. The ordinary
+benchmark entry point also used the fast correctness fixture; EP-7 now selects the
+existing durable benchmark fixture so final evidence records fsync, synchronous
+commit and full-page writes enabled. EP-1 must audit/re-record every affected CSV,
+rather than preserving incomparable old rows that happen to pass.
 
 ## Decision Log
 

@@ -2,7 +2,7 @@
 type: Runbook
 title: Compose Runtime Inspection Surfaces
 description: Mount supported inspection applications under stable prefixes on one listener.
-timestamp: 2026-10-21T03:21:33Z
+timestamp: 2026-10-25T04:48:05Z
 docId: DOC-32
 tags: [keiro, operations, http, inspection, composition]
 generated:
@@ -23,7 +23,7 @@ letters, digits and hyphens, starting with a letter or digit.
 
 ```haskell
 withFeedHandle config defaultFeedConfig inspectionStore $ \feeds -> do
-  http <- opsApplicationWithBudget config {Config.allowedOrigins = []}
+  http <- opsApplicationWithBudget config
     (handleBudget feeds) hooks inspectionStore
   let keiro = feedsMiddleware config feeds http
   app <- either (fail . show) pure $ composeSurfaces
@@ -57,8 +57,8 @@ Related upstream work is tracked by
 and `mori://shinzui/pgmq-hs/okf/improvement-requests/concepts/IR-3`.
 
 Configure HTTP CORS once on the outer composition. A host passes the same
-origin list to the outer composition and Keiro's `OpsHttpConfig` for the
-WebSocket origin check. Pass it through Kiroku's `allowedOrigin` and
+origin list to the outer composition and Keiro's `OpsHttpConfig` for HTTP mutation and
+WebSocket origin checks. Pass it through Kiroku's `allowedOrigin` and
 `corsAllowOrigins` for that owner's policy. The outer middleware adds only
 absent HTTP CORS headers; an empty list adds none. When static console assets
 are served on this same origin, no cross-origin policy is needed.
@@ -90,3 +90,11 @@ curl -s http://127.0.0.1:9092/kiroku/capabilities
 The workspace enables the `compose-example` flag. It is default-off for package
 consumers so they do not acquire sibling metrics dependencies automatically.
 The example mounts database-only hooks and disables mutations.
+
+Preserve the full origin policy in each Keiro HTTP child: mutation authorization
+uses it even when an outer wrapper supplies CORS headers. Normalized comparisons
+cover HTTP/HTTPS scheme, host and effective port. Explicitly configure the public
+HTTPS origin behind TLS termination. Every child retains its own admission,
+computation and delivery limits; Keiro's default 30-second delivery deadline bounds
+stalled response callbacks and returns shared health/feed permits on cancellation.
+The composer preserves a child's existing CORS headers rather than adding duplicates.

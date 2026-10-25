@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-21T13:49:51Z
       mode: "update"
       note: "Bound only unfiltered key traversal; specify wf-key2, filtered-query envelopes and evidence-driver migration."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T04:34:34Z
+      mode: "implement"
+      note: "Implement primary-key browsing and v2 evidence while EP-7 measurements run serially."
 ---
 
 # Bound the workflow listing cost without the withdrawn inspection indexes
@@ -47,18 +52,18 @@ change is introduced, and the published legacy `listWorkflowInstances` API keeps
 ## Progress
 
 
-- [ ] M1: Unfiltered default first/deep pages use primary-key range scans on the 100,000-row
-      fixture, without a ledger sort. Sparse and absent filters are measured separately and
-      are not accepted by pretending their rows-examined bound equals page size.
-- [ ] M2: Remove the obsolete wide-key split, its three constants and `InspectionWorkLimitExceeded`;
-      preserve response/cursor byte caps, valid wide keys, and passing library/CLI/HTTP tests.
-      Old default-order tokens fail closed under a new `wf-key2` cursor kind.
-- [ ] M3: User documentation distinguishes unfiltered range traversal from filtered and
-      creation-order search, with measured costs and deadline/cadence guidance for workflow
-      and timer reads. Documentation and relevant ADR validation pass.
-- [ ] M4: Adapt the evidence driver to the new SQL, parameters, cursor kind and errors, then
-      retain normal-planner custom/generic plans at 10,000 and 100,000 rows in
-      `keiro/bench/results/inspection/query-readside-v2/`. Historical artifacts remain intact.
+- [x] M1 (2026-10-25): First/deep unfiltered pages use primary-key index scans with
+      21 candidates and zero filter rejections at both 10k/100k sizes and both plan modes.
+      Sparse/absent and creation-order costs are retained separately.
+- [x] M2 (2026-10-25): The wide split, constants and work-limit error are removed;
+      valid wide keys page correctly and oversized continuations still refuse. Old `wf-key`
+      tokens fail closed. Nix tests: 17 workflow-inspection and 53 ops examples pass;
+      the shared HTTP suite passes after replacing its obsolete refusal assertion.
+- [x] M3 (2026-10-25): Workflow/timer envelopes and ADR-28/40 describe the implemented
+      range guarantee and filtered costs. Strict ADR and user/guide validators pass.
+- [x] M4 (2026-10-25): The adapted driver explains actual marker-identified prepared
+      statements with correct arguments. 136 normal/wide captures and the source patch
+      are retained in `keiro/bench/results/inspection/query-readside-v2/`.
 
 
 ## Surprises & Discoveries
@@ -92,7 +97,19 @@ and made evidence-driver adaptation an explicit implementation deliverable.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Default inspection browsing now follows the primary key without separate wide populations
+or a ledger sort. The new key cursor preserves fail-closed interpretation; the legacy
+released listing and creation-order tokens retain their contracts. Query evidence shows
+why filters still require host deadlines: the absent retrying class scans 100,002 normal
+rows, while unfiltered pages read 21 candidates. Normal 100k first/deep captures take
+0.032–0.043 ms; creation-first captures take 21–22.5 ms under the recorded development
+conditions. These are diagnostic observations, not a release writer-capacity result.
+
+No writer SQL or index changed. ADR-28 and ADR-40 now carry the durable guarantee and
+its exclusions; task-local captures, source patch and reproduction commands remain in
+the evidence directory. The removed HTTP refusal test was stale acceptance, not a
+regression: valid wide populations now succeed subject to existing byte limits.
+
 
 
 ## Context and Orientation

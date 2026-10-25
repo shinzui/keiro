@@ -46,7 +46,7 @@ main = do
     providers <- Metrics.storeServerProviders metricsConfig metrics store
     let kiroku = Metrics.combinedAppWithProviders metricsConfig metrics [] providers
     withFeedHandle config defaultFeedConfig store $ \feeds -> do
-      http <- opsApplicationWithBudget config {Config.allowedOrigins = []} (handleBudget feeds) emptyAppHooks store
+      http <- opsApplicationWithBudget config (handleBudget feeds) emptyAppHooks store
       let keiro = feedsMiddleware config feeds http
       app <-
         either (fail . Text.unpack . renderComposeError) pure $

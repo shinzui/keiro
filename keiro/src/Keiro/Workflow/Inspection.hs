@@ -11,8 +11,6 @@ module Keiro.Workflow.Inspection
     classStatus,
     InspectionError (..),
     maxInspectionPageSize,
-    maxWideWorkflowCandidates,
-    maxWideWorkflowKeyBytes,
     WorkflowListOrdering (..),
     WorkflowListQuery (..),
     defaultWorkflowListQuery,
@@ -73,7 +71,7 @@ import Kiroku.Store.Types
 maxInspectionPageSize :: Int
 maxInspectionPageSize = 500
 
-data InspectionError = InvalidPageSize !Int | InvalidCursor !CursorError | CursorGenerationMismatch !Int !Int | CursorResultTooLarge | InspectionWorkLimitExceeded
+data InspectionError = InvalidPageSize !Int | InvalidCursor !CursorError | CursorGenerationMismatch !Int !Int | CursorResultTooLarge
   deriving stock (Eq, Show, Generic)
 
 statusClassOf :: WorkflowInstanceRow -> WorkflowStatusClass
@@ -113,21 +111,18 @@ listWorkflowInstancesPage :: (IOE :> es, Store :> es) => WorkflowListQuery -> Ef
 listWorkflowInstancesPage query = case validated of
   Left err -> pure (Left err)
   Right position -> do
-    (observedAt, exceeded, rows) <- Instance.inspectionInstanceRows query position (query.pageSize + 1)
-    pure $
-      if exceeded
-        then Left InspectionWorkLimitExceeded
-        else do
-          nextCursor <- case query.ordering of
-            ByKey -> nextFor "wf-key" query.pageSize rows (\r -> (r.workflowName, r.workflowId))
-            ByCreatedDesc -> nextFor "wf-created" query.pageSize rows (\r -> (r.createdAt, r.workflowName, r.workflowId))
-          pure (WorkflowListPage (take query.pageSize rows) nextCursor observedAt)
+    (observedAt, rows) <- Instance.inspectionInstanceRows query position (query.pageSize + 1)
+    pure $ do
+      nextCursor <- case query.ordering of
+        ByKey -> nextFor "wf-key2" query.pageSize rows (\r -> (r.workflowId, r.workflowName))
+        ByCreatedDesc -> nextFor "wf-created" query.pageSize rows (\r -> (r.createdAt, r.workflowName, r.workflowId))
+      pure (WorkflowListPage (take query.pageSize rows) nextCursor observedAt)
   where
     validated = do
       validateSize query.pageSize
       traverse
         ( \token -> case query.ordering of
-            ByKey -> uncurry AfterWorkflowKey <$> decode "wf-key" token
+            ByKey -> uncurry AfterWorkflowKey <$> decode "wf-key2" token
             ByCreatedDesc -> (\(created, name, wid) -> AfterWorkflowCreated created name wid) <$> decode "wf-created" token
         )
         query.cursor
@@ -140,7 +135,7 @@ validateWorkflowListQuery query = do
   case query.cursor of
     Nothing -> Right ()
     Just token -> case query.ordering of
-      ByKey -> () <$ (decode "wf-key" token :: Either InspectionError (Text, Text))
+      ByKey -> () <$ (decode "wf-key2" token :: Either InspectionError (Text, Text))
       ByCreatedDesc -> () <$ (decode "wf-created" token :: Either InspectionError (UTCTime, Text, Text))
 
 data DetailPageQuery = DetailPageQuery

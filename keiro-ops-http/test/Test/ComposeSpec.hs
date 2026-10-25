@@ -76,13 +76,13 @@ spec fixture = describe "Compose" $ do
   around (withFreshStore fixture) $ it "mounts real Keiro and Kiroku applications and both socket protocols on one port" $ \store -> do
     now <- getCurrentTime
     void (stored store (appendJournalEntry (WorkflowName "compose") (WorkflowId "one") (StepRecorded "start" Null now)))
-    let config = defaultOpsHttpConfig {Config.allowedOrigins = ["http://ui.test"]}
+    let config = defaultOpsHttpConfig {Config.allowedOrigins = ["http://ui.test"], mutations = MutationsEnabled}
         metricsConfig = Metrics.defaultConfig {Metrics.wsPushIntervalUs = 30000000}
     metrics <- Metrics.newKirokuMetrics store
     providers <- Metrics.storeServerProviders metricsConfig metrics store
     let kiroku = Metrics.combinedAppWithProviders metricsConfig metrics [] providers
     withFeedHandle config defaultFeedConfig store $ \handle -> do
-      http <- opsApplicationWithBudget config {Config.allowedOrigins = []} (handleBudget handle) emptyAppHooks store
+      http <- opsApplicationWithBudget config (handleBudget handle) emptyAppHooks store
       let keiro = feedsMiddleware config handle http
           app = composed (ComposeConfig config.allowedOrigins) [MountedSurface keiroPrefix keiro, MountedSurface kirokuPrefix kiroku]
       forM_ [(keiro, "/health", "/keiro/health"), (kiroku, "/capabilities", "/kiroku/capabilities")] $ \(standalone, relative, mounted) -> do
@@ -91,6 +91,10 @@ spec fixture = describe "Compose" $ do
         Wai.simpleStatus through `shouldBe` Wai.simpleStatus plain
         Wai.simpleBody through `shouldBe` Wai.simpleBody plain
         filter ((== "Access-Control-Allow-Origin") . fst) (Wai.simpleHeaders through) `shouldBe` [("Access-Control-Allow-Origin", "http://ui.test")]
+      forM_ [("http://ui.test", status200), ("http://evil.test", status403)] $ \(origin, status) -> do
+        let request = (Wai.setPath defaultRequest "/keiro/outbox/maintenance-pass") {requestMethod = methodPost, requestHeaders = [(hOrigin, origin)]}
+        response <- Wai.runSession (Wai.srequest (Wai.SRequest request "")) app
+        Wai.simpleStatus response `shouldBe` status
       withOpsHttpServer defaultOpsHttpServerConfig {port = 0} app $ \server -> within $ do
         WS.runClient "127.0.0.1" server.serverPort "/kiroku/ws/metrics" $ \connection -> do
           receive connection >>= hasType "snapshot"

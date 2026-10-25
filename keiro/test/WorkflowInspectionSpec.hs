@@ -37,13 +37,13 @@ spec fixture = describe "Keiro.Workflow.Inspection" $ do
   describe "opaque cursors" $ do
     it "round-trips Unicode and exact timestamps, rejects foreign kinds and oversized tokens" $ do
       let payload = ("承認" :: Text, "workflow/1" :: Text, read "2026-10-20 01:02:03.123456 UTC" :: UTCTime)
-          token = encodeCursor "wf-key" payload
-      decodeCursor "wf-key" token `shouldBe` Right payload
-      encodeCursorBounded "wf-key" payload `shouldBe` Just token
-      encodeCursorBounded "wf-key" (Text.replicate 100000 "界") `shouldBe` Nothing
-      (decodeCursor "wf-created" token :: Either CursorError Value) `shouldBe` Left (CursorKindMismatch "wf-created" "wf-key")
+          token = encodeCursor "wf-key2" payload
+      decodeCursor "wf-key2" token `shouldBe` Right payload
+      encodeCursorBounded "wf-key2" payload `shouldBe` Just token
+      encodeCursorBounded "wf-key2" (Text.replicate 100000 "界") `shouldBe` Nothing
+      (decodeCursor "wf-created" token :: Either CursorError Value) `shouldBe` Left (CursorKindMismatch "wf-created" "wf-key2")
       forM_ ["not-a-cursor", "", Text.replicate 4097 "a", "===="] $ \bad ->
-        (decodeCursor "wf-key" (InspectionCursor bad) :: Either CursorError Value) `shouldSatisfy` (\case Left (MalformedCursor _) -> True; _ -> False)
+        (decodeCursor "wf-key2" (InspectionCursor bad) :: Either CursorError Value) `shouldSatisfy` (\case Left (MalformedCursor _) -> True; _ -> False)
   around (withFreshStore fixture) $ do
     it "rechecks every header field against its exact image, including old and far-future dates" $ \store -> do
       let fields =
@@ -108,7 +108,7 @@ spec fixture = describe "Keiro.Workflow.Inspection" $ do
       sql store "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) VALUES ('a',repeat('界',2000),'running'),('b',repeat('界',2000),'running')"
       result <- expectStore store (listWorkflowInstancesPage defaultWorkflowListQuery {pageSize = 1})
       result `shouldBe` Left CursorResultTooLarge
-    it "preserves large ordinary keys and merges them into both list orderings" $ \store -> do
+    it "preserves large ordinary keys and includes them in both list orderings" $ \store -> do
       sql store "WITH bytes AS (SELECT string_agg(md5(n::text),'') value FROM generate_series(1,120) n) INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) SELECT left(value,2680),'a','running' FROM bytes UNION ALL SELECT 'b',left(value,2680),'completed' FROM bytes"
       original <- expectStore store (Instance.listWorkflowInstances Instance.defaultWorkflowInstanceFilter)
       length original `shouldBe` 2
@@ -118,19 +118,26 @@ spec fixture = describe "Keiro.Workflow.Inspection" $ do
         map (length . (.items)) pages `shouldBe` [1, 1]
       running <- inspect store defaultWorkflowListQuery {classes = Just (ClassRunning :| [])}
       map statusClassOf running.items `shouldBe` [ClassRunning]
-    it "refuses excessive exceptional key work explicitly while keeping narrow-name reads usable" $ \store -> do
-      sql store "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) SELECT 'wide-'||n,repeat('x',2700),'running' FROM generate_series(1,65) n; INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) VALUES ('normal','normal','running')"
-      forM_ [ByKey, ByCreatedDesc] $ \ordering ->
-        expectStore store (listWorkflowInstancesPage defaultWorkflowListQuery {ordering = ordering}) `shouldReturn` Left InspectionWorkLimitExceeded
-      expectStore store (listWorkflowInstancesPage defaultWorkflowListQuery {cursor = Just (encodeCursor "wf-key" ("zzzz" :: Text, "zzzz" :: Text))}) `shouldReturn` Left InspectionWorkLimitExceeded
+    it "pages wide keys without an obsolete exceptional-population limit" $ \store -> do
+      sql store "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) SELECT 'wide-'||lpad(n::text,3,'0'),repeat('x',2700),'running' FROM generate_series(1,65) n; INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) VALUES ('normal','normal','running')"
+      forM_ [ByKey, ByCreatedDesc] $ \ordering -> do
+        pages <- drain store defaultWorkflowListQuery {pageSize = 10, ordering}
+        length (concatMap (.items) pages) `shouldBe` 66
       absent <- inspect store defaultWorkflowListQuery {workflowName = Just "absent"}
       absent.items `shouldBe` []
       normal <- inspect store defaultWorkflowListQuery {workflowName = Just "normal"}
       map (.workflowId) normal.items `shouldBe` ["normal"]
-      remaining <- expectStore store (Instance.listWorkflowInstances Instance.defaultWorkflowInstanceFilter)
-      length remaining `shouldBe` 66
       sql store "DELETE FROM keiro.keiro_workflows; INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) SELECT 'bytes-'||n,repeat('x',131072),'running' FROM generate_series(1,2) n"
-      expectStore store (listWorkflowInstancesPage defaultWorkflowListQuery) `shouldReturn` Left InspectionWorkLimitExceeded
+      expectStore store (listWorkflowInstancesPage defaultWorkflowListQuery {pageSize = 1}) `shouldReturn` Left CursorResultTooLarge
+    it "orders by id before name and refuses the old key cursor kind" $ \store -> do
+      sql store "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) VALUES ('a','z','running'),('z','a','running')"
+      pages <- drain store defaultWorkflowListQuery {pageSize = 1}
+      map (\row -> (row.workflowId, row.workflowName)) (concatMap (.items) pages) `shouldBe` [("a", "z"), ("z", "a")]
+      legacy <- expectStore store (Instance.listWorkflowInstances Instance.defaultWorkflowInstanceFilter)
+      map (.workflowId) legacy `shouldBe` ["z", "a"]
+      let old = encodeCursor "wf-key" ("a" :: Text, "z" :: Text)
+      validateWorkflowListQuery defaultWorkflowListQuery {cursor = Just old} `shouldBe` Left (InvalidCursor (CursorKindMismatch "wf-key2" "wf-key"))
+      expectStore store (listWorkflowInstancesPage defaultWorkflowListQuery {cursor = Just old}) `shouldReturn` Left (InvalidCursor (CursorKindMismatch "wf-key2" "wf-key"))
     it "classifies every stored row identically in Haskell and SQL without modifying rows" $ \store -> do
       sql store "INSERT INTO keiro.keiro_workflows(workflow_id, workflow_name, status, attempts, wake_after) VALUES ('running','test','running',0,NULL),('retrying','test','running',2,NULL),('sleeping','test','suspended',0,now()+interval '1 hour'),('awaiting','test','suspended',0,NULL),('completed','test','completed',0,NULL),('cancelled','test','cancelled',0,NULL),('failed','test','failed',0,NULL)"
       sql store "UPDATE keiro.keiro_workflows SET status='running' WHERE workflow_id='failed'"
@@ -150,7 +157,7 @@ spec fixture = describe "Keiro.Workflow.Inspection" $ do
       sql store "UPDATE keiro.keiro_workflows SET status=CASE WHEN right(workflow_id,1) IN ('1','4','7') THEN 'failed' WHEN right(workflow_id,1) IN ('2','5','8') THEN 'completed' ELSE status END"
       pages <- drain store defaultWorkflowListQuery {pageSize = 5}
       map (length . (.items)) pages `shouldBe` [5, 5, 5, 5, 3]
-      let keys = map (\row -> (row.workflowName, row.workflowId)) (concatMap (.items) pages)
+      let keys = map (\row -> (row.workflowId, row.workflowName)) (concatMap (.items) pages)
       length (nub keys) `shouldBe` 23
       keys `shouldBe` sort keys
       filtered <- drain store defaultWorkflowListQuery {pageSize = 3, classes = Just (ClassFailed :| [ClassCompleted, ClassFailed])}
@@ -177,7 +184,7 @@ spec fixture = describe "Keiro.Workflow.Inspection" $ do
       seed store 2
       first <- inspect store defaultWorkflowListQuery {pageSize = 1}
       crossOrder <- expectStore store (listWorkflowInstancesPage defaultWorkflowListQuery {ordering = ByCreatedDesc, cursor = first.nextCursor})
-      crossOrder `shouldSatisfy` (\case Left (InvalidCursor (CursorKindMismatch "wf-created" "wf-key")) -> True; _ -> False)
+      crossOrder `shouldSatisfy` (\case Left (InvalidCursor (CursorKindMismatch "wf-created" "wf-key2")) -> True; _ -> False)
     it "applies half-open creation and update windows" $ \store -> do
       sql store "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status,created_at,updated_at) SELECT 'window-'||n,'window','running','2026-10-01 00:00:00+00'::timestamptz+n*interval '1 hour','2026-10-01 00:00:00+00'::timestamptz+n*interval '1 hour' FROM generate_series(0,2) n"
       let boundary = read "2026-10-01 01:00:00 UTC" :: UTCTime

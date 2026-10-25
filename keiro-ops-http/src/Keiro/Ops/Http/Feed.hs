@@ -50,7 +50,7 @@ import Keiro.Wake
 import Kiroku.Store.Connection (KirokuStore (..))
 import Kiroku.Store.Effect (runStoreIO)
 
-data FeedAcquireError = TooManyViews | InitialReadFailed !Text | FeedClosed | FeedBusy | InitialResultTooLarge
+data FeedAcquireError = TooManyViews | InitialReadFailed !Text | FeedClosed | FeedBusy | FeedRetiring | InitialResultTooLarge
   deriving stock (Eq, Show)
 
 data Entry = Entry {token :: !Int, driver :: !Driver, references :: !Int}
@@ -139,7 +139,7 @@ acquireDriver handle view = mask $ \restore -> do
     if closed
       then pure (state, Left FeedClosed)
       else case Map.lookup view.viewId state.entries of
-        Just entry | entry.references == 0 -> pure (state, Left FeedBusy)
+        Just entry | entry.references == 0 -> pure (state, Left FeedRetiring)
         Just entry -> pure (state {entries = Map.insert view.viewId entry {references = entry.references + 1} state.entries}, Right entry.driver)
         Nothing | Map.size state.entries >= handle.handleFeedConfig.maxViews -> pure (state, Left TooManyViews)
         Nothing -> do

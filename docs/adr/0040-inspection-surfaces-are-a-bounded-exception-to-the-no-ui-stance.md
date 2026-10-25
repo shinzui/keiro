@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Inspection surfaces are a bounded exception to the no-UI stance
 description: Keiro sanctions state browsing and safe operator actions over supported library APIs in opt-in sister packages, while metrics and traces stay in OpenTelemetry and no keiro package grows a dashboard, a server process, or a parallel observability stack.
-timestamp: 2026-10-21T13:47:46Z
+timestamp: 2026-10-25T04:48:05Z
 docId: ADR-40
 status: Accepted
 date: 2026-09-10
@@ -162,8 +162,11 @@ promises page-proportional traversal only for an unfiltered primary-key range. C
 and time filters may examine the remaining ledger even in primary-key order; creation order
 may require scanning and sorting. Sparse and absent-filter evidence is mandatory, and those
 reads remain governed by measured workload/cadence envelopes and host deadlines. No additional
-writer index is authorized by that design decision. Implementation and query-plan acceptance
-remain open in the plan.
+writer index is authorized by that design decision. The implemented query and custom/generic 10k/100k evidence are retained in
+[the v2 read-side captures](../../keiro/bench/results/inspection/query-readside-v2/README.md).
+Both first and deep unfiltered pages examine 21 candidates for a 20-row page.
+The corresponding sparse/absent-filter captures show why this guarantee cannot
+be extended to arbitrary filters.
 
 ## Consequences
 

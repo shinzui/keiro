@@ -63,7 +63,7 @@ data Trigger = Subscribed | Notify | Timeout deriving stock (Eq, Show, Generic)
 
 instance ToJSON Trigger where toJSON = String . \case Subscribed -> "subscribe"; Notify -> "notify"; Timeout -> "timeout"
 
-data SocketErrorCode = InvalidFrame | UnknownFeed | InvalidSubscription | QueueOverflow | ReadFailed | TooManyViews | InspectionBusy | InspectionResultTooLarge
+data SocketErrorCode = InvalidFrame | UnknownFeed | InvalidSubscription | QueueOverflow | ReadFailed | TooManyViews | InspectionBusy | ViewRetiring | InspectionResultTooLarge
   deriving stock (Eq, Show, Generic)
 
 socketErrorText :: SocketErrorCode -> Text
@@ -75,6 +75,7 @@ socketErrorText = \case
   ReadFailed -> "read_failed"
   TooManyViews -> "too_many_views"
   InspectionBusy -> "inspection_busy"
+  ViewRetiring -> "view_retiring"
   InspectionResultTooLarge -> "inspection_result_too_large"
 
 instance ToJSON SocketErrorCode where toJSON = String . socketErrorText

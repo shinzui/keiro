@@ -2,8 +2,9 @@ module Main (main) where
 
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async
+import Control.Concurrent.Chan (newChan, readChan, writeChan)
 import Control.Concurrent.MVar
-import Control.Exception (IOException, bracket, finally, try)
+import Control.Exception (IOException, SomeException, bracket, finally, try)
 import Control.Monad (forM_, replicateM)
 import Data.Aeson (Value (..), object, (.=))
 import Data.Aeson qualified as Aeson
@@ -34,6 +35,7 @@ import Keiro.Ops.Http.Application
 import Keiro.Ops.Http.Budget
 import Keiro.Ops.Http.Config qualified
 import Keiro.Ops.Http.Config qualified as Config
+import Keiro.Ops.Http.Cors qualified as Cors
 import Keiro.Ops.Http.Protocol qualified as Protocol
 import Keiro.Ops.Http.Route
 import Keiro.Ops.Http.Views qualified as Views
@@ -154,6 +156,8 @@ spec fixture = do
       encodeBounded 10 (String (Text.replicate 10000 "x")) `shouldReturn` Nothing
       encodeBounded 4 (String "hi") `shouldReturn` Just "\"hi\""
       newInspectionBudget defaultInspectionLimits {maxConcurrentReads = 0} `shouldThrow` anyIOException
+      forM_ [0, -1, maxBound] $ \seconds ->
+        newInspectionBudget defaultInspectionLimits {deliveryDeadlineSeconds = seconds} `shouldThrow` anyIOException
   around (withFreshStore fixture) $ do
     describe "workflow page routes" $ do
       it "rejects an unrepresentable outgoing cursor instead of returning an unusable token" $ \store -> do
@@ -162,12 +166,13 @@ spec fixture = do
         app <- opsApplication defaultOpsHttpConfig hooks store
         response <- call app methodGet "/wf/inspect/list?limit=1" ""
         assertError response status413 "inspection_result_too_large"
-      it "reports exceptional workflow scan limits explicitly" $ \store -> do
+      it "returns wide workflow keys within the continuation and response caps" $ \store -> do
         result <- Pool.use store.pool (Session.script "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) SELECT 'wide-'||n,repeat('x',2700),'running' FROM generate_series(1,65) n")
         either (fail . show) pure result
         app <- opsApplication defaultOpsHttpConfig hooks store
         response <- call app methodGet "/wf/inspect/list?limit=1" ""
-        assertError response status413 "inspection_result_too_large"
+        simpleStatus response `shouldBe` status200
+        field "next_cursor" (body response) `shouldSatisfy` isJust
       it "pages supported reads through the same parser and maps typed failures" $ \store -> do
         seedInspection store
         now <- getCurrentTime
@@ -332,6 +337,42 @@ spec fixture = do
           assertError response status400 "invalid_request"
         response <- call app methodGet "/" ""
         assertError response status404 "not_found"
+      it "normalizes parsed origins and rejects malformed or repeated origins" $ \_ -> do
+        let allowed headers = Cors.originAllowed ["https://console.example"] False headers
+        forM_ [[], [("Origin", "http://EXAMPLE.test:80"), (hHost, "example.test")], [("Origin", "HTTPS://CONSOLE.EXAMPLE:443")]] $ \headers ->
+          allowed headers `shouldBe` True
+        forM_ [[("Origin", "null")], [("Origin", "https://console.example/path")], [("Origin", "https://console.example#fragment")], [("Origin", "https://user@console.example")], [("Origin", "https://console.example https://other.example")], [("Origin", "https://console.example"), ("Origin", "https://console.example")], [("Origin", "http://console.example")], [("Origin", "https://console.example:444")], [("Origin", "https://evil.example"), ("X-Forwarded-Host", "evil.example")]] $ \headers ->
+          allowed headers `shouldBe` False
+      it "rejects foreign mutations before reading their body or verifying schema" $ \store -> do
+        count <- newIORef (0 :: Int)
+        budget <- newInspectionBudget defaultInspectionLimits
+        app <-
+          opsApplicationWithOperations
+            defaultOpsHttpConfig {mutations = MutationsEnabled}
+            budget
+            hooks
+            store
+            (OpsHttpOperations (modifyIORef' count (+ 1) >> pure (Right [])) (\_ _ -> modifyIORef' count (+ 1) >> pure (Succeeded emptyResult)))
+        let foreignApp request respond = app (request {requestBody = fail "foreign request body was read"}) respond
+            req = (setPath defaultRequest "/stream/soft-delete/order-1") {requestMethod = methodPost, requestHeaders = [("Origin", "https://evil.example"), (hContentType, "application/json")]}
+        refused <- runSession (srequest (SRequest req "{\"confirm\":\"execute\"}")) foreignApp
+        assertError refused status403 "origin_not_allowed"
+        readIORef count `shouldReturn` 0
+      it "requires JSON for nonempty bodies including chunked confirmation, and permits empty previews" $ \store -> do
+        app <- opsApplication defaultOpsHttpConfig {mutations = MutationsEnabled} hooks store
+        let post headers payload chunked =
+              let req = (setPath defaultRequest "/stream/soft-delete/order-1") {requestMethod = methodPost, requestHeaders = headers}
+                  wrapped request respond = app (if chunked then request {requestBodyLength = ChunkedBody} else request) respond
+               in runSession (srequest (SRequest req payload)) wrapped
+        forM_ [False, True] $ \chunked -> do
+          forM_ [[], [(hContentType, "text/plain")]] $ \headers ->
+            post headers "{\"confirm\":\"execute\"}" chunked >>= \response -> assertError response status415 "unsupported_media_type"
+          preview <- post [] "" chunked
+          simpleStatus preview `shouldBe` status200
+        forM_ [[("Origin", "http://example.test:80"), (hHost, "EXAMPLE.test")], [("Origin", "https://console.example")], []] $ \origins -> do
+          allowed <- opsApplication defaultOpsHttpConfig {mutations = MutationsEnabled, Config.allowedOrigins = ["https://console.example"]} hooks store
+          response <- runSession (srequest (SRequest ((setPath defaultRequest "/outbox/maintenance-pass") {requestMethod = methodPost, requestHeaders = (hContentType, "Application/JSON; charset=utf-8") : origins}) "{\"confirm\":\"execute\"}")) allowed
+          simpleStatus response `shouldBe` status200
       it "applies exact-origin CORS without credentials or duplicate headers" $ \store -> do
         app <- opsApplication defaultOpsHttpConfig {Config.allowedOrigins = ["http://ui.example"]} Ops.emptyAppHooks store
         let request origin method = (setPath defaultRequest "/wf/list") {requestMethod = method, requestHeaders = [("Origin", origin), ("Access-Control-Request-Method", "GET")]}
@@ -400,6 +441,33 @@ spec fixture = do
           cancel job
         recovered <- call app methodGet "/health" ""
         simpleStatus recovered `shouldBe` status200
+      it "expires four blocked deliveries once, returns all permits, and recovers health" $ \store -> do
+        entered <- newChan
+        blocked <- newEmptyMVar
+        responses <- newIORef (0 :: Int)
+        cancelled <- newIORef (0 :: Int)
+        let config = defaultOpsHttpConfig {inspectionLimits = defaultInspectionLimits {maxConcurrentReads = 4, deliveryDeadlineSeconds = 1}}
+        budget <- newInspectionBudget config.inspectionLimits
+        app <- opsApplicationWithOperations config budget Ops.emptyAppHooks store (OpsHttpOperations (pure (Right [])) (\_ _ -> pure (Succeeded emptyResult)))
+        let slow request respond =
+              app
+                request
+                ( \response -> do
+                    atomicModifyIORef' responses (\n -> (n + 1, ()))
+                    writeChan entered ()
+                    (takeMVar blocked >> respond response) `finally` atomicModifyIORef' cancelled (\n -> (n + 1, ()))
+                )
+        jobs <- replicateM 4 (async (try (call slow methodGet "/health" "") :: IO (Either SomeException SResponse)))
+        timeout 1000000 (replicateM 4 (readChan entered)) `shouldReturn` Just [(), (), (), ()]
+        refused <- call app methodGet "/health" ""
+        assertError refused status503 "inspection_busy"
+        finished <- timeout 3000000 (mapM wait jobs)
+        case finished of
+          Just outcomes -> forM_ outcomes $ \outcome -> outcome `shouldSatisfy` either (const True) (const False)
+          Nothing -> mapM_ cancel jobs >> expectationFailure "delivery did not terminate"
+        readIORef responses `shouldReturn` 4
+        readIORef cancelled `shouldReturn` 4
+        call app methodGet "/health" "" >>= \response -> simpleStatus response `shouldBe` status200
       it "mounts idly without recurring verification and skips SQL for disabled/invalid requests" $ \store -> do
         count <- newIORef (0 :: Int)
         budget <- newInspectionBudget defaultInspectionLimits
@@ -428,6 +496,53 @@ spec fixture = do
         freshManager <- Client.newManager Client.defaultManagerSettings
         Client.httpLbs request manager `shouldThrow` (\(_ :: Client.HttpException) -> True)
         Client.httpLbs request freshManager `shouldThrow` (\(_ :: Client.HttpException) -> True)
+      it "refuses foreign origins and non-JSON confirmation over a real HTTP socket" $ \store -> do
+        app <- opsApplication defaultOpsHttpConfig {mutations = MutationsEnabled} hooks store
+        manager <- Client.newManager Client.defaultManagerSettings
+        withOpsHttpServer defaultOpsHttpServerConfig {port = 0} app $ \server -> do
+          base <- Client.parseRequest ("http://127.0.0.1:" <> show server.serverPort <> "/outbox/maintenance-pass")
+          forM_ [([("Origin", "https://evil.example"), (hContentType, "application/json")], status403), ([(hContentType, "text/plain")], status415)] $ \(headers, status) -> do
+            let request = base {Client.method = methodPost, Client.requestHeaders = headers, Client.requestBody = Client.RequestBodyLBS "{\"confirm\":\"execute\"}"}
+            response <- Client.httpLbs request manager
+            Client.responseStatus response `shouldBe` status
+      it "terminates a backpressured Warp delivery and recovers admission" $ \store -> do
+        entered <- newEmptyMVar
+        delivered <- newEmptyMVar
+        let bodyBytes = 32 * 1024 * 1024
+            config = defaultOpsHttpConfig {inspectionLimits = defaultInspectionLimits {maxConcurrentReads = 1, deliveryDeadlineSeconds = 1, maxResponseBytes = 64 * 1024 * 1024}}
+            large = emptyResult {jsonValue = String (Text.replicate bodyBytes "x")}
+        budget <- newInspectionBudget config.inspectionLimits
+        app <- opsApplicationWithOperations config budget Ops.emptyAppHooks store (OpsHttpOperations (pure (Right [])) (\_ _ -> pure (Succeeded large)))
+        let watched request respond =
+              app
+                request
+                ( \response -> do
+                    putMVar entered ()
+                    respond response `finally` putMVar delivered ()
+                )
+        withOpsHttpServer defaultOpsHttpServerConfig {port = 0} watched $ \server ->
+          bracket (Socket.socket Socket.AF_INET Socket.Stream Socket.defaultProtocol) Socket.close $ \client -> do
+            Socket.setSocketOption client Socket.RecvBuffer 4096
+            Socket.connect client (Socket.SockAddrInet (fromIntegral server.serverPort) (Socket.tupleToHostAddress (127, 0, 0, 1)))
+            Socket.sendAll client "GET /wf/list HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n"
+            timeout 5000000 (takeMVar entered) `shouldReturn` Just ()
+            tryTakeMVar delivered `shouldReturn` Nothing
+            -- The 32-MiB response exceeds socket buffers; no response bytes
+            -- have been read. The callback is still inside actual Warp delivery.
+            refused <- call app methodGet "/health" ""
+            assertError refused status503 "inspection_busy"
+            timeout 3000000 (takeMVar delivered) `shouldReturn` Just ()
+            recovered <- call app methodGet "/health" ""
+            simpleStatus recovered `shouldBe` status200
+            Socket.setSocketOption client Socket.RecvBuffer (1024 * 1024)
+            let drain total = do
+                  chunk <- Socket.recv client 65536
+                  if Char8.null chunk then pure total else drain (total + Char8.length chunk)
+            terminated <- timeout 5000000 (try (drain 0) :: IO (Either IOException Int))
+            case terminated of
+              Just (Right count) -> count `shouldSatisfy` (< bodyBytes)
+              Just (Left _) -> pure ()
+              Nothing -> expectationFailure "expired Warp connection remained open"
       it "joins idle accepted connections across repeated start/stop churn" $ \store -> do
         app <- opsApplication defaultOpsHttpConfig Ops.emptyAppHooks store
         forM_ [1 .. (20 :: Int)] $ \_ ->
@@ -556,7 +671,7 @@ cliReads =
   ]
 
 call :: Application -> Method -> Text -> LazyByteString.ByteString -> IO SResponse
-call app method path payload = runSession (srequest (SRequest ((setPath defaultRequest (Text.encodeUtf8 path)) {requestMethod = method}) payload)) app
+call app method path payload = runSession (srequest (SRequest ((setPath defaultRequest (Text.encodeUtf8 path)) {requestMethod = method, requestHeaders = [(hContentType, "application/json")]}) payload)) app
 
 body :: SResponse -> Value
 body response = either error id (Aeson.eitherDecode (simpleBody response))

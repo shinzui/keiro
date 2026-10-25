@@ -1,0 +1,230 @@
+diff --git a/keiro/src/Keiro/Workflow/Inspection.hs b/keiro/src/Keiro/Workflow/Inspection.hs
+index 7447c43b..112e0268 100644
+--- a/keiro/src/Keiro/Workflow/Inspection.hs
++++ b/keiro/src/Keiro/Workflow/Inspection.hs
+@@ -14,2 +13,0 @@ module Keiro.Workflow.Inspection
+-    maxWideWorkflowCandidates,
+-    maxWideWorkflowKeyBytes,
+@@ -76 +74 @@ maxInspectionPageSize = 500
+-data InspectionError = InvalidPageSize !Int | InvalidCursor !CursorError | CursorGenerationMismatch !Int !Int | CursorResultTooLarge | InspectionWorkLimitExceeded
++data InspectionError = InvalidPageSize !Int | InvalidCursor !CursorError | CursorGenerationMismatch !Int !Int | CursorResultTooLarge
+@@ -116,9 +114,6 @@ listWorkflowInstancesPage query = case validated of
+-    (observedAt, exceeded, rows) <- Instance.inspectionInstanceRows query position (query.pageSize + 1)
+-    pure $
+-      if exceeded
+-        then Left InspectionWorkLimitExceeded
+-        else do
+-          nextCursor <- case query.ordering of
+-            ByKey -> nextFor "wf-key" query.pageSize rows (\r -> (r.workflowName, r.workflowId))
+-            ByCreatedDesc -> nextFor "wf-created" query.pageSize rows (\r -> (r.createdAt, r.workflowName, r.workflowId))
+-          pure (WorkflowListPage (take query.pageSize rows) nextCursor observedAt)
++    (observedAt, rows) <- Instance.inspectionInstanceRows query position (query.pageSize + 1)
++    pure $ do
++      nextCursor <- case query.ordering of
++        ByKey -> nextFor "wf-key2" query.pageSize rows (\r -> (r.workflowId, r.workflowName))
++        ByCreatedDesc -> nextFor "wf-created" query.pageSize rows (\r -> (r.createdAt, r.workflowName, r.workflowId))
++      pure (WorkflowListPage (take query.pageSize rows) nextCursor observedAt)
+@@ -130 +125 @@ listWorkflowInstancesPage query = case validated of
+-            ByKey -> uncurry AfterWorkflowKey <$> decode "wf-key" token
++            ByKey -> uncurry AfterWorkflowKey <$> decode "wf-key2" token
+@@ -143 +138 @@ validateWorkflowListQuery query = do
+-      ByKey -> () <$ (decode "wf-key" token :: Either InspectionError (Text, Text))
++      ByKey -> () <$ (decode "wf-key2" token :: Either InspectionError (Text, Text))
+diff --git a/keiro/src/Keiro/Workflow/Inspection/Query.hs b/keiro/src/Keiro/Workflow/Inspection/Query.hs
+index a2820d42..3c262d06 100644
+--- a/keiro/src/Keiro/Workflow/Inspection/Query.hs
++++ b/keiro/src/Keiro/Workflow/Inspection/Query.hs
+@@ -64,0 +65 @@ defaultWorkflowListQuery = WorkflowListQuery Nothing Nothing Nothing Nothing Not
++-- The default key tuple is (workflow_id, workflow_name).
+@@ -67,7 +67,0 @@ data WorkflowListPosition = AfterWorkflowKey !Text !Text | AfterWorkflowCreated
+-
+--- Large keys keep their ordinary writer domain. Inspection caps their candidate
+--- count and bytes before merging; it adds no writer-side column or index.
+-maxIndexedWorkflowKeyBytes, maxWideWorkflowCandidates, maxWideWorkflowKeyBytes :: Int
+-maxIndexedWorkflowKeyBytes = 2600
+-maxWideWorkflowCandidates = 64
+-maxWideWorkflowKeyBytes = 256 * 1024
+diff --git a/keiro/src/Keiro/Workflow/Instance.hs b/keiro/src/Keiro/Workflow/Instance.hs
+index 50789756..7f16b92b 100644
+--- a/keiro/src/Keiro/Workflow/Instance.hs
++++ b/keiro/src/Keiro/Workflow/Instance.hs
+@@ -855 +855 @@ instanceFields required optional =
+-inspectionInstanceRows :: (Store :> es) => WorkflowListQuery -> Maybe WorkflowListPosition -> Int -> Eff es (UTCTime, Bool, [WorkflowInstanceRow])
++inspectionInstanceRows :: (Store :> es) => WorkflowListQuery -> Maybe WorkflowListPosition -> Int -> Eff es (UTCTime, [WorkflowInstanceRow])
+@@ -859 +859 @@ inspectionInstanceRows query position count = do
+-    (clock, exceeded, _) : _ -> pure (clock, exceeded, mapMaybe (\(_, _, row) -> row) rows)
++    (clock, _) : _ -> pure (clock, mapMaybe snd rows)
+@@ -862 +862 @@ inspectionInstanceRows query position count = do
+-inspectionInstanceStatement :: WorkflowListQuery -> Maybe WorkflowListPosition -> Int -> Statement () [(UTCTime, Bool, Maybe WorkflowInstanceRow)]
++inspectionInstanceStatement :: WorkflowListQuery -> Maybe WorkflowListPosition -> Int -> Statement () [(UTCTime, Maybe WorkflowInstanceRow)]
+@@ -869 +869 @@ inspectionInstanceStatement query position count = preparable sql params decoder
+-    selectedClasses = nub (maybe [minBound .. maxBound] NonEmpty.toList query.classes)
++    selectedClasses = nub (maybe [] NonEmpty.toList query.classes)
+@@ -871,7 +871,8 @@ inspectionInstanceStatement query position count = preparable sql params decoder
+-      catMaybes
+-        [ optional "workflow_name = ?" E.text query.workflowName,
+-          optional "created_at >= ?" E.timestamptz query.createdSince,
+-          optional "created_at < ?" E.timestamptz query.createdBefore,
+-          optional "updated_at >= ?" E.timestamptz query.updatedSince,
+-          optional "updated_at < ?" E.timestamptz query.updatedBefore
+-        ]
++      [(const ("(" <> Text.intercalate " OR " ["(" <> classPredicate status <> ")" | status <- selectedClasses] <> ")"), 0, mempty) | query.classes /= Nothing]
++        <> catMaybes
++          [ optional "workflow_name = ?" E.text query.workflowName,
++            optional "created_at >= ?" E.timestamptz query.createdSince,
++            optional "created_at < ?" E.timestamptz query.createdBefore,
++            optional "updated_at >= ?" E.timestamptz query.updatedSince,
++            optional "updated_at < ?" E.timestamptz query.updatedBefore
++          ]
+@@ -881,2 +882,2 @@ inspectionInstanceStatement query position count = preparable sql params decoder
+-      Just (AfterWorkflowKey name wid) ->
+-        [ ( \n -> "(workflow_name, workflow_id) > ($" <> number n <> ",$" <> number (n + 1) <> ")",
++      Just (AfterWorkflowKey wid name) ->
++        [ ( \n -> "(workflow_id, workflow_name) > ($" <> number n <> ",$" <> number (n + 1) <> ")",
+@@ -884 +885 @@ inspectionInstanceStatement query position count = preparable sql params decoder
+-            (const name >$< E.param (E.nonNullable E.text)) <> (const wid >$< E.param (E.nonNullable E.text))
++            (const wid >$< E.param (E.nonNullable E.text)) <> (const name >$< E.param (E.nonNullable E.text))
+@@ -893,2 +894,2 @@ inspectionInstanceStatement query position count = preparable sql params decoder
+-    (next, predicates, filterParams) = foldl' (\(index, clauses, encoders) (render, width, encoder) -> (index + width, clauses <> [render index], encoders <> encoder)) (2, [], mempty) filters
+-    order = case query.ordering of ByKey -> "workflow_name, workflow_id"; ByCreatedDesc -> "created_at DESC, workflow_name DESC, workflow_id DESC"
++    (next, predicates, filterParams) = foldl' (\(index, clauses, encoders) (render, width, encoder) -> (index + width, clauses <> [render index], encoders <> encoder)) (1, [], mempty) filters
++    order = case query.ordering of ByKey -> "workflow_id, workflow_name"; ByCreatedDesc -> "created_at DESC, workflow_name DESC, workflow_id DESC"
+@@ -896,12 +896,0 @@ inspectionInstanceStatement query position count = preparable sql params decoder
+-    keyBytes = "(octet_length(workflow_name) + octet_length(workflow_id))"
+-    narrowKey = keyBytes <> " <= " <> number maxIndexedWorkflowKeyBytes
+-    wideKey = keyBytes <> " > " <> number maxIndexedWorkflowKeyBytes
+-    limit = " LIMIT $" <> number next
+-    selectRows clauses rowOrder rowLimit =
+-      "SELECT "
+-        <> columns
+-        <> " FROM keiro.keiro_workflows WHERE "
+-        <> Text.intercalate " AND " clauses
+-        <> " ORDER BY "
+-        <> rowOrder
+-        <> rowLimit
+@@ -918,30 +906,0 @@ inspectionInstanceStatement query position count = preparable sql params decoder
+-    classExpression = "(CASE WHEN status = 'running' AND attempts = 0 THEN 'running' WHEN status = 'running' THEN 'retrying' WHEN status = 'suspended' AND wake_after IS NOT NULL THEN 'sleeping' WHEN status = 'suspended' THEN 'awaiting' ELSE status END)"
+-    classPredicates status =
+-      [ "'" <> statusClassToText status <> "' = ANY($1::text[])",
+-        classPredicate status
+-      ]
+-    union branches = Text.intercalate " UNION ALL " ["(" <> branch <> ")" | branch <- branches]
+-    narrowPage = case query.ordering of
+-      ByCreatedDesc ->
+-        selectRows
+-          ([narrowKey] <> [classExpression <> " = ANY($1::text[])" | query.classes /= Nothing] <> predicates)
+-          order
+-          limit
+-      ByKey ->
+-        if query.classes == Nothing
+-          then selectRows ([narrowKey] <> predicates) order limit
+-          else
+-            "SELECT * FROM ("
+-              <> union [selectRows (classPredicates status <> [narrowKey] <> predicates) order limit | status <- [minBound .. maxBound]]
+-              <> ") AS candidates ORDER BY "
+-              <> order
+-              <> limit
+-    wideExactName = ["workflow_name = $2" | query.workflowName /= Nothing]
+-    wideLimit = " LIMIT " <> number (maxWideWorkflowCandidates + 1)
+-    -- Budget the raw class/name population before time/cursor filtering, so a
+-    -- deep cursor cannot turn the exceptional path into a ledger-wide search.
+-    widePage =
+-      "SELECT * FROM ("
+-        <> union ["SELECT " <> columns <> " FROM keiro.keiro_workflows WHERE " <> Text.intercalate " AND " (classPredicates status <> [wideKey] <> wideExactName) <> wideLimit | status <- [minBound .. maxBound]]
+-        <> ") AS wide_candidates"
+-        <> wideLimit
+@@ -949,14 +908,5 @@ inspectionInstanceStatement query position count = preparable sql params decoder
+-      "WITH inspection_wide AS MATERIALIZED ("
+-        <> widePage
+-        <> "), wide_budget AS MATERIALIZED (SELECT count(*) > "
+-        <> number maxWideWorkflowCandidates
+-        <> " OR coalesce(sum("
+-        <> keyBytes
+-        <> "),0) > "
+-        <> number maxWideWorkflowKeyBytes
+-        <> " AS exceeded FROM inspection_wide), inspection_page AS MATERIALIZED (SELECT * FROM (("
+-        <> narrowPage
+-        <> ") UNION ALL SELECT * FROM inspection_wide"
+-        <> (if null predicates then "" else " WHERE " <> Text.intercalate " AND " predicates)
+-        <> ") AS candidates "
+-        <> "WHERE NOT (SELECT exceeded FROM wide_budget) ORDER BY "
++      "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT "
++        <> columns
++        <> " FROM keiro.keiro_workflows WHERE "
++        <> Text.intercalate " AND " ("true" : predicates)
++        <> " ORDER BY "
+@@ -964,2 +914,3 @@ inspectionInstanceStatement query position count = preparable sql params decoder
+-        <> limit
+-        <> ") SELECT now(), (SELECT exceeded FROM wide_budget), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY "
++        <> " LIMIT $"
++        <> number next
++        <> ") SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY "
+@@ -967,5 +918,2 @@ inspectionInstanceStatement query position count = preparable sql params decoder
+-    params =
+-      (const (map statusClassToText selectedClasses) >$< E.param (E.nonNullable (E.foldableArray (E.nonNullable E.text))))
+-        <> filterParams
+-        <> (const (fromIntegral count :: Int32) >$< E.param (E.nonNullable E.int4))
+-    decoder = D.rowList ((,,) <$> D.column (D.nonNullable D.timestamptz) <*> D.column (D.nonNullable D.bool) <*> getCompose (instanceFields (Compose . D.column . D.nullable) (Compose . fmap Just . D.column . D.nullable)))
++    params = filterParams <> (const (fromIntegral count :: Int32) >$< E.param (E.nonNullable E.int4))
++    decoder = D.rowList ((,) <$> D.column (D.nonNullable D.timestamptz) <*> getCompose (instanceFields (Compose . D.column . D.nullable) (Compose . fmap Just . D.column . D.nullable)))
+diff --git a/scripts/inspection-query-evidence.hs b/scripts/inspection-query-evidence.hs
+index 9596fbfe..b79e61bd 100644
+--- a/scripts/inspection-query-evidence.hs
++++ b/scripts/inspection-query-evidence.hs
+@@ -52 +52 @@ main = do
+-        forM_ (cases count) $ \(label, query, arguments) ->
++        forM_ (cases count wideFixture) $ \(label, query, arguments) ->
+@@ -60 +60 @@ main = do
+-              Left InspectionWorkLimitExceeded -> pure ()
++              Left CursorResultTooLarge -> pure ()
+@@ -63 +63 @@ main = do
+-            prepared <- use store (Session.statement () (Statement.preparable "SELECT name,statement FROM pg_prepared_statements WHERE statement LIKE 'WITH inspection_wide%'" E.noParams (D.rowList ((,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text)))))
++            prepared <- use store (Session.statement () (Statement.preparable "SELECT name,statement FROM pg_prepared_statements WHERE statement LIKE '/* keiro-inspection-page-v2 */%'" E.noParams (D.rowList ((,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text)))))
+@@ -67 +67 @@ main = do
+-            let artifact = object ["rows" .= count, "wide_fixture" .= wideFixture, "settings" .= (settings :: Value), "result" .= (case result of Left _ -> "work_limit_exceeded" :: Text; Right _ -> "ok"), "mode" .= mode, "indexes" .= ("current migrations" :: Text), "case" .= label, "sql" .= sql, "arguments" .= arguments, "plan" .= (plan :: Value)]
++            let artifact = object ["rows" .= count, "wide_fixture" .= wideFixture, "settings" .= (settings :: Value), "rows_returned" .= (case result of Left _ -> 0; Right page -> length page.items), "result" .= (case result of Left _ -> "cursor_result_too_large" :: Text; Right _ -> "ok"), "mode" .= mode, "indexes" .= ("current migrations" :: Text), "case" .= label, "sql" .= sql, "arguments" .= arguments, "plan" .= (plan :: Value)]
+@@ -75,19 +75,19 @@ number = Text.pack . show
+-cases :: Int -> [(Text, WorkflowListQuery, Text)]
+-cases count =
+-  [ ("key-first", base, allClasses <> ",21"),
+-    ("key-past-wide", base {cursor = Just (encodeCursor "wf-key" ("zzzz" :: Text, "zzzz" :: Text))}, allClasses <> ",'zzzz','zzzz',21"),
+-    ("key-deep", base {cursor = Just (encodeCursor "wf-key" ("hot" :: Text, deepId))}, allClasses <> ",'hot','" <> deepId <> "',21"),
+-    ("created-first", base {ordering = ByCreatedDesc}, allClasses <> ",21"),
+-    ("created-deep", base {ordering = ByCreatedDesc, cursor = Just (encodeCursor "wf-created" (deepTime, "hot" :: Text, deepId))}, allClasses <> ",'" <> Text.pack (show deepTime) <> "'::timestamptz,'hot','" <> deepId <> "',21"),
+-    ("rare-status", base {classes = Just (ClassFailed :| [])}, "ARRAY['failed']::text[],21"),
+-    ("absent-class", base {classes = Just (ClassRetrying :| [])}, "ARRAY['retrying']::text[],21"),
+-    ("absent-name", base {workflowName = Just "absent"}, allClasses <> ",'absent',21"),
+-    ("small-name", base {workflowName = Just "small"}, allClasses <> ",'small',21"),
+-    ("running-class", base {classes = Just (ClassRunning :| [])}, "ARRAY['running']::text[],21"),
+-    ("mixed-class", base {classes = Just (ClassFailed :| [ClassRunning, ClassFailed])}, "ARRAY['failed','running']::text[],21"),
+-    ("rare-status-deep", base {classes = Just (ClassFailed :| []), cursor = Just (encodeCursor "wf-key" ("hot" :: Text, deepId))}, "ARRAY['failed']::text[],'hot','" <> deepId <> "',21"),
+-    ("small-name-rare", base {workflowName = Just "small", classes = Just (ClassFailed :| [])}, "ARRAY['failed']::text[],'small',21"),
+-    ("created-window", base {ordering = ByCreatedDesc, createdSince = Just deepTime}, allClasses <> ",'" <> Text.pack (show deepTime) <> "'::timestamptz,21"),
+-    ("created-rare-status", base {ordering = ByCreatedDesc, classes = Just (ClassFailed :| [])}, "ARRAY['failed']::text[],21"),
+-    ("wide-name", base {workflowName = Just "wide"}, allClasses <> ",'wide',21"),
+-    ("update-window", base {updatedSince = Just (read "2026-10-02 00:00:00 UTC")}, allClasses <> ",'2026-10-02'::timestamptz,21")
++cases :: Int -> Bool -> [(Text, WorkflowListQuery, Text)]
++cases count wideFixture =
++  [ ("key-first", base, "21"),
++    ("key-past-wide", base {cursor = Just (encodeCursor "wf-key2" ("zzzz" :: Text, "zzzz" :: Text))}, "'zzzz','zzzz',21"),
++    ("key-deep", base {cursor = Just (encodeCursor "wf-key2" (deepId, deepName))}, "'" <> deepId <> "','" <> deepName <> "',21"),
++    ("created-first", base {ordering = ByCreatedDesc}, "21"),
++    ("created-deep", base {ordering = ByCreatedDesc, cursor = Just (encodeCursor "wf-created" (deepTime, deepName, deepId))}, "'" <> Text.pack (show deepTime) <> "'::timestamptz,'" <> deepName <> "','" <> deepId <> "',21"),
++    ("rare-status", base {classes = Just (ClassFailed :| [])}, "21"),
++    ("absent-class", base {classes = Just (ClassRetrying :| [])}, "21"),
++    ("absent-name", base {workflowName = Just "absent"}, "'absent',21"),
++    ("small-name", base {workflowName = Just "small"}, "'small',21"),
++    ("running-class", base {classes = Just (ClassRunning :| [])}, "21"),
++    ("mixed-class", base {classes = Just (ClassFailed :| [ClassRunning, ClassFailed])}, "21"),
++    ("rare-status-deep", base {classes = Just (ClassFailed :| []), cursor = Just (encodeCursor "wf-key2" (deepId, deepName))}, "'" <> deepId <> "','" <> deepName <> "',21"),
++    ("small-name-rare", base {workflowName = Just "small", classes = Just (ClassFailed :| [])}, "'small',21"),
++    ("created-window", base {ordering = ByCreatedDesc, createdSince = Just deepTime}, "'" <> Text.pack (show deepTime) <> "'::timestamptz,21"),
++    ("created-rare-status", base {ordering = ByCreatedDesc, classes = Just (ClassFailed :| [])}, "21"),
++    ("wide-name", base {workflowName = Just "wide"}, "'wide',21"),
++    ("update-window", base {updatedSince = Just (read "2026-10-02 00:00:00 UTC")}, "'2026-10-02'::timestamptz,21")
+@@ -96 +95,0 @@ cases count =
+-    allClasses = "ARRAY['running','retrying','sleeping','awaiting','completed','cancelled','failed']::text[]"
+@@ -100 +99,2 @@ cases count =
+-    deepId = "w-" <> Text.justifyRight 8 '0' (number deep)
++    deepName = if wideFixture then "wide" else "hot"
++    deepId = (if wideFixture then Text.replicate 2700 "x" else "w-") <> Text.justifyRight 8 '0' (number deep)

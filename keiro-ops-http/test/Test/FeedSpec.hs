@@ -1,6 +1,6 @@
 module Test.FeedSpec (spec) where
 
-import Control.Concurrent.Async (async, cancel)
+import Control.Concurrent.Async (async, cancel, wait)
 import Control.Concurrent.MVar
 import Control.Concurrent.STM
 import Control.Exception (bracket, finally)
@@ -9,15 +9,18 @@ import Data.Aeson (Value, object, (.=))
 import Data.IORef
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Data.Time (getCurrentTime)
+import Data.Time (addUTCTime, getCurrentTime)
 import Data.Word (Word64)
 import Effectful (liftIO)
+import Hasql.Pool qualified as Pool
+import Hasql.Session qualified as Session
 import Keiro.Ops.Http.Config
 import Keiro.Ops.Http.Feed qualified as Feed
 import Keiro.Ops.Http.Protocol qualified as P
 import Keiro.Ops.Http.Views
 import Keiro.Test.Postgres (Fixture, withFreshStore)
 import Keiro.Wake (WakeReason (..), neverWake, waitForWake)
+import Kiroku.Store.Connection (KirokuStore (..))
 import System.Timeout (timeout)
 import Test.Hspec
 
@@ -87,6 +90,31 @@ spec fixture = do
         recovered <- Feed.subscribe driver >>= receive
         snapshotSequence recovered `shouldBe` Just 5
         readIORef calls `shouldReturn` 6
+    it "retains fresh timer presentation without broadcasting a clock-only delta" $ do
+      firstStamp <- getCurrentTime
+      let secondStamp = addUTCTime 1 firstStamp
+          timer countdown = Item "timer" (object ["timer_id" .= ("timer" :: Text)]) (object ["status" .= ("scheduled" :: Text), "due_in_seconds" .= (countdown :: Int)])
+      source <- newIORef (firstStamp, [timer 10])
+      wake <- newEmptyMVar
+      let readItems = do
+            (stamp, rows) <- readIORef source
+            pure (Right (stamp, rows, Nothing))
+      bracket (Feed.newDriver P.Timers quick (takeMVar wake >> pure WokenByNotify) readItems) Feed.stopDriver $ \driver -> do
+        one <- Feed.subscribe driver
+        _ <- receive one
+        writeIORef source (secondStamp, [timer 9])
+        putMVar wake ()
+        refreshed <- timeout 7000000 $ atomically $ do
+          frame <- Feed.driverSnapshot driver
+          case frame of
+            P.Snapshot _ 0 _ stamp rows _ -> check (stamp == secondStamp && rows == [body (timer 9)])
+            _ -> retry
+        refreshed `shouldBe` Just ()
+        timeout 100000 (atomically (Feed.nextFrame one)) `shouldReturn` Nothing
+        fresh <- Feed.subscribe driver >>= receive
+        case fresh of
+          P.Snapshot P.Timers 0 _ stamp rows _ -> (stamp, rows) `shouldBe` (secondStamp, [body (timer 9)])
+          _ -> expectationFailure (show fresh)
   describe "feed registry" $ around (withFreshStore fixture) $ do
     it "reserves initialization, joins cancellation, shares a ready view, and drops the idle wake cursor" $ \store ->
       Feed.withFeedHandle defaultOpsHttpConfig quick {Feed.maxViews = 1, Feed.maxFrameBytes = 512} store $ \handle -> do
@@ -124,6 +152,68 @@ spec fixture = do
         Feed.feedStats handle `shouldReturn` Feed.FeedStats 0 0 False
         Feed.closeFeedHandle handle
         Feed.closeFeedHandle handle
+    it "refuses a retiring view distinctly until blocked cleanup has joined" $ \store ->
+      Feed.withFeedHandle defaultOpsHttpConfig quick {Feed.maxViews = 1} store $ \handle -> do
+        block <- newIORef False
+        entered <- newEmptyMVar
+        cleanupEntered <- newEmptyMVar
+        cleanupGate <- newEmptyMVar
+        never <- newEmptyMVar
+        let view = View "retiring" P.Workflows $ liftIO $ do
+              shouldBlock <- readIORef block
+              if shouldBlock
+                then (putMVar entered () >> takeMVar never) `finally` (putMVar cleanupEntered () >> takeMVar cleanupGate)
+                else pure ()
+              stamp <- getCurrentTime
+              pure (stamp, [item 1], Nothing)
+        Right driver <- Feed.acquireDriver handle view
+        _ <- Feed.subscribe driver >>= receive
+        writeIORef block True
+        timeout 2000000 (takeMVar entered) `shouldReturn` Just ()
+        release <- async (Feed.releaseDriver handle view)
+        ( do
+            timeout 1000000 (takeMVar cleanupEntered) `shouldReturn` Just ()
+            refused <- Feed.acquireDriver handle view
+            either (== Feed.FeedRetiring) (const False) refused `shouldBe` True
+            Feed.feedStats handle `shouldReturn` Feed.FeedStats 1 0 True
+            writeIORef block False
+          )
+          `finally` (tryPutMVar cleanupGate () >> pure ())
+        timeout 1000000 (wait release) `shouldReturn` Just ()
+        Feed.feedStats handle `shouldReturn` Feed.FeedStats 0 0 False
+        Right _ <- Feed.acquireDriver handle view
+        Feed.releaseDriver handle view
+    it "rechecks schema for each active view and recovers only after drift is removed" $ \store ->
+      Feed.withFeedHandle defaultOpsHttpConfig quick store $ \handle -> do
+        firstCalls <- newTVarIO (0 :: Int)
+        secondCalls <- newTVarIO (0 :: Int)
+        let view name calls = View name P.Workflows $ liftIO $ do
+              atomically (modifyTVar' calls (+ 1))
+              stamp <- getCurrentTime
+              pure (stamp, [item 1], Nothing)
+            firstView = view "schema-first" firstCalls
+            secondView = view "schema-second" secondCalls
+            sql text = Pool.use store.pool (Session.script text) >>= either (fail . show) pure
+        Right first <- Feed.acquireDriver handle firstView
+        one <- Feed.subscribe first
+        _ <- receive one
+        Right second <- Feed.acquireDriver handle secondView
+        two <- Feed.subscribe second
+        _ <- receive two
+        sql "ALTER TABLE keiro.keiro_workflows ADD COLUMN feed_drift bigint"
+        forM_ [one, two] $ \subscriber ->
+          receive subscriber >>= \case
+            P.ErrorFrame P.ReadFailed _ _ -> pure ()
+            frame -> expectationFailure (show frame)
+        before <- atomically ((,) <$> readTVar firstCalls <*> readTVar secondCalls)
+        sql "ALTER TABLE keiro.keiro_workflows DROP COLUMN feed_drift"
+        recovered <- timeout 2000000 $ atomically $ do
+          after <- (,) <$> readTVar firstCalls <*> readTVar secondCalls
+          check (fst after > fst before && snd after > snd before)
+        recovered `shouldBe` Just ()
+        forM_ [first, second] $ \driver -> Feed.subscribe driver >>= receive >>= \frame -> snapshotSequence frame `shouldBe` Just 0
+        Feed.releaseDriver handle firstView
+        Feed.releaseDriver handle secondView
 
 quick :: Feed.FeedConfig
 quick = Feed.defaultFeedConfig {Feed.fallbackInterval = 0.02, Feed.minRefreshInterval = 0.001, Feed.readTimeout = 2}

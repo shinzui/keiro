@@ -1,5 +1,8 @@
 # Keiro Guides Log
 
+## 2026-10-25
+* **Update**: Document parsed mutation origins, JSON confirmation, bounded delivery and fresh feed retirement behavior.
+
 ## 2026-10-21
 * **Addition**: Add DOC-31 for socket feeds, shared driver lifecycle, paired polls, overflow recovery and timer workload limits.
 * **Update**: Explain mounting the fulfillment manager inspector, explicit provenance capture and the manager/timer CLI reads.

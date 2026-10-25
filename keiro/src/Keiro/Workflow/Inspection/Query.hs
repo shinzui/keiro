@@ -62,12 +62,6 @@ defaultWorkflowListQuery :: WorkflowListQuery
 defaultWorkflowListQuery = WorkflowListQuery Nothing Nothing Nothing Nothing Nothing Nothing ByKey 100 Nothing
 
 -- | Validated exclusive database keys, decoded by the inspection facade.
+-- The default key tuple is (workflow_id, workflow_name).
 data WorkflowListPosition = AfterWorkflowKey !Text !Text | AfterWorkflowCreated !UTCTime !Text !Text
   deriving stock (Eq, Show)
-
--- Large keys keep their ordinary writer domain. Inspection caps their candidate
--- count and bytes before merging; it adds no writer-side column or index.
-maxIndexedWorkflowKeyBytes, maxWideWorkflowCandidates, maxWideWorkflowKeyBytes :: Int
-maxIndexedWorkflowKeyBytes = 2600
-maxWideWorkflowCandidates = 64
-maxWideWorkflowKeyBytes = 256 * 1024

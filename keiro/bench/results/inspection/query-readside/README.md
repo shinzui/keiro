@@ -18,3 +18,7 @@ The matching driver is scripts/inspection-query-evidence.hs, frozen here as
 source text. The writer schema/migration bundle is byte-identical to the
 published 0.21.0.0 payloads. The previously retained guarded/stored-class index
 plans are rejected prototypes after their roughly 9% writer-capacity regression.
+
+2026-10-25: [v2 query evidence](../query-readside-v2/README.md) replaces the
+obsolete narrow/wide query for current inspection pages. These historical plans
+remain evidence of the old contract and are not current performance acceptance.

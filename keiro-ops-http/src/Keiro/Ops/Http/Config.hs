@@ -24,6 +24,7 @@ data InspectionLimits = InspectionLimits
   { maxConcurrentReads :: !Int,
     readDeadlineSeconds :: !Int,
     mutationDeadlineSeconds :: !Int,
+    deliveryDeadlineSeconds :: !Int,
     statementTimeoutMillis :: !Int,
     maxResponseBytes :: !Int,
     maxRequestBytes :: !Int
@@ -31,7 +32,7 @@ data InspectionLimits = InspectionLimits
   deriving stock (Eq, Show)
 
 defaultInspectionLimits :: InspectionLimits
-defaultInspectionLimits = InspectionLimits 4 5 30 2000 1048576 16384
+defaultInspectionLimits = InspectionLimits 4 5 30 30 2000 1048576 16384
 
 data OpsHttpConfig = OpsHttpConfig
   { mutations :: !MutationPolicy,

@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Operator commands wrap supported library APIs and respect schema ownership
 description: Keiro operator commands preserve library invariants, schema ownership, destructive previews, and the standalone-versus-embedded capability boundary.
-timestamp: 2026-10-21T01:53:43Z
+timestamp: 2026-10-25T04:48:05Z
 docId: ADR-28
 status: Accepted
 date: 2026-08-08
@@ -153,16 +153,16 @@ codec limit. A stored key can be larger than a valid input cursor; such a page
 returns a typed result-size failure instead of an unusable or truncated token.
 The transport maps this failure to HTTP 413 using the same structured ops code.
 
-Inspection indexes preserve the ordinary writer key domain. Adding columns or
-reversing text-key order can exceed PostgreSQL's index-tuple limit for a row
-accepted by the existing primary key. The unreleased workflow page indexes
-therefore cover keys up to 2600 database-encoded bytes. Wider keys remain valid
-runtime inputs and use a fixed-width class/name-hash/id-hash access path. Full
-text is rechecked; hashes never become workflow identity or cursor content.
-The same statement budgets the raw class/name candidate population before
-cursor/time filtering, merges at most 64 exceptional candidates, and caps their
-combined key bytes at 256 KiB. Exceeding that budget fails explicitly rather
-than omitting rows or widening ordinary writer constraints.
+Workflow inspection preserves the ordinary writer key domain and adds no indexes.
+The withdrawn narrow/wide index experiment no longer defines a separate candidate
+path or a 64-key/256-KiB population refusal. Default inspection ordering follows
+the existing `(workflow_id, workflow_name)` primary key and uses `wf-key2` cursors;
+creation ordering retains its previous cursor contract. Valid wide keys use the
+same query, with the existing continuation and response byte limits. Legacy
+`listWorkflowInstances` retains its released name-first order. Only unfiltered
+primary-key ranges promise page-proportional traversal. Sparse/absent class, name
+and time filters can search the ledger, and creation order can scan/sort it, so
+hosts retain statement/read deadlines and measured workload/cadence limits.
 
 Owner-only child and awakeable indexes do not bound page sorting at a large
 owner. The compound-index experiment both exceeds the preliminary write-latency

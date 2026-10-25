@@ -1,5 +1,9 @@
 # Keiro User Documentation Log
 
+## 2026-10-25
+* **Update**: Clarify timer read cadence and search costs.
+* **Update**: Describe primary-key workflow browsing and filtered read deadlines.
+
 ## 2026-10-21
 * **Update**: Link operational HTTP serving to shared socket feeds and their recovery/cost runbook.
 * **Update**: Document projection status pages, paired HTTP rendering, cursor bounds and observational position semantics.

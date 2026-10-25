@@ -2,7 +2,7 @@
 type: Runbook
 title: Stream Keiro Inspection Views
 description: Mount bounded workflow, timer and projection-group feeds and recover clients through their paired poll reads.
-timestamp: 2026-10-21T03:07:07Z
+timestamp: 2026-10-25T04:48:05Z
 docId: DOC-31
 tags: [keiro, operations, http, inspection, websocket]
 generated:
@@ -27,10 +27,11 @@ withFeedHandle httpConfig defaultFeedConfig inspectionStore $ \feeds -> do
 ```
 
 Close the server before releasing the feed handle and store. The application
-and handle must use the same host policy. A composed host applies HTTP CORS
-once: construct its HTTP child with an empty HTTP origin list via
-`opsApplicationWithBudget`, then wrap it with `feedsMiddleware` using the full
-socket origin policy and the handle's shared budget. Mounting at `/keiro`
+and handle must use the same host policy. A composed host passes the full
+origin policy to `opsApplicationWithBudget` and `feedsMiddleware`, sharing the
+handle's budget. The composition wrapper preserves existing CORS headers, so
+responses carry one allow-origin header. Keep the child origin policy populated:
+it also authorizes HTTP mutations. Mounting at `/keiro`
 rewrites both WAI path fields, making the socket `/keiro/ws`; frames contain no
 absolute URLs.
 
@@ -112,3 +113,25 @@ timer schedules, leases and projection lifecycle changes, produce no append
 notification. The fallback is a scheduling interval, not a guaranteed maximum
 staleness under slow queries or saturation. An idle handle with no views runs
 no refreshes and holds no duplicated notification cursor.
+
+Every refresh verifies current schema agreement within the shared admission/read
+deadline. Verification is per view and per refresh, including a view whose data
+has not changed. A success TTL would allow publication after schema drift, so
+this implementation retains no such cache. Schema failure refuses that refresh;
+a later successful verification permits recovery. Each successful read also
+prepares a fresh snapshot even when semantic comparison emits no update. New
+subscribers receive its current `observed_at` and timer countdown without changing
+the sequence or sending clock-only deltas to existing subscribers.
+
+Socket error codes are `invalid_frame`, `unknown_feed`, `invalid_subscription`,
+`queue_overflow`, `read_failed`, `too_many_views`, `inspection_busy`,
+`inspection_result_too_large`, and `view_retiring`. A `view_retiring` refusal means
+the last subscriber left and cancellation is still joining; retry that subscription
+after cleanup. Its slot remains accounted until cleanup finishes. Upgrade refusals
+also include `origin_not_allowed`, `inspection_request_too_large`, `inspection_timeout`,
+`schema_check_failed`, `schema_drift`, `feed_closed`, `too_many_connections`,
+`invalid_feed_policy`, and `not_found`.
+
+Origins use normalized HTTP/HTTPS scheme, host and effective port. Opaque/null,
+malformed and multiple origins are refused. Behind a TLS-terminating proxy,
+explicitly allow-list the public HTTPS origin; forwarded headers are not trusted.

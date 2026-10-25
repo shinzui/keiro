@@ -1,0 +1,133 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-ops-http-0.21.0.0 (lib) (file src/Keiro/Ops/Http/Application.hs changed)
+ - keiro-ops-http-0.21.0.0 (test:keiro-ops-http-test) (dependency rebuilt)
+Preprocessing library for keiro-ops-http-0.21.0.0...
+Building library for keiro-ops-http-0.21.0.0...
+[ 8 of 15] Compiling Keiro.Ops.Http.Application ( src/Keiro/Ops/Http/Application.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-http-0.21.0.0/build/Keiro/Ops/Http/Application.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-http-0.21.0.0/build/Keiro/Ops/Http/Application.dyn_o ) [Source file changed]
+Preprocessing test suite 'keiro-ops-http-test' for keiro-ops-http-0.21.0.0...
+Building test suite 'keiro-ops-http-test' for keiro-ops-http-0.21.0.0...
+[2 of 4] Compiling Test.FeedSpec    ( test/Test/FeedSpec.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-http-0.21.0.0/t/keiro-ops-http-test/build/keiro-ops-http-test/keiro-ops-http-test-tmp/Test/FeedSpec.o ) [Source file changed]
+test/Test/FeedSpec.hs:8:20: warning: [GHC-38856] [-Wunused-imports]
+    The import of ‘Value’ from module ‘Data.Aeson’ is redundant
+  |
+8 | import Data.Aeson (Value, object, (.=))
+  |                    ^^^^^
+
+test/Test/FeedSpec.hs:75:27: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘sequence’ shadows the existing binding
+      imported from ‘Prelude’ at test/Test/FeedSpec.hs:1:8-20
+      (and originally defined in ‘ghc-internal-9.1204.0:GHC.Internal.Data.Traversable’)
+   |
+75 |         forM_ [1 .. 5] $ \sequence -> do
+   |                           ^^^^^^^^
+
+test/Test/FeedSpec.hs:208:9: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘before’ shadows the existing binding
+      imported from ‘Test.Hspec’ at test/Test/FeedSpec.hs:25:1-17
+      (and originally defined in ‘hspec-core-2.11.18:Test.Hspec.Core.Hooks’)
+    |
+208 |         before <- atomically ((,) <$> readTVar firstCalls <*> readTVar secondCalls)
+    |         ^^^^^^
+
+test/Test/FeedSpec.hs:211:11: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘after’ shadows the existing binding
+      imported from ‘Test.Hspec’ at test/Test/FeedSpec.hs:25:1-17
+      (and originally defined in ‘hspec-core-2.11.18:Test.Hspec.Core.Hooks’)
+    |
+211 |           after <- (,) <$> readTVar firstCalls <*> readTVar secondCalls
+    |           ^^^^^
+
+test/Test/FeedSpec.hs:225:39: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘sequence’ shadows the existing binding
+      imported from ‘Prelude’ at test/Test/FeedSpec.hs:1:8-20
+      (and originally defined in ‘ghc-internal-9.1204.0:GHC.Internal.Data.Traversable’)
+    |
+225 | snapshotSequence = \case P.Snapshot _ sequence _ _ _ _ -> Just sequence; _ -> Nothing
+    |                                       ^^^^^^^^
+
+[4 of 4] Compiling Main             ( test/Main.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-http-0.21.0.0/t/keiro-ops-http-test/build/keiro-ops-http-test/keiro-ops-http-test-tmp/Main.o ) [Source file changed]
+test/Main.hs:356:56: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of Request ‘requestBody’
+    (imported from Network.Wai, but defined in Network.Wai.Internal):
+    Deprecated: "requestBody's name is misleading because it only gets a partial chunk of the body. Use getRequestBodyChunk instead when getting the field, and setRequestBodyChunks when setting the field."
+    |
+356 |         let foreignApp request respond = app (request {requestBody = fail "foreign request body was read"}) respond
+    |                                                        ^^^^^^^^^^^
+
+[5 of 5] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-http-0.21.0.0/t/keiro-ops-http-test/build/keiro-ops-http-test/keiro-ops-http-test [Objects changed]
+Running 1 test suites...
+Test suite keiro-ops-http-test: RUNNING...
+
+Compose
+  strips exactly one raw segment and preserves route spelling, queries and streaming bodies [✔]
+  validates mounts, lists them in order, refuses absent surfaces and applies CORS once [✔]
+  mounts real Keiro and Kiroku applications and both socket protocols on one port [✔]
+shared feed driver
+  diffs fallback truth, extra-only changes, and recovery without duplicate reads per subscriber [✔]
+  signals overflow before retained deltas and resubscribes from the current sequence [✔]
+  retains fresh timer presentation without broadcasting a clock-only delta [✔]
+feed registry
+  reserves initialization, joins cancellation, shares a ready view, and drops the idle wake cursor [✔]
+  refuses a retiring view distinctly until blocked cleanup has joined [✔]
+  rechecks schema for each active view and recovers only after drift is removed [✔]
+inspection sockets
+  shares workflow truth, retains a subscription on refusal, and releases each sent frame [✔]
+  streams timer fallback truth and projection extra-only changes using the poll encoders [✔]
+  checks upgrade origin, capacity and schema policy and closes active sockets [✔]
+live view parameters
+  canonicalizes equivalent status sets and bounds subscription inputs [✔]
+  compares timer state independently of presentation countdowns [✔]
+request translation
+  preserves path and repeated option order, converting snake_case [✔]
+  translates flags using only the selected command grammar [✔]
+  rejects global options, malformed keys, empty and option-like segments [✔]
+  uses the real parser including the legacy two-value after option [✔]
+budget
+  rejects excess work immediately and releases a cancelled permit after cleanup [✔]
+  joins timed-out work and keeps the permit reusable [✔]
+  bounds encoding and rejects invalid host limits [✔]
+workflow page routes
+  rejects an unrepresentable outgoing cursor instead of returning an unusable token [✔]
+  returns wide workflow keys within the continuation and response caps [✔]
+  pages supported reads through the same parser and maps typed failures [✔]
+fresh header presentation reuse
+  preserves canonical bytes and observes edits, deletion and recreation [✔]
+  enforces byte and entry limits through churn, oversized changes and misses [✔]
+  fails oversized changes explicitly and reapplies schema policy to warm headers [✔]
+HTTP boundary
+  shares the supported read/write classification across every mounted domain [✔]
+  renders a real preview and applies the confirmed operation only [✔]
+  requires preview and confirmation for DLQ reads that reserve messages [✔]
+  rejects invalid requests and has structured errors [✔]
+  normalizes parsed origins and rejects malformed or repeated origins [✔]
+  rejects foreign mutations before reading their body or verifying schema [✔]
+  requires JSON for nonempty bodies including chunked confirmation, and permits empty previews [✔]
+  applies exact-origin CORS without credentials or duplicate headers [✔]
+  bounds requests and results before responding [✔]
+  keeps hook-dependent commands absent unless mounted and preserves supported failures [✔]
+  refuses excess requests before verification and cancels schema work on deadline [✔]
+  holds admission during response delivery and releases it when the client cancels [✔]
+  expires four blocked deliveries once, returns all permits, and recovers health [✔]
+  mounts idly without recurring verification and skips SQL for disabled/invalid requests [✔]
+  serves through a loopback socket and releases its port [✔]
+  refuses foreign origins and non-JSON confirmation over a real HTTP socket [✔]
+DeliveryExpired
+  terminates a backpressured Warp delivery and recovers admission [✔]
+  joins idle accepted connections across repeated start/stop churn [✔]
+bounded workflow header
+  uses one supported instance read even with 100000 children [✔]
+schema handshake
+  bounds SQL on every inspection connection and releases pool capacity on cancellation [✔]
+  detects drift after construction, refuses previews/confirmation, and supports explicit policy [✔]
+CLI agreement
+  agrees with executable JSON across the database-only command domains [✔]
+
+Finished in 28.9949 seconds
+49 examples, 0 failures
+Test suite keiro-ops-http-test: PASS
+Test suite logged to:
+/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-http-0.21.0.0/t/keiro-ops-http-test/test/keiro-ops-http-0.21.0.0-keiro-ops-http-test.log
+1 of 1 test suites (1 of 1 test cases) passed.

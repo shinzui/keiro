@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: The HTTP operational surface is a transport over the ops command tree
 description: HTTP reuses the supported command grammar and handlers with bounded inspection work, schema agreement, and explicit mutation confirmation.
-timestamp: 2026-10-21T13:47:46Z
+timestamp: 2026-10-25T04:48:05Z
 docId: ADR-53
 status: Accepted
 date: 2026-10-20
@@ -32,6 +32,15 @@ Paths supply words and positional arguments; snake_case queries supply options.
 Boolean option metadata is derived once, separately for each command grammar.
 Global CLI flags are reserved. GET returns the supported read's JSON value.
 POST previews a mutation and executes only for exactly `{"confirm":"execute"}`.
+A nonempty confirmation body requires application/json, with media-type parameters
+permitted, including chunked bodies. Empty-body preview needs no content type.
+A present Origin is checked before any body read: one parsed HTTP/HTTPS origin must
+match the allow-list or request scheme/Host with normalized scheme, host and
+effective port. Null, malformed and multiple origins fail closed. HTTP, CORS and
+WebSocket comparisons share this parser. No-Origin clients remain supported;
+TLS-terminating proxies explicitly configure their public HTTPS origin because
+forwarded headers are not trusted. Composed children retain this complete policy
+regardless of which middleware supplies the single CORS response header.
 Mutations are off by default. A mutation timeout reports an unknown commit
 outcome and never causes an automatic retry.
 
@@ -91,20 +100,22 @@ unchanged; prepared bytes are paired with the exact successful read result by
 the owning runner. A fresh database comparison, rather than an invalidation
 hint, authorizes reuse.
 
-Routes are mount-relative and emit no absolute URLs. CORS uses exact allowed
-origins, is disabled by default, emits no credential header, and preserves
+Routes are mount-relative and emit no absolute URLs. CORS uses configured serialized
+origins under the shared normalized comparison, is disabled by default, emits no credential header, and preserves
 existing surface CORS headers during composition. The deployment supplies
 authentication, authorization, and TLS through a trusted network or reverse proxy.
 
-The delivery amendment selected by
+The delivery amendment implemented by
 [Plan 318](../plans/318-harden-the-http-operational-surface-against-cross-site-mutations-and-permit-exhaustion.md)
 keeps shared admission through delivery and adds a separate configurable delivery deadline
-(default 30 seconds). Expiry must unwind delivery, return the permit and terminate the
-incomplete response; it must never issue a second response. `/health` shares admission and
+(default 30 seconds). Expiry unwinds delivery, returns the permit and terminates the
+incomplete response without issuing a second response. `/health` shares admission and
 may return inspection_busy during saturation. The guarantee is recovery after bounded work
-unwinds, not continuous health availability while all slots are held. Real-server connection
-termination and cancellation evidence are required before this amendment is implemented;
-the current computation-only behavior above is not claimed to have that delivery bound.
+unwinds, not continuous health availability while all slots are held. The HTTP suite verifies four blocked callbacks expire once and return every permit,
+then proves actual Warp backpressure with a 32-MiB body and a 4-KiB client receive
+buffer. The delivery callback is still active before expiry; after cancellation the
+socket terminates with a truncated response and health succeeds. Network exceptions
+retain the same bracket-owned permit cleanup.
 
 ## Consequences
 

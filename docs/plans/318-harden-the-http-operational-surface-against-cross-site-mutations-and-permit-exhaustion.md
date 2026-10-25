@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-21T13:49:51Z
       mode: "update"
       note: "Preserve fresh schema/snapshot observations; specify bounded delivery recovery and honest retirement refusals."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T04:38:35Z
+      mode: "implement"
+      note: "Implement shared parsed-origin policy, bounded delivery and retirement refusal."
 ---
 
 # Harden the HTTP operational surface against cross-site mutations and permit exhaustion
@@ -51,17 +56,18 @@ that choice, all refusal codes, and the TLS origin requirement.
 ## Progress
 
 
-- [ ] M1: Mutation origins are checked before body reads. Foreign origins yield 403
-      `origin_not_allowed`; nonempty non-JSON bodies yield 415 `unsupported_media_type`.
-      Same-origin, allow-listed, no-Origin JSON and empty-body preview cases pass.
-- [ ] M2: `deliveryDeadlineSeconds` (default 30) bounds respond/delivery and releases permits
-      after cancellation without a second response. Tests establish admission refusal before
-      expiry and recovery afterward, plus actual stalled-socket termination under Warp.
-- [ ] M3: Fresh schema verification and presentation remain correct across multiple views,
-      drift/failure/recovery, and clock-only refreshes. Retiring subscriptions return
-      `view_retiring` rather than `inspection_busy`; no TTL or stale snapshot reuse is added.
-- [ ] M4: HTTP/feed/composition guides and ADR-53/56 describe the resulting origin, delivery,
-      freshness and retirement behavior; documentation and ADR validators pass.
+- [x] M1 (2026-10-25): Shared parsed-origin policy rejects foreign/malformed/repeated
+      origins before body reads; JSON media types are required for nonempty bodies,
+      including chunked transfer. Real loopback HTTP requests return 403 and 415.
+- [x] M2 (2026-10-25): A validated 30-second default delivery deadline bounds respond.
+      Four blocked callbacks expire once and return every permit; cancellation also
+      releases admission. The real Warp test establishes 32-MiB/4-KiB backpressure,
+      termination/truncation and health recovery with a one-second test deadline.
+- [x] M3 (2026-10-25): Two active views refuse schema drift and recover after repair;
+      timer resubscription receives fresh presentation without a clock-only delta;
+      blocked retirement refuses with `view_retiring` until cleanup joins.
+- [x] M4 (2026-10-25): Guides, composition example and ADR-53/56 carry the implemented
+      policy. The Nix HTTP suite passes 49 examples; strict ADR/user/guide checks pass.
 
 
 ## Surprises & Discoveries
@@ -79,7 +85,28 @@ The observable promise is bounded cancellation and recovery; one-byte reads of a
 response alone do not prove blocking because the kernel may buffer the entire response.
 
 
+The existing timer driver enforces a five-second minimum independently of the test's
+short fallback configuration. The presentation test therefore waits on the refreshed STM
+snapshot with a seven-second bound, rather than weakening cadence or sleeping as proof.
+
+Composition previously cleared the HTTP child's origin list to avoid duplicate CORS
+headers. That would erase mutation authorization after this change. Composed children now
+retain the full policy; the outer middleware preserves the child's existing header. A
+composed preview test proves the allowed console succeeds and a foreign origin refuses.
+
+Mori has no registered network-uri source. The official Hackage version inventory and
+upstream tag both identify 2.6.4.2 as the latest nondeprecated release (2.7.0.0 is deprecated).
+Its source was inspected directly before adding the bounded `>=2.6.4.2 && <2.7` dependency
+for URI authority parsing. Warp source discovered through Mori brackets connection closure
+around application execution; the real socket test independently proves that behavior.
+
 ## Decision Log
+
+- Decision: Keep configured origin authorization in composed HTTP children even when the
+  outer composition supplies CORS. Share normalized URI comparison across all transports.
+  Rationale: CORS header ownership must not erase the mutation policy. Existing-header
+  preservation prevents duplicate response headers without clearing authorization.
+  Date: 2026-10-25
 
 
 - Decision: Check the request Origin against the configured allow-list or request origin,
@@ -105,7 +132,19 @@ withdrew stale schema/frame caching, and made retirement refusal deterministic.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Foreign browser mutations are refused before body, verification and execution effects.
+Nonempty confirmation bodies require JSON. Computation and delivery have independent
+bounds, and health remains shared admission with recovery after cancellation. Tests cover
+normal completion, caller cancellation, four occupied slots, one response per expired
+request and actual Warp connection truncation. The wire 403/415 checks use the same real
+loopback runner as deployments.
+
+No schema TTL or semantic-only snapshot cache was introduced. Tests preserve each view's
+fresh agreement check, current timer presentation and clock-only delta suppression. The
+retirement code distinguishes cleanup from saturation without releasing capacity early.
+ADR-53/56 now retain these durable rules; the guides include TLS proxy and composition
+requirements. Runtime interference and the final release gate remain independent obligations.
+
 
 
 ## Context and Orientation

@@ -2,7 +2,7 @@
 type: Explanation
 title: Process Managers And Timers
 description: Explain event-sourced coordination, deterministic command IDs, and durable timer workers.
-timestamp: 2026-10-21T01:53:43Z
+timestamp: 2026-10-25T04:48:05Z
 docId: DOC-17
 tags: [keiro, process-managers, timers, coordination]
 generated:
@@ -501,8 +501,11 @@ timer_id)`, and bind continuations to both filters. Database time supplies
 `observed_at`; `due_in_seconds` is negative when overdue. Reads claim or mutate
 nothing. Page size bounds returned rows, not ledger search cost: filtered reads
 can scan pending rows. Apply the inspection deadline and avoid polling broad
-filters at command rates. No new timer index or worker query is installed by
-these APIs.
+filters at command rates. Automatic timer views have a five-second minimum
+refresh interval; measure broad or sparse filters against the intended pending
+ledger and runtime load before choosing a cadence. Host statement/read deadlines
+still apply even to a one-row result. No new timer index or worker query is
+installed by these APIs.
 
 `shardOwnershipView` and `listShardedSubscriptions` read current lease rows and
 use database time for live/expired state and heartbeat age. Failover appears on

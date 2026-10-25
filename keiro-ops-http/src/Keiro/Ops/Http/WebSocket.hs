@@ -11,7 +11,6 @@ import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as Bytes
 import Data.ByteString.Char8 qualified as Char8
 import Data.ByteString.Lazy qualified as Lazy
-import Data.Char (toLower)
 import Data.IORef
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
@@ -20,6 +19,7 @@ import Keiro.Ops (AppHooks)
 import Keiro.Ops.Http.Application (opsApplicationWithBudget)
 import Keiro.Ops.Http.Budget qualified as Budget
 import Keiro.Ops.Http.Config
+import Keiro.Ops.Http.Cors qualified as Cors
 import Keiro.Ops.Http.Feed qualified as Feed
 import Keiro.Ops.Http.Feed.Driver qualified as Driver
 import Keiro.Ops.Http.Feed.Queue qualified as Queue
@@ -79,15 +79,9 @@ feedServerApp config handle pending
           }
 
 originAllowed :: OpsHttpConfig -> WS.RequestHead -> Bool
-originAllowed config request = case lookup "Origin" request.requestHeaders of
-  Nothing -> True
-  Just origin ->
-    Bytes.length origin <= config.inspectionLimits.maxRequestBytes
-      && ( normalize origin `elem` map (normalize . Text.encodeUtf8) config.allowedOrigins
-             || maybe False (\host -> normalize origin == (if request.requestSecure then "https://" else "http://") <> normalize host) (lookup "Host" request.requestHeaders)
-         )
-  where
-    normalize = Char8.map toLower
+originAllowed config request =
+  all (\(key, value) -> key /= "Origin" || Bytes.length value <= config.inspectionLimits.maxRequestBytes) request.requestHeaders
+    && Cors.originAllowed config.allowedOrigins request.requestSecure request.requestHeaders
 
 type Subscription = (View, Feed.Driver, Feed.Subscriber)
 
@@ -172,6 +166,7 @@ replaceSubscription handle queue subscriptions name view failure = mask $ \resto
                 ( case problem of
                     Feed.TooManyViews -> P.TooManyViews
                     Feed.FeedBusy -> P.InspectionBusy
+                    Feed.FeedRetiring -> P.ViewRetiring
                     Feed.InitialResultTooLarge -> P.InspectionResultTooLarge
                     _ -> P.ReadFailed
                 )

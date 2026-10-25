@@ -1,5 +1,11 @@
 # Bundle Update Log
 
+## 2026-10-25
+* **Update**: Record fresh timer resubscription, per-view schema refusal and distinct retirement cleanup behavior.
+* **Update**: Record parsed mutation origins, JSON confirmation and bounded response delivery with Warp cancellation evidence.
+* **Update**: Record accepted v2 unfiltered range evidence and the filtered-work boundary.
+* **Update**: Replace the withdrawn workflow wide-key split with primary-key browsing and honest filter envelopes.
+
 ## 2026-10-21
 * **Addition**: ADR-58: require isolated fixed benchmark workloads and attributed reproducible baselines for release gates; implementation evidence remains open.
 * **Update**: ADR-56: preserve fresh per-refresh schema verification and clock-bearing snapshot presentation (plan 318).

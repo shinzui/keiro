@@ -4,13 +4,14 @@ module Keiro.Ops.Http.Budget
     newInspectionBudget,
     withInspectionAdmission,
     withInspectionDeadline,
+    withInspectionDelivery,
     withInspectionBudget,
     encodeBounded,
   )
 where
 
 import Control.Concurrent.STM
-import Control.Exception (bracket, evaluate, mask)
+import Control.Exception (Exception, bracket, evaluate, mask, throwIO)
 import Data.Aeson (Value, encode)
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Lazy qualified as LazyByteString
@@ -29,7 +30,7 @@ newInspectionBudget limits
       ioError (userError "inspection limits must be positive and deadlines representable in microseconds")
   | otherwise = InspectionBudget limits.maxConcurrentReads <$> newTVarIO 0
   where
-    deadlines = [limits.readDeadlineSeconds, limits.mutationDeadlineSeconds]
+    deadlines = [limits.readDeadlineSeconds, limits.mutationDeadlineSeconds, limits.deliveryDeadlineSeconds]
     values = deadlines <> [limits.maxConcurrentReads, limits.statementTimeoutMillis, limits.maxResponseBytes, limits.maxRequestBytes]
 
 -- | No waiting queue. Timed-out or cancelled work unwinds before releasing the
@@ -61,6 +62,16 @@ withInspectionDeadline seconds action = do
   -- unwinding the action before returning Nothing.
   outcome <- timeout (seconds * 1000000) action
   pure (maybe (Left InspectionTimedOut) Right outcome)
+
+-- Private termination signal: after delivery starts no second response is safe.
+data DeliveryExpired = DeliveryExpired deriving stock (Show)
+
+instance Exception DeliveryExpired
+
+withInspectionDelivery :: Int -> IO a -> IO a
+withInspectionDelivery seconds action = do
+  result <- timeout (seconds * 1000000) action
+  maybe (throwIO DeliveryExpired) pure result
 
 -- | Demand at most the cap plus one byte of Aeson's lazy output. Force the
 -- bounded body before leaving the deadline; no partial result is served.

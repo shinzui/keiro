@@ -338,7 +338,6 @@ inspectionError :: Inspection.InspectionError -> (Text, Text)
 inspectionError err = (code, message)
   where
     message = case err of
-      Inspection.InspectionWorkLimitExceeded -> "workflow inspection exceeds " <> Text.pack (show Inspection.maxWideWorkflowCandidates) <> " wide-key candidates or " <> Text.pack (show Inspection.maxWideWorkflowKeyBytes) <> " key bytes"
       Inspection.CursorResultTooLarge -> "the continuation key exceeds the " <> Text.pack (show maxCursorBytes) <> "-byte cursor limit"
       _ -> Text.pack (show err)
     code = case err of
@@ -346,7 +345,6 @@ inspectionError err = (code, message)
       Inspection.InvalidCursor _ -> "invalid_cursor"
       Inspection.CursorGenerationMismatch _ _ -> "cursor_generation_mismatch"
       Inspection.CursorResultTooLarge -> "inspection_result_too_large"
-      Inspection.InspectionWorkLimitExceeded -> "inspection_result_too_large"
 
 -- | Validate the owning library's inspection grammar without any SQL.
 validateCommand :: Command -> Either (Text, Text) ()

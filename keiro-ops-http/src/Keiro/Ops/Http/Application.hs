@@ -14,6 +14,7 @@ import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Char8 qualified as Char8
 import Data.ByteString.Lazy qualified as LazyByteString
+import Data.Char (toLower)
 import Data.IORef
 import Data.Map.Strict qualified as Map
 import Data.Sequence qualified as Seq
@@ -130,7 +131,7 @@ opsApplicationPrepared config budget hooks store verify execute = do
         delivered <- withInspectionAdmission budget $ do
           computed <- withInspectionDeadline deadline (trySync action)
           -- Network exceptions must propagate; never attempt a second response.
-          respond $ case computed of
+          withInspectionDelivery limits.deliveryDeadlineSeconds $ respond $ case computed of
             Left problem -> budgetFailure mutation problem
             Right (Left _) -> internalError
             Right (Right response) -> response
@@ -159,9 +160,12 @@ opsApplicationPrepared config budget hooks store verify execute = do
                 if requestMethod request /= method
                   then immediate (methodFailure method)
                   else
-                    if mutation && config.mutations == MutationsDisabled
-                      then immediate (failure status403 "mutations_disabled" "this surface was mounted without mutations")
-                      else budgetedCommand request command mutation
+                    if mutation && (any (\(key, value) -> key == "Origin" && ByteString.length value > limits.maxRequestBytes) (requestHeaders request) || not (originAllowed config.allowedOrigins (isSecure request) (requestHeaders request)))
+                      then immediate (failure status403 "origin_not_allowed" "mutation origin is not allowed")
+                      else
+                        if mutation && config.mutations == MutationsDisabled
+                          then immediate (failure status403 "mutations_disabled" "this surface was mounted without mutations")
+                          else budgetedCommand request command mutation
     translate flags request = do
       query <- either (Left . Text.pack . displayException) Right (traverse decodeQuery (queryString request))
       either (Left . renderRouteError) Right (translateRequest (flags (pathInfo request)) (pathInfo request) query)
@@ -242,8 +246,12 @@ readConfirmation request = go 0 []
           if ByteString.null chunk
             then pure (parse (LazyByteString.fromChunks (reverse chunks)))
             else go nextSize (chunk : chunks)
+    jsonContentType = case [value | (key, value) <- requestHeaders request, key == hContentType] of
+      [value] -> Char8.map toLower (Char8.strip (Char8.takeWhile (/= ';') value)) == "application/json"
+      _ -> False
     parse body
       | LazyByteString.null body = Right False
+      | not jsonContentType = Left (failure status415 "unsupported_media_type" "a nonempty confirmation body requires application/json")
       | Aeson.decode body == Just (object ["confirm" .= ("execute" :: Text)]) = Right True
       | otherwise = Left (failure status400 "invalid_confirmation" "expected an empty body or exactly {\"confirm\":\"execute\"}")
 
