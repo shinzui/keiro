@@ -1,0 +1,49 @@
+All
+  projection
+    inline
+      legacy
+        one-target:     read-model-latency-run=1 samples=500 legacy_p95_ns=366000 versioned_p95_ns=375000 p95_ratio=1.0245901639344261 throughput_ratio=0.9693110517487731
+read-model-latency-run=2 samples=500 legacy_p95_ns=365000 versioned_p95_ns=385000 p95_ratio=1.0547945205479452 throughput_ratio=0.9680816671640307
+read-model-latency-run=3 samples=500 legacy_p95_ns=364000 versioned_p95_ns=371000 p95_ratio=1.0192307692307692 throughput_ratio=0.9841866901497043
+read-model-latency-run=4 samples=500 legacy_p95_ns=364000 versioned_p95_ns=374000 p95_ratio=1.0274725274725274 throughput_ratio=0.9736116779155548
+read-model-latency-run=5 samples=500 legacy_p95_ns=378000 versioned_p95_ns=389000 p95_ratio=1.029100529100529 throughput_ratio=0.976428930216983
+read-model-latency-median runs=5 samples_per_run=500 p95_ratio=1.0274725274725274 p95_budget=1.25 throughput_ratio=0.9736116779155548 throughput_budget=0.90
+OK
+          231  μs ±  13 μs
+      versioned
+        one-target:     OK
+          239  μs ±  14 μs, 1.04x
+      legacy
+        three-target:   OK
+          259  μs ±  15 μs
+      versioned
+        three-target:   OK
+          268  μs ±  16 μs, 1.04x
+      legacy
+        three-groups:   OK
+          309  μs ±  28 μs
+      versioned
+        three-groups:   OK
+          317  μs ±  10 μs, 1.03x
+      legacy
+        many-revisions: OK
+          235  μs ±  17 μs
+      versioned
+        many-revisions: OK
+          238  μs ±  14 μs, 1.01x
+      legacy
+        mixed-delivery: OK
+          246  μs ±  18 μs
+      versioned
+        mixed-delivery: OK
+          252  μs ±  14 μs, 1.03x
+    async
+      legacy
+        mixed-delivery: OK
+          90.4 μs ± 6.9 μs
+      versioned
+        mixed-delivery: OK
+          95.7 μs ± 7.2 μs, 1.06x
+
+All 12 tests passed (36.33s)
+PROCESS_EXIT=0

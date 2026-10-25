@@ -93,9 +93,13 @@ command/fan-out prefixes, delegated/history inputs, fixed rebuild sources and pe
 bookkeeping. The first full release gate exposed a read-model order effect despite its
 passing alternating latency sampler. Its unchanged 25,000 seed events now span 5,000
 streams; one fixture-wide ANALYZE precedes selected three-invocation warm-up. Read-model
-command/async/promotion growth is bounded at 100,000/100,000/10,000 operations.
-`work-counts.*` and its exact source patch retain the diagnostic. The extended command
-growth, tighter read-model comparison and replacement alternating pairs remain open.
+command/async/promotion growth was initially bounded at 100,000/100,000/10,000.
+The tighter run reached 84,942 command and 65,540 async operations. Current finite caps
+are 500,000 command events, one million async operations and 10,000 promotion runs,
+so correctly fast adaptive samples do not exhaust those initial budgets.
+`work-counts.*` and its exact source patch retain the diagnostic. A single-block durable probe reaches 3,005,000 seeded events with indexed lookup,
+173-us fresh and 24.8-us no-op means. Five-block checkpoint sampling will establish
+spread before accepting stationarity. Replacement alternating pairs remain open.
 
 ## Surprises & Discoveries
 
@@ -104,7 +108,12 @@ Projection's sequential one-target rows diverged 2.43x, while its alternating th
 sampler measured median p95 1.026x and throughput 0.975x. The read-model seed had 25,000
 events in only one stream, so event volume did not establish representative stream-name
 statistics. The revised seed retains the event count across 5,000 streams and records
-actual prepared plans. Diagnostic runs are not accepted timing measurements.
+actual prepared plans. A tighter follow-up still failed when it measured five legacy
+cases before five versioned cases. Adjacent controls preserve every benchmark name and
+ceiling while comparing nearer retained populations. The instrumented adjacent run passes
+all 12 cases; the separate unprobed run also passes (inline 1.01–1.04x, async 1.06x).
+Replacement command pairs and five-block growth spread remain acceptance work.
+Diagnostic runs are not accepted timing measurements.
 
 The first durable rebuild probe correctly aborted at 167 invocations: its counter
 was incorrectly charging fixed source replay as retained growth. Rebuilds now have

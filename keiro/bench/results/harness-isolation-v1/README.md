@@ -104,3 +104,21 @@ No serving SQL, baseline, or ratio ceiling changes in this step.
 overwrite existing CSVs, and separates setup traces. `analyze-pairs.py` checks complete
 command names, median absolute paired differences, no-op/rejected latency, monotone fan-out
 and fresh inbox metrics twins. The replacement pairs and extended growth probe remain open.
+
+
+`command-growth-durable-3m.*` runs the unchanged growth driver at `3eca8197` through
+3,005,000 seed events (diagnostic events are additional). The late fresh/no-op means are
+172.6/24.8 us with indexed lookup. These are single 100-operation blocks; the next driver
+records five blocks at each checkpoint to retain spread rather than infer stationarity
+from one point.
+
+`projection-warmed-attempt-1.txt` retains the tighter rejected follow-up on `3eca8197`.
+Its alternating sampler passed at p95 1.026x / throughput 0.981x, but legacy-first then
+versioned-last sequential controls diverged. It reached 84,942 command and 65,540 async
+operations. Current hard caps are 500,000 command events, one million async invocations
+and 10,000 promotion runs. Projection controls are now adjacent, with names and the 2x
+sequential tripwire unchanged. `projection-adjacent.*` retains the instrumented run and
+`projection-adjacent-source.patch` identifies its exact source against `3eca8197`.
+All 12 cases pass, with actual prepared group/stream plans after each case. A separate
+`projection-adjacent-timed.*` run disables plan/count probes. No CSV baseline or producer
+ceiling has changed. Final alternating command pairs remain required.

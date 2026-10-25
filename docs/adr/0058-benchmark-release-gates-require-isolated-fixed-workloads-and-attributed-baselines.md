@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Benchmark release gates require isolated fixed workloads and attributed baselines
 description: Release benchmark evidence uses isolated fixtures, fixed measured work, explicit growth bounds and reproducible baselines whose changes have attributed causes.
-timestamp: 2026-10-21T13:47:46Z
+timestamp: 2026-10-25T06:32:22Z
 docId: ADR-58
 status: Accepted
 date: 2026-10-21
@@ -37,6 +37,13 @@ Timed actions measure a stated workload. Irrelevant fixture deletion must not ma
 command cost, and fresh identities must not turn intended fresh commands into duplicate probes.
 Growth in streams, events or bookkeeping has an explicit bound and stability evidence; exceeding
 the bound invalidates the sample rather than producing a truncated successful timing.
+
+Control comparisons must see nearby retained populations. Placing every legacy case before
+every versioned case in a growing store can compare different points in that growth, even
+with isolated groups and selected warm-up. Keep corresponding sequential controls adjacent,
+retain the alternating sampler for its stated latency/throughput contract, and verify with
+probes disabled. Representative statistics describe both stream cardinality and event volume;
+many events in one stream do not establish a stream-name lookup population.
 
 Projection rebuild samples reuse one seeded source population and verify the same event count
 on repeated runs. New source stream or rebuild group names do not isolate whole-category replay.
@@ -74,5 +81,7 @@ Timing-sensitive release evidence is run on a quiet machine independently of dev
 - [Plan 315](../plans/315-attribute-the-command-path-append-slowdown-and-restore-trustworthy-benchmark-guards.md).
 - [Plan 316](../plans/316-run-the-benchmark-regression-guards-in-the-release-gate.md).
 - [Plan 321](../plans/321-isolate-the-keiro-bench-harness-so-each-guard-measures-only-its-own-fixture.md).
+- [Harness diagnostics](../../keiro/bench/results/harness-isolation-v1/README.md) retain actual counts, prepared plans, rejected order samples and the adjacent-control investigation; final paired acceptance remains open.
+- [Refusing gate](../../keiro/bench/results/release-gates/README.md) records correctness success and all-guard continuation; passing release acceptance remains open.
 - [ADR-42](0042-producer-outbox-identity-is-a-versioned-source-event-contract.md).
 - [ADR-48](0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md).

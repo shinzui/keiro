@@ -1,0 +1,199 @@
+diff --git a/keiro/bench/Main.hs b/keiro/bench/Main.hs
+index 3e1b013a..41b08b7c 100644
+--- a/keiro/bench/Main.hs
++++ b/keiro/bench/Main.hs
+@@ -112,6 +112,7 @@ import Shibuya.Core.Ingested (Ingested (..))
+ import Shibuya.Core.Types (Envelope (..))
+ import Streamly.Data.Stream qualified as Streamly
+ import System.Environment (lookupEnv)
++import System.IO (hFlush, stdout)
+ import Test.Tasty.Bench (Benchmark, bcompareWithin, bench, bgroup, defaultMain, nfIO)
+ import "hasql-transaction" Hasql.Transaction qualified as Tx
+ import Prelude
+@@ -1197,26 +1198,30 @@ runCommandGrowthProbe store = do
+   for_ [100001 .. 3005000 :: Int] $ \n -> append n
+   sample "grown-3005000" 3005000
+   where
+-    append n = runStoreChecked store $ do
+-      result <- runDomainCommand defaultRunCommandOptions domainAcceptedOneHandler (stream ("bench-probe-" <> Text.pack (show n))) EmitOne
++    append n = appendTarget (stream ("bench-probe-" <> Text.pack (show n)))
++    appendTarget target = runStoreChecked store $ do
++      result <- runDomainCommand defaultRunCommandOptions domainAcceptedOneHandler target EmitOne
+       case result of
+         Right value | value ^. #result . #eventsAppended == 1 -> pure ()
+         other -> liftIO (fail (show other))
+     sample :: Text -> Int -> IO ()
+     sample label n = do
+       commandPlanProbe store label
+-      started <- getMonotonicTimeNSec
+-      replicateM_ 100 $ runStoreChecked store $ do
+-        result <- runDomainCommand defaultRunCommandOptions domainNoOpHandler (stream "bench-probe-absent") SelectNoOp
+-        case result of
+-          Right value | value ^. #result . #eventsAppended == 0 -> pure ()
+-          other -> liftIO (fail (show other))
+-      stopped <- getMonotonicTimeNSec
+-      freshStarted <- getMonotonicTimeNSec
+-      for_ [1 .. 100 :: Int] $ \sampleIndex -> append (10000000 + n * 100 + (if label == "grown-5000-after-analyze" then 100 else 0) + sampleIndex)
+-      freshStopped <- getMonotonicTimeNSec
+-      putStrLn ("FRESH_PROBE label=" <> Text.unpack label <> " mean_ns=" <> show ((freshStopped - freshStarted) `div` 100))
+-      putStrLn ("NOOP_PROBE label=" <> Text.unpack label <> " events=" <> show n <> " mean_ns=" <> show ((stopped - started) `div` 100))
++      for_ [1 .. 5 :: Int] $ \block -> do
++        started <- getMonotonicTimeNSec
++        replicateM_ 100 $ runStoreChecked store $ do
++          result <- runDomainCommand defaultRunCommandOptions domainNoOpHandler (stream "bench-probe-absent") SelectNoOp
++          case result of
++            Right value | value ^. #result . #eventsAppended == 0 -> pure ()
++            other -> liftIO (fail (show other))
++        stopped <- getMonotonicTimeNSec
++        freshStarted <- getMonotonicTimeNSec
++        for_ [1 .. 100 :: Int] $ \sampleIndex ->
++          appendTarget (stream (Text.intercalate "-" ["bench-probe-diagnostic", label, Text.pack (show block), Text.pack (show sampleIndex)]))
++        freshStopped <- getMonotonicTimeNSec
++        putStrLn ("FRESH_PROBE label=" <> Text.unpack label <> " block=" <> show block <> " mean_ns=" <> show ((freshStopped - freshStarted) `div` 100))
++        putStrLn ("NOOP_PROBE label=" <> Text.unpack label <> " block=" <> show block <> " events=" <> show n <> " mean_ns=" <> show ((stopped - started) `div` 100))
++      hFlush stdout
+ 
+ runResetProbes :: Store.KirokuStore -> Store.KirokuStore -> Store.KirokuStore -> IO ()
+ runResetProbes outboxStore inboxStore producerStore = do
+diff --git a/keiro/bench/ReadModelBench.hs b/keiro/bench/ReadModelBench.hs
+index 746b7fe9..8924e50c 100644
+--- a/keiro/bench/ReadModelBench.hs
++++ b/keiro/bench/ReadModelBench.hs
+@@ -11,11 +11,12 @@ module ReadModelBench
+   )
+ where
+ 
+-import BenchSetup (selected, setupTrace)
++import BenchSetup (selectedWithCleanup, setupTrace)
+ import CommandProbe (commandPlanProbe, workCountProbe)
+ import Control.Monad (forM, replicateM_)
+ import Data.Aeson qualified as Aeson
+ import Data.ByteString qualified as ByteString
++import Data.ByteString.Lazy.Char8 qualified as Lazy
+ import Data.Foldable (toList)
+ import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
+ import Data.List qualified as List
+@@ -105,6 +106,7 @@ import Kiroku.Store.Types
+     StreamVersion (..),
+   )
+ import System.Environment (lookupEnv)
++import System.IO (stderr)
+ import Test.Tasty.Bench (Benchmark, bcompareWithin, bench, bgroup, nfIO)
+ import "hasql-transaction" Hasql.Transaction qualified as Tx
+ import Prelude
+@@ -215,23 +217,14 @@ readModelBenchmarks fixture =
+       "projection"
+       [ bgroup
+           "inline"
+-          [ bgroup
+-              "legacy"
+-              [ inlineScenarioBench fixture "one-target" "bench-legacy-one",
+-                inlineScenarioBench fixture "three-target" "bench-legacy-three",
+-                inlineScenarioBench fixture "three-groups" "bench-legacy-groups",
+-                inlineScenarioBench fixture "many-revisions" "bench-legacy-many-revisions",
+-                inlineScenarioBench fixture "mixed-delivery" "bench-legacy-mixed"
+-              ],
+-            bgroup
+-              "versioned"
+-              [ comparedInline "one-target" "bench-versioned-one",
+-                comparedInline "three-target" "bench-versioned-three",
+-                comparedInline "three-groups" "bench-versioned-groups",
+-                comparedInline "many-revisions" "bench-versioned-many-revisions",
+-                comparedInline "mixed-delivery" "bench-versioned-mixed"
++          ( concat
++              [ inlinePair "one-target" "one",
++                inlinePair "three-target" "three",
++                inlinePair "three-groups" "groups",
++                inlinePair "many-revisions" "many-revisions",
++                inlinePair "mixed-delivery" "mixed"
+               ]
+-          ],
++          ),
+         bgroup
+           "async"
+           [ bgroup "legacy" [asyncScenarioBench fixture "mixed-delivery" "bench-legacy-mixed"],
+@@ -273,6 +266,12 @@ readModelBenchmarks fixture =
+       ]
+   ]
+   where
++    -- Compare adjacent populations rather than five early legacy cases with
++    -- five later versioned cases after the shared event store has grown.
++    inlinePair benchmarkName suffix =
++      [ bgroup "legacy" [inlineScenarioBench fixture benchmarkName ("bench-legacy-" <> suffix)],
++        bgroup "versioned" [comparedInline benchmarkName ("bench-versioned-" <> suffix)]
++      ]
+     comparedInline benchmarkName scenarioKey =
+       bcompareWithin 0 projectionDiagnosticTimeBudget (inlineLegacyPattern benchmarkName) $
+         inlineScenarioBench fixture benchmarkName scenarioKey
+@@ -336,13 +335,13 @@ asyncLegacyPattern =
+ 
+ inlineScenarioBench :: ReadModelBenchFixture -> String -> Text -> Benchmark
+ inlineScenarioBench fixture benchmarkName scenarioKey =
+-  selected (warmScenario scenarioKey (runInlineScenario fixture scenarioKey)) $ \_ ->
++  selectedWithCleanup (warmScenario scenarioKey (runInlineScenario fixture scenarioKey)) (const (probeScenarioPlans fixture scenarioKey)) $ \_ ->
+     bench benchmarkName $ nfIO (runInlineScenario fixture scenarioKey)
+ 
+ runInlineScenario :: ReadModelBenchFixture -> Text -> IO ()
+ runInlineScenario fixture scenarioKey = do
+   scenario <- requireScenario fixture scenarioKey
+-  invocation <- nextCounter "read-model command events" 100000 fixture.commandCounter
++  invocation <- nextCounter "read-model command events" 500000 fixture.commandCounter
+   let target = stream ("bench-projection-command-" <> scenarioKey <> "-" <> Text.pack (show invocation))
+   result <-
+     runResourceStoreChecked fixture.runner $
+@@ -359,7 +358,7 @@ runInlineScenario fixture scenarioKey = do
+ 
+ asyncScenarioBench :: ReadModelBenchFixture -> String -> Text -> Benchmark
+ asyncScenarioBench fixture benchmarkName scenarioKey =
+-  selected (warmScenario (scenarioKey <> "-async") (runAsyncScenario fixture scenarioKey)) $ \_ ->
++  selectedWithCleanup (warmScenario (scenarioKey <> "-async") (runAsyncScenario fixture scenarioKey)) (const (probeScenarioPlans fixture scenarioKey)) $ \_ ->
+     bench benchmarkName $ nfIO (runAsyncScenario fixture scenarioKey)
+ 
+ runAsyncScenario :: ReadModelBenchFixture -> Text -> IO ()
+@@ -367,7 +366,7 @@ runAsyncScenario fixture scenarioKey = do
+   scenario <- requireScenario fixture scenarioKey
+   (projectionId, projection) <-
+     maybe (fail ("scenario has no async delivery: " <> Text.unpack scenarioKey)) pure scenario.asyncDelivery
+-  invocation <- nextCounter "read-model async operations" 100000 fixture.asyncCounter
++  invocation <- nextCounter "read-model async operations" 1000000 fixture.asyncCounter
+   outcome <-
+     runStoreChecked fixture.store $
+       Store.runTransaction
+@@ -1454,7 +1453,7 @@ probeReadModelCounts fixture = do
+   commands <- readIORef fixture.commandCounter
+   asyncOperations <- readIORef fixture.asyncCounter
+   promotionRuns <- readIORef fixture.runCounter
+-  setupTrace "counts" "read-model" ("command_events=" <> show commands <> " command_budget=100000 async_operations=" <> show asyncOperations <> " async_budget=100000 promotion_runs=" <> show promotionRuns <> " promotion_budget=10000")
++  setupTrace "counts" "read-model" ("command_events=" <> show commands <> " command_budget=500000 async_operations=" <> show asyncOperations <> " async_budget=1000000 promotion_runs=" <> show promotionRuns <> " promotion_budget=10000")
+   workCountProbe fixture.store "read-model" "bench-projection-command-" (fromIntegral commands) (fromIntegral commands)
+ 
+ fixedOccurredAt :: UTCTime
+@@ -1467,3 +1466,28 @@ runResourceStoreChecked (StoreRunner runner) action =
+ runStoreChecked :: Store.KirokuStore -> Eff '[Store, Error Store.StoreError, IOE] value -> IO value
+ runStoreChecked store action =
+   store `seq` Store.runStoreIO store action >>= either (fail . show) pure
++
++
++-- Inspect the same prepared group-admission query used by the completed case.
++-- This is diagnostic only and never runs during accepted timing samples.
++probeScenarioPlans :: ReadModelBenchFixture -> Text -> IO ()
++probeScenarioPlans fixture scenarioKey = do
++  enabled <- lookupEnv "KEIRO_BENCH_READ_MODEL_PLAN_PROBE"
++  when (enabled == Just "1") $ do
++    commandPlanProbe fixture.store (scenarioKey <> "-after-case")
++    scenario <- requireScenario fixture scenarioKey
++    for_ scenario.scenarioGroups $ \group -> do
++      let groupText = rebuildGroupIdText group.groupId
++      plan <- runStoreChecked fixture.store $ Store.runTransaction $ do
++        names <- Tx.statement () $ preparable
++          "SELECT name FROM pg_prepared_statements WHERE statement LIKE 'SELECT locked_group.status,%'"
++          E.noParams
++          (D.rowList (D.column (D.nonNullable D.text)))
++        name <- case names of
++          [name] -> pure name
++          _ -> error ("expected actual projection group query: " <> show names)
++        Tx.statement () $ preparable
++          ("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) EXECUTE \"" <> Text.replace "\"" "\"\"" name <> "\"('" <> Text.replace "'" "''" groupText <> "')")
++          E.noParams
++          (D.singleRow (D.column (D.nonNullable D.json)))
++      Lazy.hPutStrLn stderr (Aeson.encode (Aeson.object ["scenario" Aeson..= scenarioKey, "group" Aeson..= groupText, "plan" Aeson..= (plan :: Aeson.Value)]))

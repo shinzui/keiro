@@ -112,6 +112,7 @@ import Shibuya.Core.Ingested (Ingested (..))
 import Shibuya.Core.Types (Envelope (..))
 import Streamly.Data.Stream qualified as Streamly
 import System.Environment (lookupEnv)
+import System.IO (hFlush, stdout)
 import Test.Tasty.Bench (Benchmark, bcompareWithin, bench, bgroup, defaultMain, nfIO)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Prelude
@@ -1197,26 +1198,30 @@ runCommandGrowthProbe store = do
   for_ [100001 .. 3005000 :: Int] $ \n -> append n
   sample "grown-3005000" 3005000
   where
-    append n = runStoreChecked store $ do
-      result <- runDomainCommand defaultRunCommandOptions domainAcceptedOneHandler (stream ("bench-probe-" <> Text.pack (show n))) EmitOne
+    append n = appendTarget (stream ("bench-probe-" <> Text.pack (show n)))
+    appendTarget target = runStoreChecked store $ do
+      result <- runDomainCommand defaultRunCommandOptions domainAcceptedOneHandler target EmitOne
       case result of
         Right value | value ^. #result . #eventsAppended == 1 -> pure ()
         other -> liftIO (fail (show other))
     sample :: Text -> Int -> IO ()
     sample label n = do
       commandPlanProbe store label
-      started <- getMonotonicTimeNSec
-      replicateM_ 100 $ runStoreChecked store $ do
-        result <- runDomainCommand defaultRunCommandOptions domainNoOpHandler (stream "bench-probe-absent") SelectNoOp
-        case result of
-          Right value | value ^. #result . #eventsAppended == 0 -> pure ()
-          other -> liftIO (fail (show other))
-      stopped <- getMonotonicTimeNSec
-      freshStarted <- getMonotonicTimeNSec
-      for_ [1 .. 100 :: Int] $ \sampleIndex -> append (10000000 + n * 100 + (if label == "grown-5000-after-analyze" then 100 else 0) + sampleIndex)
-      freshStopped <- getMonotonicTimeNSec
-      putStrLn ("FRESH_PROBE label=" <> Text.unpack label <> " mean_ns=" <> show ((freshStopped - freshStarted) `div` 100))
-      putStrLn ("NOOP_PROBE label=" <> Text.unpack label <> " events=" <> show n <> " mean_ns=" <> show ((stopped - started) `div` 100))
+      for_ [1 .. 5 :: Int] $ \block -> do
+        started <- getMonotonicTimeNSec
+        replicateM_ 100 $ runStoreChecked store $ do
+          result <- runDomainCommand defaultRunCommandOptions domainNoOpHandler (stream "bench-probe-absent") SelectNoOp
+          case result of
+            Right value | value ^. #result . #eventsAppended == 0 -> pure ()
+            other -> liftIO (fail (show other))
+        stopped <- getMonotonicTimeNSec
+        freshStarted <- getMonotonicTimeNSec
+        for_ [1 .. 100 :: Int] $ \sampleIndex ->
+          appendTarget (stream (Text.intercalate "-" ["bench-probe-diagnostic", label, Text.pack (show block), Text.pack (show sampleIndex)]))
+        freshStopped <- getMonotonicTimeNSec
+        putStrLn ("FRESH_PROBE label=" <> Text.unpack label <> " block=" <> show block <> " mean_ns=" <> show ((freshStopped - freshStarted) `div` 100))
+        putStrLn ("NOOP_PROBE label=" <> Text.unpack label <> " block=" <> show block <> " events=" <> show n <> " mean_ns=" <> show ((stopped - started) `div` 100))
+      hFlush stdout
 
 runResetProbes :: Store.KirokuStore -> Store.KirokuStore -> Store.KirokuStore -> IO ()
 runResetProbes outboxStore inboxStore producerStore = do

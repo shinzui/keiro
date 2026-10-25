@@ -1,0 +1,87 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.21.0.0 (bench:keiro-bench) (file bench/Main.hs changed)
+Preprocessing benchmark 'keiro-bench' for keiro-0.21.0.0...
+Building benchmark 'keiro-bench' for keiro-0.21.0.0...
+[ 2 of 10] Compiling CommandProbe     ( bench/CommandProbe.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/CommandProbe.o ) [Source file changed]
+[ 9 of 10] Compiling ReadModelBench   ( bench/ReadModelBench.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/ReadModelBench.o ) [Source file changed]
+[10 of 10] Compiling Main             ( bench/Main.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/Main.o ) [Source file changed]
+[11 of 11] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench [Objects changed]
+scripts/bench-regression.sh projection
+##### guard projection 2026-10-25T06:13:31Z
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.21.0.0 (bench:keiro-bench) (ephemeral targets)
+Preprocessing benchmark 'keiro-bench' for keiro-0.21.0.0...
+Building benchmark 'keiro-bench' for keiro-0.21.0.0...
+Running 1 benchmarks...
+Benchmark keiro-bench: RUNNING...
+BENCH_SETUP gAll
+r  projection
+o    inline
+u      legacy
+p        one-target:     =read-model scenario=shared schema history=25000
+BENCH_SETUP group=read-model scenario=shared seed_streams=5000 seed_events=25000 analyze=once-before-warm-up
+read-model-latency-run=1 samples=500 legacy_p95_ns=386000 versioned_p95_ns=400000 p95_ratio=1.0362694300518134 throughput_ratio=0.96033629836786
+read-model-latency-run=2 samples=500 legacy_p95_ns=424000 versioned_p95_ns=435000 p95_ratio=1.025943396226415 throughput_ratio=0.980529153692918
+read-model-latency-run=3 samples=500 legacy_p95_ns=410000 versioned_p95_ns=412000 p95_ratio=1.0048780487804878 throughput_ratio=0.9808437712064225
+read-model-latency-run=4 samples=500 legacy_p95_ns=403000 versioned_p95_ns=413000 p95_ratio=1.0248138957816377 throughput_ratio=0.9826236785234507
+read-model-latency-run=5 samples=500 legacy_p95_ns=414000 versioned_p95_ns=426000 p95_ratio=1.0289855072463767 throughput_ratio=0.8828169218866023
+read-model-latency-median runs=5 samples_per_run=500 p95_ratio=1.025943396226415 p95_budget=1.25 throughput_ratio=0.980529153692918 throughput_budget=0.90
+BENCH_SETUP group=read-model scenario=bench-legacy-one warm-up invocations=3
+BOK
+E          249  μs ±  17 μs, 72% less than baseline
+N        three-target:   CH_SETUP group=read-model scenario=bench-legacy-three warm-up invocations=3
+BEOK
+NC          277  μs ±  15 μs, 73% less than baseline
+H        three-groups:   _SETUP group=read-model scenario=bench-legacy-groups warm-up invocations=3
+BENOK
+C          326  μs ±  31 μs, 72% less than baseline
+H        many-revisions: _SETUP group=read-model scenario=bench-legacy-many-revisions warm-up invocations=3
+BENCH_SETUP group=read-modelOK
+ s          243  μs ± 6.9 μs, 79% less than baseline
+cenario        mixed-delivery: =bench-legacy-mixed warm-up invocations=3
+BOK
+ENCH_SETUP group=read-model scenario=          421  μs ± 361 μs, 63% less than baseline
+b      versioned
+e        one-target:     nch-versioned-one warm-up invocations=3
+BENCH_SETUP group=reaFAIL
+d-          768  μs ±  54 μs, 3.08x, 37% less than baseline
+m          Use -p '/projection/&&/versioned.one-target/' to rerun this test only.
+o        three-target:   del scenario=bench-versioned-three warm-up invocations=3
+BENCH_SETUP groFAIL
+          703  μs ±  44 μs, 2.54x, 48% less than baseline
+          Use -p '/projection/&&/versioned.three-target/' to rerun this test only.
+        three-groups:   up=read-model scenario=bench-versioned-groups warm-up invocations=3
+BENCH_SFAIL
+E          683  μs ±  63 μs, 2.10x, 56% less than baseline
+T          Use -p '/projection/&&/versioned.three-groups/' to rerun this test only.
+UP        many-revisions:  group=read-model scenario=bench-versioned-many-revisions warm-up invocations=3
+BEOK
+NCH_          418  μs ±  37 μs, 1.72x, 71% less than baseline
+S        mixed-delivery: ETUP group=read-model scenario=bench-versioned-mixed warm-up invocations=3
+BENOK
+C          476  μs ±  35 μs, 1.13x, 69% less than baseline
+H    async
+_      legacy
+S        mixed-delivery: ETUP group=read-model scenario=bench-legacy-mixed-async warm-up invocations=3
+BENCH_SETUP groOK
+up=          196  μs ± 106 μs,       same as baseline
+r      versioned
+ea        mixed-delivery: d-model scenario=bench-versioned-mixed-async warm-up invocations=3
+BENCH_SETUP group=counts scenario=read-model command_events=84942 command_budget=100000 async_operations=65540 async_budget=100000 promotion_runs=0 promotion_budget=10000
+FAIL
+          237  μs ±  15 μs, 1.21x, 53% more than baseline
+          Use -p '/projection/&&/async.versioned.mixed-delivery/' to rerun this test only.
+
+4 out of 12 tests failed (50.40s)
+Benchmark keiro-bench: ERROR
+Error: [Cabal-7125]
+Benchmarks failed for bench:keiro-bench from keiro-0.21.0.0.
+
+##### guard summary 2026-10-25T06:14:25Z
+GUARD(projection)=1
+BENCH_REGRESSION=FAILED
+error: recipe `bench-regression` failed on line 163 with exit code 1
