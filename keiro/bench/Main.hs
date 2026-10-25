@@ -6,7 +6,7 @@ module Main
   )
 where
 
-import BenchSetup (freshCounter, memoSetup, nextIteration, selected, selectedCounter, setupTrace)
+import BenchSetup (freshCounter, memoSetup, nextBoundedIteration, nextIteration, selected, selectedCounter, setupTrace)
 import CommandProbe (commandPlanProbe, tableResetProbe)
 import Control.Concurrent (threadDelay)
 import Control.Monad (replicateM_)
@@ -724,7 +724,7 @@ rebuildScenarioBench store =
   selectedCounter "rebuild" 600 setup $ \runCounter -> bench "three-categories-200" $ nfIO (runRebuild False runCounter)
   where
     setup = do
-      setupTrace "rebuild" "three-categories-200" "schema source_events=600"
+      setupTrace "rebuild" "three-categories-200" "schema source_events=600 bookkeeping_run_budget=10000"
       runStoreChecked store do
         Store.runTransaction (Tx.sql rebuildBenchSql)
         traverse_ seedRebuildStream rebuildStreams
@@ -738,7 +738,7 @@ rebuildScenarioBench store =
       when (probe == Just "1") (replicateM_ 3 (runRebuild True counter))
       pure counter
     runRebuild probe runCounter = do
-      runNumber <- nextIteration "rebuild" 600 runCounter
+      runNumber <- nextBoundedIteration "rebuild" 10000 runCounter
       runStoreChecked store do
         let request =
               RebuildRequest

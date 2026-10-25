@@ -1,5 +1,5 @@
 -- | Selection-aware fixture diagnostics shared by the benchmark groups.
-module BenchSetup (selected, memoSetup, setupTrace, freshCounter, nextIteration, selectedCounter) where
+module BenchSetup (selected, memoSetup, setupTrace, freshCounter, nextIteration, nextBoundedIteration, selectedCounter) where
 
 import Control.Concurrent.MVar (modifyMVar, newMVar)
 import Control.DeepSeq (NFData (..))
@@ -44,9 +44,12 @@ iterationBudget :: Int -> Int
 iterationBudget units = 100000 `div` max 1 units
 
 nextIteration :: String -> Int -> IORef Int -> IO Int
-nextIteration label units counter = do
+nextIteration label units = nextBoundedIteration label (iterationBudget units)
+
+nextBoundedIteration :: String -> Int -> IORef Int -> IO Int
+nextBoundedIteration label budget counter = do
   next <- atomicModifyIORef' counter (\current -> let n = current + 1 in (n, n))
-  if next > iterationBudget units
+  if next > budget
     then fail ("benchmark fixture growth budget exceeded: " <> label <> " iterations=" <> show next)
     else pure next
 

@@ -85,6 +85,11 @@ reset-alternative probes and alternating pairs remain acceptance work.
 
 ## Surprises & Discoveries
 
+The first durable rebuild probe correctly aborted at 167 invocations: its counter
+was incorrectly charging fixed source replay as retained growth. Rebuilds now have
+an independent 10,000-run bookkeeping budget; source count stays exactly 600 and
+no run appends sources. The failed probe remains retained, not treated as a timing.
+
 
 `prepareInboxDelegatedBenchmarks` creates the business table, seeds duplicate scenarios and
 executes each fresh scenario once before defaultMain. Its history nodes instead use

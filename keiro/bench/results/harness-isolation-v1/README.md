@@ -53,3 +53,8 @@ fixture and do not establish durable baseline values. `KEIRO_BENCH_RESET_PROBE=1
 compares five TRUNCATE and DELETE samples at fixed populated row counts for outbox
 (2,000), ordinary inbox (2,000) and producer outbox (1,000), including before/after
 counts and relation bytes. No timed command deletes have returned.
+
+The first durable rebuild probe aborted at run 167 because fixed replay work was
+charged as retained growth. It is retained as a failed probe. The corrected
+harness limits rebuild bookkeeping to 10,000 runs independently of the fixed
+600-event source; command fresh-event budgets remain unchanged.
