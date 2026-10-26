@@ -6,7 +6,7 @@ docId: DOC-12
 tags: [keiro, dsl, mappings, adoption]
 generated:
   by: openai-codex/gpt-6.1-sol
-  at: 2026-10-14T17:10:13Z
+  at: 2026-10-26T23:15:24Z
 ---
 
 # Adopting Mapped Consumer Surfaces
@@ -138,3 +138,28 @@ A cases table, bumped version, or rebuilt snapshot is finite repository evidence
 not consumer retained-history approval. Compare the required historical observations
 before deployment and retain a compatible replay path where needed. No consumer
 repository, deployment, or stored data is changed by this feature.
+
+
+## Qualifying structural enum equality
+
+Candidate Language 6 supports exact `==` and `!=` guards for one mapped structural
+enum declaration, including qualified constructor literals. The
+[scope example](keiro-dsl-types-and-mappings.md#exact-equality-for-structural-enums-candidate-language-6)
+shows the same owner type inside a required record and as a direct command and
+register. Generated structural conformance validates the total binding and finite
+projection laws; application tests must also pin each owner's expected wire string.
+
+Wait for a package release that includes this capability before replacing a
+consumer's native-enum bridge. Re-scaffold and compile using that release, run its
+binding/concrete/symbolic tests, and compare retained supported event bytes through
+the old and new codecs. Separately compare register layout, fold identity, and the
+three snapshot admission discriminators. Replay supported history, rebuild stale
+snapshots, and compare full replay with hydration from an admitted compatible
+snapshot. If byte parity cannot be established, use an explicit migration or a
+fresh supported history baseline. Matching enum strings alone does not make a
+bridge removal replay-neutral.
+
+The adopter tracked by
+`mori://shinzui/kotei/plans/103-reconstruct-recorded-failure-environments-for-inspection-and-debugging`
+can retain its existing adapter until those consumer-owned release and history
+checks pass. Keiro implementation evidence does not mark that adoption complete.

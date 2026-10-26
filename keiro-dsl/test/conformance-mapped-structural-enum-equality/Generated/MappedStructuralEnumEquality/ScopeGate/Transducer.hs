@@ -14,7 +14,7 @@ import Data.Text (Text)
 import Generated.MappedStructuralEnumEquality.StructuralProjections qualified as StructuralProjections
 import Conformance.MappedStructuralEnumEquality.Domain (RequiredScope)
 import Keiki.Builder qualified as B
-import Keiki.Core (HsPred, SymTransducer, (.==), (./=))
+import Keiki.Core (HsPred, SymTransducer, (.==), (./=), (.&&), (.||))
 import Keiki.Core qualified as K
 import Keiki.Symbolic qualified as S
 import Keiki.Builder ((=:))
@@ -52,13 +52,65 @@ scopeGateTransducer =
           , request = d.request
           })
         B.goto ScopeGateDone
+      B.onCmd inCtorEqRight $ \d -> B.do
+        let commandRequiredScope = K.inpProj StructuralProjections.requiredScopeWitness inCtorEqRight (#requiredScope :: K.Index (RegFieldsOf EqRightData) RequiredScope)
+        B.requireGuard $
+          commandRequiredScope .== K.lit ("pipeline" :: Text)
+        B.slot @"requiredScope" =: d.requiredScope
+        B.emit wireEqRightAccepted (EqRightAcceptedTermFields
+          { requiredScope = d.requiredScope
+          , request = d.request
+          })
+        B.goto ScopeGateDone
+      B.onCmd inCtorEqLeft $ \d -> B.do
+        let commandRequiredScope = K.inpProj StructuralProjections.requiredScopeWitness inCtorEqLeft (#requiredScope :: K.Index (RegFieldsOf EqLeftData) RequiredScope)
+        B.requireGuard $
+          K.lit ("pipeline" :: Text) .== commandRequiredScope
+        B.slot @"requiredScope" =: d.requiredScope
+        B.emit wireEqLeftAccepted (EqLeftAcceptedTermFields
+          { requiredScope = d.requiredScope
+          , request = d.request
+          })
+        B.goto ScopeGateDone
+      B.onCmd inCtorNeRight $ \d -> B.do
+        let commandRequiredScope = K.inpProj StructuralProjections.requiredScopeWitness inCtorNeRight (#requiredScope :: K.Index (RegFieldsOf NeRightData) RequiredScope)
+        B.requireGuard $
+          commandRequiredScope ./= K.lit ("diagnostic" :: Text)
+        B.slot @"requiredScope" =: d.requiredScope
+        B.emit wireNeRightAccepted (NeRightAcceptedTermFields
+          { requiredScope = d.requiredScope
+          , request = d.request
+          })
+        B.goto ScopeGateDone
+      B.onCmd inCtorNeLeft $ \d -> B.do
+        let commandRequiredScope = K.inpProj StructuralProjections.requiredScopeWitness inCtorNeLeft (#requiredScope :: K.Index (RegFieldsOf NeLeftData) RequiredScope)
+        B.requireGuard $
+          K.lit ("diagnostic" :: Text) ./= commandRequiredScope
+        B.slot @"requiredScope" =: d.requiredScope
+        B.emit wireNeLeftAccepted (NeLeftAcceptedTermFields
+          { requiredScope = d.requiredScope
+          , request = d.request
+          })
+        B.goto ScopeGateDone
+      B.onCmd inCtorSelf $ \d -> B.do
+        let commandRequiredScope = K.inpProj StructuralProjections.requiredScopeWitness inCtorSelf (#requiredScope :: K.Index (RegFieldsOf SelfData) RequiredScope)
+        B.requireGuard $
+          commandRequiredScope .== commandRequiredScope
+          .&& (commandRequiredScope ./= commandRequiredScope
+          .|| commandRequiredScope .== commandRequiredScope)
+        B.slot @"requiredScope" =: K.opaqueLit (case K.checkFieldProjectionKey StructuralProjections.requiredScopeWitness "pipeline" of Right owner -> owner; Left problem -> error (show problem))
+        B.emit wireSelfAccepted (SelfAcceptedTermFields
+          { requiredScope = d.requiredScope
+          , request = d.request
+          })
+        B.goto ScopeGateDone
  where
   isTerminal = \case
     ScopeGateDone -> True
     _ -> False
 
 scopeGateFoldFingerprint :: Text
-scopeGateFoldFingerprint = "43e92665304a99829119f8437bd7c0b5"
+scopeGateFoldFingerprint = "e0a7710ac6ee88af5cb2a06e40fa922f"
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)
@@ -69,6 +121,11 @@ scopeGatePredicateVerifications :: IO [(Text, BehaviorOwnership, S.PredicateVeri
 scopeGatePredicateVerifications = sequence
   [ verifyTransition "transition1ReadyMatch" GeneratedOwned ScopeGateReady 0
   , verifyTransition "transition2ReadyDiffer" GeneratedOwned ScopeGateReady 1
+  , verifyTransition "transition3ReadyEqRight" GeneratedOwned ScopeGateReady 2
+  , verifyTransition "transition4ReadyEqLeft" GeneratedOwned ScopeGateReady 3
+  , verifyTransition "transition5ReadyNeRight" GeneratedOwned ScopeGateReady 4
+  , verifyTransition "transition6ReadyNeLeft" GeneratedOwned ScopeGateReady 5
+  , verifyTransition "transition7ReadySelf" GeneratedOwned ScopeGateReady 6
   ]
  where
   verifyTransition label owner source edgeIndex =

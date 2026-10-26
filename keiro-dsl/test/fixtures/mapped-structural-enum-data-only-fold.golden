@@ -1,0 +1,14 @@
+8b4128a98997f93292b0cdc3a2dd4413
+semantic-contract:keiro-dsl/projection-catalog/1
+semantic-contract:keiro-dsl/runtime-semantics/2
+state:Ready|terminal=false
+state:Done|terminal=true
+reg:requiredScope:RequiredScope=initial
+mapped-register:RequiredScope|wire=0b2821aba8872fd3|canonical=conformance.RequiredScope.v1|binding=Conformance.MappedStructuralEnumEquality.Bindings.requiredScopeBinding|binding-version=1|initial=Conformance.MappedStructuralEnumEquality.Bindings.initialScope
+transition:live|Ready|Match|implementation=generated|guard=|writes=requiredScope:=cmd.requiredScope|emits=Matched|outputs=Matched=generated-command-identity:Match[requiredScope=requiredScope:RequiredScope,request=request:Request]|goto=Done
+transition:live|Ready|Differ|implementation=generated|guard=|writes=requiredScope:=cmd.requiredScope|emits=Differed|outputs=Differed=generated-command-identity:Differ[requiredScope=requiredScope:RequiredScope,request=request:Request]|goto=Done
+transition:live|Ready|EqRight|implementation=generated|guard=|writes=requiredScope:=cmd.requiredScope|emits=EqRightAccepted|outputs=EqRightAccepted=generated-command-identity:EqRight[requiredScope=requiredScope:RequiredScope,request=request:Request]|goto=Done
+transition:live|Ready|EqLeft|implementation=generated|guard=|writes=requiredScope:=cmd.requiredScope|emits=EqLeftAccepted|outputs=EqLeftAccepted=generated-command-identity:EqLeft[requiredScope=requiredScope:RequiredScope,request=request:Request]|goto=Done
+transition:live|Ready|NeRight|implementation=generated|guard=|writes=requiredScope:=cmd.requiredScope|emits=NeRightAccepted|outputs=NeRightAccepted=generated-command-identity:NeRight[requiredScope=requiredScope:RequiredScope,request=request:Request]|goto=Done
+transition:live|Ready|NeLeft|implementation=generated|guard=|writes=requiredScope:=cmd.requiredScope|emits=NeLeftAccepted|outputs=NeLeftAccepted=generated-command-identity:NeLeft[requiredScope=requiredScope:RequiredScope,request=request:Request]|goto=Done
+transition:live|Ready|Self|implementation=generated|guard=|writes=requiredScope:=cmd.requiredScope|emits=SelfAccepted|outputs=SelfAccepted=generated-command-identity:Self[requiredScope=requiredScope:RequiredScope,request=request:Request]|goto=Done

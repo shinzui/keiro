@@ -30,8 +30,43 @@ data DifferData = DifferData
   }
   deriving stock (Generic, Eq, Show)
 
+data EqRightData = EqRightData
+  { requiredScope :: !RequiredScope
+  , request :: !Request
+  }
+  deriving stock (Generic, Eq, Show)
+
+data EqLeftData = EqLeftData
+  { requiredScope :: !RequiredScope
+  , request :: !Request
+  }
+  deriving stock (Generic, Eq, Show)
+
+data NeRightData = NeRightData
+  { requiredScope :: !RequiredScope
+  , request :: !Request
+  }
+  deriving stock (Generic, Eq, Show)
+
+data NeLeftData = NeLeftData
+  { requiredScope :: !RequiredScope
+  , request :: !Request
+  }
+  deriving stock (Generic, Eq, Show)
+
+data SelfData = SelfData
+  { requiredScope :: !RequiredScope
+  , request :: !Request
+  }
+  deriving stock (Generic, Eq, Show)
+
 data ScopeGateCommand = Match !MatchData
   | Differ !DifferData
+  | EqRight !EqRightData
+  | EqLeft !EqLeftData
+  | NeRight !NeRightData
+  | NeLeft !NeLeftData
+  | Self !SelfData
   deriving stock (Generic, Eq, Show)
 
 data MatchedData = MatchedData
@@ -46,8 +81,43 @@ data DifferedData = DifferedData
   }
   deriving stock (Generic, Eq, Show)
 
+data EqRightAcceptedData = EqRightAcceptedData
+  { requiredScope :: !RequiredScope
+  , request :: !Request
+  }
+  deriving stock (Generic, Eq, Show)
+
+data EqLeftAcceptedData = EqLeftAcceptedData
+  { requiredScope :: !RequiredScope
+  , request :: !Request
+  }
+  deriving stock (Generic, Eq, Show)
+
+data NeRightAcceptedData = NeRightAcceptedData
+  { requiredScope :: !RequiredScope
+  , request :: !Request
+  }
+  deriving stock (Generic, Eq, Show)
+
+data NeLeftAcceptedData = NeLeftAcceptedData
+  { requiredScope :: !RequiredScope
+  , request :: !Request
+  }
+  deriving stock (Generic, Eq, Show)
+
+data SelfAcceptedData = SelfAcceptedData
+  { requiredScope :: !RequiredScope
+  , request :: !Request
+  }
+  deriving stock (Generic, Eq, Show)
+
 data ScopeGateEvent = Matched !MatchedData
   | Differed !DifferedData
+  | EqRightAccepted !EqRightAcceptedData
+  | EqLeftAccepted !EqLeftAcceptedData
+  | NeRightAccepted !NeRightAcceptedData
+  | NeLeftAccepted !NeLeftAcceptedData
+  | SelfAccepted !SelfAcceptedData
   deriving stock (Generic, Eq, Show)
 
 type ScopeGateRegs =

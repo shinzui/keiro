@@ -28,8 +28,19 @@ aggregate ScopeGate
   states Ready Done!
   command Match { requiredScope:RequiredScope request:Request }
   command Differ { requiredScope:RequiredScope request:Request }
+  command EqRight { requiredScope:RequiredScope request:Request }
+  command EqLeft { requiredScope:RequiredScope request:Request }
+  command NeRight { requiredScope:RequiredScope request:Request }
+  command NeLeft { requiredScope:RequiredScope request:Request }
+  command Self { requiredScope:RequiredScope request:Request }
   event Matched = fields(Match)
   event Differed = fields(Differ)
+  event EqRightAccepted = fields(EqRight)
+  event EqLeftAccepted = fields(EqLeft)
+  event NeRightAccepted = fields(NeRight)
+  event NeLeftAccepted = fields(NeLeft)
+  event SelfAccepted = fields(Self)
+
 
   Ready -- Match -->
     guard cmd.requiredScope == reg.requiredScope
@@ -41,6 +52,36 @@ aggregate ScopeGate
     guard cmd.requiredScope != reg.requiredScope
     write requiredScope := cmd.requiredScope
     emit Differed
+    goto Done
+
+  Ready -- EqRight -->
+    guard cmd.requiredScope == RequiredScope.PipelineScope
+    write requiredScope := cmd.requiredScope
+    emit EqRightAccepted
+    goto Done
+
+  Ready -- EqLeft -->
+    guard RequiredScope.PipelineScope == cmd.requiredScope
+    write requiredScope := cmd.requiredScope
+    emit EqLeftAccepted
+    goto Done
+
+  Ready -- NeRight -->
+    guard cmd.requiredScope != RequiredScope.DiagnosticScope
+    write requiredScope := cmd.requiredScope
+    emit NeRightAccepted
+    goto Done
+
+  Ready -- NeLeft -->
+    guard RequiredScope.DiagnosticScope != cmd.requiredScope
+    write requiredScope := cmd.requiredScope
+    emit NeLeftAccepted
+    goto Done
+
+  Ready -- Self -->
+    guard cmd.requiredScope == cmd.requiredScope && (cmd.requiredScope != cmd.requiredScope || cmd.requiredScope == cmd.requiredScope)
+    write requiredScope := RequiredScope.PipelineScope
+    emit SelfAccepted
     goto Done
 
   wire kind=ctorName fields=camelCase schemaVersion=1

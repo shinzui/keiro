@@ -8,14 +8,19 @@ module Generated.StructuralConformance.StructuralProjections
   , artifactInfoArtifactKeyGet
   , artifactInfoDisplayNameWitness
   , artifactInfoDisplayNameGet
+  , artifactKindWitness
+  , artifactKindGet
   ) where
 
 import Data.Text (Text)
-import Keiro.Codec.Structural (bindingToShape)
-import Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)
+import Data.List.NonEmpty (NonEmpty (..))
+import Keiro.Codec.Structural (bindingToShape, bindingFromShape)
+import Keiki.Core (FieldProjection (..), FieldWitness, ExactFieldProjection (..), exactFieldWitness, fieldWitness)
+import Keiki.ProjectionDomain (finiteProjectionDomain)
 import Generated.StructuralConformance.Structural.Shape.ArtifactInfo (ArtifactInfoShape(artifactKey, displayName))
 import Conformance.Structural.Bindings qualified as Bindings
-import Conformance.Structural.Domain (ArtifactInfo)
+import Conformance.Structural.Domain (ArtifactInfo, ArtifactKind)
+import Generated.StructuralConformance.Structural.Shape.ArtifactKind qualified as ShapeArtifactKind
 
 data ArtifactInfoArtifactKeyProjection
 
@@ -46,3 +51,25 @@ instance FieldProjection ArtifactInfoDisplayNameProjection where
 
 artifactInfoDisplayNameWitness :: FieldWitness ArtifactInfoDisplayNameProjection
 artifactInfoDisplayNameWitness = fieldWitness @ArtifactInfoDisplayNameProjection
+
+data ArtifactKindProjection
+
+artifactKindGet :: ArtifactKind -> Text
+artifactKindGet owner = case bindingToShape Bindings.artifactKindBinding owner of ShapeArtifactKind.Guide -> "guide"; ShapeArtifactKind.Reference -> "reference"
+
+instance FieldProjection ArtifactKindProjection where
+  type FieldName ArtifactKindProjection = ""
+  type FieldOwner ArtifactKindProjection = ArtifactKind
+  type FieldResult ArtifactKindProjection = Text
+  fieldShapeId _ = "conformance.structural.ArtifactKind.v1"
+  projectFieldValue _ = artifactKindGet
+
+instance ExactFieldProjection ArtifactKindProjection where
+  fieldProjectionDomain _ = finiteProjectionDomain ("guide" :| ["reference"])
+  reconstructFieldOwner _ value = case value of
+    "guide" -> Just (bindingFromShape Bindings.artifactKindBinding ShapeArtifactKind.Guide)
+    "reference" -> Just (bindingFromShape Bindings.artifactKindBinding ShapeArtifactKind.Reference)
+    _ -> Nothing
+
+artifactKindWitness :: FieldWitness ArtifactKindProjection
+artifactKindWitness = exactFieldWitness @ArtifactKindProjection

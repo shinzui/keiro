@@ -131,7 +131,43 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- ScopeGateDone x Differ: required rejection
+  [ -- ScopeGateDone x EqRight: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-070772cfee379456"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = ScopeGateDone
+      , commandName = "EqRight"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- ScopeGateDone x NeLeft: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-1cdfb1b7e2088a1a"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = ScopeGateDone
+      , commandName = "NeLeft"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- ScopeGateDone x NeRight: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-2609ef2ca7eca507"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = ScopeGateDone
+      , commandName = "NeRight"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- ScopeGateDone x Differ: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-373ac328a7acad82"
       , kind = RequiredRejection
@@ -142,6 +178,18 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
+      }
+  , -- ScopeGateReady x NeRight: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-3bd69ca93310ff6c"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ScopeGateReady
+      , commandName = "NeRight"
+      , expectedEdge = (Just (K.EdgeRef ScopeGateReady 4))
+      , target = Just ScopeGateDone
+      , eventKinds = ["NeRightAccepted"]
       }
   , -- ScopeGateReady x Differ: live transition
     BehaviorRequirement
@@ -155,6 +203,30 @@ behaviorRequirements =
       , target = Just ScopeGateDone
       , eventKinds = ["Differed"]
       }
+  , -- ScopeGateDone x Self: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-734985bac0c81864"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = ScopeGateDone
+      , commandName = "Self"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- ScopeGateReady x NeLeft: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-aad7a9b25d6c4dff"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ScopeGateReady
+      , commandName = "NeLeft"
+      , expectedEdge = (Just (K.EdgeRef ScopeGateReady 5))
+      , target = Just ScopeGateDone
+      , eventKinds = ["NeLeftAccepted"]
+      }
   , -- ScopeGateDone x Match: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-ab778d2eeb34cd73"
@@ -166,6 +238,54 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
+      }
+  , -- ScopeGateReady x EqRight: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-b44fa84cbf45f2dc"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ScopeGateReady
+      , commandName = "EqRight"
+      , expectedEdge = (Just (K.EdgeRef ScopeGateReady 2))
+      , target = Just ScopeGateDone
+      , eventKinds = ["EqRightAccepted"]
+      }
+  , -- ScopeGateDone x EqLeft: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-c8ec15a0f293621d"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = ScopeGateDone
+      , commandName = "EqLeft"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- ScopeGateReady x EqLeft: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-ee7fcaed44a911f9"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ScopeGateReady
+      , commandName = "EqLeft"
+      , expectedEdge = (Just (K.EdgeRef ScopeGateReady 3))
+      , target = Just ScopeGateDone
+      , eventKinds = ["EqLeftAccepted"]
+      }
+  , -- ScopeGateReady x Self: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-f136428bd6a3061f"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ScopeGateReady
+      , commandName = "Self"
+      , expectedEdge = (Just (K.EdgeRef ScopeGateReady 6))
+      , target = Just ScopeGateDone
+      , eventKinds = ["SelfAccepted"]
       }
   , -- ScopeGateReady x Match: live transition
     BehaviorRequirement
@@ -339,6 +459,11 @@ commandKind :: ScopeGateCommand -> Text
 commandKind command = case command of
   Match _ -> "Match"
   Differ _ -> "Differ"
+  EqRight _ -> "EqRight"
+  EqLeft _ -> "EqLeft"
+  NeRight _ -> "NeRight"
+  NeLeft _ -> "NeLeft"
+  Self _ -> "Self"
 
 eventKind :: ScopeGateEvent -> Text
 eventKind event = case Codec.eventType scopeGateCodec event of Codec.EventType tag -> tag

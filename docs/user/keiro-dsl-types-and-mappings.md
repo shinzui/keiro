@@ -6,7 +6,7 @@ docId: DOC-26
 tags: [keiro, dsl, types, mappings, reference]
 generated:
   by: openai-codex/gpt-6.1-sol
-  at: 2026-10-14T17:10:13Z
+  at: 2026-10-26T23:15:24Z
 ---
 
 # Keiro DSL Types and Mappings
@@ -206,6 +206,7 @@ Aggregate registers and explicit command/event fields accept:
 | `Natural` | `Natural` | Non-negative integral initial; equality, ordering, and total arithmetic. |
 | declared `id` or `enum` | nominal generated or consumer type | Equality and whole-value writes. |
 | `mapped` type | consumer-owned type | Whole-value fields/registers/writes; scalar projection depends on shape. |
+| `mapped structural enum` (candidate Language 6) | consumer-owned enum | Same-declaration exact equality/inequality and qualified constructors; existing total binding and wire strings. |
 | `<Aggregate>Vertex` | aggregate lifecycle vertex | Register use is opaque; `goto` normally owns lifecycle state. |
 
 `UTCTime` is accepted as an input alias and canonicalizes to `Time`.
@@ -634,3 +635,80 @@ cases have type `NonEmpty (Text, source, target)`. This does not change the
 mapping's codec or binding laws. Refined mappings admit target `initial` writes
 but do not declare lifts. The [aggregate construction reference](keiro-dsl-aggregates.md#mapped-register-construction-in-candidate-language-6)
 explains source restrictions, create-once stubs, manual versioning, and replay.
+
+
+## Exact equality for structural enums (candidate Language 6)
+
+One consumer-owned structural enum can be used inside a required record and in
+aggregate command, event, and register fields. Direct enum roots of the same DSL
+declaration support `==` and `!=`, including qualified constructors on either
+side. For example, after declaring the consumer binding:
+
+```keiro
+language keiro-dsl 6
+context scope-example
+
+mapped structural enum RequiredScope {
+  haskell package=application module=Application.Domain type=RequiredScope
+  binding = "Application.Bindings.requiredScopeBinding"
+  binding-version = "1"
+  canonical-type = "application.RequiredScope.v1"
+  fixtures = "Application.Bindings.requiredScopeFixtures"
+  initial = "Application.Bindings.initialScope"
+  wire string {
+    PipelineScope as "pipeline"
+    DiagnosticScope as "diagnostic"
+  }
+}
+
+mapped structural record Request {
+  haskell package=application module=Application.Domain type=Request
+  binding = "Application.Bindings.requestBinding"
+  binding-version = "1"
+  canonical-type = "application.Request.v1"
+  fixtures = "Application.Bindings.requestFixtures"
+  wire object constructor=Request unknown-fields=reject {
+    requiredScope as "requiredScope" : RequiredScope required
+  }
+}
+
+aggregate ScopeGate
+  regs requiredScope RequiredScope = initial
+  states Ready Done!
+  command Match { requiredScope:RequiredScope request:Request }
+  event Matched = fields(Match)
+  Ready -- Match -->
+    guard cmd.requiredScope == reg.requiredScope
+    emit Matched
+    goto Done
+  wire kind=ctorName fields=camelCase schemaVersion=1
+```
+
+`guard RequiredScope.PipelineScope != cmd.requiredScope` also works. Constructors
+are qualified by their DSL declaration, regardless of the consumer's Haskell
+constructor names. Owner-valued constructor writes use the total structural
+binding. No second native enum or additional equality adapter is required.
+
+The generated root witness projects through `bindingToShape` to the declared
+wire strings. Its exact finite domain contains only those strings; reconstruction
+uses `bindingFromShape`. Symbolic models provide checked, path-local key/owner
+pairs, not complete command/register environments. Exactness depends on the total
+binding laws. `check --explain-bindings` reports the declared contract but cannot
+execute Haskell functions. Compile the bindings and run generated structural
+conformance, which checks every enum shape, supplied owner fixtures, branch
+coverage, and projection owner/key laws. Independently pin each owner's expected
+wire spelling: swapping both binding directions still satisfies round-trip laws.
+
+Comparisons across different declarations fail even if they share wire strings
+or a Haskell type. Enum/Text comparisons, unqualified or unknown constructors,
+ordering, arithmetic, and equality over structural records, unions, or opaque
+mappings remain unsupported. This feature adds no traversal through optional
+values, collections, or nested structural enums.
+
+Equality contributes a declaration-specific, versioned fold identity only where
+an aggregate uses it. Binding, canonical identity, domain, and guard changes may
+invalidate snapshots and require replay review. Fixture-label edits and constructor
+reordering do not change that identity. Event strings retain their declared
+spellings; event-codec parity alone does not establish register-layout, fold, or
+snapshot compatibility. This is candidate implementation support, not a published
+release or approval of a downstream migration.

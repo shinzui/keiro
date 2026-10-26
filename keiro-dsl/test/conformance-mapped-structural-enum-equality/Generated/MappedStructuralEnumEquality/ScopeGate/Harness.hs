@@ -25,12 +25,27 @@ harnessAssertions =
   -- clock-free: spec samples no wall clock (verified at scaffold time)
   , ("golden round-trip: Matched", roundTrips sampleEventMatched)
   , ("golden round-trip: Differed", roundTrips sampleEventDiffered)
+  , ("golden round-trip: EqRightAccepted", roundTrips sampleEventEqRightAccepted)
+  , ("golden round-trip: EqLeftAccepted", roundTrips sampleEventEqLeftAccepted)
+  , ("golden round-trip: NeRightAccepted", roundTrips sampleEventNeRightAccepted)
+  , ("golden round-trip: NeLeftAccepted", roundTrips sampleEventNeLeftAccepted)
+  , ("golden round-trip: SelfAccepted", roundTrips sampleEventSelfAccepted)
   , ("accepts Match from ScopeGateReady", acceptMatch)
   , ("accepts Differ from ScopeGateReady", acceptDiffer)
+  , ("accepts EqRight from ScopeGateReady", acceptEqRight)
+  , ("accepts EqLeft from ScopeGateReady", acceptEqLeft)
+  , ("accepts NeRight from ScopeGateReady", acceptNeRight)
+  , ("accepts NeLeft from ScopeGateReady", acceptNeLeft)
+  , ("accepts Self from ScopeGateReady", acceptSelf)
   ]
   ++ mappedConformanceAssertions
   ++ forwardReplayMatch
   ++ forwardReplayDiffer
+  ++ forwardReplayEqRight
+  ++ forwardReplayEqLeft
+  ++ forwardReplayNeRight
+  ++ forwardReplayNeLeft
+  ++ forwardReplaySelf
 
 roundTrips :: ScopeGateEvent -> Bool
 roundTrips e = parseScopeGateEvent (eventType scopeGateCodec e) (encodeScopeGateEvent e) == Right e
@@ -41,6 +56,21 @@ sampleEventMatched = Matched (MatchedData (snd (NonEmpty.head (fixtureCases Bind
 sampleEventDiffered :: ScopeGateEvent
 sampleEventDiffered = Differed (DifferedData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))
 
+sampleEventEqRightAccepted :: ScopeGateEvent
+sampleEventEqRightAccepted = EqRightAccepted (EqRightAcceptedData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))
+
+sampleEventEqLeftAccepted :: ScopeGateEvent
+sampleEventEqLeftAccepted = EqLeftAccepted (EqLeftAcceptedData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))
+
+sampleEventNeRightAccepted :: ScopeGateEvent
+sampleEventNeRightAccepted = NeRightAccepted (NeRightAcceptedData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))
+
+sampleEventNeLeftAccepted :: ScopeGateEvent
+sampleEventNeLeftAccepted = NeLeftAccepted (NeLeftAcceptedData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))
+
+sampleEventSelfAccepted :: ScopeGateEvent
+sampleEventSelfAccepted = SelfAccepted (SelfAcceptedData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))
+
 acceptMatch :: Bool
 acceptMatch =
   case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (Match (MatchData Bindings.initialScope (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
@@ -50,6 +80,36 @@ acceptMatch =
 acceptDiffer :: Bool
 acceptDiffer =
   case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (Differ (DifferData (case [value | (_, value) <- NonEmpty.toList (fixtureCases Bindings.requiredScopeFixtures), value /= Bindings.initialScope] of value : _ -> value; [] -> error "enum inequality requires an alternative fixture") (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
+    Just (v, _, _) -> v == ScopeGateDone
+    Nothing -> False
+
+acceptEqRight :: Bool
+acceptEqRight =
+  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (EqRight (EqRightData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
+    Just (v, _, _) -> v == ScopeGateDone
+    Nothing -> False
+
+acceptEqLeft :: Bool
+acceptEqLeft =
+  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (EqLeft (EqLeftData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
+    Just (v, _, _) -> v == ScopeGateDone
+    Nothing -> False
+
+acceptNeRight :: Bool
+acceptNeRight =
+  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (NeRight (NeRightData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
+    Just (v, _, _) -> v == ScopeGateDone
+    Nothing -> False
+
+acceptNeLeft :: Bool
+acceptNeLeft =
+  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (NeLeft (NeLeftData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
+    Just (v, _, _) -> v == ScopeGateDone
+    Nothing -> False
+
+acceptSelf :: Bool
+acceptSelf =
+  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (Self (SelfData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
     Just (v, _, _) -> v == ScopeGateDone
     Nothing -> False
 
@@ -91,6 +151,101 @@ forwardReplayDiffer =
   where
     prefix = "forward/replay equality: Differ from ScopeGateReady -- "
 
+-- forward/replay equality (plan 147): cross the persisted codec boundary,
+-- replay the emitted chain, and compare the final vertex and every register.
+forwardReplayEqRight :: [(String, Bool)]
+forwardReplayEqRight =
+  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (EqRight (EqRightData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
+    Nothing -> [(prefix <> "forward step accepted", False)]
+    Just (forwardVertex, forwardRegs, emitted) ->
+      case mapM (\event -> parseScopeGateEvent (eventType scopeGateCodec event) (encodeScopeGateEvent event)) emitted of
+        Left _ -> [(prefix <> "emitted chain decodes", False)]
+        Right decodedEvents ->
+          case applyEventsEither scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) decodedEvents of
+            Left _ -> [(prefix <> "replay succeeds", False)]
+            Right (replayVertex, replayRegs) ->
+              [ (prefix <> "final vertex", replayVertex == forwardVertex)
+              , (prefix <> "register requiredScope", (replayRegs ! #requiredScope) == (forwardRegs ! #requiredScope))
+              ]
+  where
+    prefix = "forward/replay equality: EqRight from ScopeGateReady -- "
+
+-- forward/replay equality (plan 147): cross the persisted codec boundary,
+-- replay the emitted chain, and compare the final vertex and every register.
+forwardReplayEqLeft :: [(String, Bool)]
+forwardReplayEqLeft =
+  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (EqLeft (EqLeftData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
+    Nothing -> [(prefix <> "forward step accepted", False)]
+    Just (forwardVertex, forwardRegs, emitted) ->
+      case mapM (\event -> parseScopeGateEvent (eventType scopeGateCodec event) (encodeScopeGateEvent event)) emitted of
+        Left _ -> [(prefix <> "emitted chain decodes", False)]
+        Right decodedEvents ->
+          case applyEventsEither scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) decodedEvents of
+            Left _ -> [(prefix <> "replay succeeds", False)]
+            Right (replayVertex, replayRegs) ->
+              [ (prefix <> "final vertex", replayVertex == forwardVertex)
+              , (prefix <> "register requiredScope", (replayRegs ! #requiredScope) == (forwardRegs ! #requiredScope))
+              ]
+  where
+    prefix = "forward/replay equality: EqLeft from ScopeGateReady -- "
+
+-- forward/replay equality (plan 147): cross the persisted codec boundary,
+-- replay the emitted chain, and compare the final vertex and every register.
+forwardReplayNeRight :: [(String, Bool)]
+forwardReplayNeRight =
+  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (NeRight (NeRightData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
+    Nothing -> [(prefix <> "forward step accepted", False)]
+    Just (forwardVertex, forwardRegs, emitted) ->
+      case mapM (\event -> parseScopeGateEvent (eventType scopeGateCodec event) (encodeScopeGateEvent event)) emitted of
+        Left _ -> [(prefix <> "emitted chain decodes", False)]
+        Right decodedEvents ->
+          case applyEventsEither scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) decodedEvents of
+            Left _ -> [(prefix <> "replay succeeds", False)]
+            Right (replayVertex, replayRegs) ->
+              [ (prefix <> "final vertex", replayVertex == forwardVertex)
+              , (prefix <> "register requiredScope", (replayRegs ! #requiredScope) == (forwardRegs ! #requiredScope))
+              ]
+  where
+    prefix = "forward/replay equality: NeRight from ScopeGateReady -- "
+
+-- forward/replay equality (plan 147): cross the persisted codec boundary,
+-- replay the emitted chain, and compare the final vertex and every register.
+forwardReplayNeLeft :: [(String, Bool)]
+forwardReplayNeLeft =
+  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (NeLeft (NeLeftData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
+    Nothing -> [(prefix <> "forward step accepted", False)]
+    Just (forwardVertex, forwardRegs, emitted) ->
+      case mapM (\event -> parseScopeGateEvent (eventType scopeGateCodec event) (encodeScopeGateEvent event)) emitted of
+        Left _ -> [(prefix <> "emitted chain decodes", False)]
+        Right decodedEvents ->
+          case applyEventsEither scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) decodedEvents of
+            Left _ -> [(prefix <> "replay succeeds", False)]
+            Right (replayVertex, replayRegs) ->
+              [ (prefix <> "final vertex", replayVertex == forwardVertex)
+              , (prefix <> "register requiredScope", (replayRegs ! #requiredScope) == (forwardRegs ! #requiredScope))
+              ]
+  where
+    prefix = "forward/replay equality: NeLeft from ScopeGateReady -- "
+
+-- forward/replay equality (plan 147): cross the persisted codec boundary,
+-- replay the emitted chain, and compare the final vertex and every register.
+forwardReplaySelf :: [(String, Bool)]
+forwardReplaySelf =
+  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (Self (SelfData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
+    Nothing -> [(prefix <> "forward step accepted", False)]
+    Just (forwardVertex, forwardRegs, emitted) ->
+      case mapM (\event -> parseScopeGateEvent (eventType scopeGateCodec event) (encodeScopeGateEvent event)) emitted of
+        Left _ -> [(prefix <> "emitted chain decodes", False)]
+        Right decodedEvents ->
+          case applyEventsEither scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) decodedEvents of
+            Left _ -> [(prefix <> "replay succeeds", False)]
+            Right (replayVertex, replayRegs) ->
+              [ (prefix <> "final vertex", replayVertex == forwardVertex)
+              , (prefix <> "register requiredScope", (replayRegs ! #requiredScope) == (forwardRegs ! #requiredScope))
+              ]
+  where
+    prefix = "forward/replay equality: Self from ScopeGateReady -- "
+
 mappedConformanceAssertions :: [(String, Bool)]
 mappedConformanceAssertions =
   concat
@@ -98,6 +253,16 @@ mappedConformanceAssertions =
     , matchedRequestAssertions
     , differedRequiredScopeAssertions
     , differedRequestAssertions
+    , eqRightAcceptedRequiredScopeAssertions
+    , eqRightAcceptedRequestAssertions
+    , eqLeftAcceptedRequiredScopeAssertions
+    , eqLeftAcceptedRequestAssertions
+    , neRightAcceptedRequiredScopeAssertions
+    , neRightAcceptedRequestAssertions
+    , neLeftAcceptedRequiredScopeAssertions
+    , neLeftAcceptedRequestAssertions
+    , selfAcceptedRequiredScopeAssertions
+    , selfAcceptedRequestAssertions
     , structuralWirePolicyAssertions
     ]
 
@@ -122,6 +287,66 @@ differedRequiredScopeAssertions =
 differedRequestAssertions :: [(String, Bool)]
 differedRequestAssertions =
   [ ("mapped codec round-trip: Differed/request/" <> T.unpack label, roundTrips (Differed (DifferedData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) mappedValue)))
+  | (label, mappedValue) <- NonEmpty.toList (fixtureCases Bindings.requestFixtures)
+  ]
+
+eqRightAcceptedRequiredScopeAssertions :: [(String, Bool)]
+eqRightAcceptedRequiredScopeAssertions =
+  [ ("mapped codec round-trip: EqRightAccepted/requiredScope/" <> T.unpack label, roundTrips (EqRightAccepted (EqRightAcceptedData mappedValue (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))))
+  | (label, mappedValue) <- NonEmpty.toList (fixtureCases Bindings.requiredScopeFixtures)
+  ]
+
+eqRightAcceptedRequestAssertions :: [(String, Bool)]
+eqRightAcceptedRequestAssertions =
+  [ ("mapped codec round-trip: EqRightAccepted/request/" <> T.unpack label, roundTrips (EqRightAccepted (EqRightAcceptedData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) mappedValue)))
+  | (label, mappedValue) <- NonEmpty.toList (fixtureCases Bindings.requestFixtures)
+  ]
+
+eqLeftAcceptedRequiredScopeAssertions :: [(String, Bool)]
+eqLeftAcceptedRequiredScopeAssertions =
+  [ ("mapped codec round-trip: EqLeftAccepted/requiredScope/" <> T.unpack label, roundTrips (EqLeftAccepted (EqLeftAcceptedData mappedValue (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))))
+  | (label, mappedValue) <- NonEmpty.toList (fixtureCases Bindings.requiredScopeFixtures)
+  ]
+
+eqLeftAcceptedRequestAssertions :: [(String, Bool)]
+eqLeftAcceptedRequestAssertions =
+  [ ("mapped codec round-trip: EqLeftAccepted/request/" <> T.unpack label, roundTrips (EqLeftAccepted (EqLeftAcceptedData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) mappedValue)))
+  | (label, mappedValue) <- NonEmpty.toList (fixtureCases Bindings.requestFixtures)
+  ]
+
+neRightAcceptedRequiredScopeAssertions :: [(String, Bool)]
+neRightAcceptedRequiredScopeAssertions =
+  [ ("mapped codec round-trip: NeRightAccepted/requiredScope/" <> T.unpack label, roundTrips (NeRightAccepted (NeRightAcceptedData mappedValue (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))))
+  | (label, mappedValue) <- NonEmpty.toList (fixtureCases Bindings.requiredScopeFixtures)
+  ]
+
+neRightAcceptedRequestAssertions :: [(String, Bool)]
+neRightAcceptedRequestAssertions =
+  [ ("mapped codec round-trip: NeRightAccepted/request/" <> T.unpack label, roundTrips (NeRightAccepted (NeRightAcceptedData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) mappedValue)))
+  | (label, mappedValue) <- NonEmpty.toList (fixtureCases Bindings.requestFixtures)
+  ]
+
+neLeftAcceptedRequiredScopeAssertions :: [(String, Bool)]
+neLeftAcceptedRequiredScopeAssertions =
+  [ ("mapped codec round-trip: NeLeftAccepted/requiredScope/" <> T.unpack label, roundTrips (NeLeftAccepted (NeLeftAcceptedData mappedValue (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))))
+  | (label, mappedValue) <- NonEmpty.toList (fixtureCases Bindings.requiredScopeFixtures)
+  ]
+
+neLeftAcceptedRequestAssertions :: [(String, Bool)]
+neLeftAcceptedRequestAssertions =
+  [ ("mapped codec round-trip: NeLeftAccepted/request/" <> T.unpack label, roundTrips (NeLeftAccepted (NeLeftAcceptedData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) mappedValue)))
+  | (label, mappedValue) <- NonEmpty.toList (fixtureCases Bindings.requestFixtures)
+  ]
+
+selfAcceptedRequiredScopeAssertions :: [(String, Bool)]
+selfAcceptedRequiredScopeAssertions =
+  [ ("mapped codec round-trip: SelfAccepted/requiredScope/" <> T.unpack label, roundTrips (SelfAccepted (SelfAcceptedData mappedValue (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))))
+  | (label, mappedValue) <- NonEmpty.toList (fixtureCases Bindings.requiredScopeFixtures)
+  ]
+
+selfAcceptedRequestAssertions :: [(String, Bool)]
+selfAcceptedRequestAssertions =
+  [ ("mapped codec round-trip: SelfAccepted/request/" <> T.unpack label, roundTrips (SelfAccepted (SelfAcceptedData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) mappedValue)))
   | (label, mappedValue) <- NonEmpty.toList (fixtureCases Bindings.requestFixtures)
   ]
 

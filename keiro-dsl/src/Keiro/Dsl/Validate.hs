@@ -963,12 +963,16 @@ validateAggregateTypes languageContract typeGraphResult spec = case Nominal.reso
       where
         capabilityRules
           | runtimeProfileHasCapability languageContract.runtimeProfile StructuralEnumEqualityGuards = []
-          | otherwise = case transition.guard >>= either (const Nothing) Just . resolveGuardExpr environment of
-              Just expression | usesStructuralEnumEquality expression -> [mkErr (locLine transition.loc) AggregateGuardCapabilityUnsupported "mapped structural enum equality requires Language 6"]
-              _ -> []
+          | otherwise =
+              [ mkErr (locLine expression.loc) AggregateGuardCapabilityUnsupported "mapped structural enum equality and constructors require Language 6"
+              | Right expression <- maybe [] (pure . resolveGuardExpr environment) transition.guard <> map (uncurry (resolveWriteExpr environment)) transition.writes,
+                usesStructuralEnumEquality expression
+              ]
         usesStructuralEnumEquality expression = case expression.node of
-          TypedEqual left _ -> isStructuralEnum left.valueType
-          TypedNotEqual left _ -> isStructuralEnum left.valueType
+          TypedEqual left right -> isStructuralEnum left.valueType || usesStructuralEnumEquality left || usesStructuralEnumEquality right
+          TypedNotEqual left right -> isStructuralEnum left.valueType || usesStructuralEnumEquality left || usesStructuralEnumEquality right
+          TypedLiteral ScalarEnumValue {} -> isStructuralEnum expression.valueType
+          TypedMappedLift _ _ child -> usesStructuralEnumEquality child
           TypedAnd left right -> usesStructuralEnumEquality left || usesStructuralEnumEquality right
           TypedOr left right -> usesStructuralEnumEquality left || usesStructuralEnumEquality right
           _ -> False
@@ -999,7 +1003,11 @@ validateAggregateTypes languageContract typeGraphResult spec = case Nominal.reso
             Left _ -> []
             Right expected ->
               case resolveScalarExpr environment (ExpectScalarType expected) expression of
-                Right _ -> []
+                Right typed
+                  | not (runtimeProfileHasCapability languageContract.runtimeProfile StructuralEnumEqualityGuards),
+                    usesStructuralEnumEquality typed ->
+                      [mkErr (locLine typed.loc) AggregateGuardCapabilityUnsupported "mapped structural enum equality and constructors require Language 6"]
+                  | otherwise -> []
                 Left diagnostics -> map (outcomeExpressionDiagnostic label . id) (NE.toList diagnostics)
           where
             declaration = case (.domainOutcomeTypes) aggregate of

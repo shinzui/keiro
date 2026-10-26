@@ -45,8 +45,8 @@ The concrete adopter is `mori://shinzui/kotei/plans/103-reconstruct-recorded-fai
 
 
 - [x] Milestone 1 (2026-10-26): the Language 6 scope fixture scaffolds and its compiled suite passes concrete equality/inequality, finite-domain exclusion, typed model reconstruction, and decoded replay. Verified with `nix develop -c cabal test keiro-dsl-conformance-mapped-structural-enum-equality --test-show-details=direct`.
-- [ ] Milestone 2: both operators and qualified constructors pass the complete concrete/symbolic matrix; invalid types and dishonest or incomplete bindings fail at the appropriate gate.
-- [ ] Milestone 3: fingerprints, semantic diff, scaffold provenance, and replay/snapshot qualification expose relevant changes while preserving unaffected contracts and established wire strings.
+- [x] Milestone 2 (2026-10-26): seven generated predicate forms pass all 28 concrete/symbolic input/register combinations, including literals on both sides, self comparisons, and owner-valued constructor writes. Seven restoring mutations detect collapsed bindings, omitted fixtures/domains, wrong inverses, bijective meaning swaps, missing symbols, and incorrect signatures; the restored compiled baseline passes. Focused source tests reject unsupported types/operators and preserve declaration identity, including a shared Haskell owner.
+- [x] Milestone 3 (2026-10-26): single-file/workspace equality rows round-trip separately from nominal rows, binding explanations retain the declared contract, and supported revision pairs compare against their own graphs. Binding/domain/guard changes affect the scope aggregate; fixture/order changes remain replay-neutral; the unrelated control and data-only fold golden retain identity. Exact direct/nested JSON byte vectors and decoded replay pass. The compiled snapshot check preserves codec/layout discriminators, changes the fold discriminator, and agrees with full replay; the final repository gate also exercises the shared runtime snapshot-admission tests.
 - [ ] Milestone 4: affected regression suites, repository verification, documentation, and ADR distillation establish an adoption-ready implementation.
 
 Implementation has verified the first compiled consumer path; the remaining milestones are in progress. Creation evaluated the source and validation paths. The Nix shell reports Z3 4.16.0. The working tree already contained an unrelated edit to `docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md`; preserve it.
@@ -56,6 +56,10 @@ Implementation has verified the first compiled consumer path; the remaining mile
 
 
 The generated forward/replay harness samples the first mapped fixture. That can falsify an inequality guard when the first fixture equals the register initial. Structural enum command sampling now uses the initial for explicit equality and selects a different supplied fixture for explicit inequality. This preserves executable replay assertions without weakening an assertion or depending on solver-selected whole environments.
+
+An extra strict check of the improvement-request bundle reports six pre-existing missing recommended `reviews` fields (including IR-60). The prescribed strict ADR check passes; no review metadata was invented or unrelated requests changed. Final repository acceptance uses the required verification gate.
+
+The full unit regression also maintains an explicit list of Language 6 fixture exceptions; the new fixture and six revision vectors must be listed there in addition to registering the compiled suite in `test/conformance-baseline.json`. The first broad run exposed that inventory obligation.
 
 The general mapped-value operations share a bidirectional `AggregateMapped` pattern over ordinary mappings and the new checked enum variant. Capability admission inspects the enum evidence first, while codecs, samples, initials, and writes keep their established structural paths. Declaration-specific equality uses a separate versioned canonical segment; no global capability fold segment is added.
 

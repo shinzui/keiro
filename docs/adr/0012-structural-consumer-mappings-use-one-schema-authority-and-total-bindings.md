@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
 description: Keiro-generated structural and nominal representations own private-event wire policy; aggregate, queue, query, and projection consumers resolve through checked schema authorities, consumer bindings are total isomorphisms, snapshots remain separately invalidated, and Keiki projections come from those authorities.
-timestamp: 2026-10-14T17:10:13Z
+timestamp: 2026-10-26T23:05:52Z
 docId: ADR-12
 status: Accepted
 date: 2026-07-28
@@ -437,6 +437,24 @@ obligations import their consumer/scalar types through the module import plan an
 never overwrite existing hand-owned implementations. Optional schema-1 ledger lift
 metadata uses absent-field decoding to preserve pre-lift drift history.
 
+
+Candidate Language 6 structural enum equality is derived from the checked enum
+declaration and its existing total structural binding. Direct roots and qualified
+constructors of the same declaration compare canonical wire strings through one
+declaration-tagged exact finite projection. Every declared key reconstructs a
+consumer owner via the generated shape and `bindingFromShape`; reconstruction
+never chooses a fixture owner. Other structural shapes retain opaque whole-value
+handling and cannot acquire equality through this capability. Declaration identity
+is independent of shared wire strings and shared Haskell ownership.
+
+Generated conformance enumerates every enum shape, checks supplied owner round
+trips and branch coverage, and exercises both projection-law directions. Expected
+owner/wire fixtures detect a bijective meaning swap. These are executable
+qualification obligations, not a proof about arbitrary Haskell values. Checking
+only admits declared capability; missing Haskell symbols or signatures fail
+compilation, and dishonest/incomplete bindings fail conformance. Solver model
+owners are path-local projection reconstructions rather than full environments.
+No new optional/container traversal is introduced.
 
 ## Consequences
 

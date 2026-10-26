@@ -1,6 +1,7 @@
 # Keiro Guides Log
 
 ## 2026-10-26
+* **Update**: Qualify structural enum equality using total bindings, exact models, wire expectations, and replay (Plan 322).
 * **Update**: Clarify that discovery encodes each response on demand within the ordinary resource limits.
 * **Update**: Document adjacent aggregate and manager discovery JSON, mounting, aliases and unknown timer configuration.
 

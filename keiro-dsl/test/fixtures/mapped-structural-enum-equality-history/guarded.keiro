@@ -1,0 +1,100 @@
+language keiro-dsl 6
+context mapped-structural-enum-equality
+
+mapped structural enum RequiredScope {
+  haskell package=keiro-dsl module=Conformance.MappedStructuralEnumEquality.Domain type=RequiredScope
+  binding = "Conformance.MappedStructuralEnumEquality.Bindings.requiredScopeBinding"
+  binding-version = "1"
+  canonical-type = "conformance.RequiredScope.v1"
+  fixtures = "Conformance.MappedStructuralEnumEquality.Bindings.requiredScopeFixtures"
+  initial = "Conformance.MappedStructuralEnumEquality.Bindings.initialScope"
+  wire string { PipelineScope as "pipeline" DiagnosticScope as "diagnostic" }
+}
+
+mapped structural record Request {
+  haskell package=keiro-dsl module=Conformance.MappedStructuralEnumEquality.Domain type=Request
+  binding = "Conformance.MappedStructuralEnumEquality.Bindings.requestBinding"
+  binding-version = "1"
+  canonical-type = "conformance.Request.v1"
+  fixtures = "Conformance.MappedStructuralEnumEquality.Bindings.requestFixtures"
+  wire object constructor=Request unknown-fields=reject {
+    requiredScope as "requiredScope" : RequiredScope required
+  }
+}
+
+aggregate ScopeGate
+  regs
+    requiredScope RequiredScope = initial
+  states Ready Done!
+  command Match { requiredScope:RequiredScope request:Request }
+  command Differ { requiredScope:RequiredScope request:Request }
+  command EqRight { requiredScope:RequiredScope request:Request }
+  command EqLeft { requiredScope:RequiredScope request:Request }
+  command NeRight { requiredScope:RequiredScope request:Request }
+  command NeLeft { requiredScope:RequiredScope request:Request }
+  command Self { requiredScope:RequiredScope request:Request }
+  event Matched = fields(Match)
+  event Differed = fields(Differ)
+  event EqRightAccepted = fields(EqRight)
+  event EqLeftAccepted = fields(EqLeft)
+  event NeRightAccepted = fields(NeRight)
+  event NeLeftAccepted = fields(NeLeft)
+  event SelfAccepted = fields(Self)
+
+
+  Ready -- Match -->
+    guard cmd.requiredScope == reg.requiredScope
+    write requiredScope := cmd.requiredScope
+    emit Matched
+    goto Done
+
+  Ready -- Differ -->
+    guard cmd.requiredScope != reg.requiredScope
+    write requiredScope := cmd.requiredScope
+    emit Differed
+    goto Done
+
+  Ready -- EqRight -->
+    guard cmd.requiredScope == RequiredScope.PipelineScope
+    write requiredScope := cmd.requiredScope
+    emit EqRightAccepted
+    goto Done
+
+  Ready -- EqLeft -->
+    guard RequiredScope.PipelineScope == cmd.requiredScope
+    write requiredScope := cmd.requiredScope
+    emit EqLeftAccepted
+    goto Done
+
+  Ready -- NeRight -->
+    guard cmd.requiredScope != RequiredScope.DiagnosticScope
+    write requiredScope := cmd.requiredScope
+    emit NeRightAccepted
+    goto Done
+
+  Ready -- NeLeft -->
+    guard RequiredScope.DiagnosticScope != cmd.requiredScope
+    write requiredScope := cmd.requiredScope
+    emit NeLeftAccepted
+    goto Done
+
+  Ready -- Self -->
+    guard cmd.requiredScope == cmd.requiredScope && (cmd.requiredScope != cmd.requiredScope || cmd.requiredScope == cmd.requiredScope)
+    write requiredScope := RequiredScope.PipelineScope
+    emit SelfAccepted
+    goto Done
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  snapshot every 1
+    state-codec version=1 shape-hash="scope-gate-v1"
+
+aggregate ScopeControl
+  regs value Text = ""
+  states Ready Done!
+  command Store { value:Text }
+  event Stored = fields(Store)
+  Ready -- Store -->
+    write value := cmd.value
+    emit Stored
+    goto Done
+  wire kind=ctorName fields=camelCase schemaVersion=1

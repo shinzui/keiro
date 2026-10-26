@@ -17,10 +17,20 @@ data BehaviorSourceLocation = BehaviorSourceLocation
 
 behaviorSourceLocation :: Text -> Maybe BehaviorSourceLocation
 behaviorSourceLocation key = case key of
+  "behavior-v1-070772cfee379456" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/mapped-structural-enum-equality.keiro" 28 16)
+  "behavior-v1-1cdfb1b7e2088a1a" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/mapped-structural-enum-equality.keiro" 28 16)
+  "behavior-v1-2609ef2ca7eca507" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/mapped-structural-enum-equality.keiro" 28 16)
   "behavior-v1-373ac328a7acad82" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/mapped-structural-enum-equality.keiro" 28 16)
-  "behavior-v1-677f2db2c9c2a230" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/mapped-structural-enum-equality.keiro" 40 3)
+  "behavior-v1-3bd69ca93310ff6c" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/mapped-structural-enum-equality.keiro" 69 3)
+  "behavior-v1-677f2db2c9c2a230" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/mapped-structural-enum-equality.keiro" 51 3)
+  "behavior-v1-734985bac0c81864" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/mapped-structural-enum-equality.keiro" 28 16)
+  "behavior-v1-aad7a9b25d6c4dff" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/mapped-structural-enum-equality.keiro" 75 3)
   "behavior-v1-ab778d2eeb34cd73" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/mapped-structural-enum-equality.keiro" 28 16)
-  "behavior-v1-fbe937c9ea4bf8c9" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/mapped-structural-enum-equality.keiro" 34 3)
+  "behavior-v1-b44fa84cbf45f2dc" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/mapped-structural-enum-equality.keiro" 57 3)
+  "behavior-v1-c8ec15a0f293621d" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/mapped-structural-enum-equality.keiro" 28 16)
+  "behavior-v1-ee7fcaed44a911f9" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/mapped-structural-enum-equality.keiro" 63 3)
+  "behavior-v1-f136428bd6a3061f" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/mapped-structural-enum-equality.keiro" 81 3)
+  "behavior-v1-fbe937c9ea4bf8c9" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/mapped-structural-enum-equality.keiro" 45 3)
   _ -> Nothing
 
 renderBehaviorSourceLocation :: Text -> Text

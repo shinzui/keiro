@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-10-26
+* **Update**: Gate structural enum equality in Language 6 and scope fold identity to actual use (Plan 322).
+* **Update**: Derive exact structural enum equality from total bindings and finite declaration-tagged projections (Plan 322).
 * **Update**: Keep direct metadata JSON encoding inside the host byte/deadline budget with fresh schema verification and no catalog-response cache.
 * **Update**: Retain the optimized custom-policy regression test and opaque metadata-only label boundary for the Nix GHC 9.12.4 toolchain.
 * **Update**: Preserve fresh schema verification and shared route/resource policy for metadata-only pm types.

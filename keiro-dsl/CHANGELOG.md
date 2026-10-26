@@ -6,6 +6,25 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Candidate Language 6 structural enums support declaration-safe `==` and `!=`
+  guards and qualified constructor literals through the existing total binding.
+  Generated root projections carry exact finite wire-key domains and reconstruct
+  consumer owners; structural conformance checks exhaustive enum shapes, fixture
+  coverage, and projection owner/key laws. Records, unions, opaque mappings,
+  ordering, arithmetic, and additional nested traversal remain excluded.
+- Equality use adds a versioned declaration-specific fold segment, binding
+  explanations, and distinct `structural-enum-equality` scaffold/workspace ledger
+  rows. Data-only mappings and unrelated fold identities retain their bytes.
+  Consumer release, event-history, register-layout, fold, and snapshot qualification
+  remain required before removing a downstream native-enum adapter.
+- API additions include `AggregateStructuralEnum`, `StructuralEnumEquality`,
+  `StructuralEnumEqualityGuards`, `StructuralProjection.rootEnum`, and
+  `ScaffoldRecord.structuralEnumEqualities`/`WorkspaceRecord.structuralEnumEqualities`.
+  `AggregateMapped` is a bundled bidirectional pattern covering both mapped-value
+  representations, preserving their structural codec/initial/write paths.
+
 ### Other Changes
 
 - 0.21.0.0 erratum: regeneration rewrites every generated aggregate

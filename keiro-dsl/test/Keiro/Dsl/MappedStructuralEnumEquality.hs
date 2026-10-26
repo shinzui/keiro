@@ -20,6 +20,7 @@ import Keiro.Dsl.ScaffoldRun (scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
 import Keiro.Dsl.TypeGraph (MappedKey (..))
 import Keiro.Dsl.Validate
+import Keiro.Dsl.WorkspaceRecord qualified as WR
 import Test.Hspec
 
 mappedStructuralEnumEqualitySpec :: Spec
@@ -32,6 +33,10 @@ mappedStructuralEnumEqualitySpec = describe "mapped structural enum equality" $ 
     forM_ ["4", "5"] $ \version -> do
       service <- parseChecked (T.replace "language keiro-dsl 6" ("language keiro-dsl " <> version) source)
       codes service `shouldContain` [AggregateGuardCapabilityUnsupported]
+      wrapped <- parseChecked (T.replace "language keiro-dsl 6" ("language keiro-dsl " <> version) (replaceGuard "(cmd.requiredScope == reg.requiredScope) == true" source))
+      codes wrapped `shouldContain` [AggregateGuardCapabilityUnsupported]
+      literalWrite <- parseChecked (T.replace "language keiro-dsl 6" ("language keiro-dsl " <> version) (T.unlines (filter (not . T.isPrefixOf "    guard ") (T.lines source))))
+      codes literalWrite `shouldContain` [AggregateGuardCapabilityUnsupported]
   it "checks both operators with roots, qualified constructors on either side, and self comparisons" $ do
     source <- fixture
     forM_ [left <> " " <> operator <> " " <> right | operator <- ["==", "!="], (left, right) <- [("cmd.requiredScope", "reg.requiredScope"), ("cmd.requiredScope", "RequiredScope.PipelineScope"), ("RequiredScope.DiagnosticScope", "reg.requiredScope"), ("cmd.requiredScope", "cmd.requiredScope"), ("RequiredScope.PipelineScope", "RequiredScope.DiagnosticScope")]] $ \guardText -> do
@@ -111,14 +116,24 @@ mappedStructuralEnumEqualitySpec = describe "mapped structural enum equality" $ 
     identities `shouldSatisfy` (not . null)
     case bindingObligationsForService service of
       Left failure -> expectationFailure (show failure)
-      Right obligations -> [identity | obligation <- obligations, Just identity <- [obligation.equalityContract]] `shouldSatisfy` all (`elem` identities)
+      Right obligations -> do
+        let contracts = [identity | obligation <- obligations, Just identity <- [obligation.equalityContract]]
+        contracts `shouldSatisfy` (not . null)
+        contracts `shouldSatisfy` all (`elem` identities)
     contents <- TIO.readFile "test/conformance-mapped-structural-enum-equality/keiro-dsl-ledger.context.mapped-structural-enum-equality.txt"
     case parseRecord contents of
       Nothing -> expectationFailure "scaffold record did not parse"
       Just record -> do
         let updated = record {structuralEnumEqualities = identities}
         parseRecord (renderRecord updated) `shouldBe` Just updated
+        parseRecord (renderRecord updated <> "structural-enum-equality " <> NE.head (NE.fromList identities) <> "\n") `shouldBe` Nothing
         renderRecord updated `shouldSatisfy` T.isInfixOf "structural-enum-equality keiro-dsl/structural-enum-equality/1:"
+    workspaceContents <- TIO.readFile "test/conformance-workspace-nominals/keiro-dsl-ledger.workspace.workspace-nominal-proof.txt"
+    case WR.parseWorkspaceRecord workspaceContents of
+      Nothing -> expectationFailure "workspace ledger did not parse"
+      Just record -> do
+        let updated = record {WR.structuralEnumEqualities = identities}
+        WR.parseWorkspaceRecord (WR.renderWorkspaceRecord updated) `shouldBe` Just updated
   it "scopes fold identity to equality use and keeps fixture names and order out of it" $ do
     source <- fixture
     service <- parseChecked source
@@ -137,11 +152,29 @@ mappedStructuralEnumEqualitySpec = describe "mapped structural enum equality" $ 
     noEquality <- parseChecked (stripGuards source)
     surface noEquality `shouldSatisfy` (not . T.isInfixOf "structural-enum-equality-use:")
     oldLanguage <- parseChecked (T.replace "language keiro-dsl 6" "language keiro-dsl 5" (stripGuards source))
+    errors oldLanguage `shouldBe` []
     fingerprint noEquality `shouldBe` fingerprint oldLanguage
     surface noEquality `shouldBe` surface oldLanguage
     noGuardDiff <- pure (Diff.diffServices noEquality service)
     noGuardDiff `shouldSatisfy` either (const False) (not . null)
     replayImpactServices noEquality service `shouldSatisfy` (/= Right ReplayNeutral)
+
+  it "compares each supported-history revision against its own graph and preserves unrelated controls" $ do
+    let load name = TIO.readFile ("test/fixtures/mapped-structural-enum-equality-history/" <> name <> ".keiro") >>= parseChecked
+        fingerprints service = [(owner.name, either (error . show) id (aggregateFoldFingerprintForService service owner)) | NAggregate owner <- (checkedSpec service).nodes]
+    old <- load "guarded"
+    forM_ [("data-only", False), ("binding-v2", False), ("wire-v2", False), ("fixture-only", True), ("reordered", True)] $ \(name, neutral) -> do
+      new <- load name
+      errors new `shouldBe` []
+      lookup "ScopeControl" (fingerprints new) `shouldBe` lookup "ScopeControl" (fingerprints old)
+      (lookup "ScopeGate" (fingerprints new) == lookup "ScopeGate" (fingerprints old)) `shouldBe` neutral
+      result <- either (\failure -> expectationFailure (show failure) >> fail "replay comparison failed") pure (replayImpactServices old new)
+      (result == ReplayNeutral) `shouldBe` neutral
+    dataOnly <- load "data-only"
+    let surface = either (error . show) id (aggregateFoldSurfaceForService dataOnly (aggregate dataOnly))
+        fingerprint = either (error . show) id (aggregateFoldFingerprintForService dataOnly (aggregate dataOnly))
+    expected <- TIO.readFile "test/fixtures/mapped-structural-enum-data-only-fold.golden"
+    fingerprint <> "\n" <> surface <> "\n" `shouldBe` expected
 
 fixture :: IO Text
 fixture = TIO.readFile "test/fixtures/mapped-structural-enum-equality.keiro"
@@ -164,7 +197,7 @@ replaceGuard :: Text -> Text -> Text
 replaceGuard = T.replace "cmd.requiredScope == reg.requiredScope"
 
 stripGuards :: Text -> Text
-stripGuards = T.unlines . filter (not . T.isPrefixOf "    guard ") . T.lines
+stripGuards = T.replace "write requiredScope := RequiredScope.PipelineScope" "write requiredScope := cmd.requiredScope" . T.unlines . filter (not . T.isPrefixOf "    guard ") . T.lines
 
 moduleText :: Text -> [ScaffoldModule] -> Text
 moduleText suffix modules = T.unlines [value.text | value <- modules, suffix `T.isSuffixOf` T.pack value.path]

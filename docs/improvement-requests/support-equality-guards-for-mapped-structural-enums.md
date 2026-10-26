@@ -4,9 +4,9 @@ title: Support equality guards for mapped structural enums
 description: >-
   Allow a consumer-owned mapped structural enum to participate in exact, type-safe aggregate
   equality guards without introducing a second native enum and an exhaustive adapter.
-timestamp: 2026-10-26T19:17:42Z
+timestamp: 2026-10-26T23:15:24Z
 requestId: IR-60
-status: accepted
+status: in-progress
 plan: docs/plans/322-support-exact-equality-guards-for-mapped-structural-enums.md
 origin: mori://shinzui/kotei
 ---
@@ -17,7 +17,7 @@ origin: mori://shinzui/kotei
 
 Accepted for implementation through
 [Plan 322](../plans/322-support-exact-equality-guards-for-mapped-structural-enums.md).
-The plan is drafted; implementation and release qualification are pending.
+The implementation now checks and compiles the consumer scope fixture, including exact finite equality, qualified literals, reconstruction, binding conformance, and replay. Final repository qualification is in progress; package publication and downstream adoption remain separate.
 
 Proposed from `mori://shinzui/kotei/plans/103-reconstruct-recorded-failure-environments-for-inspection-and-debugging`.
 This is a follow-up improvement, not a prerequisite for that implementation. Kotei can retain

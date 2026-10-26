@@ -9,7 +9,7 @@ import Data.List.NonEmpty qualified as NonEmpty
 import Data.Maybe (isJust, isNothing)
 import Data.Proxy (Proxy (..))
 import Data.Text qualified as T
-import Keiki.Core (fieldWitnessAgrees)
+import Keiki.Core (fieldWitnessAgrees, checkFieldProjectionOwner, checkFieldProjectionKey)
 import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
 import Generated.StructuralConformance.StructuralProjections qualified as StructuralProjections
@@ -58,7 +58,7 @@ artifactKindBindingAssertions :: [(String, Bool)]
 artifactKindBindingAssertions =
   ("fixture labels: conformance.structural.ArtifactKind.v1", validFixtureLabels cases) :
   ("canonical identity: conformance.structural.ArtifactKind.v1", canonicalTypeName (Proxy @ArtifactKind) == "conformance.structural.ArtifactKind.v1") :
-  concat
+  [("exhaustive enum shape round-trip: conformance.structural.ArtifactKind.v1", all (bindingShapeRoundTrip Bindings.artifactKindBinding) [ShapeArtifactKind.Guide, ShapeArtifactKind.Reference])] <> concat
     [ [ ("binding domain round-trip: conformance.structural.ArtifactKind.v1/" <> T.unpack label, bindingDomainRoundTrip Bindings.artifactKindBinding value)
       , ("binding shape round-trip: conformance.structural.ArtifactKind.v1/" <> T.unpack label, bindingShapeRoundTrip Bindings.artifactKindBinding (bindingToShape Bindings.artifactKindBinding value))
       ]
@@ -126,4 +126,6 @@ structuralProjectionAssertions :: [(String, Bool)]
 structuralProjectionAssertions =
   [ ("projection witness agreement: conformance.structural.ArtifactInfo.v1/artifact_key", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.artifactInfoArtifactKeyWitness (\referenceOwner -> StructuralProjections.artifactInfoArtifactKeyGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.artifactInfoCases)))
   , ("projection witness agreement: conformance.structural.ArtifactInfo.v1/display_name", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.artifactInfoDisplayNameWitness (\referenceOwner -> StructuralProjections.artifactInfoDisplayNameGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.artifactInfoCases)))
+  , ("projection owner law: conformance.structural.ArtifactKind.v1", all (\(_, owner) -> either (const False) (const True) (checkFieldProjectionOwner StructuralProjections.artifactKindWitness owner)) (NonEmpty.toList (fixtureCases Bindings.artifactKindCases))),
+  ("projection key law: conformance.structural.ArtifactKind.v1", all (either (const False) (const True) . checkFieldProjectionKey StructuralProjections.artifactKindWitness) ["guide", "reference"])
   ]

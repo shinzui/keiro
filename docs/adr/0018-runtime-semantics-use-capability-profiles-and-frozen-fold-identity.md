@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Runtime semantics use capability profiles and frozen fold identity
 description: Released runtime behavior is selected by explicit monotone capabilities, while replay identity is derived by a total frozen encoder and a fold-only FNV-1a-128 digest.
-timestamp: 2026-10-14T17:10:13Z
+timestamp: 2026-10-26T23:05:52Z
 docId: ADR-18
 status: Accepted
 date: 2026-08-02
@@ -158,6 +158,22 @@ only aggregate use independently creates the fold/snapshot advisory. Removing a 
 or changing its source with a corresponding write remains a valid comparison, never
 an unresolved hybrid of old expressions and new declarations.
 
+
+Candidate Language 6 explicitly gates mapped structural enum equality with
+`StructuralEnumEqualityGuards`. The capability adds no global fold segment. An
+aggregate using the equality contract contributes a distinct
+`structural-enum-equality-use:` segment containing the
+`keiro-dsl/structural-enum-equality/1` policy and declaration, owner, binding,
+canonical-type, and sorted constructor/wire facts. Locations and fixture labels
+are excluded. Aggregates using mapped enums only as data preserve the existing
+canonical fold surface and digest. Constructor declaration order is not identity.
+
+Scaffold and workspace ledgers expose a separate `structural-enum-equality` row;
+nominal equality provenance is not reused for structural mappings. Existing mapped
+use-site, diff, and replay evidence still own binding, wire, and snapshot impact.
+Removing a native bridge requires separate event-codec, register-layout, fold, and
+snapshot qualification even when its strings agree. A changed fold discriminator
+requires snapshot rebuild from supported event history.
 
 ## Consequences
 

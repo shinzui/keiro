@@ -72,7 +72,7 @@ parseRequiredScopeShape = withText "RequiredScopeShape" $ \tag -> case tag of
   unknownTag -> fail ("unknown RequiredScope wire value " <> show unknownTag <> "; expected one of: pipeline, diagnostic")
 
 scopeGateEventTypes :: NonEmpty EventType
-scopeGateEventTypes = EventType "Matched" :| [EventType "Differed"]
+scopeGateEventTypes = EventType "Matched" :| [EventType "Differed", EventType "EqRightAccepted", EventType "EqLeftAccepted", EventType "NeRightAccepted", EventType "NeLeftAccepted", EventType "SelfAccepted"]
 
 scopeGateCodec :: Codec ScopeGateEvent
 scopeGateCodec =
@@ -81,6 +81,11 @@ scopeGateCodec =
     , eventType = \case
         Matched{} -> EventType "Matched"
         Differed{} -> EventType "Differed"
+        EqRightAccepted{} -> EventType "EqRightAccepted"
+        EqLeftAccepted{} -> EventType "EqLeftAccepted"
+        NeRightAccepted{} -> EventType "NeRightAccepted"
+        NeLeftAccepted{} -> EventType "NeLeftAccepted"
+        SelfAccepted{} -> EventType "SelfAccepted"
     , schemaVersion = 1
     , encode = encodeScopeGateEvent
     , decode = parseScopeGateEvent
@@ -101,6 +106,36 @@ encodeScopeGateEvent = \case
       , "requiredScope" .= encodeRequiredScopeMapped payload.requiredScope
       , "request" .= encodeRequestMapped payload.request
       ]
+  EqRightAccepted payload ->
+    object
+      [ "kind" .= ("EqRightAccepted" :: Text)
+      , "requiredScope" .= encodeRequiredScopeMapped payload.requiredScope
+      , "request" .= encodeRequestMapped payload.request
+      ]
+  EqLeftAccepted payload ->
+    object
+      [ "kind" .= ("EqLeftAccepted" :: Text)
+      , "requiredScope" .= encodeRequiredScopeMapped payload.requiredScope
+      , "request" .= encodeRequestMapped payload.request
+      ]
+  NeRightAccepted payload ->
+    object
+      [ "kind" .= ("NeRightAccepted" :: Text)
+      , "requiredScope" .= encodeRequiredScopeMapped payload.requiredScope
+      , "request" .= encodeRequestMapped payload.request
+      ]
+  NeLeftAccepted payload ->
+    object
+      [ "kind" .= ("NeLeftAccepted" :: Text)
+      , "requiredScope" .= encodeRequiredScopeMapped payload.requiredScope
+      , "request" .= encodeRequestMapped payload.request
+      ]
+  SelfAccepted payload ->
+    object
+      [ "kind" .= ("SelfAccepted" :: Text)
+      , "requiredScope" .= encodeRequiredScopeMapped payload.requiredScope
+      , "request" .= encodeRequestMapped payload.request
+      ]
 
 parseScopeGateEvent :: EventType -> Value -> Either Text ScopeGateEvent
 parseScopeGateEvent (EventType tag) = mapLeftText . parseEither (withObject "ScopeGateEvent" go)
@@ -116,6 +151,36 @@ parseScopeGateEvent (EventType tag) = mapLeftText . parseEither (withObject "Sco
         "Differed" ->
           Differed
             <$> ( DifferedData
+                    <$> explicitParseField parseRequiredScopeMapped o "requiredScope"
+                    <*> explicitParseField parseRequestMapped o "request"
+                )
+        "EqRightAccepted" ->
+          EqRightAccepted
+            <$> ( EqRightAcceptedData
+                    <$> explicitParseField parseRequiredScopeMapped o "requiredScope"
+                    <*> explicitParseField parseRequestMapped o "request"
+                )
+        "EqLeftAccepted" ->
+          EqLeftAccepted
+            <$> ( EqLeftAcceptedData
+                    <$> explicitParseField parseRequiredScopeMapped o "requiredScope"
+                    <*> explicitParseField parseRequestMapped o "request"
+                )
+        "NeRightAccepted" ->
+          NeRightAccepted
+            <$> ( NeRightAcceptedData
+                    <$> explicitParseField parseRequiredScopeMapped o "requiredScope"
+                    <*> explicitParseField parseRequestMapped o "request"
+                )
+        "NeLeftAccepted" ->
+          NeLeftAccepted
+            <$> ( NeLeftAcceptedData
+                    <$> explicitParseField parseRequiredScopeMapped o "requiredScope"
+                    <*> explicitParseField parseRequestMapped o "request"
+                )
+        "SelfAccepted" ->
+          SelfAccepted
+            <$> ( SelfAcceptedData
                     <$> explicitParseField parseRequiredScopeMapped o "requiredScope"
                     <*> explicitParseField parseRequestMapped o "request"
                 )

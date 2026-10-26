@@ -1,5 +1,8 @@
 # Keiro User Documentation Log
 
+## 2026-10-26
+* **Update**: Document candidate structural enum equality, binding qualification, and adapter-release adoption (Plan 322).
+
 ## 2026-10-25
 * **Update**: Document reaction state inspector modes and correct DLQ reservation/force behavior.
 * **Update**: Label positional manager inspection and legacy-only provenance with the pre-1.0 retirement boundary.

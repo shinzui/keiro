@@ -6,7 +6,7 @@ docId: DOC-28
 tags: [keiro, dsl, mappings, adoption]
 generated:
   by: process:codex-cli
-  at: 2026-09-20T20:55:54Z
+  at: 2026-10-26T23:15:24Z
 ---
 
 # Checked Mapping Adoption
@@ -184,3 +184,30 @@ mapped-opaque declaration in favor of the checked v5-or-v7 nominal path.
 Generic mapped-opaque support and every historical reader remain retained. The
 manifest performs no release, publication, consumer edit, deployment, or
 main-tree deletion.
+
+
+## Reusing a structural enum in guards
+
+A candidate Language 6 `mapped structural enum` can remain the sole wire authority
+when the consumer compares direct command/register fields with `==` or `!=`.
+Qualified literals such as `RequiredScope.PipelineScope` use the same declaration.
+See the [complete scope example](../user/keiro-dsl-types-and-mappings.md#exact-equality-for-structural-enums-candidate-language-6).
+Records, unions, opaque mappings, ordering, arithmetic, and new container traversal
+are excluded. Keep constructors declaration-qualified and compare only values of
+that declaration.
+
+Run source checking with binding explanations, scaffold, and compile the consumer's
+conformance target. Run every generated structural assertion, exhaustive enum
+shape round trips, fixture coverage, expected owner/wire pairs, both concrete
+truth tables, and exact symbolic model round trips. An omitted domain member can
+produce false unsatisfiability; successful solver startup or `check` alone cannot
+qualify an arbitrary consumer binding. Changing binding implementation requires a
+binding-version bump and renewed conformance.
+
+The repository acceptance fixture is
+`keiro-dsl/test/fixtures/mapped-structural-enum-equality.keiro`; its compiled target
+is `keiro-dsl-conformance-mapped-structural-enum-equality`. Run it inside
+`nix develop`, along with its restoring mutation script. Publishing a supporting
+release, removing a downstream adapter, and qualifying retained bytes are separate
+steps. Preserve `pipeline`/`diagnostic` spellings while independently checking
+event codecs, register layout, fold behavior, snapshot admission, and full replay.
