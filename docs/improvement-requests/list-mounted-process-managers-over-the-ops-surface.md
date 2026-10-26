@@ -6,15 +6,21 @@ description: >-
   process managers a host mounts. Add `pm types` (GET /pm/types over HTTP), mirroring
   `aggregate types`, so a UI and an operator can discover managers instead of knowing their
   names in advance.
-timestamp: 2026-10-21T23:30:00Z
+timestamp: 2026-10-26T19:18:52Z
 requestId: IR-56
-status: proposed
+status: accepted
+plan: docs/plans/323-list-mounted-process-managers-without-runtime-performance-regressions.md
 origin: mori://shinzui/keiro-ui
 ---
 
 # Improvement Request: List the Mounted Process Managers Over the Ops Surface
 
 ## Status
+
+Accepted and planned in
+[ExecPlan 323](../plans/323-list-mounted-process-managers-without-runtime-performance-regressions.md).
+Implementation and performance acceptance remain pending. The plan requires metadata-only
+discovery and blocks completion on any reproducible runtime performance regression.
 
 Proposed by the keiro runtime console initiative
 (`mori://shinzui/keiro-ui/masterplans/2-build-the-keiro-runtime-console`), filed from

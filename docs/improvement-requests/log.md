@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-26
+* **Update**: IR-56 accepted and linked to ExecPlan 323; implementation and no-regression performance acceptance remain pending.
 * **Update**: IR-60 accepted and linked to ExecPlan 322; implementation and release qualification remain pending.
 
 ## 2026-10-25
