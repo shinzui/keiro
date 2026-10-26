@@ -1,0 +1,5 @@
+waiting for another Nix process to finish fetching input 'git+file:///Users/shinzui/Keikaku/bokuno/keiro'...
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+error (ignored): SQLite database '/Users/shinzui/.cache/nix/eval-cache-v6/746c2f2199a97fd891ef41f92a999ae801cb022e929cfa760799820ff2d78950.sqlite' is busy
+OK: 60 concepts

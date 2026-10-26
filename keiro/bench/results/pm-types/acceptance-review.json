@@ -1,0 +1,854 @@
+{
+  "status": "accepted",
+  "candidate": "bc4799c33f953dada4685031020aa898591c23c6",
+  "plan": "docs/plans/323-list-mounted-process-managers-without-runtime-performance-regressions.md",
+  "decision_date": "2026-10-26",
+  "user_instructions": [
+    "a small allocation overhead is fine it's only 0.009%",
+    "for latency measurement we should also accept unless there is a regression"
+  ],
+  "timing_policy": "Reject statistically supported degradation (CI95 lower ratio > 1); retain uncertainty without a separate 1% resolution gate.",
+  "allocation_policy": "Accept the observed final-cohort overhead; this decision establishes no general allowance for larger future increases.",
+  "original_analysis": {
+    "path": "keiro/bench/results/pm-types/matched-v2/analysis.json",
+    "sha256": "c08b548b9b8e2e00e582b3576ed39e9ec3eb472f52146f1e23d2f4d20a669faa",
+    "status": "not-accepted",
+    "preserved": true
+  },
+  "original_controller_policy_preserved": true,
+  "trials": 60,
+  "successful_polls": 800,
+  "failed_polls": 0,
+  "raw_trial_sha256": {
+    "keiro/bench/results/pm-types/matched-v2/baseline-capacity/1/1-disabled.json": "7bcf1a87964ef97f9577be7958b72a4c7f0fb0cbc00e34fe4dd0c17477143af8",
+    "keiro/bench/results/pm-types/matched-v2/baseline-capacity/2/1-disabled.json": "c65aab7b19889792bef6c9790f014ab106457e249a45e6ceaa1845e61a0e267e",
+    "keiro/bench/results/pm-types/matched-v2/baseline-capacity/3/1-disabled.json": "69553af4c04a83f04e791d529e329f7905976cdec60940e2f356aa49d3a82c47",
+    "keiro/bench/results/pm-types/matched-v2/baseline-capacity/4/1-disabled.json": "f30340ba6b1e3546e3279612e97d7b1a0470132ff12eac80cd683a9f413cfe2c",
+    "keiro/bench/results/pm-types/matched-v2/baseline-capacity/5/1-disabled.json": "2845a4f74f77226f4e1bf181b7f87ff51d050a69a8f4d6f40cbdac996f7fc557",
+    "keiro/bench/results/pm-types/matched-v2/baseline-disabled/1/1-disabled.json": "868bfa8d0c5f9b9ceec7cf7a065c01136480b1797b7d1ef163f54b6b63205737",
+    "keiro/bench/results/pm-types/matched-v2/baseline-disabled/2/1-disabled.json": "d4a19f9f0386cda374eb632d380e5aa410c2e15b6a49d1de7d3d455589a09384",
+    "keiro/bench/results/pm-types/matched-v2/baseline-disabled/3/1-disabled.json": "5287c0adb8a58152dedbe24737e921c558ef512165d91c62c42799b3f1d454c0",
+    "keiro/bench/results/pm-types/matched-v2/baseline-disabled/4/1-disabled.json": "cd4175f96db4e3467ec9ffaa8998604cde6911ee685da2fafd8b402fba8c0031",
+    "keiro/bench/results/pm-types/matched-v2/baseline-disabled/5/1-disabled.json": "7cea43564a492469b8b52b0faf4e0220e59b5c1fbe5f3b002da7fb35976e4f76",
+    "keiro/bench/results/pm-types/matched-v2/baseline-idle/1/1-idle.json": "2d1655d30638953899b83a6960f58bc1668c8c9e7ae51fb354e58da41bcf929b",
+    "keiro/bench/results/pm-types/matched-v2/baseline-idle/2/1-idle.json": "b2c45b779e5620dff8ae0645108d3bae67a5c860246784eba4df9752d7627ee8",
+    "keiro/bench/results/pm-types/matched-v2/baseline-idle/3/1-idle.json": "9f1e7652fdc38350bde519ea6e5f43f74c51dce6a726884cafaec3f3df59f75f",
+    "keiro/bench/results/pm-types/matched-v2/baseline-idle/4/1-idle.json": "c5a64e8d6601620eb6faae855ef774f417be5e884e1901f3ed9a819eafe93e19",
+    "keiro/bench/results/pm-types/matched-v2/baseline-idle/5/1-idle.json": "2947f1e85b3802b1938b0db89cdb7b9895adde743062434aa8cde814fba18681",
+    "keiro/bench/results/pm-types/matched-v2/candidate-capacity/1/1-disabled.json": "f51966ccbb8077820f0664546d41e0096a95b6bb663b60dd90754a6dbb6f2c50",
+    "keiro/bench/results/pm-types/matched-v2/candidate-capacity/2/1-disabled.json": "f41a8dadce87a681cb9b02cdfe0bb140ea959a37b92aef2335742a9decb7723b",
+    "keiro/bench/results/pm-types/matched-v2/candidate-capacity/3/1-disabled.json": "f7db2b4aaa0869093c0f1838b9cd424e9d7a60e9415989b0d1d9cc00f66aa06d",
+    "keiro/bench/results/pm-types/matched-v2/candidate-capacity/4/1-disabled.json": "3cd331e3ad4041e6ad62c36c2edca4fa1dba318b7cbeeaf015b8c3ae513d19f1",
+    "keiro/bench/results/pm-types/matched-v2/candidate-capacity/5/1-disabled.json": "c8ce08752b776564256633070e9ee5380ff43bc742b1cc04f83c3bc01479780f",
+    "keiro/bench/results/pm-types/matched-v2/candidate-disabled/1/1-disabled.json": "3e3bf71cbc214819c692b77f5a1d3675b6cb8a98993a5f7ceca2d3d366d6695c",
+    "keiro/bench/results/pm-types/matched-v2/candidate-disabled/2/1-disabled.json": "7a724f64f92c53e5d66e15c3c45fbf13a6ec597e18e57781482edff80380052e",
+    "keiro/bench/results/pm-types/matched-v2/candidate-disabled/3/1-disabled.json": "1ea151160c25dab9ed1a218de3300d73a0436af32c78e618a1f846ae0fb26868",
+    "keiro/bench/results/pm-types/matched-v2/candidate-disabled/4/1-disabled.json": "ebfc51894b83678ef92af9b9b4c58e835e9c4d5c42f3d72fa6bcc3268112f696",
+    "keiro/bench/results/pm-types/matched-v2/candidate-disabled/5/1-disabled.json": "aeb458351e7ddc937b6fec132fc4bf605b6f3d0bf59bfe0a0934bf5a75598703",
+    "keiro/bench/results/pm-types/matched-v2/candidate-idle/1/1-idle.json": "46938611fbe14b16e45508137b066f6446bd4d8e2b3390fcb2dc01433596a9d7",
+    "keiro/bench/results/pm-types/matched-v2/candidate-idle/2/1-idle.json": "41d0bd3644c61324b69089d2df8d46f083a59b48d3d1a527ae82a00ae7ca6754",
+    "keiro/bench/results/pm-types/matched-v2/candidate-idle/3/1-idle.json": "45cee972936d4ddec5cd74ab803bd21950c60935fab7d950f5b6c1ec8c4216ee",
+    "keiro/bench/results/pm-types/matched-v2/candidate-idle/4/1-idle.json": "05aa4792fa4fd800ef1754e40df4c13429015732a18f9e289898e82bbd5b6d92",
+    "keiro/bench/results/pm-types/matched-v2/candidate-idle/5/1-idle.json": "ac7a6f3b173d2ce266411e4bd701fa85809995d3f5d939a0fcccbf4513d14588",
+    "keiro/bench/results/pm-types/matched-v2/catalog-active/1/1-pm-types.json": "b2d8a0ab8de0e649f0448233e51512acfe62b28d7eda6578d30271442ffd3d9f",
+    "keiro/bench/results/pm-types/matched-v2/catalog-active/2/1-pm-types.json": "ccc7a0778e4e0290909289f25224c23b2d9208696ea90454681a688641dd9fa0",
+    "keiro/bench/results/pm-types/matched-v2/catalog-active/3/1-pm-types.json": "e7cbde9cd8bad0406ef06e484b5ac0d826a0e2127addcb65c0ad571fb39af59b",
+    "keiro/bench/results/pm-types/matched-v2/catalog-active/4/1-pm-types.json": "59c5512e08aafb7ca68bbef94ac1f60efffb85547f55681638d6b52d40841c6c",
+    "keiro/bench/results/pm-types/matched-v2/catalog-active/5/1-pm-types.json": "a108448a83a4cdfea88dd2dffac22ff9ad6b9abc98eb0be8ed8263aaa4e6b0f2",
+    "keiro/bench/results/pm-types/matched-v2/catalog-idle/1/1-pm-types-idle.json": "90c9717c86e0d2b28068da901d270bb0cfab5ac6deb6c5688c5eee6b668f99d4",
+    "keiro/bench/results/pm-types/matched-v2/catalog-idle/2/1-pm-types-idle.json": "4a0d6cc17173ad45683f9332f923b0285ae1b7517483630cea303a82a95e8640",
+    "keiro/bench/results/pm-types/matched-v2/catalog-idle/3/1-pm-types-idle.json": "8331b6bf7596d5fa19ca141e25c13b3fc49b088a3b36c19b2e18e2024414b1ef",
+    "keiro/bench/results/pm-types/matched-v2/catalog-idle/4/1-pm-types-idle.json": "6e1a06915246cc6166f98f300b19ff360eebe564f54c26ba345d44118c0dec44",
+    "keiro/bench/results/pm-types/matched-v2/catalog-idle/5/1-pm-types-idle.json": "972f95b63d89d1d8630c43a08cdf7399e35a6896c6ea80ab2410fc6428123e3f",
+    "keiro/bench/results/pm-types/matched-v2/control-a/1/1-idle.json": "8662942ace6b453bcd714cd149eb0d1b9510ca8c47d2c13768101bfd0a4ffb56",
+    "keiro/bench/results/pm-types/matched-v2/control-a/2/1-idle.json": "2b1f896a7c111ce4ba597021fbbe9e3d1bc8dbcc1f426574ee69c43f1234f597",
+    "keiro/bench/results/pm-types/matched-v2/control-a/3/1-idle.json": "c5ec90b734469359bfc66c443e35ead2486ffa6fdd27ba39e0dfb1e47a5d664e",
+    "keiro/bench/results/pm-types/matched-v2/control-a/4/1-idle.json": "099c4916950bed1056a5f2adb82ec5ad8a10c93ee4dbde57228ef8b2dba5874d",
+    "keiro/bench/results/pm-types/matched-v2/control-a/5/1-idle.json": "670f9ad1f662fccb38282a3d94b51944fe8512e524c002c57c6398fcb771bd7f",
+    "keiro/bench/results/pm-types/matched-v2/control-b/1/1-idle.json": "8cbb797b25a2dc1fec468637ba3364040428516c24346536528416f648fd756e",
+    "keiro/bench/results/pm-types/matched-v2/control-b/2/1-idle.json": "89a72ebf72c65d191a89baaafd88e2cdb4345657dffbe4926682adf641ed8bc5",
+    "keiro/bench/results/pm-types/matched-v2/control-b/3/1-idle.json": "27e042b9702013f762ab1a04151b3108be31a299da5cf86362d74d19a0f1ce9e",
+    "keiro/bench/results/pm-types/matched-v2/control-b/4/1-idle.json": "dc07df55104303142593825fbffad2b8d0e6ad58e73fcb8ab0e3daf0f1eb68ca",
+    "keiro/bench/results/pm-types/matched-v2/control-b/5/1-idle.json": "68a048dba2ab6d963354456df57d4df3b54e7c0e3c13413269fc8df2c476488d",
+    "keiro/bench/results/pm-types/matched-v2/many-active/1/1-pm-types-many.json": "cbf1d23968c49322741760f0606034d2e3c375121aa6e6118e63a6ffcadfd03e",
+    "keiro/bench/results/pm-types/matched-v2/many-active/2/1-pm-types-many.json": "39046f4d03b386b500bac86ae331c4af4ca1d354b319f6247f6e820b67553820",
+    "keiro/bench/results/pm-types/matched-v2/many-active/3/1-pm-types-many.json": "0d804330fc01b3e332cbcd40d886af6227833a3576c2604783197d58c95234fa",
+    "keiro/bench/results/pm-types/matched-v2/many-active/4/1-pm-types-many.json": "cc972bd26e503745b0b8dfba9127e3737aec4a9ed4384a625ed8b1a8734ce832",
+    "keiro/bench/results/pm-types/matched-v2/many-active/5/1-pm-types-many.json": "a215f178a751396b444330ea6b418dd2165343860dde14dc2ec4a1cc8890c4cb",
+    "keiro/bench/results/pm-types/matched-v2/many-idle/1/1-pm-types-many-idle.json": "90ebe63872f1b6c5ec6f1727443a51d356c67e1a5bee15aa618ffbe42b27e6d7",
+    "keiro/bench/results/pm-types/matched-v2/many-idle/2/1-pm-types-many-idle.json": "de48673e76ea715267c69239a28dfb670190d9f44fda352d588f27ea42d233b2",
+    "keiro/bench/results/pm-types/matched-v2/many-idle/3/1-pm-types-many-idle.json": "2bf9ca80bad19a7dcd8d0e2c37383d87e9f73540a2ca15e992da16e3d5c8d43e",
+    "keiro/bench/results/pm-types/matched-v2/many-idle/4/1-pm-types-many-idle.json": "aea09b95ba1dad51b006e1622b15f395b2955ab3d3f2bcb1fc68ce2d48b7ceb7",
+    "keiro/bench/results/pm-types/matched-v2/many-idle/5/1-pm-types-many-idle.json": "71e5a88fef1f4825f45b24503887af84fde84c0a1e4189f76388afb52bdfef51"
+  },
+  "results": [
+    {
+      "comparison": "disabled",
+      "metric": "throughput",
+      "ratios": [
+        1.0000865540703276,
+        0.9999937963618764,
+        0.9999900442276431,
+        1.0000153083514711,
+        0.9999490175649747
+      ],
+      "median": 0.9999937963618764,
+      "ci95": [
+        0.9999490175649747,
+        1.0000865540703276
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2,
+      "original_status": "passed",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "disabled",
+      "metric": "p95_us",
+      "ratios": [
+        0.996641289744738,
+        1.0097972972972973,
+        0.99568345323741,
+        0.9946927077804903,
+        1.0122679752506933
+      ],
+      "median": 0.996641289744738,
+      "ci95": [
+        0.9946927077804903,
+        1.0122679752506933
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2,
+      "original_status": "inconclusive",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "disabled",
+      "metric": "p99_us",
+      "ratios": [
+        1.0024733842348639,
+        1.0260944576234634,
+        0.9749089016137429,
+        1.0005045408678104,
+        1.0148349984862246
+      ],
+      "median": 1.0024733842348639,
+      "ci95": [
+        0.9749089016137429,
+        1.0260944576234634
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 4,
+      "original_status": "inconclusive",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "disabled",
+      "metric": "writer_thread_allocated_bytes_per_operation",
+      "ratios": [
+        0.9999730569798386,
+        0.9999952266630368,
+        1.0001491747725344,
+        1.0000555674205724,
+        0.999979298534343
+      ],
+      "median": 0.9999952266630368,
+      "ci95": [
+        0.9999730569798386,
+        1.0001491747725344
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2,
+      "original_status": "passed",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "capacity",
+      "metric": "throughput",
+      "ratios": [
+        1.0068227782786106,
+        1.0298688295750766,
+        0.9935080668991194,
+        0.979958129435036,
+        1.0007090911237433
+      ],
+      "median": 1.0007090911237433,
+      "ci95": [
+        0.979958129435036,
+        1.0298688295750766
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 3,
+      "original_status": "inconclusive",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "capacity",
+      "metric": "p95_us",
+      "ratios": [
+        1.0464816010329245,
+        1.0637319316688567,
+        0.9556803995006242,
+        0.9860228716645489,
+        1.0019404915912031
+      ],
+      "median": 1.0019404915912031,
+      "ci95": [
+        0.9556803995006242,
+        1.0637319316688567
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 3,
+      "original_status": "inconclusive",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "capacity",
+      "metric": "p99_us",
+      "ratios": [
+        1.0166959578207382,
+        1.0519902518277824,
+        1.0189818809318378,
+        0.866467735919433,
+        1.0554123711340206
+      ],
+      "median": 1.0189818809318378,
+      "ci95": [
+        0.866467735919433,
+        1.0554123711340206
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 4,
+      "original_status": "inconclusive",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "capacity",
+      "metric": "writer_thread_allocated_bytes_per_operation",
+      "ratios": [
+        1.000062966510905,
+        1.0001155941539512,
+        0.9998217631514973,
+        0.9997167303354833,
+        1.0002957450790395
+      ],
+      "median": 1.000062966510905,
+      "ci95": [
+        0.9997167303354833,
+        1.0002957450790395
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 3,
+      "original_status": "passed",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "idle",
+      "metric": "throughput",
+      "ratios": [
+        0.999976987384484,
+        1.0000203117706712,
+        1.0000011506536863,
+        1.0000673881416884,
+        0.9999366153634653
+      ],
+      "median": 1.0000011506536863,
+      "ci95": [
+        0.9999366153634653,
+        1.0000673881416884
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 3,
+      "original_status": "passed",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "idle",
+      "metric": "p95_us",
+      "ratios": [
+        0.9923613417469279,
+        1.0016778523489933,
+        1.0068293775190327,
+        1.0131663455362878,
+        0.9822283707566245
+      ],
+      "median": 1.0016778523489933,
+      "ci95": [
+        0.9822283707566245,
+        1.0131663455362878
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 3,
+      "original_status": "inconclusive",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "idle",
+      "metric": "p99_us",
+      "ratios": [
+        0.9907988289418653,
+        1.0169110564058654,
+        1.0261678200692042,
+        1.014297302778341,
+        0.9711425206124853
+      ],
+      "median": 1.014297302778341,
+      "ci95": [
+        0.9711425206124853,
+        1.0261678200692042
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 3,
+      "original_status": "inconclusive",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "idle",
+      "metric": "writer_thread_allocated_bytes_per_operation",
+      "ratios": [
+        1.000711424862996,
+        0.9999955094493006,
+        0.9996488429690868,
+        0.9995054149607165,
+        1.000054647511841
+      ],
+      "median": 0.9999955094493006,
+      "ci95": [
+        0.9995054149607165,
+        1.000711424862996
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2,
+      "original_status": "passed",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "same-source",
+      "metric": "throughput",
+      "ratios": [
+        1.0000132572988059,
+        1.0000233138332628,
+        0.9999664818331537,
+        1.0000424247781914,
+        1.0000290668704117
+      ],
+      "median": 1.0000233138332628,
+      "ci95": [
+        0.9999664818331537,
+        1.0000424247781914
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 4,
+      "original_status": "passed",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "same-source",
+      "metric": "p95_us",
+      "ratios": [
+        0.9944239991078399,
+        0.9976517946997652,
+        0.9965540240106714,
+        0.9886729710069625,
+        1.0093770209096788
+      ],
+      "median": 0.9965540240106714,
+      "ci95": [
+        0.9886729710069625,
+        1.0093770209096788
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 1,
+      "original_status": "inconclusive",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "same-source",
+      "metric": "p99_us",
+      "ratios": [
+        1.0020273154075972,
+        0.9933628318584071,
+        0.9700735217976597,
+        1.4744271487962874,
+        0.9970501474926253
+      ],
+      "median": 0.9970501474926253,
+      "ci95": [
+        0.9700735217976597,
+        1.4744271487962874
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2,
+      "original_status": "inconclusive",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "same-source",
+      "metric": "writer_thread_allocated_bytes_per_operation",
+      "ratios": [
+        0.9999551399154479,
+        1.0000088793254094,
+        1.0000469897425261,
+        1.0000458698099186,
+        0.9999850688005913
+      ],
+      "median": 1.0000088793254094,
+      "ci95": [
+        0.9999551399154479,
+        1.0000469897425261
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 3,
+      "original_status": "passed",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "catalog-polling",
+      "metric": "throughput",
+      "ratios": [
+        0.9999660823696157,
+        0.9999942969057862,
+        0.9999669296087967,
+        1.0001210909271772,
+        1.000066136146711
+      ],
+      "median": 0.9999942969057862,
+      "ci95": [
+        0.9999660823696157,
+        1.0001210909271772
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2,
+      "original_status": "passed",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "catalog-polling",
+      "metric": "p95_us",
+      "ratios": [
+        1.0047148630444545,
+        0.9730639730639731,
+        1.0084490740740741,
+        1.024072655651603,
+        1.013708981001727
+      ],
+      "median": 1.0084490740740741,
+      "ci95": [
+        0.9730639730639731,
+        1.024072655651603
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 4,
+      "original_status": "inconclusive",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "catalog-polling",
+      "metric": "p99_us",
+      "ratios": [
+        1.016821036942404,
+        0.9754734554486184,
+        1.0042521526522803,
+        1.0559513830678962,
+        1.0192682176898638
+      ],
+      "median": 1.016821036942404,
+      "ci95": [
+        0.9754734554486184,
+        1.0559513830678962
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 4,
+      "original_status": "inconclusive",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "catalog-polling",
+      "metric": "writer_thread_allocated_bytes_per_operation",
+      "ratios": [
+        0.9998350693261352,
+        1.0000597485087757,
+        0.9999520703076212,
+        1.000614021300394,
+        0.9999761094618308
+      ],
+      "median": 0.9999761094618308,
+      "ci95": [
+        0.9998350693261352,
+        1.000614021300394
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2,
+      "original_status": "passed",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "many-polling",
+      "metric": "throughput",
+      "ratios": [
+        0.9999248085055737,
+        1.000021312395289,
+        0.9998910896364309,
+        0.9999975986409508,
+        0.9999331651957757
+      ],
+      "median": 0.9999331651957757,
+      "ci95": [
+        0.9998910896364309,
+        1.000021312395289
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 1,
+      "original_status": "passed",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "many-polling",
+      "metric": "p95_us",
+      "ratios": [
+        0.9968422239765422,
+        1.004646017699115,
+        0.9786658003032273,
+        0.9910195456946645,
+        0.9737546866630958
+      ],
+      "median": 0.9910195456946645,
+      "ci95": [
+        0.9737546866630958,
+        1.004646017699115
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 1,
+      "original_status": "passed",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "many-polling",
+      "metric": "p99_us",
+      "ratios": [
+        0.9980853100733964,
+        1.0313363076269386,
+        0.9710393541876892,
+        1.0012008405884119,
+        0.994730975782754
+      ],
+      "median": 0.9980853100733964,
+      "ci95": [
+        0.9710393541876892,
+        1.0313363076269386
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2,
+      "original_status": "inconclusive",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "many-polling",
+      "metric": "writer_thread_allocated_bytes_per_operation",
+      "ratios": [
+        1.0000878343498232,
+        1.00001299704492,
+        1.0000630411308482,
+        1.000153086032042,
+        1.0001147605662468
+      ],
+      "median": 1.0000878343498232,
+      "ci95": [
+        1.00001299704492,
+        1.000153086032042
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 5,
+      "original_status": "regression",
+      "acceptance_reason": "observed-allocation-overhead-accepted-by-user"
+    },
+    {
+      "comparison": "catalog-versus-prechange",
+      "metric": "throughput",
+      "ratios": [
+        0.9999944969832462,
+        1.0000312681198755,
+        0.9999184036451106,
+        0.9999360638121176,
+        1.0000660360854188
+      ],
+      "median": 0.9999944969832462,
+      "ci95": [
+        0.9999184036451106,
+        1.0000660360854188
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2,
+      "original_status": "passed",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "catalog-versus-prechange",
+      "metric": "p95_us",
+      "ratios": [
+        0.9908114690578989,
+        1.002125279642058,
+        0.9754814151365876,
+        1.0018197388139585,
+        0.9993614983505374
+      ],
+      "median": 0.9993614983505374,
+      "ci95": [
+        0.9754814151365876,
+        1.002125279642058
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2,
+      "original_status": "passed",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "catalog-versus-prechange",
+      "metric": "p99_us",
+      "ratios": [
+        0.9986407360936846,
+        1.0088836562132077,
+        1.0215181660899655,
+        1.0219022510646927,
+        0.976148409893993
+      ],
+      "median": 1.0088836562132077,
+      "ci95": [
+        0.976148409893993,
+        1.0219022510646927
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 3,
+      "original_status": "inconclusive",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "catalog-versus-prechange",
+      "metric": "writer_thread_allocated_bytes_per_operation",
+      "ratios": [
+        1.00061678328337,
+        1.0000146706404458,
+        0.9999325128741929,
+        0.9999996040785788,
+        0.9999791862095245
+      ],
+      "median": 0.9999996040785788,
+      "ci95": [
+        0.9999325128741929,
+        1.00061678328337
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2,
+      "original_status": "passed",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "many-versus-prechange",
+      "metric": "throughput",
+      "ratios": [
+        0.9999211567781457,
+        1.0000192111328514,
+        0.9999049459998224,
+        0.9999976486691468,
+        0.9999588775286256
+      ],
+      "median": 0.9999588775286256,
+      "ci95": [
+        0.9999049459998224,
+        1.0000192111328514
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 1,
+      "original_status": "passed",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "many-versus-prechange",
+      "metric": "p95_us",
+      "ratios": [
+        0.9785231927377394,
+        1.015883668903803,
+        1.011755485893417,
+        1.0040676514664955,
+        0.9673299989358306
+      ],
+      "median": 1.0040676514664955,
+      "ci95": [
+        0.9673299989358306,
+        1.015883668903803
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 3,
+      "original_status": "inconclusive",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "many-versus-prechange",
+      "metric": "p99_us",
+      "ratios": [
+        0.9810748640736093,
+        1.039173712940169,
+        1.0405493079584776,
+        1.0145001013993105,
+        0.9635846093443267
+      ],
+      "median": 1.0145001013993105,
+      "ci95": [
+        0.9635846093443267,
+        1.0405493079584776
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 3,
+      "original_status": "inconclusive",
+      "acceptance_reason": "no-supported-regression"
+    },
+    {
+      "comparison": "many-versus-prechange",
+      "metric": "writer_thread_allocated_bytes_per_operation",
+      "ratios": [
+        1.0007808128408826,
+        0.9999773210222869,
+        1.0000693309745343,
+        1.0000779625838419,
+        1.0000980058047173
+      ],
+      "median": 1.0000779625838419,
+      "ci95": [
+        0.9999773210222869,
+        1.0007808128408826
+      ],
+      "status": "accepted",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 4,
+      "original_status": "passed",
+      "acceptance_reason": "no-supported-regression"
+    }
+  ],
+  "retention": [
+    {
+      "path": "keiro/bench/results/pm-types/retention-single-v2/1-pm-types.json",
+      "successful_polls": 240,
+      "failed_polls": 0,
+      "lifecycle_after": {
+        "active_threads": 11,
+        "large_object_bytes": 578056,
+        "live_bytes": 969912,
+        "operations": 3000,
+        "phase": "mounted-after-poller-cleanup-and-drain"
+      },
+      "resources_after_clients": {
+        "connections": 0,
+        "views": 0,
+        "wake_pump": false
+      }
+    },
+    {
+      "path": "keiro/bench/results/pm-types/retention-many-v2/1-pm-types-many.json",
+      "successful_polls": 240,
+      "failed_polls": 0,
+      "lifecycle_after": {
+        "active_threads": 11,
+        "large_object_bytes": 577680,
+        "live_bytes": 1081544,
+        "operations": 3000,
+        "phase": "mounted-after-poller-cleanup-and-drain"
+      },
+      "resources_after_clients": {
+        "connections": 0,
+        "views": 0,
+        "wake_pump": false
+      }
+    }
+  ],
+  "release_gate": {
+    "path": "keiro/bench/results/release-gates/20261026T215310Z-bc4799c3.log",
+    "sha256": "9a24548d94213531f496395743d13eb2d7c41dbd10a60f6a99e66bec28b98ca0",
+    "verify_exit": 0,
+    "bench_exit": 0
+  },
+  "rejected_predecessor_timing_regressions": [
+    {
+      "comparison": "many-polling",
+      "metric": "p99_us",
+      "ratios": [
+        1.0618348233290762,
+        1.0519494545847283,
+        1.0101922874855522,
+        1.0437226733291693,
+        1.0899341686132937
+      ],
+      "median": 1.0519494545847283,
+      "ci95": [
+        1.0101922874855522,
+        1.0899341686132937
+      ],
+      "status": "regression"
+    },
+    {
+      "comparison": "catalog-versus-prechange",
+      "metric": "throughput",
+      "ratios": [
+        1.0000309677863481,
+        1.0000241640731564,
+        1.000016160138871,
+        1.0000358207599214,
+        1.000035420003447
+      ],
+      "median": 1.0000309677863481,
+      "ci95": [
+        1.000016160138871,
+        1.0000358207599214
+      ],
+      "status": "regression"
+    },
+    {
+      "comparison": "many-versus-prechange",
+      "metric": "p99_us",
+      "ratios": [
+        1.0629661197528233,
+        1.028402491817126,
+        1.0047026857560875,
+        1.0670498084291187,
+        1.080412588148616
+      ],
+      "median": 1.0629661197528233,
+      "ci95": [
+        1.0047026857560875,
+        1.080412588148616
+      ],
+      "status": "regression"
+    }
+  ],
+  "limitations": "Intervals do not all exclude a 1% loss; acceptance does not prove exact equality or attribute the small allocation increase to a measurement artifact."
+}

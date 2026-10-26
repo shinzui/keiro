@@ -6,9 +6,16 @@ description: >-
   process managers a host mounts. Add `pm types` (GET /pm/types over HTTP), mirroring
   `aggregate types`, so a UI and an operator can discover managers instead of knowing their
   names in advance.
-timestamp: 2026-10-26T19:18:52Z
+timestamp: 2026-10-26T22:20:33Z
 requestId: IR-56
-status: accepted
+status: completed
+completedAt: 2026-10-26T22:20:33Z
+resolution: >-
+  Implemented under ExecPlan 323 with metadata-only library, CLI and HTTP discovery,
+  documented JSON and 919 passing focused examples. Both retention runs and the full
+  release gate pass. The user accepts the observed approximately 0.009% allocation
+  overhead and timing results without statistically supported regressions; the final
+  cohort meets those criteria. Publication remains separate.
 plan: docs/plans/323-list-mounted-process-managers-without-runtime-performance-regressions.md
 origin: mori://shinzui/keiro-ui
 ---
@@ -17,10 +24,13 @@ origin: mori://shinzui/keiro-ui
 
 ## Status
 
-Accepted and planned in
+Implemented and accepted in
 [ExecPlan 323](../plans/323-list-mounted-process-managers-without-runtime-performance-regressions.md).
-Implementation and performance acceptance remain pending. The plan requires metadata-only
-discovery and blocks completion on any reproducible runtime performance regression.
+Metadata-only discovery, CLI/HTTP parity, transport limits, retention and the full
+release gate pass. The final paired cohort shows no statistically supported timing
+regression; the user accepts its approximately 0.009% allocation overhead and the
+reported timing uncertainty. The plan and its evidence retain both original strict
+reports and the separate acceptance decision. Publication remains separate.
 
 Proposed by the keiro runtime console initiative
 (`mori://shinzui/keiro-ui/masterplans/2-build-the-keiro-runtime-console`), filed from

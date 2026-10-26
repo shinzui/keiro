@@ -1,0 +1,8 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+profile: count-workflow-instances-by-status-class: missing profile-recommended field: reviews
+profile: list-mounted-process-managers-over-the-ops-surface: missing profile-recommended field: reviews
+profile: map-categories-to-the-projections-that-consume-them: missing profile-recommended field: reviews
+profile: name-the-feeding-subscription-on-projection-status-rows: missing profile-recommended field: reviews
+profile: provide-a-runnable-inspection-host-that-mounts-the-jitsurei-aggregate-and-process-manager-hooks: missing profile-recommended field: reviews
+profile: support-equality-guards-for-mapped-structural-enums: missing profile-recommended field: reviews

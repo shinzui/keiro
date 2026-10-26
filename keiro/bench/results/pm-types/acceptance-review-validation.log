@@ -1,0 +1,4 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+keiro/bench/results/pm-types/acceptance-review.json: accepted; 60 complete trials, 800 successful polls, no supported timing regression
+Rejected predecessor still has supported timing regressions under the revised policy

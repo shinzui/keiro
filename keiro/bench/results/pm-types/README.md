@@ -4,6 +4,13 @@ Implementation baseline: `d61aabcfdaa4af14aef59712f10deb4826f0e99b`, preserved
 in the detached `../keiro-pm-types-baseline` worktree. The only initial dirty
 file was unrelated plan 304; it is excluded from implementation commits.
 
+Final candidate `bc4799c3` is accepted under the user's revised criteria:
+accept the observed approximately 0.009% writer-allocation overhead and accept
+timing measurements unless they show a statistically supported regression.
+[`acceptance-review.json`](acceptance-review.json) records that decision against
+the unchanged final cohort, including trial/report hashes and all uncertainty.
+The original strict-controller refusals below remain historical evidence.
+
 Machine: Mac17,15, arm64 Darwin 27.0.0, 36 logical CPUs, 256 GiB RAM.
 Nix development shell: GHC 9.12.4, Cabal 3.16.1.0, PostgreSQL 18.6,
 Z3 4.16.0. Cabal's build profile is `-O1`; benchmarks use `+RTS -N2 -T -RTS`.
@@ -15,7 +22,8 @@ and warms 50 complete writer operations. Timed operations perform real workflow
 creation/claim/resume and timer schedule/claim/fire work. No production database
 is used. Benchmarks run serially, after builds finish.
 
-Pre-change protocol, from the repository root in `nix develop`:
+Original measurement protocol (retained for reproducibility), from the repository
+root in `nix develop`:
 
 ```bash
 cabal build all --enable-tests --enable-benchmarks
@@ -49,7 +57,10 @@ Intervals must exclude 1% degradation; 1% is a resolution requirement, never an
 allowed slowdown budget. Adverse point estimates and the number of adverse pairs
 are retained for reproducibility review. Supported degradation requires the
 interval to exclude equality; a point estimate's sign alone cannot establish it.
-Combined-process allocation is diagnostic.
+Combined-process allocation is diagnostic. These are the original controller's
+rules. The user's later acceptance revision, recorded below, supersedes its
+allocation and interval-width blockers for this candidate without rewriting
+the controller or its historical output.
 
 Retention runs use `KEIRO_INSPECTION_RETENTION_SECONDS=60` for both new active
 catalog sizes. Post-major-GC heap and active threads are sampled every five
@@ -168,30 +179,32 @@ cabal exec -- ghc -O1 -threaded -rtsopts -package-id=keiro-0.21.0.0-inplace -pac
 detached baseline, using the same 50 operations/second, five alternating pairs,
 20-second duration, durability settings and RTS options. All 60 trials finish
 and all 800 required polls succeed. `matched-v2-controller.log`, `analysis.json`
-and the nonzero exit record retain the refusal; this cohort does not establish
-performance acceptance.
+and the nonzero exit record retain the original strict-policy refusal. The
+separate acceptance review applies the user's revised criteria to this cohort.
 
 For 1,000 descriptors, the active/idle writer p99 ratio is 0.998085
 (95% interval 0.971039–1.031336). The previously detected p99 regression is no
-longer supported, but the interval cannot exclude a 1% loss. Writer allocation
+longer supported, and the user accepts the result despite the interval not
+excluding a 1% loss. Writer allocation
 still reports a supported ratio of 1.000088 (1.000013–1.000153), about 62 bytes
-per operation. Several baseline and same-source latency/capacity controls also
-fail the resolution requirement. The corrected single-catalog/pre-change
+per operation; this is the overhead the user explicitly accepts. Several
+baseline and same-source latency/capacity controls also fail the original
+resolution requirement, with no supported timing degradation. The corrected single-catalog/pre-change
 throughput interval includes equality (median 0.999994, interval
 0.999918–1.000066). Median large-catalog process allocation is approximately
 986 MB, down from approximately 1,141 MB in the first cohort; process totals
 remain diagnostic rather than the writer allocation acceptance metric.
 
-Allocation attribution remains open. The benchmark sums 1,000 separate
+Allocation attribution was unresolved when the strict run was reviewed. The benchmark sums 1,000 separate
 per-operation `getAllocationCounter` differences. The pinned compiler
 (`mori://ghc/ghc`, release tag `ghc-9.12.4-release`) documents an accuracy of
 about 4 KB in `libraries/ghc-internal/src/GHC/Internal/Conc/Sync.hs`, while
 `rts/PrimOps.cmm` also accounts for the current nursery block. These source
 artifact-level URIs are pending, and this project is not yet in the local
-registry. These facts warrant a metering
-calibration; they do not prove that the observed increase is an artifact.
-No metric, confidence interval or acceptance threshold has been changed to
-dismiss it. A useful next experiment is one counter span around the complete
+registry. These facts do not prove that the observed increase is an artifact.
+The user accepts the measured overhead without requiring calibration; further
+attribution is optional. No raw metric or confidence interval is changed to
+dismiss the signal. An optional experiment is one counter span around the complete
 writer loop, retaining the per-operation values as diagnostics and using the
 same metering driver against both production package sets. Mixing a new span
 with the old baseline's per-operation sum would be an invalid comparison.
@@ -203,8 +216,7 @@ respectively; large-object bytes level off near 668 KB. Active threads vary
 between 11 and 13 during sampling and finish at 11 after cleanup. Both mounts
 report zero views, zero connections and no wake pump after the clients leave.
 The final drained live heaps are 969,912 and 1,081,544 bytes. These bounded runs
-show no continuing per-request growth; they do not override the failed timing
-and allocation acceptance.
+show no continuing per-request growth and satisfy the bounded resource criterion.
 
 ## Final repository verification
 
@@ -217,5 +229,41 @@ strict documentation metadata and repository policies. All six benchmark guards
 pass: producer-identity, outbox, inbox, command, projection and read-model each
 record exit zero, followed by `BENCH_REGRESSION=PASSED` and `BENCH_EXIT=0`.
 The gate finishes at 22:16:59 UTC on 2026-10-26. Keep the earlier red pre-change
-read-model controls: this final pass does not erase their variability or satisfy
-the stronger paired discovery-specific acceptance rule. Plan 323 remains open.
+read-model controls: this final pass does not erase their variability. The
+separate review below closes the paired acceptance under the revised criteria.
+
+## User acceptance review
+
+On 2026-10-26 the user accepted the approximately 0.009% allocation overhead and
+specified that latency should be accepted unless there is a regression. The
+review treats a paired 95% ratio interval wholly above equality as a supported
+timing regression. Interval width and adverse point estimates remain visible
+without becoming separate refusal conditions. No general allowance for larger
+future allocation increases is established.
+
+`acceptance-review.json` checks all 60 complete trials and 800 successful polls,
+both 240-poll retention runs, the passing full gate, and all 32 metric results.
+There is no supported final-cohort throughput, capacity or p95/p99 regression.
+Its sole supported increase is the accepted `many-polling` allocation result.
+The report records the original analysis and trial hashes, original statuses,
+confidence intervals, decisions and measurement limitations. Production and
+benchmark sources are unchanged from the measured candidate.
+
+The first cohort remains rejected: it has supported p99 regressions under the
+revised rule as well. A wider interval in the accepted cohort does not prove
+exact equality or exclude every 1% timing loss. Plan 323 is complete under the
+user-approved acceptance criteria; the historical reports remain unchanged.
+
+Reproduce the scoped review from the repository root (it refuses implementation
+changes from the measured candidate):
+
+```bash
+nix develop -c python3 keiro/bench/results/pm-types/ReviewAcceptance.py
+```
+
+`acceptance-review-validation.log` retains the successful review. IR metadata,
+profile and log enforcement pass for all 60 requests in
+`acceptance-ir-validation.log`. Strict mode reports the same six missing
+recommended `reviews` fields in the pre-change and current bundles; both strict
+logs are retained as `acceptance-ir-baseline-strict.log` and
+`acceptance-ir-current-strict.log`. This completion adds no strict diagnostic.

@@ -35,7 +35,8 @@ coordinates reactions to input events; its journal records its persisted state. 
 inspector is an application-supplied description of how to inspect that manager. Discovery
 lists these descriptions, including managers with no persisted instances.
 
-The user requires no performance regression. Enumeration must use static in-memory metadata,
+The user requires no statistically supported timing regression and accepts the observed
+approximately 0.009% writer-allocation overhead. Enumeration must use static in-memory metadata,
 with no journal, instance, snapshot, or timer queries and no changes to ordinary command or
 worker processing. HTTP retains its existing schema checks and resource limits. Completion
 requires both structural evidence of isolation and measured evidence under active polling;
@@ -46,42 +47,45 @@ this plan.
 ## Progress
 
 
-- [ ] Milestone 1: Record reproducible pre-change performance controls and a comparable measurement protocol.
+- [x] Milestone 1 (2026-10-26): Pre-change saturation/idle controls, all six historical guards, fixed durable settings and five alternating pairs per comparison are retained with source/binary identity. Baseline variation remains visible; under the revised user criteria it is reported rather than treated as a separate resolution failure.
 - [x] Milestone 2 (2026-10-26): Deterministic metadata summaries and embedded `pm types` pass all 786 core and 55 ops tests in Nix, including aliases, all inspector families/policies, forced callback sentinels, and an armed store-access sentinel. Evidence: `keiro/bench/results/pm-types/candidate-tests-final.log`.
 - [x] Milestone 3 (2026-10-26): The representative Jitsurei CLI/HTTP path and all 53 HTTP tests pass in Nix, including missing/empty hooks, response limits, fresh schema refusal and verifier-only pool use. Jitsurei's 25 tests also pass; evidence is in `keiro/bench/results/pm-types/candidate-tests-final.log`.
-- [ ] Milestone 4: Demonstrate no measurable runtime regression, pass the repository gates, and document the shipped interface and evidence.
+- [x] Milestone 4 (2026-10-26): The final 60-trial cohort has no statistically supported timing regression; the user accepts its approximately 0.009% allocation overhead. Both retention runs and the complete release gate pass. The guide, changelogs, ADR amendments and `keiro/bench/results/pm-types/acceptance-review.json` retain the interface, evidence and revised acceptance decision.
 
 Implementation started 2026-10-26 from `d61aabcfdaa4af14aef59712f10deb4826f0e99b`,
 preserved in detached `../keiro-pm-types-baseline`. The full pre-change Nix build
 passed. Five durable saturation and five mounted-idle controls are retained under
 `keiro/bench/results/pm-types/`. The pre-change six-guard run passed five guards
 but failed read-model; its focused repeat also fails, on different cases. These
-red controls leave baseline stability unresolved. The fixed offered rate
+red controls document baseline variability. The fixed offered rate
 is 50 operations/second against measured median capacity 718.89 operations/second.
 The discovery implementation and all four focused suites pass (919 examples);
-matched performance acceptance remains unresolved. The final release gate passes. Preserve unrelated concurrent plans
+matched performance acceptance passes under the user's revised criteria. The final release gate passes. Preserve unrelated concurrent plans
 and documentation commits.
 
 The first complete 60-trial cohort (`matched-v1`) is red: 1,000-descriptor polling
 raises writer p99 by a paired median 5.195% (95% interval +1.019% to +8.993%)
 against its matching idle control, with a supported +0.0091% writer-allocation
 increase. Single-manager active/idle comparisons pass, but baseline/same-source
-uncertainty remains unresolved. A direct-encoding implementation is now under
-validation; the initial source/measurements remain retained. Its second complete
-cohort (`matched-v2`, candidate `bc4799c3`) also refuses acceptance: all 800 polls
-succeed, but large-catalog allocation reports +0.0088% and several latency/control
-intervals cannot exclude a 1% loss. Both 60-second retention runs finish with
+uncertainty remains visible. The direct-encoding implementation is validated;
+the initial source/measurements remain retained. Its second complete cohort
+(`matched-v2`, candidate `bc4799c3`) was refused by the original strict controller:
+all 800 polls succeed, but large-catalog allocation reports +0.0088% and several
+latency/control intervals cannot exclude a 1% loss. The user subsequently accepted
+this overhead and timing results without a supported regression. The separate
+`acceptance-review.json` records acceptance without rewriting either cohort's raw
+report. Both 60-second retention runs finish with
 240 successful polls and clean feed resources, with live heap leveling off after
 warm-up. All 919 focused tests pass again on the direct-encoding candidate.
-No performance milestone is accepted until new paired evidence and the gate pass.
+All milestones are accepted under the revised user criteria described below.
 
 The final candidate's full `nix develop -c just release-gate` correctness phase
 passes (`VERIFY_EXIT=0`); Z3 4.16.0 is verified in Nix. All six historical
 benchmark guards also pass (`BENCH_EXIT=0`, `BENCH_REGRESSION=PASSED`). The
 combined retained log is
 `keiro/bench/results/release-gates/20261026T215310Z-bc4799c3.log`.
-This does not supersede the stronger paired no-regression requirement or erase
-the two red pre-change read-model controls.
+Together with the paired review this closes acceptance; the two red pre-change
+read-model controls remain retained.
 
 
 ## Surprises & Discoveries
@@ -90,7 +94,7 @@ the two red pre-change read-model controls.
 2026-10-26: Pre-change mounted-idle p95 varies from 7,428 to 8,792 microseconds
 across five 20-second trials, although throughput remains 50.025–50.040 operations
 per second. This is existing measurement noise, not candidate evidence, and may
-prevent the required 1% resolution. Keep raw controls and investigate paired
+prevent the originally required 1% resolution. Keep raw controls and investigate paired
 uncertainty rather than interpreting paced throughput as unchanged capacity.
 
 2026-10-26: Source inspection of `mori://hasql/hasql/packages/hasql-pool`
@@ -124,7 +128,7 @@ the project remains on its verified Nix compiler rather than upgrading scope.
 plus the same summary work, about 41% less than the original pipeline. The real
 first cohort adds about 390 MB of process allocation across 80 large polls;
 process bytes are diagnostic, while its writer p99/allocation regressions block
-acceptance. A fixed encoded-key experiment increases allocation and is rejected;
+acceptance under the original criteria. A fixed encoded-key experiment increases allocation and is rejected;
 retain its patch and profile as failed evidence.
 
 2026-10-26: The existing benchmark stopped its throughput clock after joining the
@@ -137,19 +141,37 @@ modes, so its original completion clock incurs no external-client cleanup.
 
 2026-10-26: The direct-encoding cohort no longer supports the previous
 large-catalog p99 regression: median ratio 0.998085, 95% interval
-0.971039–1.031336. That interval is still too wide for acceptance. Its allocation
+0.971039–1.031336. That interval failed the original 1% resolution rule. Its allocation
 ratio remains 1.000088 (1.000013–1.000153), roughly 62 bytes/operation. GHC 9.12.4
 documents allocation-counter accuracy of about 4 KB, while its RTS also accounts
 for the current nursery block. The current benchmark sums separate per-operation
-counter spans; calibration of that very small signal is unresolved, not evidence
-that it can be ignored. The evidence README identifies the pinned compiler sources
+counter spans; calibration of that very small signal was unresolved, not evidence
+of an artifact. The user subsequently accepted the measured overhead, so further
+allocation-meter calibration is optional. The evidence README identifies the pinned compiler sources
 under their intended Mori project URI; source artifact-level URIs are pending.
 Any whole-loop counter experiment must use identical metering against both
 package sets and retain the original per-operation diagnostic values. Do not
-mix metering scopes or relax the no-supported-regression rule.
+mix metering scopes. The revised acceptance below preserves the supported timing
+regression rule while accepting the observed allocation increase.
 
 ## Decision Log
 
+
+2026-10-26 (acceptance revision): The user states, "a small allocation overhead
+is fine it's only 0.009%" and "for latency measurement we should also accept
+unless there is a regression". Accept the final cohort's observed allocation
+increase and accept timing comparisons when their 95% interval does not establish
+a degradation. A wide interval or adverse point estimate alone is no longer a
+completion blocker. Keep throughput/capacity and latency estimates, uncertainty,
+all raw samples, load/isolation checks, retention and the full release gate.
+This is a scoped acceptance change for this feature, not a general allowance
+for larger future allocation increases or a change to historical CSV thresholds.
+Preserve the original controller and its reports as historical strict-policy
+evidence; `acceptance-review.json` separately binds the current review to the
+final cohort's hashes and source. The first cohort still has supported timing
+regressions and is rejected. This supersedes the original allocation and 1%
+uncertainty blockers, including the stricter interpretation previously adopted
+from ADR-58; the passing repository release-gate requirement is unchanged.
 
 2026-10-26: Enumerate the existing `ProcessManagerInspectors` map on demand. Do not add a
 runtime registry, background refresh, descriptor cache, new descriptor fields, or database
@@ -183,6 +205,8 @@ estimate/sign counts for review and apply the stated interval rule. The zero
 supported-slowdown threshold and 1% uncertainty ceiling are unchanged. An added
 noise control passes while the supported 0.1% negative control still fails; the
 first cohort's supported large-catalog regressions remain red under this rule.
+The subsequent user acceptance revision supersedes the remaining interval-width
+blocker while preserving this controller as historical evidence.
 
 2026-10-26: Return the catalog key as `name`, because it is the value accepted by the existing
 `pm show --name` and `pm list --name` lookup. The public map currently permits aliases that
@@ -197,7 +221,8 @@ reaction function or inspect stored instances to infer capabilities.
 2026-10-26: Treat any reproducible runtime degradation as blocking, even below historical
 thresholds. Existing gates remain mandatory but cannot alone satisfy the user's stronger
 constraint. Measurements have finite resolution; document that resolution and never claim
-mathematical proof of exactly zero cost from noisy timings.
+mathematical proof of exactly zero cost from noisy timings. The later user acceptance
+revision above supersedes this decision for the observed allocation overhead and interval width.
 
 
 ## Outcomes & Retrospective
@@ -213,25 +238,29 @@ ADR-53/ADR-55 amendments describe the interface and its constraints.
 
 The final candidate passes the complete repository release gate: correctness,
 metadata/policy checks, and all six historical benchmark guards. Its retained
-combined log records both exit statuses as zero. Historical guard success does
-not close the stronger discovery-specific performance requirement below.
+combined log records both exit statuses as zero. Paired performance acceptance
+is recorded separately under the user's revised criteria.
 
-This plan is not complete. Two retained 60-trial cohorts do not meet the
-no-regression criterion. Direct encoding reduces large-catalog process
+This plan is complete under the revised user acceptance criteria. Both retained
+60-trial cohorts preserve their original strict-controller refusals. Direct encoding reduces large-catalog process
 allocation by about 155 MB across 80 polls and removes support for the first
-cohort's p99 regression, but the second cohort still reports a small writer
-allocation increase and lacks required latency/control resolution. Bounded
-retention results do not substitute for those missing criteria. IR-56 remains
-accepted and pending implementation acceptance; nothing is published.
+cohort's p99 regression. The final cohort shows no statistically supported
+timing regression; the user accepts its small writer-allocation increase and
+the uncertainty in its timing intervals. Both bounded retention runs pass.
+`acceptance-review.json` retains all 32 comparisons and uncertainty, original
+report/trial hashes, successful load counts and the passing release gate. IR-56
+is completed for implementation and acceptance; publication remains separate.
+Its metadata/profile/log check passes for all 60 requests. Strict IR validation
+has the same six pre-existing missing recommended `reviews` fields in the
+pre-change and current bundles; the retained acceptance validation logs show
+no added diagnostic. The implementation still matches the fully gated candidate.
 
-Resume with allocation-meter calibration using the same driver against both
-unchanged package sets, then repeat paired timing on an environment whose
-same-source controls can exclude a 1% loss. Keep the original raw cohorts and
-the pre-change read-model guard failures. A passing historical guard alone,
-a new metering scope compared with an old one, or a relaxed threshold cannot
-close this plan. The durable transport/presentation decisions are already in
-the amended ADRs; the unresolved metering hypothesis remains evidence in this
-plan rather than an architectural claim.
+Keep the original raw cohorts and pre-change read-model guard failures. These
+measurements do not prove exact equality or exclude every 1% timing loss; the
+accepted allocation cost is not attributed to a metering artifact. Further
+calibration is optional. The durable transport/presentation decisions are
+already in the amended ADRs; this feature's user-approved tolerance remains
+in the plan rather than changing the repository-wide benchmark policy.
 
 
 ## Context and Orientation
@@ -295,8 +324,9 @@ keeps application descriptors and presentation separate from command execution.
 requires honest unavailable evidence and preserves default-off reaction costs.
 [ADR-58](../adr/0058-benchmark-release-gates-require-isolated-fixed-workloads-and-attributed-baselines.md)
 requires attributable, fixed-workload benchmarks and the complete release gate; failed or
-inconclusive measurements are not acceptance. This plan adopts those constraints and tightens
-performance acceptance to the user's no-regression requirement.
+inconclusive release-gate measurements are not acceptance. This plan retains the
+full repository gate. Its separate paired timing review follows the user's later
+acceptance revision in the Decision Log.
 
 
 ## Plan of Work
@@ -508,7 +538,16 @@ nix develop -c git diff --check
 
 Set the four `PM_TYPES_*` variables to the two recorded executable paths, a fresh evidence
 output directory, and the chosen numerical rate. The script must document its effective
-settings and return nonzero on regression or inconclusive evidence. The final release-gate
+settings. The retained controller returns nonzero under its original strict
+regression/resolution policy; keep those reports unchanged. For this candidate,
+`keiro/bench/results/pm-types/acceptance-review.json` applies the user-approved
+review to that evidence, checks complete samples/load and records no supported
+timing regression plus the accepted allocation overhead. A future candidate
+needs a new review of its own results, not reuse of this candidate's waiver.
+Reproduce this review with
+`nix develop -c python3 keiro/bench/results/pm-types/ReviewAcceptance.py`; it
+checks that implementation sources still match the measured candidate.
+The final release-gate
 command runs correctness then every historical guard serially; no release is performed.
 Retain its combined log and ensure it corresponds to the final implementation tree.
 
@@ -534,7 +573,9 @@ no additional database reads for discovery. No changes to runtime append, hydrat
 timer scheduling, worker loops, schemas, dependency pins, or indexes are expected. Inspect the
 production diff and explain any deviation before considering it accepted.
 
-Performance acceptance has no allowed slowdown budget. For each comparison retain at least
+Timing acceptance rejects statistically supported degradation; interval width alone
+does not reject a result. The user accepts the observed approximately 0.009%
+writer-allocation overhead for candidate `bc4799c3`. For each comparison retain at least
 five alternating pairs, all raw writer timings, throughput, p95 and p99 latency (the latency
 below which 95% or 99% of completed operations fall), writer-thread bytes per operation,
 request successes/errors, and source/environment identity. Report paired median ratios and
@@ -542,13 +583,16 @@ request successes/errors, and source/environment identity. Report paired median 
 analysis documented in the script. Retain same-source control pairs and their spread. Do not
 treat thousands of correlated operations within one trial as thousands of independent trials.
 
-A statistically supported degradation in writer throughput, capacity, p95/p99 latency, or
-writer-thread allocation blocks completion, however small. Any extra deterministic ordinary-path
+A statistically supported degradation in writer throughput, capacity or p95/p99 latency
+blocks completion: a 95% paired ratio interval wholly above equality establishes
+degradation. The observed final-cohort writer allocation increase is accepted
+explicitly by the user; it does not establish a general future allowance.
+Any extra deterministic ordinary-path
 query, callback, metadata encoding, or task also blocks completion. If a degradation is suggested
-but unresolved, extend the paired runs and investigate; do not call it a pass. Intervals too wide
-to exclude a 1% degradation are insufficient measurement resolution and require more evidence;
-1% is a maximum uncertainty bound, not an allowed regression. Acceptance means no detected
-regression at the recorded resolution, no adverse reproducible trend, and exact structural
+but unresolved, retain its point estimate and uncertainty. Under the revised user
+criteria, an interval spanning equality is accepted without requiring it to
+exclude a 1% loss. Acceptance means no statistically supported timing regression,
+the explicit accepted allocation overhead, and exact structural
 zero-work invariants, not a claim that finite measurements prove absolute equality. Neither the
 older 5% inspection guard nor the 25% CSV guard can override a smaller reproducible regression.
 
@@ -560,8 +604,11 @@ catalog requests must release admission permits, retain no growing per-request s
 no active client tasks after cleanup. The large-catalog case must stay under the ordinary response
 cap; a deliberately oversized response must fail explicitly rather than truncate.
 
-Milestone 4 is incomplete if baseline quality, measurement noise, or the final repository gate
-remains unresolved. Do not loosen thresholds, rewrite baseline CSVs, suppress schema checks,
+Milestone 4 is incomplete if samples/load are invalid, a statistically supported
+timing regression remains, the structural/retention checks fail, or the final
+repository gate fails. Measurement noise is reported and does not independently
+block acceptance. Beyond the user's explicit acceptance revision, do not loosen
+thresholds, rewrite baseline CSVs, suppress schema checks,
 remove load, or enable result caching to manufacture passing evidence.
 
 
