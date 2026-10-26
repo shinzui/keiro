@@ -1,3 +1,5 @@
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -Werror=incomplete-patterns #-}
 
 -- | Canonical aggregate type resolution and capability policy.
@@ -8,7 +10,9 @@
 module Keiro.Dsl.AggregateType
   ( AggregateUseSite (..),
     AggregateCapability (..),
-    ResolvedAggregateType (..),
+    ResolvedAggregateType (AggregateText, AggregateInt, AggregateInteger, AggregateBool, AggregateTime, AggregateNatural, AggregateNominal, AggregateVertex, AggregateStructuralEnum, AggregateMapped),
+    StructuralEnumEquality (..),
+    structuralEnumEqualityIdentity,
     AggregateSymbols,
     aggregateSymbols,
     aggregateSymbolsFromGraph,
@@ -35,6 +39,9 @@ module Keiro.Dsl.AggregateType
   )
 where
 
+import Data.Aeson qualified as Aeson
+import Data.ByteString.Lazy qualified as BL
+import Data.List (sort)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -42,6 +49,7 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import Data.Time.Calendar (toGregorian)
 import Data.Time.Clock (UTCTime (..), diffTimeToPicoseconds)
 import Data.Time.Format.ISO8601 (iso8601ParseM)
@@ -79,8 +87,53 @@ data ResolvedAggregateType
   | AggregateNatural
   | AggregateNominal !ResolvedNominalType
   | AggregateVertex !Name
-  | AggregateMapped !MappedKey
+  | AggregateMappedValue !MappedKey
+  | AggregateStructuralEnum !StructuralEnumEquality
   deriving stock (Eq, Ord, Show)
+
+-- | Checked declaration evidence. Locations and fixture labels are deliberately
+-- excluded from equality identity; the declared owner and total binding are not.
+data StructuralEnumEquality = StructuralEnumEquality
+  { key :: !MappedKey,
+    owner :: !HaskellSource,
+    binding :: !QualifiedValueName,
+    bindingVersion :: !BindingVersion,
+    canonical :: !CanonicalTypeId,
+    constructors :: !(NE.NonEmpty (Name, Text))
+  }
+  deriving stock (Eq, Ord, Show)
+
+structuralEnumEqualityIdentity :: StructuralEnumEquality -> Text
+structuralEnumEqualityIdentity evidence =
+  "keiro-dsl/structural-enum-equality/1:"
+    <> TE.decodeUtf8
+      ( BL.toStrict
+          ( Aeson.encode
+              [ unMappedKey evidence.key,
+                evidence.owner.package,
+                evidence.owner.moduleName,
+                evidence.owner.valueType,
+                unQualifiedValueName evidence.binding,
+                unBindingVersion evidence.bindingVersion,
+                unCanonicalTypeId evidence.canonical,
+                TE.decodeUtf8 (BL.toStrict (Aeson.encode (sort (NE.toList evidence.constructors))))
+              ]
+          )
+      )
+
+-- | The common mapped-value view keeps codecs, initials, samples and writes on
+-- the structural binding path. Equality inspects AggregateStructuralEnum first.
+pattern AggregateMapped :: MappedKey -> ResolvedAggregateType
+pattern AggregateMapped key <- (mappedAggregateKey -> Just key)
+  where
+    AggregateMapped key = AggregateMappedValue key
+
+mappedAggregateKey :: ResolvedAggregateType -> Maybe MappedKey
+mappedAggregateKey (AggregateMappedValue key) = Just key
+mappedAggregateKey (AggregateStructuralEnum evidence) = Just evidence.key
+mappedAggregateKey _ = Nothing
+
+{-# COMPLETE AggregateText, AggregateInt, AggregateInteger, AggregateBool, AggregateTime, AggregateNatural, AggregateNominal, AggregateVertex, AggregateMapped #-}
 
 data AggregateSymbols = AggregateSymbols
   { nominals :: !(Map Name ResolvedNominalType),
@@ -147,6 +200,8 @@ resolveAggregateType symbols loc useSite expression = do
     TRef name
       | Just nominal <- Map.lookup name ((.nominals) symbols) -> pure (AggregateNominal nominal)
       | Map.member name ((.vertices) symbols) -> pure (AggregateVertex name)
+      | Just (ResolvedStructural declaration (REnum (entry : entries))) <- Map.lookup (MappedKey name) symbols.mapped ->
+          pure (AggregateStructuralEnum (StructuralEnumEquality (MappedKey name) declaration.haskell declaration.binding declaration.bindingVersion declaration.canonical (NE.fromList (sort [(value.ctor, value.tag) | value <- entry : entries]))))
       | Map.member (MappedKey name) ((.mapped) symbols) -> pure (AggregateMapped (MappedKey name))
       | otherwise -> Left (AggregateTypeError loc useSite (UnknownAggregateType name))
   case aggregateCapability useSite resolved of
@@ -175,6 +230,7 @@ inferAggregateFieldType symbols aggregate useSite field =
 aggregateCapability :: AggregateUseSite -> ResolvedAggregateType -> AggregateCapability
 aggregateCapability useSite resolved = case useSite of
   EqualityGuardUse -> case resolved of
+    AggregateStructuralEnum {} -> SolverVisible
     AggregateMapped {} -> Unsupported
     AggregateNominal nominal -> case (.representation) nominal of
       ScalarRepresentation {} -> SolverVisible

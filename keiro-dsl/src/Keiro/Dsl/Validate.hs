@@ -859,7 +859,7 @@ validateSpec = validateService . legacyCheckedService
 
 validateCheckedSpec :: EffectiveLanguageContract -> Either (NE.NonEmpty TypeGraphError) TypeGraph -> ProjectionSupplyAnalysis -> Spec -> [Diagnostic]
 validateCheckedSpec languageContract typeGraphResult supplyAnalysis spec =
-  sortOn (.line) (validateNames languageContract typeGraphResult spec ++ validateMapped languageContract typeGraphResult spec ++ validateNominal languageContract spec ++ validateAggregateTypes typeGraphResult spec ++ specLevelRules languageContract supplyAnalysis spec ++ concatMap (validateNode languageContract typeGraphResult supplyAnalysis spec) ((.nodes) spec))
+  sortOn (.line) (validateNames languageContract typeGraphResult spec ++ validateMapped languageContract typeGraphResult spec ++ validateNominal languageContract spec ++ validateAggregateTypes languageContract typeGraphResult spec ++ specLevelRules languageContract supplyAnalysis spec ++ concatMap (validateNode languageContract typeGraphResult supplyAnalysis spec) ((.nodes) spec))
 
 -- | Rules added before language 4 ships consult the effective semantic
 -- contract, not the numeric source spelling. Versions 1 through 3 retain their
@@ -917,8 +917,8 @@ nominalTypeDiagnostic nominalError = case nominalError of
     problem loc diagnosticCode detail = mkErr (locLine loc) diagnosticCode (detail <> "; GHC and conformance validate consumer function bodies")
 
 -- | Resolve every direct aggregate type once at the earliest semantic gate.
-validateAggregateTypes :: Either (NE.NonEmpty TypeGraphError) TypeGraph -> Spec -> [Diagnostic]
-validateAggregateTypes typeGraphResult spec = case Nominal.resolveNominalTypes spec of
+validateAggregateTypes :: EffectiveLanguageContract -> Either (NE.NonEmpty TypeGraphError) TypeGraph -> Spec -> [Diagnostic]
+validateAggregateTypes languageContract typeGraphResult spec = case Nominal.resolveNominalTypes spec of
   Left _ -> []
   Right _ -> concatMap aggregateRules aggregates
   where
@@ -959,8 +959,21 @@ validateAggregateTypes typeGraphResult spec = case Nominal.resolveNominalTypes s
                   "aggregate '" <> (.name) aggregate <> "' declares unknown or unsupported " <> label <> " outcome type '" <> name <> "'"
               ]
 
-    transitionRules aggregate transition = ownershipRules ++ outcomeExpressionRules
+    transitionRules aggregate transition = capabilityRules ++ ownershipRules ++ outcomeExpressionRules
       where
+        capabilityRules
+          | runtimeProfileHasCapability languageContract.runtimeProfile StructuralEnumEqualityGuards = []
+          | otherwise = case transition.guard >>= either (const Nothing) Just . resolveGuardExpr environment of
+              Just expression | usesStructuralEnumEquality expression -> [mkErr (locLine transition.loc) AggregateGuardCapabilityUnsupported "mapped structural enum equality requires Language 6"]
+              _ -> []
+        usesStructuralEnumEquality expression = case expression.node of
+          TypedEqual left _ -> isStructuralEnum left.valueType
+          TypedNotEqual left _ -> isStructuralEnum left.valueType
+          TypedAnd left right -> usesStructuralEnumEquality left || usesStructuralEnumEquality right
+          TypedOr left right -> usesStructuralEnumEquality left || usesStructuralEnumEquality right
+          _ -> False
+        isStructuralEnum AggregateStructuralEnum {} = True
+        isStructuralEnum _ = False
         environment = expressionEnvironmentFromGraphResult typeGraphResult spec aggregate transition
         ownershipRules = case (.implementation) transition of
           LegacyHoleImplementation ->

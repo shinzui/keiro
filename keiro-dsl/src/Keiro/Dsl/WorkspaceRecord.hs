@@ -207,6 +207,7 @@ data WorkspaceRecord = WorkspaceRecord
     mappings :: ![MappingIdentity],
     idDomains :: ![Text],
     nominalEqualities :: ![Text],
+    structuralEnumEqualities :: ![Text],
     bindingObligations :: ![BindingHole],
     requirements :: ![BehaviorRecordRow],
     projectionCatalogFacts :: ![Text],
@@ -239,6 +240,7 @@ renderWorkspaceRecord record =
       <> [mappingRowPrefix mapping <> encodeRow mapping | mapping <- (.mappings) record]
       <> ["id-domain " <> identity | identity <- (.idDomains) record]
       <> ["nominal-equality " <> identity | identity <- (.nominalEqualities) record]
+      <> ["structural-enum-equality " <> identity | identity <- record.structuralEnumEqualities]
       <> ["binding " <> encodeRow obligation | obligation <- (.bindingObligations) record]
       <> ["behavior " <> encodeRow requirement | requirement <- (.requirements) record]
       <> ["projection-catalog-fact " <> fact | fact <- (.projectionCatalogFacts) record]
@@ -276,6 +278,7 @@ parseWorkspaceRecord contents = case T.lines contents of
         let mappings = ordinaryMappings <> nominalMappings
         let idDomains = [identity | row <- rows, Just identity <- [T.stripPrefix "id-domain " row]]
         let nominalEqualities = [identity | row <- rows, Just identity <- [T.stripPrefix "nominal-equality " row]]
+        let structuralEnumEqualities = [identity | row <- rows, Just identity <- [T.stripPrefix "structural-enum-equality " row]]
         obligations <- traverse (decodeRow "binding ") (rowsWith "binding " rows)
         requirements <- traverse (decodeRow "behavior ") (rowsWith "behavior " rows)
         let catalogFacts = [fact | row <- rows, Just fact <- [T.stripPrefix "projection-catalog-fact " row]]
@@ -290,6 +293,7 @@ parseWorkspaceRecord contents = case T.lines contents of
           || hasDuplicates (map (.specName) mappings)
           || hasDuplicates idDomains
           || hasDuplicates nominalEqualities
+          || hasDuplicates structuralEnumEqualities
           || hasDuplicates (map bindingKey obligations)
           || hasDuplicates (map (.key) requirements)
           || hasDuplicates catalogFacts
@@ -312,6 +316,7 @@ parseWorkspaceRecord contents = case T.lines contents of
                   mappings = mappings,
                   idDomains = idDomains,
                   nominalEqualities = nominalEqualities,
+                  structuralEnumEqualities = structuralEnumEqualities,
                   bindingObligations = obligations,
                   requirements = requirements,
                   projectionCatalogFacts = catalogFacts,

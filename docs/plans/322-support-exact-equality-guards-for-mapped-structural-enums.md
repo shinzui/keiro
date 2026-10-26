@@ -16,6 +16,12 @@ provenance:
       at: 2026-10-26T19:17:42Z
       verdict: "changes-requested"
       note: "Author self-review: require an explicit Language 6 capability gate and older-language negative coverage; shared-Haskell-owner test currently stops at MappedImportConflict, not expression identity."
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-26T22:49:17Z
+      mode: "implement"
+      note: "Implement checked structural enum equality and consumer qualification"
 ---
 
 # Support exact equality guards for mapped structural enums
@@ -38,16 +44,20 @@ The concrete adopter is `mori://shinzui/kotei/plans/103-reconstruct-recorded-fai
 ## Progress
 
 
-- [ ] Milestone 1: one Language 6 consumer fixture checks, scaffolds, compiles, and executes same-declaration mapped enum equality with an exact finite symbolic witness.
+- [x] Milestone 1 (2026-10-26): the Language 6 scope fixture scaffolds and its compiled suite passes concrete equality/inequality, finite-domain exclusion, typed model reconstruction, and decoded replay. Verified with `nix develop -c cabal test keiro-dsl-conformance-mapped-structural-enum-equality --test-show-details=direct`.
 - [ ] Milestone 2: both operators and qualified constructors pass the complete concrete/symbolic matrix; invalid types and dishonest or incomplete bindings fail at the appropriate gate.
 - [ ] Milestone 3: fingerprints, semantic diff, scaffold provenance, and replay/snapshot qualification expose relevant changes while preserving unaffected contracts and established wire strings.
 - [ ] Milestone 4: affected regression suites, repository verification, documentation, and ADR distillation establish an adoption-ready implementation.
 
-Creation evaluated the current source and validation paths. No implementation milestone is complete. The Nix shell reports Z3 4.16.0. The working tree already contained an unrelated edit to `docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md`; preserve it.
+Implementation has verified the first compiled consumer path; the remaining milestones are in progress. Creation evaluated the source and validation paths. The Nix shell reports Z3 4.16.0. The working tree already contained an unrelated edit to `docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md`; preserve it.
 
 
 ## Surprises & Discoveries
 
+
+The generated forward/replay harness samples the first mapped fixture. That can falsify an inequality guard when the first fixture equals the register initial. Structural enum command sampling now uses the initial for explicit equality and selects a different supplied fixture for explicit inequality. This preserves executable replay assertions without weakening an assertion or depending on solver-selected whole environments.
+
+The general mapped-value operations share a bidirectional `AggregateMapped` pattern over ordinary mappings and the new checked enum variant. Capability admission inspects the enum evidence first, while codecs, samples, initials, and writes keep their established structural paths. Declaration-specific equality uses a separate versioned canonical segment; no global capability fold segment is added.
 
 
 ## Decision Log

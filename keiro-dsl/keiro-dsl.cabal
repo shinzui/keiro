@@ -227,6 +227,7 @@ test-suite keiro-dsl-test
     Keiro.Dsl.FrontendPublicApiProbe
     Keiro.Dsl.FrontendSurface
     Keiro.Dsl.MappedRegisterConstruction
+    Keiro.Dsl.MappedStructuralEnumEquality
     Paths_keiro_dsl
 
   build-depends:
@@ -2264,3 +2265,36 @@ test-suite keiro-dsl-conformance-mapped-register-construction
     keiro,
     text >=2.1 && <2.2,
     time >=1.12 && <1.15,
+
+test-suite keiro-dsl-conformance-mapped-structural-enum-equality
+  import: warnings, generated-output
+  default-extensions: OverloadedLabels
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-mapped-structural-enum-equality
+  main-is: Main.hs
+  other-modules:
+    Conformance.MappedStructuralEnumEquality.Bindings
+    Conformance.MappedStructuralEnumEquality.Domain
+    Generated.MappedStructuralEnumEquality.BehaviorSourceMap
+    Generated.MappedStructuralEnumEquality.ReplayAudit
+    Generated.MappedStructuralEnumEquality.ScopeGate.BehaviorContract
+    Generated.MappedStructuralEnumEquality.ScopeGate.Codec
+    Generated.MappedStructuralEnumEquality.ScopeGate.Domain
+    Generated.MappedStructuralEnumEquality.ScopeGate.EventStream
+    Generated.MappedStructuralEnumEquality.ScopeGate.Harness
+    Generated.MappedStructuralEnumEquality.ScopeGate.Projection
+    Generated.MappedStructuralEnumEquality.ScopeGate.Transducer
+    Generated.MappedStructuralEnumEquality.Structural.Shape.Request
+    Generated.MappedStructuralEnumEquality.Structural.Shape.RequiredScope
+    Generated.MappedStructuralEnumEquality.StructuralConformance
+    Generated.MappedStructuralEnumEquality.StructuralProjections
+    MappedStructuralEnumEquality.ScopeGate.BehaviorHoles
+
+  build-depends:
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    containers >=0.6 && <0.8,
+    deepseq >=1.4 && <1.6,
+    keiki >=0.9 && <0.10,
+    keiro,
+    text >=2.1 && <2.2,

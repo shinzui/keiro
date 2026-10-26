@@ -1207,6 +1207,15 @@ commandCtorExpr a transition rc =
 
 commandSampleValue :: Agg -> Transition -> Text -> ResolvedAggregateType -> Text
 commandSampleValue aggregate transition name valueType = case valueType of
+  AggregateStructuralEnum evidence
+    | Just register <- find matchesRegister aggregate.regs,
+      guardEquatesCommandAndRegister transition name ->
+        regInitialValueForHarness aggregate register
+    | Just register <- find matchesRegister aggregate.regs,
+      guardComparesCommandAndRegister OpNeq transition name,
+      Just graph <- aggregate.typeGraph,
+      Just (ResolvedStructural declaration _) <- Map.lookup evidence.key graph.declarations ->
+        "(case [value | (_, value) <- NonEmpty.toList (fixtureCases " <> renderHarnessReference aggregate (harnessQualifiedValueReference declaration.fixtures) <> "), value /= " <> regInitialValueForHarness aggregate register <> "] of value : _ -> value; [] -> error \"enum inequality requires an alternative fixture\")"
   AggregateNominal _
     | guardEquatesCommandAndRegister transition name -> case find matchesRegister ((.regs) aggregate) of
         Just register -> regInitialValueForHarness aggregate register
@@ -1228,12 +1237,15 @@ commandSampleValue aggregate transition name valueType = case valueType of
         _ -> renderRegisterInitial ((.initial) register)
 
 guardEquatesCommandAndRegister :: Transition -> Text -> Bool
-guardEquatesCommandAndRegister transition name = maybe False containsEquality ((.guard) transition)
+guardEquatesCommandAndRegister = guardComparesCommandAndRegister OpEq
+
+guardComparesCommandAndRegister :: CmpOp -> Transition -> Text -> Bool
+guardComparesCommandAndRegister operator transition name = maybe False containsEquality ((.guard) transition)
   where
     containsEquality = \case
       EOr left right -> containsEquality left || containsEquality right
       EAnd left right -> containsEquality left || containsEquality right
-      ECmp OpEq left right -> matchingPaths left right || matchingPaths right left
+      ECmp selected left right | selected == operator -> matchingPaths left right || matchingPaths right left
       _ -> False
     matchingPaths (EPath _ CommandRoot [commandField]) (EPath _ RegisterRoot [registerField]) =
       commandField == name && registerField == name

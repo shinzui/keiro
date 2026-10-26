@@ -70,7 +70,7 @@ import Keiro.Dsl.ConformancePackage
     renderConformancePackageReport,
   )
 import Keiro.Dsl.CoordinationImpact (RouterSelectionDrift, renderRouterSelectionDrift, routerSelectionDrift, routerSelectionSnapshots)
-import Keiro.Dsl.ExplainBindings (BindingHole (..), bindingHolesForService)
+import Keiro.Dsl.ExplainBindings (BindingHole (..), bindingHolesForService, structuralEnumEqualityIdentitiesForService)
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcessForService, harnessReadModelForService, harnessRouterForService, harnessWorkflow)
@@ -720,6 +720,7 @@ currentWorkspaceRecord plan adopted queryHistoryBaseline currentSemanticImpact =
       mappings = (.mappings) (consumerPlanForService checkedService),
       idDomains = idDomainIdentitiesForService checkedService,
       nominalEqualities = nominalEqualityIdentitiesForService checkedService,
+      structuralEnumEqualities = structuralEnumEqualityIdentitiesForService checkedService,
       bindingObligations = either (const []) id (bindingHolesForService checkedService),
       requirements = workspaceBehaviorRows checkedService workspace,
       projectionCatalogFacts = projectionCatalogFactsForService checkedService,

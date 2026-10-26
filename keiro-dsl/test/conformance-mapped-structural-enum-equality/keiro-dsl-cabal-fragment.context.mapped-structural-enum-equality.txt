@@ -1,0 +1,43 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/mapped-structural-enum-equality.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+
+other-modules:
+    Conformance.MappedStructuralEnumEquality.Bindings
+    Generated.MappedStructuralEnumEquality.BehaviorSourceMap
+    Generated.MappedStructuralEnumEquality.ReplayAudit
+    Generated.MappedStructuralEnumEquality.ScopeGate.BehaviorContract
+    Generated.MappedStructuralEnumEquality.ScopeGate.Codec
+    Generated.MappedStructuralEnumEquality.ScopeGate.Domain
+    Generated.MappedStructuralEnumEquality.ScopeGate.EventStream
+    Generated.MappedStructuralEnumEquality.ScopeGate.Harness
+    Generated.MappedStructuralEnumEquality.ScopeGate.Projection
+    Generated.MappedStructuralEnumEquality.ScopeGate.Transducer
+    Generated.MappedStructuralEnumEquality.Structural.Shape.Request
+    Generated.MappedStructuralEnumEquality.Structural.Shape.RequiredScope
+    Generated.MappedStructuralEnumEquality.StructuralConformance
+    Generated.MappedStructuralEnumEquality.StructuralProjections
+    MappedStructuralEnumEquality.ScopeGate.BehaviorHoles
+
+build-depends:
+    , aeson
+    , base
+    , keiki
+    , keiro
+    , keiro-dsl
+    , text
+
+consumer-packages:
+    keiro-dsl
+
+consumer-modules:
+    Conformance.MappedStructuralEnumEquality.Bindings
+    Conformance.MappedStructuralEnumEquality.Domain

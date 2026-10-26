@@ -195,7 +195,7 @@ conformanceImports rendering =
     <> ["import Data.Maybe (isJust, isNothing)" | any shapeUsesMaybe structural]
     <> ["import Data.Proxy (Proxy (..))" | not (null structural) || not (null consumerNominals)]
     <> ["import Data.Text qualified as T" | not (null structural) || not (null opaque)]
-    <> ["import Keiki.Core (fieldWitnessAgrees)" | not (null projections)]
+    <> ["import Keiki.Core (" <> T.intercalate ", " (["fieldWitnessAgrees" | any (\spec -> spec.rootEnum == Nothing) projections] <> ["checkFieldProjectionOwner, checkFieldProjectionKey" | any (\spec -> spec.rootEnum /= Nothing) projections]) <> ")" | not (null projections)]
     <> ["import Keiki.Shape (CanonicalTypeName (..))" | not (null structural) || not (null consumerNominals)]
     <> ["import Keiro.Codec.Nominal (nominalDomainRoundTrip, nominalFixtureCases, nominalFixtureDomain, nominalRepresentationRoundTrip, nominalToRepresentation)" | not (null consumerNominals)]
     <> ["import Keiro.Codec.Structural (" <> T.intercalate ", " structuralCodecImports <> ")" | not (null structural) || not (null opaque)]
@@ -366,13 +366,13 @@ renderReference rendering reference =
     (renderPlannedReference ((.importPlan) rendering) reference)
 
 bindingAssertionDecl :: ConformanceRendering -> (StructuralDecl, ResolvedMappedShape) -> [Text]
-bindingAssertionDecl rendering (declaration, _shape) =
+bindingAssertionDecl rendering (declaration, shape) =
   [ "",
     valueName <> " :: [(String, Bool)]",
     valueName <> " =",
     "  (\"fixture labels: " <> canonical <> "\", validFixtureLabels cases) :",
     "  (\"canonical identity: " <> canonical <> "\", canonicalTypeName (Proxy @" <> consumerType <> ") == " <> tshow canonical <> ") :",
-    "  concat",
+    "  " <> (case shape of REnum entries -> "[(\"exhaustive enum shape round-trip: " <> canonical <> "\", all (bindingShapeRoundTrip " <> binding <> ") [" <> T.intercalate ", " [shapeConstructor rendering declaration.name entry.ctor | entry <- entries] <> "])] <> "; _ -> "") <> "concat",
     "    [ [ (\"binding domain round-trip: " <> canonical <> "/\" <> T.unpack label, bindingDomainRoundTrip " <> binding <> " value)",
     "      , (\"binding shape round-trip: " <> canonical <> "/\" <> T.unpack label, bindingShapeRoundTrip " <> binding <> " (bindingToShape " <> binding <> " value))",
     "      ]",
@@ -688,6 +688,9 @@ projectionAssertionDecls rendering structural
       ]
   where
     specs = (.projections) rendering
+    assertion spec
+      | Just (_, entries) <- spec.rootEnum =
+          "(\"projection owner law: " <> unCanonicalTypeId spec.canonical <> "\", all (\\(_, owner) -> either (const False) (const True) (checkFieldProjectionOwner StructuralProjections." <> spec.witness <> " owner)) (NonEmpty.toList (fixtureCases " <> ownerFixtures spec <> "))),\n  (\"projection key law: " <> unCanonicalTypeId spec.canonical <> "\", all (either (const False) (const True) . checkFieldProjectionKey StructuralProjections." <> spec.witness <> ") [" <> T.intercalate ", " [tshow wire | (_, wire) <- entries] <> "])"
     assertion spec =
       "(\"projection witness agreement: "
         <> unCanonicalTypeId ((.canonical) spec)

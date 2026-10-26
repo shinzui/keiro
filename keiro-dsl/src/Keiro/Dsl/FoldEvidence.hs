@@ -133,7 +133,7 @@ aggregateFoldEvidenceForService service aggregate = do
           global
             ++ map snd directNominals
             ++ map snd nestedNominals
-            ++ ["nominal-equality-use:" <> identity | identity <- Set.toAscList (Set.fromList (map snd equalityUses))]
+            ++ [(if "keiro-dsl/structural-enum-equality/" `T.isPrefixOf` identity then "structural-enum-equality-use:" else "nominal-equality-use:") <> identity | identity <- Set.toAscList (Set.fromList (map snd equalityUses))]
             ++ transitionSegments
             ++ map ruleSegment (referencedRules ((.transitions) aggregate)),
         aggregateSegments = global ++ [segment | (Nothing, segment) <- nominals],
@@ -282,6 +282,7 @@ equalityIdentities languageContract expression =
       TypedNotEqual left _ -> equalityIdentity left
       _ -> []
     equalityIdentity operand = case (.valueType) operand of
+      AggregateStructuralEnum evidence -> [(unMappedKey evidence.key, structuralEnumEqualityIdentity evidence)]
       AggregateNominal nominal -> [((.name) nominal, identity) | identity <- maybeToList (nominalEqualityIdentityForService languageContract nominal)]
       _ -> []
     children = case (.node) expression of

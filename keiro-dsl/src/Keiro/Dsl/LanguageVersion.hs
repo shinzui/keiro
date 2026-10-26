@@ -148,6 +148,7 @@ data RuntimeCapability
   | TextSetMappings
   | RefinedBase16Mappings
   | ExplicitIdAdmissionDomains
+  | StructuralEnumEqualityGuards
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | An immutable, explicitly named set of runtime capabilities.  The
@@ -191,6 +192,8 @@ capabilityFoldSegment RefinedBase16Mappings = Nothing
 -- Admission identity is declaration-scoped so unrelated candidate services
 -- retain their existing fold fingerprints.
 capabilityFoldSegment ExplicitIdAdmissionDomains = Nothing
+-- Equality contributes declaration-scoped identity only at actual use sites.
+capabilityFoldSegment StructuralEnumEqualityGuards = Nothing
 
 runtimeProfileFoldSegments :: RuntimeSemanticsProfile -> [Text]
 runtimeProfileFoldSegments RuntimeSemanticsProfile {capabilities} =
@@ -358,7 +361,7 @@ runtimeProfileV5 :: RuntimeSemanticsProfile
 runtimeProfileV5 =
   RuntimeSemanticsProfile
     "keiro-dsl/runtime-semantics/5"
-    (Set.insert ExplicitIdAdmissionDomains (Set.insert RefinedBase16Mappings (Set.insert TextSetMappings (Set.insert CalendarDayMappings (Set.insert BareStructuralMappings (Set.insert StructuralNominalLeaves (Set.insert DelegatedInboxRuntime ((.capabilities) runtimeProfileV4))))))))
+    (Set.insert StructuralEnumEqualityGuards (Set.insert ExplicitIdAdmissionDomains (Set.insert RefinedBase16Mappings (Set.insert TextSetMappings (Set.insert CalendarDayMappings (Set.insert BareStructuralMappings (Set.insert StructuralNominalLeaves (Set.insert DelegatedInboxRuntime ((.capabilities) runtimeProfileV4)))))))))
 
 -- | Supported versions, derived from 'languageRegistry'.
 supportedLanguageVersions :: NonEmpty LanguageVersion

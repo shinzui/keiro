@@ -54,6 +54,7 @@ data ScaffoldRecord = ScaffoldRecord
     mappings :: ![MappingIdentity],
     idDomains :: ![Text],
     nominalEqualities :: ![Text],
+    structuralEnumEqualities :: ![Text],
     bindingObligations :: ![BindingHole],
     behaviorRequirements :: ![BehaviorRecordRow],
     projectionCatalogFacts :: ![Text],
@@ -149,6 +150,7 @@ renderRecord record =
       <> map renderMapping ((.mappings) record)
       <> map ("id-domain " <>) ((.idDomains) record)
       <> map ("nominal-equality " <>) ((.nominalEqualities) record)
+      <> map ("structural-enum-equality " <>) record.structuralEnumEqualities
       <> map renderBindingObligation ((.bindingObligations) record)
       <> map renderBehaviorRequirement ((.behaviorRequirements) record)
       <> map ("projection-catalog-fact " <>) ((.projectionCatalogFacts) record)
@@ -188,6 +190,7 @@ parseRecord contents = case T.lines contents of
         let mappings = ordinaryMappings <> nominalMappings
         let idDomains = [identity | row <- rows, Just identity <- [T.stripPrefix "id-domain " row]]
         let nominalEqualities = [identity | row <- rows, Just identity <- [T.stripPrefix "nominal-equality " row]]
+        let structuralEnumEqualities = [identity | row <- rows, Just identity <- [T.stripPrefix "structural-enum-equality " row]]
         bindingEntries <- traverse parseBindingObligation (filter ("binding " `T.isPrefixOf`) rows)
         behaviorEntries <- traverse parseBehaviorRequirement (filter ("behavior " `T.isPrefixOf`) rows)
         let catalogFacts = [fact | row <- rows, Just fact <- [T.stripPrefix "projection-catalog-fact " row]]
@@ -196,7 +199,7 @@ parseRecord contents = case T.lines contents of
         routerSelections <- traverse parseRouterSelection (filter ("router-selection " `T.isPrefixOf`) rows)
         processReactions <- traverse parseProcessReaction (filter ("process-reaction " `T.isPrefixOf`) rows)
         semanticImpact <- parseSemanticImpact rows
-        if hasDuplicateMappingNames mappings || hasDuplicates idDomains || hasDuplicates nominalEqualities || hasDuplicateBindingObligations bindingEntries || hasDuplicateBehaviorRequirements behaviorEntries || hasDuplicates catalogFacts || hasDuplicates (map queryContractIdentityKey queryContracts) || hasDuplicates (map (.router) routerSelections) || hasDuplicates (map (.processName) processReactions)
+        if hasDuplicateMappingNames mappings || hasDuplicates idDomains || hasDuplicates nominalEqualities || hasDuplicates structuralEnumEqualities || hasDuplicateBindingObligations bindingEntries || hasDuplicateBehaviorRequirements behaviorEntries || hasDuplicates catalogFacts || hasDuplicates (map queryContractIdentityKey queryContracts) || hasDuplicates (map (.router) routerSelections) || hasDuplicates (map (.processName) processReactions)
           then Nothing
           else
             pure
@@ -212,6 +215,7 @@ parseRecord contents = case T.lines contents of
                   mappings = mappings,
                   idDomains = idDomains,
                   nominalEqualities = nominalEqualities,
+                  structuralEnumEqualities = structuralEnumEqualities,
                   bindingObligations = bindingEntries,
                   behaviorRequirements = behaviorEntries,
                   projectionCatalogFacts = catalogFacts,

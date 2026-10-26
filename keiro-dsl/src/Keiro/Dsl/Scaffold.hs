@@ -364,6 +364,8 @@ firewallSurface =
               "exactFieldWitness",
               "fieldWitnessGet",
               "fieldWitnessAgrees",
+              "checkFieldProjectionOwner",
+              "checkFieldProjectionKey",
               "applyEventsEither",
               "defaultValidationOptions",
               "step",
@@ -2626,6 +2628,7 @@ data StructuralProjection = StructuralProjection
     binding :: !QualifiedValueName,
     fixtures :: !QualifiedValueName,
     terminalNominal :: !(Maybe NominalLeaf),
+    rootEnum :: !(Maybe (Text, [(Name, Text)])),
     selectors :: ![(Text, Text)]
   }
   deriving stock (Eq, Show)
@@ -2640,7 +2643,7 @@ projectionSpecs graph =
 projectionsForRoot :: TypeGraph -> StructuralDecl -> ResolvedMappedShape -> [StructuralProjection]
 projectionsForRoot graph root rootShape = case rootShape of
   RRecord _ _ fields -> concatMap (walkField [] []) fields
-  REnum {} -> []
+  REnum entries -> [(mkProjection [] [] "Text" Nothing) {rootEnum = Just ("__SHAPE__." <> root.name, [(entry.ctor, entry.tag) | entry <- entries])}]
   RUnion {} -> []
   RBare {} -> []
   RRefined {} -> []
@@ -2688,6 +2691,7 @@ projectionsForRoot graph root rootShape = case rootShape of
           binding = (.binding) root,
           fixtures = (.fixtures) root,
           terminalNominal = nominal,
+          rootEnum = Nothing,
           selectors = selectors
         }
       where
@@ -2771,6 +2775,7 @@ allocateProjectionNames specs = concatMap allocateGroup groups
           binding = spec.binding,
           fixtures = spec.fixtures,
           terminalNominal = spec.terminalNominal,
+          rootEnum = spec.rootEnum,
           selectors = spec.selectors
         }
       where
@@ -2813,10 +2818,11 @@ emitStructuralProjections ctx graph =
   where
     moduleName = structuralProjectionModule ctx
     specs = map (resolveProjectionModules ctx) (projectionSpecs graph)
-    exactSpecs = [spec | spec <- specs, maybe False projectionLeafHasExactDomain ((.terminalNominal) spec)]
+    exactSpecs = filter isExactProjection specs
+    nominalExactSpecs = [spec | spec <- exactSpecs, spec.rootEnum == Nothing]
     hasExact = not (null exactSpecs)
     hasExactId = any (maybe False projectionLeafIsId . (.terminalNominal)) exactSpecs
-    hasExactEnum = any (maybe False projectionLeafIsEnum . (.terminalNominal)) exactSpecs
+    hasExactEnum = any (\spec -> isJust spec.rootEnum || maybe False projectionLeafIsEnum spec.terminalNominal) exactSpecs
     hasExactConsumer = any (maybe False projectionLeafIsConsumer . (.terminalNominal)) exactSpecs
     resultTypes = Set.fromList (map (.result) specs)
     projectionExports spec = [(.witness) spec, (.getter) spec] <> maybeToList ((.rawGetter) spec)
@@ -2825,7 +2831,7 @@ emitStructuralProjections ctx graph =
         <> ["import Data.Time (UTCTime)" | "UTCTime" `Set.member` resultTypes]
         <> ["import Numeric.Natural (Natural)" | "Natural" `Set.member` resultTypes]
         <> ["import Data.List.NonEmpty (NonEmpty (..))" | hasExactEnum]
-        <> ["import Data.List.NonEmpty qualified as NonEmpty" | hasExact]
+        <> ["import Data.List.NonEmpty qualified as NonEmpty" | not (null nominalExactSpecs)]
         <> ["import Data.KindID qualified as KindID" | any (maybe False projectionLeafIsConsumerId . (.terminalNominal)) specs]
         <> [ "import Keiro.Codec.IdDomain (" <> T.intercalate ", " structuralProjectionIdImports <> ")"
            | hasExactId
@@ -2845,7 +2851,8 @@ emitStructuralProjections ctx graph =
         <> ["nominalFromRepresentation" | hasExactConsumer]
     structuralCodecImports =
       ["bindingToShape"]
-        <> if hasExact then ["bindingFromShape", "fixtureCases"] else []
+        <> ["bindingFromShape" | hasExact]
+        <> ["fixtureCases" | not (null nominalExactSpecs)]
     keikiCoreImports =
       ["FieldProjection (..)", "FieldWitness"]
         <> (if hasExact then ["ExactFieldProjection (..)", "exactFieldWitness"] else [])
@@ -2886,7 +2893,7 @@ emitStructuralProjections ctx graph =
         ( Set.fromList
             ( [haskellTypeReference ((.owner) spec) | spec <- specs]
                 <> [qualifiedValueReference ((.binding) spec) | spec <- specs]
-                <> [qualifiedValueReference ((.fixtures) spec) | spec <- exactSpecs]
+                <> [qualifiedValueReference ((.fixtures) spec) | spec <- nominalExactSpecs]
                 <> [nominalLeafTypeReference ctx leaf | spec <- specs, Just leaf <- [(.terminalNominal) spec]]
                 <> concatMap projectionConstructorReferences exactSpecs
                 <> concatMap (maybe [] (projectionNominalReferences ctx) . (.terminalNominal)) specs
@@ -2926,7 +2933,7 @@ emitStructuralProjections ctx graph =
     witnessConstructor spec
       | isExactProjection spec = "exactFieldWitness"
       | otherwise = "fieldWitness"
-    isExactProjection spec = maybe False projectionLeafHasExactDomain ((.terminalNominal) spec)
+    isExactProjection spec = isJust spec.rootEnum || maybe False projectionLeafHasExactDomain ((.terminalNominal) spec)
     renderProjectionDomain spec = case (.terminalNominal) spec of
       Just NominalLeaf {kind = NominalIdLeaf prefix admission} ->
         [ projectionPatternName spec <> " :: TextPattern",
@@ -2934,6 +2941,15 @@ emitStructuralProjections ctx graph =
           ""
         ]
       _ -> []
+    renderExactProjection spec
+      | Just (shapeModule, entries) <- spec.rootEnum =
+          [ "",
+            "instance ExactFieldProjection " <> spec.tag <> " where",
+            "  fieldProjectionDomain _ = finiteProjectionDomain (" <> renderNonEmpty (map (tshow . snd) entries) <> ")",
+            "  reconstructFieldOwner _ value = case value of"
+          ]
+            <> ["    " <> tshow wire <> " -> Just (bindingFromShape " <> bindingValue spec <> " " <> renderedConstructor shapeModule constructor <> ")" | (constructor, wire) <- entries]
+            <> ["    _ -> Nothing"]
     renderExactProjection spec = case (.terminalNominal) spec of
       Just leaf
         | projectionLeafHasExactDomain leaf ->
@@ -2953,6 +2969,10 @@ emitStructuralProjections ctx graph =
       NominalScalarLeaf {} -> error "nominal scalar reached exact structural projection rendering"
     bindingValue spec = renderReferenceOrDie importPlan (qualifiedValueReference ((.binding) spec))
     fixturesValue spec = renderReferenceOrDie importPlan (qualifiedValueReference ((.fixtures) spec))
+    renderedConstructor shapeModule constructor = renderReferenceOrDie importPlan (HaskellReference shapeModule constructor ConstructorNamespace RequireQualified)
+    projectionConstructorReferences spec
+      | Just (shapeModule, entries) <- spec.rootEnum =
+          [HaskellReference shapeModule constructor ConstructorNamespace RequireQualified | (constructor, _) <- entries]
     projectionConstructorReferences spec =
       [ HaskellReference shapeModuleName constructor ConstructorNamespace RequireQualified
       | (shapeModuleName, _selector) <- (.selectors) spec,
@@ -3001,6 +3021,9 @@ emitStructuralProjections ctx graph =
         )
         ("bindingToShape " <> renderReferenceOrDie importPlan (qualifiedValueReference ((.binding) spec)) <> " owner")
         ((.selectors) spec)
+    renderProjectionGetter spec
+      | Just (shapeModule, entries) <- spec.rootEnum =
+          "case " <> renderGetter spec <> " of " <> T.intercalate "; " [renderedConstructor shapeModule constructor <> " -> " <> tshow wire | (constructor, wire) <- entries]
     renderProjectionGetter spec = case (.terminalNominal) spec of
       Nothing -> renderGetter spec
       Just leaf -> case (.rawGetter) spec of
@@ -3117,6 +3140,7 @@ resolveProjectionModules ctx spec =
       binding = spec.binding,
       fixtures = spec.fixtures,
       terminalNominal = spec.terminalNominal,
+      rootEnum = fmap (\(marker, entries) -> (replaceModule marker, entries)) spec.rootEnum,
       selectors =
         [ (replaceModule marker, selector)
         | (marker, selector) <- spec.selectors
@@ -8700,6 +8724,11 @@ typedExpressionChildren expression = case (.node) expression of
   TypedAnd left right -> [left, right]
   TypedOr left right -> [left, right]
 
+structuralEnumLiteral :: TypedScalarExpr -> Bool
+structuralEnumLiteral expression = case (expression.valueType, expression.node) of
+  (AggregateStructuralEnum {}, TypedLiteral ScalarEnumValue {}) -> True
+  _ -> False
+
 typedConsumerLiteralNominals :: TypedScalarExpr -> [ResolvedNominalType]
 typedConsumerLiteralNominals expression = own <> concatMap typedConsumerLiteralNominals (typedExpressionChildren expression)
   where
@@ -8752,6 +8781,7 @@ projectionAliasTargets expression = own <> comparisonTargets <> concatMap projec
       TypedNotEqual left right -> mapMaybe nominalTarget [left, right]
       _ -> []
     nominalTarget operand = case ((.valueType) operand, (.node) operand) of
+      (AggregateStructuralEnum evidence, TypedRoot provenance) -> Just (StructuralProjectionAlias provenance (ResolvedScalarProjection evidence.key "" [] Nothing))
       (AggregateNominal nominal, TypedRoot provenance)
         | nominalComparisonProjection nominal -> Just (NominalProjectionAlias nominal provenance)
       _ -> Nothing
@@ -8874,6 +8904,10 @@ renderComparisonOperator = \case
 
 renderComparisonTerm :: HaskellImportPlan -> [ProjectionAlias] -> Agg -> Transition -> TypedScalarExpr -> RenderedKeikiExpr
 renderComparisonTerm importPlan aliases aggregate transition expression = case ((.valueType) expression, (.node) expression) of
+  (AggregateStructuralEnum evidence, TypedRoot provenance) ->
+    renderedAtom (projectionAliasFor aliases (StructuralProjectionAlias provenance (ResolvedScalarProjection evidence.key "" [] Nothing)))
+  (AggregateStructuralEnum evidence, TypedLiteral (ScalarEnumValue _ constructor)) ->
+    renderedAtom ("K.lit (" <> tshow (fromMaybe (error "checked structural enum constructor disappeared") (lookup constructor (NE.toList evidence.constructors))) <> " :: Text)")
   (AggregateNominal nominal, TypedRoot provenance)
     | nominalComparisonProjection nominal ->
         renderedAtom (projectionAliasFor aliases (NominalProjectionAlias nominal provenance))
@@ -9090,6 +9124,8 @@ renderKeikiLiteral importPlan aggregate scalarType = \case
   ScalarBoolValue value -> "K.lit " <> if value then "True" else "False"
   ScalarTimeValue value -> "K.lit " <> renderRegisterInitial (InitialTime value)
   ScalarEnumValue _typeName constructor -> case scalarType of
+    AggregateStructuralEnum evidence ->
+      "K.opaqueLit (case K.checkFieldProjectionKey StructuralProjections." <> fromMaybe (error "checked root enum witness disappeared") (aggregate.typeGraph >>= \graph -> projectionWitnessName graph evidence.key "") <> " " <> tshow (fromMaybe (error "checked constructor disappeared") (lookup constructor (NE.toList evidence.constructors))) <> " of Right owner -> owner; Left problem -> error (show problem))"
     AggregateNominal nominal -> case (.ownership) nominal of
       GeneratedNominal -> "K.lit " <> constructor
       ConsumerNominal binding ->
@@ -9224,7 +9260,7 @@ emitGeneratedTransducer aggregate =
     projectionTargets = map (.target) projectionAliases
     structuralProjectionImport =
       [ "import " <> structuralProjectionModule ((.context) aggregate) <> " qualified as StructuralProjections"
-      | any isStructuralProjection projectionTargets
+      | any isStructuralProjection projectionTargets || any (anyTypedExpression structuralEnumLiteral) resolvedExpressions
       ]
     generatedNominalProjectionImport =
       [ "import " <> generatedNominalModule ((.context) aggregate) <> " qualified as GeneratedNominals"
@@ -9703,7 +9739,7 @@ emitEventStream a =
     projectionTargets = nub (concatMap projectionAliasTargets outcomeExpressions)
     structuralProjectionImports =
       [ "import " <> structuralProjectionModule ((.context) a) <> " qualified as StructuralProjections"
-      | any isStructuralProjection projectionTargets
+      | any isStructuralProjection projectionTargets || any (anyTypedExpression structuralEnumLiteral) outcomeExpressions
       ]
     generatedNominalProjectionImports =
       [ "import " <> generatedNominalModule ((.context) a) <> " qualified as GeneratedNominals"

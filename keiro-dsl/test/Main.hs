@@ -88,6 +88,7 @@ import Keiro.Dsl.MappedCodecPlan
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
 import Keiro.Dsl.MappedDiff (MappedFinding (..), diffMapped)
 import Keiro.Dsl.MappedRegisterConstruction (mappedRegisterConstructionSpec)
+import Keiro.Dsl.MappedStructuralEnumEquality (mappedStructuralEnumEqualitySpec)
 import Keiro.Dsl.NominalType hiding (NominalInvalidHaskellSource, NominalInvalidIdPrefix, NominalInvalidIdentity, NominalMissingIngredient)
 import Keiro.Dsl.Parser (parseSource, parseSourceDocument, parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSource, renderSpec, renderTransition)
@@ -244,6 +245,7 @@ main = hspec $ do
   frontendCompatibilitySpec
   frontendSurfaceSpec
   mappedRegisterConstructionSpec
+  mappedStructuralEnumEqualitySpec
   frontendProfilesSpec
 
   describe "calendar-day codec policy v1" $ do
@@ -678,6 +680,7 @@ main = hspec $ do
                   mappings = [],
                   idDomains = [],
                   nominalEqualities = [],
+                  structuralEnumEqualities = [],
                   bindingObligations = [],
                   behaviorRequirements = [],
                   projectionCatalogFacts = [],
@@ -4338,6 +4341,7 @@ main = hspec $ do
                 mappings = [],
                 idDomains = [],
                 nominalEqualities = [],
+                structuralEnumEqualities = [],
                 bindingObligations = [],
                 behaviorRequirements = rows,
                 projectionCatalogFacts = [],
@@ -4372,6 +4376,7 @@ main = hspec $ do
                 mappings = [],
                 idDomains = [],
                 nominalEqualities = [],
+                structuralEnumEqualities = [],
                 bindingObligations = [],
                 requirements = ownedRows,
                 projectionCatalogFacts = [],
@@ -4536,6 +4541,7 @@ main = hspec $ do
                 mappings = (.mappings) plan,
                 idDomains = [],
                 nominalEqualities = nominalEqualityIdentities spec,
+                structuralEnumEqualities = [],
                 bindingObligations = [],
                 behaviorRequirements = [],
                 projectionCatalogFacts = [],
@@ -5705,6 +5711,7 @@ main = hspec $ do
                 mappings = [],
                 idDomains = [],
                 nominalEqualities = [],
+                structuralEnumEqualities = [],
                 bindingObligations = [],
                 behaviorRequirements = [],
                 projectionCatalogFacts = [],
@@ -6423,6 +6430,7 @@ main = hspec $ do
                   mappings = [],
                   idDomains = [],
                   nominalEqualities = [],
+                  structuralEnumEqualities = [],
                   bindingObligations = [],
                   behaviorRequirements = [],
                   projectionCatalogFacts = [],
@@ -12333,6 +12341,7 @@ main = hspec $ do
                   mappings = [],
                   idDomains = [],
                   nominalEqualities = [],
+                  structuralEnumEqualities = [],
                   bindingObligations = [],
                   behaviorRequirements = Behavior.behaviorRecordRows requirements,
                   projectionCatalogFacts = [],
@@ -14799,6 +14808,7 @@ sampleWorkspaceRecord workspace =
       mappings = (.mappings) (consumerPlan ((.mergedSpec) workspace)),
       idDomains = [],
       nominalEqualities = nominalEqualityIdentities ((.mergedSpec) workspace),
+      structuralEnumEqualities = [],
       bindingObligations = either (const []) id (bindingHoles ((.mergedSpec) workspace)),
       requirements = [],
       projectionCatalogFacts = [],
@@ -14849,6 +14859,7 @@ representativeRecordMigrationContracts = do
             mappings = [],
             idDomains = [],
             nominalEqualities = [],
+            structuralEnumEqualities = [],
             bindingObligations = [],
             behaviorRequirements = behaviorRows,
             projectionCatalogFacts = [],
@@ -14873,6 +14884,7 @@ representativeRecordMigrationContracts = do
             mappings = [],
             idDomains = [],
             nominalEqualities = [],
+            structuralEnumEqualities = [],
             bindingObligations = [],
             requirements = behaviorRows,
             projectionCatalogFacts = [],
@@ -15178,6 +15190,7 @@ scaffoldRecordWithEdition edition record = case record of
     recordMappings
     recordIdDomains
     recordNominalEqualities
+    recordStructuralEnumEqualities
     recordBindingObligations
     recordBehaviorRequirements
     recordProjectionCatalogFacts
@@ -15198,6 +15211,7 @@ scaffoldRecordWithEdition edition record = case record of
         recordMappings
         recordIdDomains
         recordNominalEqualities
+        recordStructuralEnumEqualities
         recordBindingObligations
         recordBehaviorRequirements
         recordProjectionCatalogFacts
@@ -17577,8 +17591,8 @@ workspaceModuleRowWithPath path (WorkspaceModuleRow kind _ owner role) =
   WorkspaceModuleRow kind path owner role
 
 workspaceRecordWithEditionAndModules :: GeneratedHaskellNamingEdition -> [WorkspaceModuleRow] -> WorkspaceRecord -> WorkspaceRecord
-workspaceRecordWithEditionAndModules namingEdition modules (WorkspaceRecord service manifest contextName moduleRoot layout members sourceLanguages languageContract _ _ mappings idDomains nominalEqualities bindingObligations requirements projectionCatalogFacts queryContractBaseline queryContracts routerSelections adopted semanticImpact) =
-  WorkspaceRecord service manifest contextName moduleRoot layout members sourceLanguages languageContract namingEdition modules mappings idDomains nominalEqualities bindingObligations requirements projectionCatalogFacts queryContractBaseline queryContracts routerSelections adopted semanticImpact
+workspaceRecordWithEditionAndModules namingEdition modules (WorkspaceRecord service manifest contextName moduleRoot layout members sourceLanguages languageContract _ _ mappings idDomains nominalEqualities structuralEnumEqualities bindingObligations requirements projectionCatalogFacts queryContractBaseline queryContracts routerSelections adopted semanticImpact) =
+  WorkspaceRecord service manifest contextName moduleRoot layout members sourceLanguages languageContract namingEdition modules mappings idDomains nominalEqualities structuralEnumEqualities bindingObligations requirements projectionCatalogFacts queryContractBaseline queryContracts routerSelections adopted semanticImpact
 
 timerNodeWithPayload :: [FieldBinding] -> TimerNode -> TimerNode
 timerNodeWithPayload payload (TimerNode name identity fireAt _ fire decodeUnknown maxAttempts deadLetter loc) =

@@ -39,6 +39,7 @@ import Data.Time.Format.ISO8601 (iso8601ParseM)
 import Data.TypeID qualified as TypeID
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.NominalType
 import Keiro.Dsl.TypeGraph
 
 data ExpressionEnvironment = ExpressionEnvironment
@@ -558,6 +559,7 @@ resolveLiteral environment loc expected literal = case literal of
   LiteralQualified typeName constructor -> resolveEnumLiteral environment loc expected typeName constructor
   LiteralId typeName value -> resolveIdLiteral environment loc expected typeName value
   where
+    invalid :: Text -> Either (NonEmpty ExpressionDiagnostic) a
     invalid message = failure loc ScalarLiteralInvalid message
     mismatch other syntax =
       failure
@@ -566,24 +568,28 @@ resolveLiteral environment loc expected literal = case literal of
         (syntax <> " literal cannot inhabit scalar type '" <> aggregateCanonicalName other <> "'")
 
 resolveEnumLiteral :: ExpressionEnvironment -> Loc -> ExpectedScalarType -> Name -> Name -> Either (NonEmpty ExpressionDiagnostic) TypedScalarExpr
-resolveEnumLiteral environment loc expected typeName constructor = case find ((== typeName) . (.name)) ((.enums) ((.spec) environment)) of
-  Nothing -> failure loc ScalarLiteralInvalid ("unknown enum literal type '" <> typeName <> "'")
-  Just declaration
-    | constructor `notElem` map fst ((.ctors) declaration) ->
-        failure loc ScalarLiteralInvalid ("enum '" <> typeName <> "' has no constructor '" <> constructor <> "'")
-    | otherwise -> do
-        resolved <- resolveDeclared typeName
-        requireExpected resolved
-        pure (literalExpr loc resolved (ScalarEnumValue typeName constructor))
+resolveEnumLiteral environment loc expected typeName constructor = do
+  resolved <- case resolveAggregateType environment.symbols loc WholeValueWriteUse (TRef typeName) of
+    Right value -> Right value
+    Left _ -> invalid ("unknown enum literal type '" <> typeName <> "'")
+  constructors <- case resolved of
+    AggregateStructuralEnum evidence -> Right (map fst (NE.toList evidence.constructors))
+    AggregateNominal nominal -> case nominal.representation of
+      EnumRepresentation entries -> Right (map fst (NE.toList entries))
+      _ -> invalid ("unknown enum literal type '" <> typeName <> "'")
+    _ -> invalid ("unknown enum literal type '" <> typeName <> "'")
+  if constructor `elem` constructors
+    then pure ()
+    else invalid ("enum '" <> typeName <> "' has no constructor '" <> constructor <> "'")
+  case expected of
+    InferScalarType -> pure ()
+    ExpectScalarType wanted
+      | wanted == resolved -> pure ()
+      | otherwise -> failure loc (nominalMismatchCode resolved wanted) ("enum literal has type '" <> aggregateCanonicalName resolved <> "', expected '" <> aggregateCanonicalName wanted <> "'")
+  pure (literalExpr loc resolved (ScalarEnumValue typeName constructor))
   where
-    resolveDeclared name = case resolveAggregateType ((.symbols) environment) loc WholeValueWriteUse (TRef name) of
-      Left _ -> failure loc ScalarLiteralInvalid ("enum type '" <> name <> "' is not available at this aggregate use")
-      Right resolved -> Right resolved
-    requireExpected resolved = case expected of
-      InferScalarType -> Right ()
-      ExpectScalarType wanted
-        | wanted == resolved -> Right ()
-        | otherwise -> failure loc (nominalMismatchCode resolved wanted) ("enum literal has type '" <> aggregateCanonicalName resolved <> "', expected '" <> aggregateCanonicalName wanted <> "'")
+    invalid :: Text -> Either (NonEmpty ExpressionDiagnostic) a
+    invalid message = failure loc ScalarLiteralInvalid message
 
 resolveIdLiteral :: ExpressionEnvironment -> Loc -> ExpectedScalarType -> Name -> Text -> Either (NonEmpty ExpressionDiagnostic) TypedScalarExpr
 resolveIdLiteral environment loc expected typeName value = case find ((== typeName) . (.name)) ((.ids) ((.spec) environment)) of

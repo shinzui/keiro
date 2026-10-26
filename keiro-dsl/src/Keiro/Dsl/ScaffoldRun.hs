@@ -99,7 +99,7 @@ import Keiro.Dsl.ConformancePackage
     renderConformancePackageReport,
   )
 import Keiro.Dsl.CoordinationImpact (ProcessReactionDrift, ProcessReactionSnapshot (..), RouterSelectionDrift, processReactionDrift, processReactionSnapshots, renderProcessReactionDrift, renderRouterSelectionDrift, routerSelectionDrift, routerSelectionSnapshots)
-import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligationKind (..), bindingHolesForService)
+import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligationKind (..), bindingHolesForService, structuralEnumEqualityIdentitiesForService)
 import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForService, renderFoldSurfaceError)
 import Keiro.Dsl.GeneratedHaskellLanguage (idiomaticV2LabelMigrations)
 import Keiro.Dsl.Goldens (GoldenPayload)
@@ -1714,6 +1714,7 @@ currentRecord specPath sourceLanguage ctx service modules queryHistoryBaseline c
       mappings = (.mappings) (consumerPlanForService service),
       idDomains = idDomainIdentitiesForService service,
       nominalEqualities = nominalEqualityIdentitiesForService service,
+      structuralEnumEqualities = structuralEnumEqualityIdentitiesForService service,
       bindingObligations = either (const []) id (bindingHolesForService service),
       behaviorRequirements = currentBehavior,
       projectionCatalogFacts = projectionCatalogFactsForService service,

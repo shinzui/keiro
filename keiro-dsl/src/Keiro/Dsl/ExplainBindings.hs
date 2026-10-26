@@ -10,6 +10,7 @@ module Keiro.Dsl.ExplainBindings
     BindingHole (..),
     bindingObligations,
     bindingObligationsForService,
+    structuralEnumEqualityIdentitiesForService,
     bindingHoles,
     bindingHolesForService,
     renderBindingObligations,
@@ -24,11 +25,13 @@ import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
+import Keiro.Dsl.AggregateType
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.IdDomain (idDomainContractForDeclaration, idDomainVersion)
+import Keiro.Dsl.LanguageVersion (RuntimeCapability (StructuralEnumEqualityGuards), runtimeProfileHasCapability)
 import Keiro.Dsl.NominalType
-import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract, checkedSpec, checkedTypeGraph, legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract (..), checkedLanguageContract, checkedSpec, checkedTypeGraph, legacyCheckedService)
 import Keiro.Dsl.TypeGraph
 
 data BindingResolutionError
@@ -138,6 +141,20 @@ instance FromJSON BindingHole where
           <*> value .:? "path"
           <*> value .: "signature"
 
+-- | Declaration-scoped capability provenance. Executable binding laws remain
+-- separate qualification evidence; checking cannot execute consumer functions.
+structuralEnumEqualityIdentitiesForService :: CheckedService -> [Text]
+structuralEnumEqualityIdentitiesForService service
+  | runtimeProfileHasCapability (checkedLanguageContract service).runtimeProfile StructuralEnumEqualityGuards =
+      case checkedTypeGraph service of
+        Left _ -> []
+        Right graph ->
+          [ structuralEnumEqualityIdentity evidence
+          | ResolvedStructural declaration REnum {} <- Map.elems graph.declarations,
+            Right (AggregateStructuralEnum evidence) <- [resolveAggregateType (aggregateSymbolsFromGraph graph (checkedSpec service)) declaration.loc EqualityGuardUse (TRef declaration.name)]
+          ]
+  | otherwise = []
+
 bindingObligations :: Spec -> Either (NonEmpty BindingResolutionError) [BindingObligation]
 bindingObligations = bindingObligationsForService . legacyCheckedService
 
@@ -147,13 +164,18 @@ bindingObligationsForService service = do
   nominalRegistry <- first (fmap BindingNominalTypeError) (resolveNominalTypes spec)
   pure . sortOn obligationSortKey $
     concat
-      [ obligationsFor graph declaration
+      [ map (withEquality graph declaration) (obligationsFor graph declaration)
       | ResolvedStructural declaration _ <- Map.elems ((.declarations) graph)
       ]
       <> concatMap (liftObligationsFor graph) (Map.elems graph.declarations)
       <> concatMap (nominalObligationsFor service graph) (Map.elems (nominalTypes nominalRegistry))
   where
     spec = checkedSpec service
+    withEquality graph declaration obligation =
+      case resolveAggregateType (aggregateSymbolsFromGraph graph spec) declaration.loc EqualityGuardUse (TRef declaration.name) of
+        Right (AggregateStructuralEnum evidence)
+          | runtimeProfileHasCapability (checkedLanguageContract service).runtimeProfile StructuralEnumEqualityGuards -> obligation {equalityContract = Just (structuralEnumEqualityIdentity evidence)}
+        _ -> obligation
 
 bindingHoles :: Spec -> Either (NonEmpty BindingResolutionError) [BindingHole]
 bindingHoles = bindingHolesForService . legacyCheckedService
