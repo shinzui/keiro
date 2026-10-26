@@ -46,8 +46,10 @@ p95, p99 and writer-thread allocation per operation. Missing measurements,
 rejected/missing polling, lost offered writer load, detected degradation or
 insufficient resolution fail acceptance. All observations are retained.
 Intervals must exclude 1% degradation; 1% is a resolution requirement, never an
-allowed slowdown budget. An adverse median is conservatively inconclusive
-pending additional paired evidence. Combined-process allocation is diagnostic.
+allowed slowdown budget. Adverse point estimates and the number of adverse pairs
+are retained for reproducibility review. Supported degradation requires the
+interval to exclude equality; a point estimate's sign alone cannot establish it.
+Combined-process allocation is diagnostic.
 
 Retention runs use `KEIRO_INSPECTION_RETENTION_SECONDS=60` for both new active
 catalog sizes. Post-major-GC heap and active threads are sampled every five
@@ -76,7 +78,7 @@ started. Concurrent documentation-only commits changed HEAD but no production
 source relative to the detached baseline. These are red controls and do not
 establish acceptance; no CSV or threshold has been changed.
 
-The controller's seven positive/negative checks pass in the Nix shell, including
+The controller's eight positive/negative checks cover
 refusal of a supported 0.1% slowdown, intervals that lack resolution, missing
 trials/raw samples and rejected/lost polls. Run them with:
 
@@ -116,3 +118,46 @@ successful polls with zero refusals, validating every field for one and 1,000
 descriptors respectively. Their feed resource observations return to zero views,
 zero connections and no wake pump. These diagnostic trials verify the harness;
 they are not the alternating paired performance acceptance cohort.
+
+## Rejected first paired cohort and encoding investigation
+
+`matched-v1` retains all 60 trials at candidate `96ba2d7d` against the detached
+baseline, with five alternating pairs for every comparison and all 800 expected
+polls successful. `analysis.json` and `matched-v1-controller.log` refuse acceptance.
+The matching single-manager active/idle comparison passes its four metrics, but
+the 1,000-entry active/idle comparison has median writer p99 ratio 1.051949
+(95% interval 1.010192–1.089934) and writer allocation ratio 1.000091
+(1.000082–1.000172). Several controls also lack 1% resolution. These results are
+not overridden by throughput or the older historical guard ceilings.
+
+Median process allocation is 750.96 MB in large-catalog idle and 1,141.38 MB
+while serving 80 large polls. This is diagnostic attribution, not the writer
+allocation gate. `ProfileAllocation.hs` separates pure summaries, JSON-tree
+construction and serialization without a store; `allocation-profile.log` records
+136,016 bytes, 1,072,936 bytes and 3,507,040 bytes respectively for 1,000 entries.
+`allocation-profile-v2.log` records 2,642,768 bytes for direct encoding, plus the
+same summary work, about 41% less total allocation. Both forms decode to identical
+JSON. `allocation-profile-v3.log` and `static-keys-experiment.patch` preserve a
+rejected literal-key variant that allocates more than standard Aeson pairs.
+
+The revised implementation adds a standard `ToJSON` direct encoding and lets the
+host bound it on every request. The canonical OpsResult remains fully available
+but defers its array when the transport consumes the direct form. Repeated-call
+tests count fresh encoder invocations, verify the header cache remains empty,
+and preserve JSON, schema, method and byte-cap behavior.
+
+The investigation also found that the benchmark's elapsed clock included joining
+the external client after the writer finished. The old single-manager/pre-change
+throughput comparison reports a tiny supported difference from that envelope.
+The revised harness records writer completion before joining clients and reports
+`client_cleanup_seconds` separately, plus GC count/time diagnostics. Per-operation
+latency samples and the actual writer workload are unchanged. The old binary's
+compared disabled/idle modes have no client process to join. The original raw
+cohort is preserved; the revised candidate requires a fresh paired run.
+
+Reproduce the allocation attribution inside Nix after building the local libraries:
+
+```bash
+cabal exec -- ghc -O1 -threaded -rtsopts -package-id=keiro-0.21.0.0-inplace -package-id=jitsurei-0.1.0.0-inplace keiro/bench/results/pm-types/ProfileAllocation.hs -odir /tmp/keiro-pm-types-profile -hidir /tmp/keiro-pm-types-profile -o /tmp/keiro-pm-types-profile-allocation
+/tmp/keiro-pm-types-profile-allocation +RTS -N2 -T -RTS
+```

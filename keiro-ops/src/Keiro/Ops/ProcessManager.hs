@@ -1,8 +1,11 @@
 -- | Thin read-only adapters over application-owned manager inspectors.
-module Keiro.Ops.ProcessManager (Command (..), ShowOptions (..), ListOptions (..), commandParser, validateCommand, isMutation, runCommand) where
+module Keiro.Ops.ProcessManager (Command (..), ShowOptions (..), ListOptions (..), commandParser, validateCommand, isMutation, runCommand, prepareTypes) where
 
-import Data.Aeson (object, (.=))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.Encoding (Encoding)
+import Data.Aeson.Encoding qualified as Encoding
+import Data.Aeson.KeyMap qualified as KeyMap
+import Data.Map.Lazy qualified as LazyMap
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -77,16 +80,7 @@ runCommand :: PM.ProcessManagerInspectors -> OpsEnv -> Command -> IO OpsOutcome
 runCommand catalog env command = case validateCommand command of
   Left (code, detail) -> pure (InspectionFailed code detail)
   Right () -> case command of
-    Types ->
-      let summaries = PM.listProcessManagerTypes catalog
-       in pure
-            ( Succeeded
-                ( OpsResult
-                    ["name", "category", "snapshots_configured", "snapshot_policy", "timers_configured"]
-                    [[summary.name, summary.category, if summary.snapshotsConfigured then "true" else "false", summary.snapshotPolicy, maybe "unknown" (\configured -> if configured then "true" else "false") summary.timersConfigured] | summary <- summaries]
-                    (object ["items" .= map PM.processManagerTypeJson summaries])
-                )
-            )
+    Types -> pure (Succeeded (fst (prepareTypes catalog)))
     Show options -> case Map.lookup options.name catalog of
       Nothing -> unknown options.name
       Just (PM.SomeProcessManagerInspector inspector) -> do
@@ -123,4 +117,20 @@ runCommand catalog env command = case validateCommand command of
           PM.InvalidInstanceCursor _ -> "invalid_cursor"
           PM.InstanceResultTooLarge -> "inspection_result_too_large",
         Text.pack (show err)
+      )
+
+-- | Canonical presentation and an equivalent direct encoding from one traversal.
+-- The host must consume the encoding inside its own byte/deadline budget.
+-- Neither representation is retained between requests.
+prepareTypes :: PM.ProcessManagerInspectors -> (OpsResult, Encoding)
+prepareTypes catalog =
+  let summaries = PM.listProcessManagerTypes catalog
+      -- Defer the canonical array until a caller actually consumes JSON. HTTP
+      -- can consume the direct encoding while retaining the same OpsResult API.
+      value = Aeson.Object (KeyMap.fromMap (LazyMap.singleton "items" (Aeson.toJSON summaries)))
+   in ( OpsResult
+          ["name", "category", "snapshots_configured", "snapshot_policy", "timers_configured"]
+          [[summary.name, summary.category, if summary.snapshotsConfigured then "true" else "false", summary.snapshotPolicy, maybe "unknown" (\configured -> if configured then "true" else "false") summary.timersConfigured] | summary <- summaries]
+          value,
+        Encoding.pairs (Encoding.pair "items" (Aeson.toEncoding summaries))
       )

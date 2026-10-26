@@ -136,7 +136,7 @@ benchmark = do
           use store (Session.script "CHECKPOINT")
           forM_ [1 .. 50] $ \n -> operation store ("warm-" <> number n) >> pure ()
           lifecycleBefore <- if retentionSeconds /= Nothing then Just <$> heapSample "mounted-before-pollers" 0 else pure Nothing
-          ((samples, statsBefore, started, before), pollSuccess, pollFailure) <- withPollers app mode duration $ \startPolling -> do
+          ((samples, statsBefore, started, before, writerFinished), pollSuccess, pollFailure) <- withPollers app mode duration $ \startPolling -> do
             -- Let warm writer notifications settle in every mode, including
             -- the baseline, before capturing counters and the measurement clock.
             threadDelay 1000000
@@ -175,7 +175,8 @@ benchmark = do
                           loop (n + 1)
                 loop 1
                 pure []
-            pure (samples, statsBefore, started, before)
+            writerFinished <- getMonotonicTimeNSec
+            pure (samples, statsBefore, started, before, writerFinished)
           finished <- getMonotonicTimeNSec
           performMajorGC
           statsAfter <- getRTSStats
@@ -187,11 +188,12 @@ benchmark = do
             Just _ -> do
               threadDelay 12000000
               Just <$> heapSample "mounted-after-poller-cleanup-and-drain" sampleCount
-          let elapsed = fromIntegral (finished - started) / 1e9 :: Double
+          let elapsed = fromIntegral (writerFinished - started) / 1e9 :: Double
+              cleanupSeconds = fromIntegral (finished - writerFinished) / 1e9 :: Double
               durations = map (\(q, a, b, c, d, _) -> q + a + b + c + d) samples
               percentile p = if null durations then Nothing else Just (sort durations !! min (sampleCount - 1) (floor (p * fromIntegral sampleCount)))
               (views, clients) = pollingShape mode
-              artifact = object ["resources_after_clients" .= resourcesAfter, "trial" .= trial, "retention_seconds" .= retentionSeconds, "lifecycle_before" .= lifecycleBefore, "lifecycle_after" .= lifecycleAfter, "mode" .= mode, "views" .= views, "clients" .= clients, "poll_success" .= pollSuccess, "poll_failure" .= pollFailure, "writer_thread_allocated_bytes_per_operation" .= (if null samples then Nothing else Just (sum [allocated | (_, _, _, _, _, allocated) <- samples] / fromIntegral sampleCount)), "allocated_bytes" .= (statsAfter.allocated_bytes - statsBefore.allocated_bytes), "cpu_ns" .= (statsAfter.cpu_ns - statsBefore.cpu_ns), "settings" .= (settings :: Value), "offered_ops_per_second" .= offeredRate, "elapsed_seconds" .= elapsed, "throughput" .= (fromIntegral sampleCount / elapsed), "p50_us" .= percentile 0.5, "p95_us" .= percentile 0.95, "p99_us" .= percentile 0.99, "before" .= before, "after" .= after, "samples_wait_schedule_claim_resume_timer_us_writer_bytes" .= samples]
+              artifact = object ["resources_after_clients" .= resourcesAfter, "trial" .= trial, "retention_seconds" .= retentionSeconds, "lifecycle_before" .= lifecycleBefore, "lifecycle_after" .= lifecycleAfter, "mode" .= mode, "views" .= views, "clients" .= clients, "poll_success" .= pollSuccess, "poll_failure" .= pollFailure, "writer_thread_allocated_bytes_per_operation" .= (if null samples then Nothing else Just (sum [allocated | (_, _, _, _, _, allocated) <- samples] / fromIntegral sampleCount)), "allocated_bytes" .= (statsAfter.allocated_bytes - statsBefore.allocated_bytes), "cpu_ns" .= (statsAfter.cpu_ns - statsBefore.cpu_ns), "settings" .= (settings :: Value), "offered_ops_per_second" .= offeredRate, "elapsed_seconds" .= elapsed, "client_cleanup_seconds" .= cleanupSeconds, "minor_and_major_gcs" .= (statsAfter.gcs - statsBefore.gcs), "major_gcs" .= (statsAfter.major_gcs - statsBefore.major_gcs), "gc_cpu_ns" .= (statsAfter.gc_cpu_ns - statsBefore.gc_cpu_ns), "gc_elapsed_ns" .= (statsAfter.gc_elapsed_ns - statsBefore.gc_elapsed_ns), "throughput" .= (fromIntegral sampleCount / elapsed), "p50_us" .= percentile 0.5, "p95_us" .= percentile 0.95, "p99_us" .= percentile 0.99, "before" .= before, "after" .= after, "samples_wait_schedule_claim_resume_timer_us_writer_bytes" .= samples]
               path = output </> (show trial <> "-" <> Text.unpack mode <> ".json")
           Lazy.writeFile path (Aeson.encode artifact)
           putStrLn path

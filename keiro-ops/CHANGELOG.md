@@ -15,6 +15,7 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 - Add embedded `pm types` with shared JSON and human metadata output, including
   empty catalogs and aliases, without requiring a manager name or store reads.
+  Hosts may supply a bounded direct encoder through `runCommandWithReadEncoding`.
 
 - Add bounded projection-status pages and `projection status`, preserving the
   frozen v1 relation and complete-list compatibility API. Page keys precede

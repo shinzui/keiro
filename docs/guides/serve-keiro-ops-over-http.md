@@ -2,7 +2,7 @@
 type: Runbook
 title: Serve Keiro Ops Over HTTP
 description: Mount bounded HTTP inspection and explicitly confirmed operator actions using the supported Keiro command tree.
-timestamp: 2026-10-26T20:14:45Z
+timestamp: 2026-10-26T21:13:27Z
 docId: DOC-30
 tags: [keiro, operations, http, inspection]
 generated:
@@ -114,6 +114,8 @@ The standalone database-only server has no application catalogs. Discovery
 enumerates in-memory descriptors without journal, state, snapshot, or timer
 reads. HTTP still performs its normal fresh schema verification and applies
 admission, deadlines and response-byte limits on every admitted read.
+Discovery computes and encodes each response on demand inside those limits;
+the mount retains no catalog response cache.
 
 Path segments are command words followed by positional arguments. Query keys
 use `snake_case` and become `--kebab-case=value` options. Repeated options retain

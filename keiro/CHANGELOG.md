@@ -15,6 +15,7 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 - Add pure mounted process-manager discovery with sorted catalog lookup names,
   snapshot configuration, and explicitly unknown timer configuration; discovery
   performs no store reads or application callback evaluation.
+  Summary JSON supports equivalent canonical values and direct encodings.
 
 - Add bounded projection-status pages and `projection status`, preserving the
   frozen v1 relation and complete-list compatibility API. Page keys precede

@@ -38,6 +38,7 @@ where
 
 import Data.Aeson (object, (.=))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.Encoding qualified as Encoding
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict (Map)
@@ -163,6 +164,19 @@ processManagerTypeJson summary =
       "snapshot_policy" .= summary.snapshotPolicy,
       "timers_configured" .= summary.timersConfigured
     ]
+
+-- Direct encoding avoids building an intermediate JSON tree on polling reads.
+-- Keep its meaning equal to processManagerTypeJson (covered by parity tests).
+instance Aeson.ToJSON ProcessManagerTypeSummary where
+  toJSON = processManagerTypeJson
+  toEncoding summary =
+    Encoding.pairs
+      ( "category" .= summary.category
+          <> "name" .= summary.name
+          <> "snapshot_policy" .= summary.snapshotPolicy
+          <> "snapshots_configured" .= summary.snapshotsConfigured
+          <> "timers_configured" .= summary.timersConfigured
+      )
 
 data DispatchWitness = EventPresent | NotObserved deriving stock (Generic, Eq, Show)
 

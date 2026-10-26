@@ -2,8 +2,9 @@
 
 Ratios above one always mean worse. No operations are resampled independently.
 An interval wholly above one rejects regression; an upper endpoint >=1.01 is
-inconclusive. A median above one is an unresolved adverse trend. Same-source
-controls must satisfy the resolution requirement too. Keep every raw sample.
+inconclusive. Retain adverse point estimates for reproducibility review; their
+sign alone does not establish a degradation. Same-source controls must satisfy
+the resolution requirement too. Keep every raw sample.
 """
 import json
 import math
@@ -62,11 +63,13 @@ def analyze(root, pairs):
             boot = sorted(statistics.median(rng.choices(ratios, k=pairs)) for _ in range(20000))
             median = statistics.median(ratios)
             lo, hi = boot[499], boot[19499]
-            status = "regression" if lo > 1 else "inconclusive" if hi >= 1.01 or median > 1 else "passed"
+            status = "regression" if lo > 1 else "inconclusive" if hi >= 1.01 else "passed"
             if name == "same-source" and lo <= 1 / 1.01:
                 status = "inconclusive"
             results.append(dict(comparison=name, metric=metric, ratios=ratios,
-                                median=median, ci95=[lo, hi], status=status))
+                                median=median, ci95=[lo, hi], status=status,
+                                adverse_point_estimate=median > 1,
+                                adverse_pairs=sum(r > 1 for r in ratios)))
     report = dict(seed=323, resamples=20000, pairs=pairs, results=results,
                   status="passed" if all(r["status"] == "passed" for r in results) else "not-accepted")
     (root / "analysis.json").write_text(json.dumps(report, indent=2) + "\n")

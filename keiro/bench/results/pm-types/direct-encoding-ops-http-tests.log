@@ -1,0 +1,202 @@
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-ops-0.21.0.0 (test:keiro-ops-test) (file test/ReactionInspectionSpec.hs changed)
+ - keiro-ops-http-0.21.0.0 (test:keiro-ops-http-test) (file test/Main.hs changed)
+Preprocessing test suite 'keiro-ops-test' for keiro-ops-0.21.0.0...
+Preprocessing test suite 'keiro-ops-http-test' for keiro-ops-http-0.21.0.0...
+Building test suite 'keiro-ops-test' for keiro-ops-0.21.0.0...
+Building test suite 'keiro-ops-http-test' for keiro-ops-http-0.21.0.0...
+[1 of 2] Compiling ReactionInspectionSpec ( test/ReactionInspectionSpec.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.21.0.0/t/keiro-ops-test/build/keiro-ops-test/keiro-ops-test-tmp/ReactionInspectionSpec.o ) [Source file changed]
+[4 of 4] Compiling Main             ( test/Main.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-http-0.21.0.0/t/keiro-ops-http-test/build/keiro-ops-http-test/keiro-ops-http-test-tmp/Main.o ) [Source file changed]
+test/ReactionInspectionSpec.hs:110:14: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘last’ shadows the existing binding
+      imported from ‘Prelude’ at test/ReactionInspectionSpec.hs:1:8-29
+      (and originally defined in ‘ghc-internal-9.1204.0:GHC.Internal.List’)
+    |
+110 |         Just last -> do
+    |              ^^^^
+
+test/Main.hs:397:56: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of Request ‘requestBody’
+    (imported from Network.Wai, but defined in Network.Wai.Internal):
+    Deprecated: "requestBody's name is misleading because it only gets a partial chunk of the body. Use getRequestBodyChunk instead when getting the field, and setRequestBodyChunks when setting the field."
+    |
+397 |         let foreignApp request respond = app (request {requestBody = fail "foreign request body was read"}) respond
+    |                                                        ^^^^^^^^^^^
+
+test/Main.hs:609:13: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘before’ shadows the existing binding
+      imported from ‘Test.Hspec’ at test/Main.hs:75:1-17
+      (and originally defined in ‘hspec-core-2.11.18:Test.Hspec.Core.Hooks’)
+    |
+609 |             before <- readIORef calls
+    |             ^^^^^^
+
+[2 of 2] Compiling Main             ( test/Main.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.21.0.0/t/keiro-ops-test/build/keiro-ops-test/keiro-ops-test-tmp/Main.o ) [Keiro.Ops changed]
+[5 of 5] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-http-0.21.0.0/t/keiro-ops-http-test/build/keiro-ops-http-test/keiro-ops-http-test [Objects changed]
+[3 of 3] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.21.0.0/t/keiro-ops-test/build/keiro-ops-test/keiro-ops-test [Objects changed]
+Running 1 test suites...
+Test suite keiro-ops-http-test: RUNNING...
+
+Compose
+  strips exactly one raw segment and preserves route spelling, queries and streaming bodies [✔]
+  validates mounts, lists them in order, refuses absent surfaces and applies CORS once [✔]
+Running 1 test suites...
+Test suite keiro-ops-test: RUNNING...
+  mounts real Keiro and Kiroku applications and both socket protocols on one port [✔]
+shared feed driver
+  diffs fallback truth, extra-only changes, and recovery without duplicate reads per subscriber [✔]
+  signals overflow before retained deltas and resubscribes from the current sequence [✔]
+
+reaction process-manager commands
+  lists metadata with an unusable store and fully renders both formats [✔]
+  mounts a handwritten reaction inspector through pm show and pm list [✔]
+embedded command tree
+  omits code-dependent commands from the standalone tree [✔]
+  mounts every code-dependent command from typed application hooks [✔]
+  parses a complete versioned start and rejects malformed generation identities [✔]
+numeric option rejection
+  rejects non-finite durations on every duration flag [✔]
+  rejects non-positive and wrapped integer options at parse time [✔]
+  shares non-negative admission across global positions, stream versions, and generations [✔]
+targeted stream repair command
+  requires a positive event admission limit [✔]
+  classifies the command as mutating and renders a stable typed refusal [✔]
+  keeps every typed refusal code distinct and stable [✔]
+catalog rebuild adoption
+  previews exact slice changes and adopts them only with force [✔]
+  annotates preview scope and warns about out-of-scope drift [✔]
+  refuses an adoption preview for a group absent from the catalog [✔]
+  recovers a pre-canonical stranded run through preview and force [✔]
+durable checkpoint inventory
+  mounts both read-only commands in the standalone tree without a lag alias [✔]
+  returns the captured store position with empty durable rows and null summaries [✔]
+  lists stopped-worker rows in name/member order and derives the member-aware floor [✔]
+  diverges store_position from visible_store_head after a hard delete [✔]
+selectConnectionString
+  prefers the explicit option, then the Keiro variable, then DATABASE_URL [✔]
+  uses an empty libpq string for standard PG environment fallbacks [✔]
+parseDuration
+  rejects every non-finite spelling Read Double accepts [✔]
+  rejects finite durations the timestamptz wire encoding cannot represent [✔]
+  still rejects lowercase non-finite spellings, negatives, and junk [✔]
+  accepts integers, decimals, scientific notation, and suffixes unchanged [✔]
+renderHuman
+  aligns columns without changing the structured JSON value [✔]
+keiro-ops numeric argument rejection
+  refuses a NaN duration before any preview or database contact [✔]
+keiro-ops executable
+  emits parseable JSON and refuses a mutation after schema drift [✔]
+  does not treat a registered binding view as schema drift [✔]
+workflow handlers
+  previews and runs one bounded application-registry resume pass [✔]
+keiro resume worker: no registry entry for workflow retired-approval (id wf-resume-unregistered); skipping
+  reports advanced work and the exact unregistered workflow names [✔]
+  classifies a due sleep with no timer worker as blocked, not advanced [✔]
+  lists and decodes a real journal without mutating it [✔]
+  applies exact name/status filters and keyset cursors [✔]
+  retains fresh timer presentation without broadcasting a clock-only delta [✔]
+feed registry
+  previews cancellation without mutation, then records it with force [✔]
+  reserves initialization, joins cancellation, shares a ready view, and drops the idle wake cursor [✔]
+  previews and applies failed-workflow resurrection and lease release [✔]
+  refuses a retiring view distinctly until blocked cleanup has joined [✔]
+  previews and signals an awakeable through the supported library path [✔]
+  previews the exact GC candidates before deleting them [✔]
+timer handlers
+  rechecks schema for each active view and recovers only after drift is removed [✔]
+inspection sockets
+  renders pending timer pages with reusable cursors and due time [✔]
+  shares workflow truth, retains a subscription on refusal, and releases each sent frame [✔]
+  previews and dispatches one bounded due-timer pass through the mounted hook [✔]
+  lists, previews, requeues, and dead-letters a stuck timer [✔]
+  previews and cancels a scheduled timer [✔]
+outbox handlers
+  lists backlog and previews stale recovery without mutation [✔]
+  filters and renders rejected rows with bounded audit fields [✔]
+  surfaces dispatch dead letters through the supported API [✔]
+inbox handlers
+  previews poison marking and GC without bypassing inbox APIs [✔]
+pgmq handlers
+  previews and redrives a DLQ entry, which is then consumable [✔]
+  refuses purge after inspection and leaves the DLQ unchanged [✔]
+  archives an inspected entry by id while it remains hidden [✔]
+projection handlers
+  renders bounded projection status through the owning public relation [✔]
+  prunes only the named dedup rows [✔]
+shard handlers
+  previews exact buckets and relinquishes them for another worker [✔]
+snapshot handlers
+  refuses uncovered truncation, passes matching coverage, and deletes advisories [✔]
+stream handlers
+  reads causation and applies reversible lifecycle operations [✔]
+  previews and applies truncate markers and permanent deletion [✔]
+
+Finished in 7.2174 seconds
+55 examples, 0 failures
+Test suite keiro-ops-test: PASS
+Test suite logged to:
+/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.21.0.0/t/keiro-ops-test/test/keiro-ops-0.21.0.0-keiro-ops-test.log
+1 of 1 test suites (1 of 1 test cases) passed.
+  streams timer fallback truth and projection extra-only changes using the poll encoders [✔]
+  checks upgrade origin, capacity and schema policy and closes active sockets [✔]
+live view parameters
+  canonicalizes equivalent status sets and bounds subscription inputs [✔]
+  compares timer state independently of presentation countdowns [✔]
+request translation
+  preserves path and repeated option order, converting snake_case [✔]
+  translates flags using only the selected command grammar [✔]
+  rejects global options, malformed keys, empty and option-like segments [✔]
+  uses the real parser including the legacy two-value after option [✔]
+budget
+  rejects excess work immediately and releases a cancelled permit after cleanup [✔]
+  joins timed-out work and keeps the permit reusable [✔]
+  bounds encoding and rejects invalid host limits [✔]
+mounted process-manager discovery
+  serves Jitsurei metadata without journal instances and agrees with the parsed CLI [✔]
+  distinguishes absent and empty hooks and bounds large catalogs [✔]
+  keeps fresh schema refusal for metadata reads [✔]
+workflow page routes
+  rejects an unrepresentable outgoing cursor instead of returning an unusable token [✔]
+  returns wide workflow keys within the continuation and response caps [✔]
+  pages supported reads through the same parser and maps typed failures [✔]
+fresh header presentation reuse
+  preserves canonical bytes and observes edits, deletion and recreation [✔]
+  enforces byte and entry limits through churn, oversized changes and misses [✔]
+  fails oversized changes explicitly and reapplies schema policy to warm headers [✔]
+HTTP boundary
+  shares the supported read/write classification across every mounted domain [✔]
+  renders a real preview and applies the confirmed operation only [✔]
+  requires preview and confirmation for DLQ reads that reserve messages [✔]
+  rejects invalid requests and has structured errors [✔]
+  normalizes parsed origins and rejects malformed or repeated origins [✔]
+  rejects foreign mutations before reading their body or verifying schema [✔]
+  requires JSON for nonempty bodies including chunked confirmation, and permits empty previews [✔]
+  applies exact-origin CORS without credentials or duplicate headers [✔]
+  bounds requests and results before responding [✔]
+  keeps hook-dependent commands absent unless mounted and preserves supported failures [✔]
+  refuses excess requests before verification and cancels schema work on deadline [✔]
+  holds admission during response delivery and releases it when the client cancels [✔]
+  expires four blocked deliveries once, returns all permits, and recovers health [✔]
+  mounts idly without recurring verification and skips SQL for disabled/invalid requests [✔]
+  serves through a loopback socket and releases its port [✔]
+  refuses foreign origins and non-JSON confirmation over a real HTTP socket [✔]
+DeliveryExpired
+  terminates a backpressured Warp delivery and recovers admission [✔]
+  joins idle accepted connections across repeated start/stop churn [✔]
+process-manager discovery database boundary
+  performs only aggregate-types verifier work and rejects parsing before borrowing [✔]
+bounded workflow header
+  uses one supported instance read even with 100000 children [✔]
+schema handshake
+  bounds SQL on every inspection connection and releases pool capacity on cancellation [✔]
+  detects drift after construction, refuses previews/confirmation, and supports explicit policy [✔]
+CLI agreement
+  agrees with executable JSON across the database-only command domains [✔]
+
+Finished in 28.8678 seconds
+53 examples, 0 failures
+Test suite keiro-ops-http-test: PASS
+Test suite logged to:
+/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-http-0.21.0.0/t/keiro-ops-http-test/test/keiro-ops-http-0.21.0.0-keiro-ops-http-test.log
+1 of 1 test suites (1 of 1 test cases) passed.

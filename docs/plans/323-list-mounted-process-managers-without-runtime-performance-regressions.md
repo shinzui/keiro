@@ -62,6 +62,14 @@ The discovery implementation and all four focused suites pass (919 examples);
 matched performance evidence and the final gate remain underway. Preserve unrelated concurrent plans
 and documentation commits.
 
+The first complete 60-trial cohort (`matched-v1`) is red: 1,000-descriptor polling
+raises writer p99 by a paired median 5.195% (95% interval +1.019% to +8.993%)
+against its matching idle control, with a supported +0.0091% writer-allocation
+increase. Single-manager active/idle comparisons pass, but baseline/same-source
+uncertainty remains unresolved. A direct-encoding implementation is now under
+final validation; the initial source/measurements remain retained. No performance
+milestone is accepted from the new implementation until new paired evidence passes.
+
 
 ## Surprises & Discoveries
 
@@ -97,6 +105,23 @@ dependency pin changes. The package registry lists GHC 9.14.1 as newer, and the
 GHC 9.12.4 release tag is `1b7c33460847bb8017142407b853811fd8d04bff`;
 the project remains on its verified Nix compiler rather than upgrading scope.
 
+2026-10-26: Allocation attribution identifies roughly 136 KB of summary work,
+1.073 MB of JSON-tree construction and 3.507 MB of generic encoding per
+1,000-descriptor response. The on-demand direct encoder uses 2.643 MB for encoding,
+plus the same summary work, about 41% less than the original pipeline. The real
+first cohort adds about 390 MB of process allocation across 80 large polls;
+process bytes are diagnostic, while its writer p99/allocation regressions block
+acceptance. A fixed encoded-key experiment increases allocation and is rejected;
+retain its patch and profile as failed evidence.
+
+2026-10-26: The existing benchmark stopped its throughput clock after joining the
+external poller. This charged client cleanup to writer throughput (including a
+supported +0.0031% apparent slowdown in a single-manager/pre-change comparison).
+The candidate now stops at writer completion, records client cleanup separately,
+and retains GC count/time diagnostics. Its per-operation p95/p99 samples and writer
+work are unchanged. The old baseline has no poller in the compared disabled/idle
+modes, so its original completion clock incurs no external-client cleanup.
+
 ## Decision Log
 
 
@@ -110,6 +135,28 @@ commit, for the detached executable and all pre-change controls. Concurrent
 documentation-only commits do not change its production sources. Preserve those
 unrelated commits and new plans, and record the exact final candidate identity
 separately.
+
+2026-10-26: Replace the assumption of no HTTP production edits with a bounded
+direct-encoding path, required by the measured large-catalog interference.
+The owning summary type supplies equivalent Aeson `Value` and `Encoding` forms;
+an Encoding describes JSON bytes directly without first materializing a JSON tree.
+Ops prepares both from the same on-demand summary list. Its canonical array remains
+deferred when HTTP consumes the direct form. The transport supplies its existing
+byte/deadline-bound encoder through `runCommandWithReadEncoding`; existing command
+and workflow-header paths delegate unchanged. Nothing caches descriptors or response
+bytes, and route grammar, schema verification, admission and delivery limits stay
+unchanged. JSON parity, cap refusal and repeated fresh encoding/schema work are
+executable acceptance checks. This changes implementation approach, not the no-regression
+acceptance requirement.
+
+2026-10-26: Correct the controller's classification of noisy point estimates.
+Its initial extra condition refused every median above equality even when the
+95% interval included equality and excluded a 1% degradation. The plan requires
+supported degradation and reproducible adverse trends, so retain the point
+estimate/sign counts for review and apply the stated interval rule. The zero
+supported-slowdown threshold and 1% uncertainty ceiling are unchanged. An added
+noise control passes while the supported 0.1% negative control still fails; the
+first cohort's supported large-catalog regressions remain red under this rule.
 
 2026-10-26: Return the catalog key as `name`, because it is the value accepted by the existing
 `pm show --name` and `pm list --name` lookup. The public map currently permits aliases that
@@ -164,8 +211,12 @@ the former omits the command; the latter mounts a valid empty catalog.
 
 `keiro-ops-http/src/Keiro/Ops/Http/Route.hs` derives HTTP commands from the CLI parser.
 `keiro-ops-http/src/Keiro/Ops/Http/Application.hs` handles parsing, admission, per-request
-schema verification, execution, and bounded response encoding. There should be no route-table
-or HTTP production-code change for this feature. A metadata-only handler still incurs the
+schema verification, execution, and bounded response encoding. Routes still derive from the
+command tree. Measured large-catalog allocation requires a small production encoding change:
+`Keiro.Ops.runCommandWithReadEncoding` receives the host's bounded encoder, delegates existing
+commands to the existing runner, and prepares manager types on demand. `encodeBoundedEncoding`
+in `keiro-ops-http/src/Keiro/Ops/Http/Budget.hs` shares the ordinary byte-boundary implementation.
+No schema check, cache, route table or resource policy is bypassed. A metadata-only handler still incurs the
 transport's existing schema check; claiming the whole HTTP request performs zero SQL would
 be incorrect. `keiro-ops/src/Keiro/Ops/Render.hs` renders the same `OpsResult.jsonValue` for CLI
 JSON mode. Human output uses its column headers and rows.
@@ -242,6 +293,16 @@ for `Show` and `List`, including their validation and failures. Bind the summary
 reuse it for human rows and JSON. Use columns `name`, `category`, `snapshots_configured`,
 `snapshot_policy`, and `timers_configured`; render unknown timers as `unknown` in the table.
 Do not alter `AppHooks` or any existing inspector constructor signature.
+
+Give `ProcessManagerTypeSummary` an explicit `ToJSON` instance whose canonical value
+delegates to `processManagerTypeJson` and whose direct encoding writes the same fields.
+`prepareTypes` in the owning ops module returns the unchanged `OpsResult` shape and
+the equivalent direct encoding from one summary binding. Defer the canonical JSON
+array using a lazy map value, so the direct HTTP path does not construct an unused
+JSON tree. Both representations must remain fully forceable and equal, including
+escaped names, null/known timers and all policy constructors. `runCommandWithReadEncoding`
+invokes the host encoder afresh on each types request and never inserts a metadata
+entry into the existing header cache.
 
 Extend the process-manager inspection tests in `keiro/test/Main.hs` and CLI coverage in
 `keiro-ops/test/Main.hs` (with `keiro-ops/test/ReactionInspectionSpec.hs` for the existing modern
@@ -489,6 +550,13 @@ leaves an honest representation for future known values without inventing timer 
 Existing `ProcessManagerInspector`, `ProcessManagerInspectors`, and `AppHooks` remain unchanged.
 The ops command adds `Types`, whose JSON is `object ["items" .= map processManagerTypeJson summaries]`.
 HTTP continues to use the parser and owning runner; there is no independent route definition.
+
+The summary additionally implements `ToJSON` with value/encoding parity. Ops exports
+`prepareTypes :: ProcessManagerInspectors -> (OpsResult, Encoding)` and
+`runCommandWithReadEncoding :: (Encoding -> IO (Maybe ByteString)) -> WorkflowHeaderCache -> AppHooks -> OpsEnv -> Command -> IO (OpsOutcome, Maybe ByteString)`.
+The HTTP budget exports `encodeBoundedEncoding :: Int -> Encoding -> IO (Maybe LazyByteString)`.
+These are additive adapters over existing Aeson/bytestring dependencies; every host
+encoder is required to apply its own response-byte/deadline budget.
 
 No external dependency upgrade or new production dependency is required. The CLI parser uses
 the existing `command`/`info`/`pure` pattern already present for aggregate types. Mori discovery

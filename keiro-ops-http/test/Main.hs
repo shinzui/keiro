@@ -156,6 +156,8 @@ spec fixture = do
     it "bounds encoding and rejects invalid host limits" $ do
       encodeBounded 10 (String (Text.replicate 10000 "x")) `shouldReturn` Nothing
       encodeBounded 4 (String "hi") `shouldReturn` Just "\"hi\""
+      encodeBoundedEncoding 4 (Aeson.toEncoding ("hi" :: Text)) `shouldReturn` Just "\"hi\""
+      encodeBoundedEncoding 10 (Aeson.toEncoding (replicate 100000 ("x" :: Text))) `shouldReturn` Nothing
       newInspectionBudget defaultInspectionLimits {maxConcurrentReads = 0} `shouldThrow` anyIOException
       forM_ [0, -1, maxBound] $ \seconds ->
         newInspectionBudget defaultInspectionLimits {deliveryDeadlineSeconds = seconds} `shouldThrow` anyIOException
@@ -616,6 +618,10 @@ spec fixture = do
             afterManager <- readIORef calls
             afterAggregate `shouldSatisfy` (> before)
             afterManager - afterAggregate `shouldBe` afterAggregate - before
+            repeated <- call app methodGet "/pm/types" ""
+            body repeated `shouldBe` body manager
+            afterRepeated <- readIORef calls
+            afterRepeated - afterManager `shouldBe` afterAggregate - before
     describe "bounded workflow header" $ do
       it "uses one supported instance read even with 100000 children" $ \url ->
         withStore (defaultConnectionSettings url) $ \store -> do

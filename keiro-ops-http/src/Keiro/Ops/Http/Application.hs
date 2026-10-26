@@ -23,7 +23,7 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Hasql.Pool qualified as Pool
 import Keiro.Migrations.SchemaCheck (renderSchemaDrift, verifyExpectedSchemaSession)
-import Keiro.Ops (AppHooks, Command, commandParser, isMutation, runCommandWithHeaderCache, validateCommand)
+import Keiro.Ops (AppHooks, Command, commandParser, isMutation, runCommandWithReadEncoding, validateCommand)
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (Json))
 import Keiro.Ops.Http.Budget
 import Keiro.Ops.Http.Config
@@ -84,7 +84,8 @@ opsApplicationWithBudget config budget hooks store = do
           Left err -> Left (Text.pack (show err))
           Right (Left err) -> Left (Text.pack (show err))
           Right (Right drifts) -> Right (map renderSchemaDrift drifts)
-  opsApplicationPrepared config budget hooks store verify (runCommandWithHeaderCache cache hooks)
+  let encodeDirect encoding = fmap LazyByteString.toStrict <$> encodeBoundedEncoding config.inspectionLimits.maxResponseBytes encoding
+  opsApplicationPrepared config budget hooks store verify (runCommandWithReadEncoding encodeDirect cache hooks)
 
 opsApplicationWithOperations :: OpsHttpConfig -> InspectionBudget -> AppHooks -> KirokuStore -> OpsHttpOperations -> IO Application
 opsApplicationWithOperations config budget hooks store operations =

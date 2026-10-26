@@ -1,0 +1,11 @@
+2026-10-26T20:20:24Z
+candidate source:
+96ba2d7d6fbd30fc12009af83a34cbe1aa41829f
+baseline source:
+d61aabcfdaa4af14aef59712f10deb4826f0e99b
+Darwin yujin 27.0.0 Darwin Kernel Version 27.0.0: Tue Aug 11 21:06:40 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6050 arm64 arm Darwin
+The Glorious Glasgow Haskell Compilation System, version 9.12.4
+postgres (PostgreSQL) 18.6
+08ad4c7222638866bc8dd2c64a10f867c2562c1f08dabb78623a9670ea239d13  /Users/shinzui/Keikaku/bokuno/keiro-pm-types-baseline/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-http-0.21.0.0/b/inspection-interference/build/inspection-interference/inspection-interference
+fd21a23b70fa631e3fe8ef0c05834dff7f3a000d2cfcf9813b11a962d46f0693  /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-http-0.21.0.0/b/inspection-interference/build/inspection-interference/inspection-interference
+rate=50 pairs=5 seconds=20 RTS=-N2,-T

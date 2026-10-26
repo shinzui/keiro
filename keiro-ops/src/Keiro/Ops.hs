@@ -14,11 +14,13 @@ module Keiro.Ops
     isMutation,
     runCommand,
     runCommandWithHeaderCache,
+    runCommandWithReadEncoding,
     runOpsInvocation,
   )
 where
 
 import Control.Exception (SomeException, displayException, fromException, try)
+import Data.Aeson.Encoding (Encoding)
 import Data.ByteString (ByteString)
 import Data.Foldable (traverse_)
 import Data.Maybe (isJust)
@@ -225,6 +227,20 @@ runCommandWithHeaderCache cache _ env (Workflow (Workflow.Inspect (Workflow.Insp
 runCommandWithHeaderCache _ hooks env command = do
   outcome <- runCommand hooks env command
   pure (outcome, Nothing)
+
+-- | Prepare supported direct encodings on demand using the host's bounded
+-- encoder. Schema verification and admission remain the front end's job.
+-- The callback must return the supplied encoding's exact bytes or refuse size.
+-- Existing command/header behavior is delegated without changing its cache.
+runCommandWithReadEncoding :: (Encoding -> IO (Maybe ByteString)) -> WorkflowHeaderCache -> AppHooks -> OpsEnv -> Command -> IO (OpsOutcome, Maybe ByteString)
+runCommandWithReadEncoding encode cache hooks env command = case command of
+  ProcessManager ProcessManager.Types | Just catalog <- hooks.processManagers -> do
+    let (result, encoding) = ProcessManager.prepareTypes catalog
+    encoded <- encode encoding
+    pure $ case encoded of
+      Nothing -> (InspectionFailed "inspection_result_too_large" "encoded result exceeds the host limit; narrow the read", Nothing)
+      Just body -> (Succeeded result, Just body)
+  _ -> runCommandWithHeaderCache cache hooks env command
 
 -- | Execute a parsed command after schema verification. Front ends must use
 -- JSON mode and enable force only after explicit mutation confirmation.

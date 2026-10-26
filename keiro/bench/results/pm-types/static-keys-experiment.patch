@@ -1,0 +1,40 @@
+diff --git a/keiro/src/Keiro/ProcessManager/Inspect.hs b/keiro/src/Keiro/ProcessManager/Inspect.hs
+index 07e86d9d..34a3771b 100644
+--- a/keiro/src/Keiro/ProcessManager/Inspect.hs
++++ b/keiro/src/Keiro/ProcessManager/Inspect.hs
+@@ -38,7 +38,10 @@ where
+ 
+ import Data.Aeson (object, (.=))
+ import Data.Aeson qualified as Aeson
++import Data.Aeson.Encoding qualified as Encoding
+ import Data.Aeson.KeyMap qualified as KeyMap
++import Data.ByteString (ByteString)
++import Data.ByteString.Builder qualified as Builder
+ import Data.List.NonEmpty qualified as NonEmpty
+ import Data.Map.Strict (Map)
+ import Data.Map.Strict qualified as Map
+@@ -164,6 +167,24 @@ processManagerTypeJson summary =
+       "timers_configured" .= summary.timersConfigured
+     ]
+ 
++-- Direct encoding avoids building an intermediate JSON tree on polling reads.
++-- Keep its meaning equal to processManagerTypeJson (covered by parity tests).
++instance Aeson.ToJSON ProcessManagerTypeSummary where
++  toJSON = processManagerTypeJson
++  toEncoding summary =
++    Encoding.pairs
++      ( encodedField "\"category\"" (Aeson.toEncoding summary.category)
++          <> encodedField "\"name\"" (Aeson.toEncoding summary.name)
++          <> encodedField "\"snapshot_policy\"" (Aeson.toEncoding summary.snapshotPolicy)
++          <> encodedField "\"snapshots_configured\"" (Aeson.toEncoding summary.snapshotsConfigured)
++          <> encodedField "\"timers_configured\"" (Aeson.toEncoding summary.timersConfigured)
++      )
++
++-- Fixed, quoted JSON field names; every value still uses Aeson's escaping.
++-- This shares code literals, without retaining descriptor or response data.
++encodedField :: ByteString -> Encoding.Encoding -> Encoding.Series
++encodedField key = Encoding.pair' (Encoding.unsafeToEncoding (Builder.byteString key))
++
+ data DispatchWitness = EventPresent | NotObserved deriving stock (Generic, Eq, Show)
+ 
+ data DispatchedCommandStatus = DispatchedCommandStatus

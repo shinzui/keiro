@@ -5348,6 +5348,9 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       map (^. #category) summaries `shouldBe` ["pm:counter", "pm:counter", "pm:counter", "domain", "reactive", "pm:counter"]
       encoded <- evaluate (LazyByteString.length (Aeson.encode (map PMInspection.processManagerTypeJson summaries)))
       encoded `shouldSatisfy` (> 0)
+      forM_ (summaries <> [PMInspection.ProcessManagerTypeSummary "known-timers" "timer-metadata" False "never" (Just True), PMInspection.ProcessManagerTypeSummary "no-timers" "timer-metadata" False "never" (Just False), PMInspection.ProcessManagerTypeSummary "escaped-\"\\\n界" "category-界" True "custom" Nothing]) $ \summary ->
+        Aeson.eitherDecode (Aeson.encode summary) `shouldBe` Right (PMInspection.processManagerTypeJson summary)
+      Aeson.eitherDecode (Aeson.encode summaries) `shouldBe` Right (Aeson.toJSON (map PMInspection.processManagerTypeJson summaries))
     it "instance view equals the runtime's own rebuild" $ \(storeHandle, StoreRunner runner) -> do
       let options = defaultRunCommandOptions & #inspectionProvenance .~ CaptureInspectionProvenance
           definition = unvalidated pmSnapshotCounterEventStream

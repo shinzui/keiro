@@ -3,9 +3,12 @@ module ReactionInspectionSpec (spec) where
 import Control.Exception (finally)
 import Control.Monad (when)
 import Data.Aeson (Value (..), object, (.=))
+import Data.Aeson qualified as Aeson
+import Data.Aeson.Encoding qualified as Encoding
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
-import Data.IORef (newIORef, readIORef, writeIORef)
+import Data.ByteString.Lazy qualified as Lazy
+import Data.IORef (modifyIORef', newIORef, readIORef, writeIORef)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
@@ -18,6 +21,7 @@ import Keiro.Ops qualified as Ops
 import Keiro.Ops.Env
 import Keiro.Ops.ProcessManager qualified as PM
 import Keiro.Ops.Render
+import Keiro.Ops.WorkflowHeaderCache (newWorkflowHeaderCache, workflowHeaderCacheUsage)
 import Keiro.ProcessManager.Inspect qualified as Inspect
 import Keiro.ProcessManager.Reaction qualified as Reaction
 import Keiro.Stream qualified as Stream
@@ -62,6 +66,21 @@ spec fixture = describe "reaction process-manager commands" $
             _ -> expectationFailure "pm types did not parse"
           Succeeded empty <- PM.runCommand Map.empty env PM.Types
           empty.jsonValue `shouldBe` object ["items" .= ([] :: [Value])]
+          cache <- newWorkflowHeaderCache 1048576 (const (fail "metadata used the header cache encoder"))
+          calls <- newIORef (0 :: Int)
+          let encodeDirect encoding = do
+                modifyIORef' calls (+ 1)
+                pure (Just (Lazy.toStrict (Encoding.encodingToLazyByteString encoding)))
+              command = Ops.ProcessManager PM.Types
+          (Succeeded prepared, Just bytes) <- Ops.runCommandWithReadEncoding encodeDirect cache hooks env command
+          prepared `shouldBe` result
+          Aeson.eitherDecodeStrict bytes `shouldBe` Right result.jsonValue
+          _ <- Ops.runCommandWithReadEncoding encodeDirect cache hooks env command
+          readIORef calls `shouldReturn` 2
+          workflowHeaderCacheUsage cache `shouldReturn` (0, 0)
+          (refused, body) <- Ops.runCommandWithReadEncoding (const (pure Nothing)) cache hooks env command
+          refused `shouldSatisfy` (\case InspectionFailed "inspection_result_too_large" _ -> True; _ -> False)
+          body `shouldBe` Nothing
     it "mounts a handwritten reaction inspector through pm show and pm list" $ \(store, StoreRunner run) -> do
       clock <- getCurrentTime
       let source = RecordedEvent (EventId UUID.nil) (EventType "Input") (StreamVersion 1) (GlobalPosition 1) (StreamId 1) (StreamVersion 1) Null Nothing Nothing Nothing clock

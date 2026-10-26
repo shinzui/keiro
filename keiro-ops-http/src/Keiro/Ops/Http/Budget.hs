@@ -7,12 +7,14 @@ module Keiro.Ops.Http.Budget
     withInspectionDelivery,
     withInspectionBudget,
     encodeBounded,
+    encodeBoundedEncoding,
   )
 where
 
 import Control.Concurrent.STM
 import Control.Exception (Exception, bracket, evaluate, mask, throwIO)
 import Data.Aeson (Value, encode)
+import Data.Aeson.Encoding (Encoding, encodingToLazyByteString)
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Lazy qualified as LazyByteString
 import Keiro.Ops.Http.Config
@@ -76,8 +78,15 @@ withInspectionDelivery seconds action = do
 -- | Demand at most the cap plus one byte of Aeson's lazy output. Force the
 -- bounded body before leaving the deadline; no partial result is served.
 encodeBounded :: Int -> Value -> IO (Maybe LazyByteString.ByteString)
-encodeBounded limit value = do
-  let prefix = LazyByteString.take (fromIntegral limit + 1) (encode value)
+encodeBounded limit = boundBytes limit . encode
+
+-- | The same byte boundary for owner-provided direct JSON encodings.
+encodeBoundedEncoding :: Int -> Encoding -> IO (Maybe LazyByteString.ByteString)
+encodeBoundedEncoding limit = boundBytes limit . encodingToLazyByteString
+
+boundBytes :: Int -> LazyByteString.ByteString -> IO (Maybe LazyByteString.ByteString)
+boundBytes limit encoded = do
+  let prefix = LazyByteString.take (fromIntegral limit + 1) encoded
   size <- evaluate (LazyByteString.length prefix)
   if size > fromIntegral limit
     then pure Nothing

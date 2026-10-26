@@ -63,6 +63,14 @@ class MeasurementAcceptance(unittest.TestCase):
             self.edit("candidate-disabled", pair, p95_us=value)
         self.assertEqual(self.run_analysis(), 1)
 
+    def test_noise_with_sufficient_resolution_is_reported_without_a_false_failure(self):
+        for pair, value in enumerate([99.9, 100.1, 100.2, 100.05, 99.95], 1):
+            self.edit("candidate-disabled", pair, p95_us=value)
+        self.assertEqual(self.run_analysis(), 0)
+        report = json.loads((self.root / "analysis.json").read_text())
+        result = next(r for r in report["results"] if r["comparison"] == "disabled" and r["metric"] == "p95_us")
+        self.assertTrue(result["adverse_point_estimate"])
+
     def test_lost_polling_and_rejections_are_refused(self):
         self.edit("many-active", 1, poll_success=79)
         with self.assertRaisesRegex(ValueError, "lost polling"):

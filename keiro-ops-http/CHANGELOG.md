@@ -10,6 +10,7 @@
 
 - Expose mounted process-manager discovery as `GET /pm/types` through the shared
   command tree, preserving schema verification and transport resource limits.
+  Encode discovery on demand with the same byte/deadline bounds and no response cache.
 
 - Compose allocated inspection applications under stable `/keiro`, `/kiroku`,
   `/shibuya` and `/pgmq` prefixes with preserved raw paths, shared CORS policy

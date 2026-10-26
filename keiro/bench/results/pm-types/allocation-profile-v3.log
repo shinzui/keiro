@@ -1,0 +1,12 @@
+catalog=1 phase=summaries allocated_bytes=224
+catalog=1 phase=json_value allocated_bytes=1776
+catalog=1 phase=encoding allocated_bytes=8704
+catalog=1 encoded_bytes=135
+catalog=1 phase=direct_encoding allocated_bytes=7720
+direct_encoding_matches_canonical=true
+catalog=1000 phase=summaries allocated_bytes=136016
+catalog=1000 phase=json_value allocated_bytes=1072936
+catalog=1000 phase=encoding allocated_bytes=3507040
+catalog=1000 encoded_bytes=125904
+catalog=1000 phase=direct_encoding allocated_bytes=2786160
+direct_encoding_matches_canonical=true
