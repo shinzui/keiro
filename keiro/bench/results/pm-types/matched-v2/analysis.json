@@ -1,0 +1,616 @@
+{
+  "seed": 323,
+  "resamples": 20000,
+  "pairs": 5,
+  "results": [
+    {
+      "comparison": "disabled",
+      "metric": "throughput",
+      "ratios": [
+        1.0000865540703276,
+        0.9999937963618764,
+        0.9999900442276431,
+        1.0000153083514711,
+        0.9999490175649747
+      ],
+      "median": 0.9999937963618764,
+      "ci95": [
+        0.9999490175649747,
+        1.0000865540703276
+      ],
+      "status": "passed",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2
+    },
+    {
+      "comparison": "disabled",
+      "metric": "p95_us",
+      "ratios": [
+        0.996641289744738,
+        1.0097972972972973,
+        0.99568345323741,
+        0.9946927077804903,
+        1.0122679752506933
+      ],
+      "median": 0.996641289744738,
+      "ci95": [
+        0.9946927077804903,
+        1.0122679752506933
+      ],
+      "status": "inconclusive",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2
+    },
+    {
+      "comparison": "disabled",
+      "metric": "p99_us",
+      "ratios": [
+        1.0024733842348639,
+        1.0260944576234634,
+        0.9749089016137429,
+        1.0005045408678104,
+        1.0148349984862246
+      ],
+      "median": 1.0024733842348639,
+      "ci95": [
+        0.9749089016137429,
+        1.0260944576234634
+      ],
+      "status": "inconclusive",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 4
+    },
+    {
+      "comparison": "disabled",
+      "metric": "writer_thread_allocated_bytes_per_operation",
+      "ratios": [
+        0.9999730569798386,
+        0.9999952266630368,
+        1.0001491747725344,
+        1.0000555674205724,
+        0.999979298534343
+      ],
+      "median": 0.9999952266630368,
+      "ci95": [
+        0.9999730569798386,
+        1.0001491747725344
+      ],
+      "status": "passed",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2
+    },
+    {
+      "comparison": "capacity",
+      "metric": "throughput",
+      "ratios": [
+        1.0068227782786106,
+        1.0298688295750766,
+        0.9935080668991194,
+        0.979958129435036,
+        1.0007090911237433
+      ],
+      "median": 1.0007090911237433,
+      "ci95": [
+        0.979958129435036,
+        1.0298688295750766
+      ],
+      "status": "inconclusive",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 3
+    },
+    {
+      "comparison": "capacity",
+      "metric": "p95_us",
+      "ratios": [
+        1.0464816010329245,
+        1.0637319316688567,
+        0.9556803995006242,
+        0.9860228716645489,
+        1.0019404915912031
+      ],
+      "median": 1.0019404915912031,
+      "ci95": [
+        0.9556803995006242,
+        1.0637319316688567
+      ],
+      "status": "inconclusive",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 3
+    },
+    {
+      "comparison": "capacity",
+      "metric": "p99_us",
+      "ratios": [
+        1.0166959578207382,
+        1.0519902518277824,
+        1.0189818809318378,
+        0.866467735919433,
+        1.0554123711340206
+      ],
+      "median": 1.0189818809318378,
+      "ci95": [
+        0.866467735919433,
+        1.0554123711340206
+      ],
+      "status": "inconclusive",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 4
+    },
+    {
+      "comparison": "capacity",
+      "metric": "writer_thread_allocated_bytes_per_operation",
+      "ratios": [
+        1.000062966510905,
+        1.0001155941539512,
+        0.9998217631514973,
+        0.9997167303354833,
+        1.0002957450790395
+      ],
+      "median": 1.000062966510905,
+      "ci95": [
+        0.9997167303354833,
+        1.0002957450790395
+      ],
+      "status": "passed",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 3
+    },
+    {
+      "comparison": "idle",
+      "metric": "throughput",
+      "ratios": [
+        0.999976987384484,
+        1.0000203117706712,
+        1.0000011506536863,
+        1.0000673881416884,
+        0.9999366153634653
+      ],
+      "median": 1.0000011506536863,
+      "ci95": [
+        0.9999366153634653,
+        1.0000673881416884
+      ],
+      "status": "passed",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 3
+    },
+    {
+      "comparison": "idle",
+      "metric": "p95_us",
+      "ratios": [
+        0.9923613417469279,
+        1.0016778523489933,
+        1.0068293775190327,
+        1.0131663455362878,
+        0.9822283707566245
+      ],
+      "median": 1.0016778523489933,
+      "ci95": [
+        0.9822283707566245,
+        1.0131663455362878
+      ],
+      "status": "inconclusive",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 3
+    },
+    {
+      "comparison": "idle",
+      "metric": "p99_us",
+      "ratios": [
+        0.9907988289418653,
+        1.0169110564058654,
+        1.0261678200692042,
+        1.014297302778341,
+        0.9711425206124853
+      ],
+      "median": 1.014297302778341,
+      "ci95": [
+        0.9711425206124853,
+        1.0261678200692042
+      ],
+      "status": "inconclusive",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 3
+    },
+    {
+      "comparison": "idle",
+      "metric": "writer_thread_allocated_bytes_per_operation",
+      "ratios": [
+        1.000711424862996,
+        0.9999955094493006,
+        0.9996488429690868,
+        0.9995054149607165,
+        1.000054647511841
+      ],
+      "median": 0.9999955094493006,
+      "ci95": [
+        0.9995054149607165,
+        1.000711424862996
+      ],
+      "status": "passed",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2
+    },
+    {
+      "comparison": "same-source",
+      "metric": "throughput",
+      "ratios": [
+        1.0000132572988059,
+        1.0000233138332628,
+        0.9999664818331537,
+        1.0000424247781914,
+        1.0000290668704117
+      ],
+      "median": 1.0000233138332628,
+      "ci95": [
+        0.9999664818331537,
+        1.0000424247781914
+      ],
+      "status": "passed",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 4
+    },
+    {
+      "comparison": "same-source",
+      "metric": "p95_us",
+      "ratios": [
+        0.9944239991078399,
+        0.9976517946997652,
+        0.9965540240106714,
+        0.9886729710069625,
+        1.0093770209096788
+      ],
+      "median": 0.9965540240106714,
+      "ci95": [
+        0.9886729710069625,
+        1.0093770209096788
+      ],
+      "status": "inconclusive",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 1
+    },
+    {
+      "comparison": "same-source",
+      "metric": "p99_us",
+      "ratios": [
+        1.0020273154075972,
+        0.9933628318584071,
+        0.9700735217976597,
+        1.4744271487962874,
+        0.9970501474926253
+      ],
+      "median": 0.9970501474926253,
+      "ci95": [
+        0.9700735217976597,
+        1.4744271487962874
+      ],
+      "status": "inconclusive",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2
+    },
+    {
+      "comparison": "same-source",
+      "metric": "writer_thread_allocated_bytes_per_operation",
+      "ratios": [
+        0.9999551399154479,
+        1.0000088793254094,
+        1.0000469897425261,
+        1.0000458698099186,
+        0.9999850688005913
+      ],
+      "median": 1.0000088793254094,
+      "ci95": [
+        0.9999551399154479,
+        1.0000469897425261
+      ],
+      "status": "passed",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 3
+    },
+    {
+      "comparison": "catalog-polling",
+      "metric": "throughput",
+      "ratios": [
+        0.9999660823696157,
+        0.9999942969057862,
+        0.9999669296087967,
+        1.0001210909271772,
+        1.000066136146711
+      ],
+      "median": 0.9999942969057862,
+      "ci95": [
+        0.9999660823696157,
+        1.0001210909271772
+      ],
+      "status": "passed",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2
+    },
+    {
+      "comparison": "catalog-polling",
+      "metric": "p95_us",
+      "ratios": [
+        1.0047148630444545,
+        0.9730639730639731,
+        1.0084490740740741,
+        1.024072655651603,
+        1.013708981001727
+      ],
+      "median": 1.0084490740740741,
+      "ci95": [
+        0.9730639730639731,
+        1.024072655651603
+      ],
+      "status": "inconclusive",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 4
+    },
+    {
+      "comparison": "catalog-polling",
+      "metric": "p99_us",
+      "ratios": [
+        1.016821036942404,
+        0.9754734554486184,
+        1.0042521526522803,
+        1.0559513830678962,
+        1.0192682176898638
+      ],
+      "median": 1.016821036942404,
+      "ci95": [
+        0.9754734554486184,
+        1.0559513830678962
+      ],
+      "status": "inconclusive",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 4
+    },
+    {
+      "comparison": "catalog-polling",
+      "metric": "writer_thread_allocated_bytes_per_operation",
+      "ratios": [
+        0.9998350693261352,
+        1.0000597485087757,
+        0.9999520703076212,
+        1.000614021300394,
+        0.9999761094618308
+      ],
+      "median": 0.9999761094618308,
+      "ci95": [
+        0.9998350693261352,
+        1.000614021300394
+      ],
+      "status": "passed",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2
+    },
+    {
+      "comparison": "many-polling",
+      "metric": "throughput",
+      "ratios": [
+        0.9999248085055737,
+        1.000021312395289,
+        0.9998910896364309,
+        0.9999975986409508,
+        0.9999331651957757
+      ],
+      "median": 0.9999331651957757,
+      "ci95": [
+        0.9998910896364309,
+        1.000021312395289
+      ],
+      "status": "passed",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 1
+    },
+    {
+      "comparison": "many-polling",
+      "metric": "p95_us",
+      "ratios": [
+        0.9968422239765422,
+        1.004646017699115,
+        0.9786658003032273,
+        0.9910195456946645,
+        0.9737546866630958
+      ],
+      "median": 0.9910195456946645,
+      "ci95": [
+        0.9737546866630958,
+        1.004646017699115
+      ],
+      "status": "passed",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 1
+    },
+    {
+      "comparison": "many-polling",
+      "metric": "p99_us",
+      "ratios": [
+        0.9980853100733964,
+        1.0313363076269386,
+        0.9710393541876892,
+        1.0012008405884119,
+        0.994730975782754
+      ],
+      "median": 0.9980853100733964,
+      "ci95": [
+        0.9710393541876892,
+        1.0313363076269386
+      ],
+      "status": "inconclusive",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2
+    },
+    {
+      "comparison": "many-polling",
+      "metric": "writer_thread_allocated_bytes_per_operation",
+      "ratios": [
+        1.0000878343498232,
+        1.00001299704492,
+        1.0000630411308482,
+        1.000153086032042,
+        1.0001147605662468
+      ],
+      "median": 1.0000878343498232,
+      "ci95": [
+        1.00001299704492,
+        1.000153086032042
+      ],
+      "status": "regression",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 5
+    },
+    {
+      "comparison": "catalog-versus-prechange",
+      "metric": "throughput",
+      "ratios": [
+        0.9999944969832462,
+        1.0000312681198755,
+        0.9999184036451106,
+        0.9999360638121176,
+        1.0000660360854188
+      ],
+      "median": 0.9999944969832462,
+      "ci95": [
+        0.9999184036451106,
+        1.0000660360854188
+      ],
+      "status": "passed",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2
+    },
+    {
+      "comparison": "catalog-versus-prechange",
+      "metric": "p95_us",
+      "ratios": [
+        0.9908114690578989,
+        1.002125279642058,
+        0.9754814151365876,
+        1.0018197388139585,
+        0.9993614983505374
+      ],
+      "median": 0.9993614983505374,
+      "ci95": [
+        0.9754814151365876,
+        1.002125279642058
+      ],
+      "status": "passed",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2
+    },
+    {
+      "comparison": "catalog-versus-prechange",
+      "metric": "p99_us",
+      "ratios": [
+        0.9986407360936846,
+        1.0088836562132077,
+        1.0215181660899655,
+        1.0219022510646927,
+        0.976148409893993
+      ],
+      "median": 1.0088836562132077,
+      "ci95": [
+        0.976148409893993,
+        1.0219022510646927
+      ],
+      "status": "inconclusive",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 3
+    },
+    {
+      "comparison": "catalog-versus-prechange",
+      "metric": "writer_thread_allocated_bytes_per_operation",
+      "ratios": [
+        1.00061678328337,
+        1.0000146706404458,
+        0.9999325128741929,
+        0.9999996040785788,
+        0.9999791862095245
+      ],
+      "median": 0.9999996040785788,
+      "ci95": [
+        0.9999325128741929,
+        1.00061678328337
+      ],
+      "status": "passed",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 2
+    },
+    {
+      "comparison": "many-versus-prechange",
+      "metric": "throughput",
+      "ratios": [
+        0.9999211567781457,
+        1.0000192111328514,
+        0.9999049459998224,
+        0.9999976486691468,
+        0.9999588775286256
+      ],
+      "median": 0.9999588775286256,
+      "ci95": [
+        0.9999049459998224,
+        1.0000192111328514
+      ],
+      "status": "passed",
+      "adverse_point_estimate": false,
+      "adverse_pairs": 1
+    },
+    {
+      "comparison": "many-versus-prechange",
+      "metric": "p95_us",
+      "ratios": [
+        0.9785231927377394,
+        1.015883668903803,
+        1.011755485893417,
+        1.0040676514664955,
+        0.9673299989358306
+      ],
+      "median": 1.0040676514664955,
+      "ci95": [
+        0.9673299989358306,
+        1.015883668903803
+      ],
+      "status": "inconclusive",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 3
+    },
+    {
+      "comparison": "many-versus-prechange",
+      "metric": "p99_us",
+      "ratios": [
+        0.9810748640736093,
+        1.039173712940169,
+        1.0405493079584776,
+        1.0145001013993105,
+        0.9635846093443267
+      ],
+      "median": 1.0145001013993105,
+      "ci95": [
+        0.9635846093443267,
+        1.0405493079584776
+      ],
+      "status": "inconclusive",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 3
+    },
+    {
+      "comparison": "many-versus-prechange",
+      "metric": "writer_thread_allocated_bytes_per_operation",
+      "ratios": [
+        1.0007808128408826,
+        0.9999773210222869,
+        1.0000693309745343,
+        1.0000779625838419,
+        1.0000980058047173
+      ],
+      "median": 1.0000779625838419,
+      "ci95": [
+        0.9999773210222869,
+        1.0007808128408826
+      ],
+      "status": "passed",
+      "adverse_point_estimate": true,
+      "adverse_pairs": 4
+    }
+  ],
+  "status": "not-accepted"
+}

@@ -56,10 +56,10 @@ preserved in detached `../keiro-pm-types-baseline`. The full pre-change Nix buil
 passed. Five durable saturation and five mounted-idle controls are retained under
 `keiro/bench/results/pm-types/`. The pre-change six-guard run passed five guards
 but failed read-model; its focused repeat also fails, on different cases. These
-red controls leave baseline/release acceptance unresolved. The fixed offered rate
+red controls leave baseline stability unresolved. The fixed offered rate
 is 50 operations/second against measured median capacity 718.89 operations/second.
 The discovery implementation and all four focused suites pass (919 examples);
-matched performance evidence and the final gate remain underway. Preserve unrelated concurrent plans
+matched performance acceptance remains unresolved. The final release gate passes. Preserve unrelated concurrent plans
 and documentation commits.
 
 The first complete 60-trial cohort (`matched-v1`) is red: 1,000-descriptor polling
@@ -67,8 +67,21 @@ raises writer p99 by a paired median 5.195% (95% interval +1.019% to +8.993%)
 against its matching idle control, with a supported +0.0091% writer-allocation
 increase. Single-manager active/idle comparisons pass, but baseline/same-source
 uncertainty remains unresolved. A direct-encoding implementation is now under
-final validation; the initial source/measurements remain retained. No performance
-milestone is accepted from the new implementation until new paired evidence passes.
+validation; the initial source/measurements remain retained. Its second complete
+cohort (`matched-v2`, candidate `bc4799c3`) also refuses acceptance: all 800 polls
+succeed, but large-catalog allocation reports +0.0088% and several latency/control
+intervals cannot exclude a 1% loss. Both 60-second retention runs finish with
+240 successful polls and clean feed resources, with live heap leveling off after
+warm-up. All 919 focused tests pass again on the direct-encoding candidate.
+No performance milestone is accepted until new paired evidence and the gate pass.
+
+The final candidate's full `nix develop -c just release-gate` correctness phase
+passes (`VERIFY_EXIT=0`); Z3 4.16.0 is verified in Nix. All six historical
+benchmark guards also pass (`BENCH_EXIT=0`, `BENCH_REGRESSION=PASSED`). The
+combined retained log is
+`keiro/bench/results/release-gates/20261026T215310Z-bc4799c3.log`.
+This does not supersede the stronger paired no-regression requirement or erase
+the two red pre-change read-model controls.
 
 
 ## Surprises & Discoveries
@@ -121,6 +134,19 @@ The candidate now stops at writer completion, records client cleanup separately,
 and retains GC count/time diagnostics. Its per-operation p95/p99 samples and writer
 work are unchanged. The old baseline has no poller in the compared disabled/idle
 modes, so its original completion clock incurs no external-client cleanup.
+
+2026-10-26: The direct-encoding cohort no longer supports the previous
+large-catalog p99 regression: median ratio 0.998085, 95% interval
+0.971039–1.031336. That interval is still too wide for acceptance. Its allocation
+ratio remains 1.000088 (1.000013–1.000153), roughly 62 bytes/operation. GHC 9.12.4
+documents allocation-counter accuracy of about 4 KB, while its RTS also accounts
+for the current nursery block. The current benchmark sums separate per-operation
+counter spans; calibration of that very small signal is unresolved, not evidence
+that it can be ignored. The evidence README identifies the pinned compiler sources
+under their intended Mori project URI; source artifact-level URIs are pending.
+Any whole-loop counter experiment must use identical metering against both
+package sets and retain the original per-operation diagnostic values. Do not
+mix metering scopes or relax the no-supported-regression rule.
 
 ## Decision Log
 
@@ -176,6 +202,36 @@ mathematical proof of exactly zero cost from noisy timings.
 
 ## Outcomes & Retrospective
 
+
+The discovery implementation is available through the owning library, embedded
+`pm types`, and the parser-derived HTTP route. It lists sorted mounted lookup
+names even without persisted instances, reports snapshot configuration and
+unknown timer capability honestly, and passes the 919 focused examples on the
+direct-encoding candidate. Forced callback/store sentinels and real Jitsurei
+CLI/HTTP parity establish the metadata boundary. The guide, changelogs and
+ADR-53/ADR-55 amendments describe the interface and its constraints.
+
+The final candidate passes the complete repository release gate: correctness,
+metadata/policy checks, and all six historical benchmark guards. Its retained
+combined log records both exit statuses as zero. Historical guard success does
+not close the stronger discovery-specific performance requirement below.
+
+This plan is not complete. Two retained 60-trial cohorts do not meet the
+no-regression criterion. Direct encoding reduces large-catalog process
+allocation by about 155 MB across 80 polls and removes support for the first
+cohort's p99 regression, but the second cohort still reports a small writer
+allocation increase and lacks required latency/control resolution. Bounded
+retention results do not substitute for those missing criteria. IR-56 remains
+accepted and pending implementation acceptance; nothing is published.
+
+Resume with allocation-meter calibration using the same driver against both
+unchanged package sets, then repeat paired timing on an environment whose
+same-source controls can exclude a 1% loss. Keep the original raw cohorts and
+the pre-change read-model guard failures. A passing historical guard alone,
+a new metering scope compared with an old one, or a relaxed threshold cannot
+close this plan. The durable transport/presentation decisions are already in
+the amended ADRs; the unresolved metering hypothesis remains evidence in this
+plan rather than an architectural claim.
 
 
 ## Context and Orientation

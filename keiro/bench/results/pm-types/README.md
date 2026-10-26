@@ -161,3 +161,61 @@ Reproduce the allocation attribution inside Nix after building the local librari
 cabal exec -- ghc -O1 -threaded -rtsopts -package-id=keiro-0.21.0.0-inplace -package-id=jitsurei-0.1.0.0-inplace keiro/bench/results/pm-types/ProfileAllocation.hs -odir /tmp/keiro-pm-types-profile -hidir /tmp/keiro-pm-types-profile -o /tmp/keiro-pm-types-profile-allocation
 /tmp/keiro-pm-types-profile-allocation +RTS -N2 -T -RTS
 ```
+
+## Second paired cohort and retention
+
+`matched-v2` measures the direct-encoding candidate `bc4799c3` against the same
+detached baseline, using the same 50 operations/second, five alternating pairs,
+20-second duration, durability settings and RTS options. All 60 trials finish
+and all 800 required polls succeed. `matched-v2-controller.log`, `analysis.json`
+and the nonzero exit record retain the refusal; this cohort does not establish
+performance acceptance.
+
+For 1,000 descriptors, the active/idle writer p99 ratio is 0.998085
+(95% interval 0.971039–1.031336). The previously detected p99 regression is no
+longer supported, but the interval cannot exclude a 1% loss. Writer allocation
+still reports a supported ratio of 1.000088 (1.000013–1.000153), about 62 bytes
+per operation. Several baseline and same-source latency/capacity controls also
+fail the resolution requirement. The corrected single-catalog/pre-change
+throughput interval includes equality (median 0.999994, interval
+0.999918–1.000066). Median large-catalog process allocation is approximately
+986 MB, down from approximately 1,141 MB in the first cohort; process totals
+remain diagnostic rather than the writer allocation acceptance metric.
+
+Allocation attribution remains open. The benchmark sums 1,000 separate
+per-operation `getAllocationCounter` differences. The pinned compiler
+(`mori://ghc/ghc`, release tag `ghc-9.12.4-release`) documents an accuracy of
+about 4 KB in `libraries/ghc-internal/src/GHC/Internal/Conc/Sync.hs`, while
+`rts/PrimOps.cmm` also accounts for the current nursery block. These source
+artifact-level URIs are pending, and this project is not yet in the local
+registry. These facts warrant a metering
+calibration; they do not prove that the observed increase is an artifact.
+No metric, confidence interval or acceptance threshold has been changed to
+dismiss it. A useful next experiment is one counter span around the complete
+writer loop, retaining the per-operation values as diagnostics and using the
+same metering driver against both production package sets. Mixing a new span
+with the old baseline's per-operation sum would be an invalid comparison.
+
+`retention-single-v2` and `retention-many-v2` retain separate 60-second runs,
+each with 3,000 writer operations, 240 successful polls and zero failed polls.
+After warm-up, post-major-GC live heap levels off near 2.1 MB and 2.2 MB,
+respectively; large-object bytes level off near 668 KB. Active threads vary
+between 11 and 13 during sampling and finish at 11 after cleanup. Both mounts
+report zero views, zero connections and no wake pump after the clients leave.
+The final drained live heaps are 969,912 and 1,081,544 bytes. These bounded runs
+show no continuing per-request growth; they do not override the failed timing
+and allocation acceptance.
+
+## Final repository verification
+
+`nix develop -c z3 --version` reports Z3 4.16.0. The final candidate's
+`nix develop -c just release-gate` retains its combined output in
+[`20261026T215310Z-bc4799c3.log`](../release-gates/20261026T215310Z-bc4799c3.log).
+The full correctness phase passes with `VERIFY_EXIT=0`, including all package
+tests, symbolic/conformance checks, mutation proofs, migration verification,
+strict documentation metadata and repository policies. All six benchmark guards
+pass: producer-identity, outbox, inbox, command, projection and read-model each
+record exit zero, followed by `BENCH_REGRESSION=PASSED` and `BENCH_EXIT=0`.
+The gate finishes at 22:16:59 UTC on 2026-10-26. Keep the earlier red pre-change
+read-model controls: this final pass does not erase their variability or satisfy
+the stronger paired discovery-specific acceptance rule. Plan 323 remains open.
