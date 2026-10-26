@@ -27,6 +27,11 @@ provenance:
       at: 2026-10-20T16:50:14Z
       mode: "implement"
       note: "Begin EP-1 in registry order; preserve required integration and release gates"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T11:45:15Z
+      mode: "update"
+      note: "Reconcile completed REV-20 remediation and retained gate evidence; identify release-only work and missing temporary draft."
 ---
 
 # Expose the keiro inspection surface for the keiro runtime UI
@@ -54,9 +59,9 @@ audited keiro in September 2026 and filed seven improvement requests in
 `docs/improvement-requests/`, IR-26 through IR-32. IR-32 asked keiro to decide, in an ADR,
 whether an inspection surface is compatible with its published no-UI stance; it is complete
 ([ADR-40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md)
-sanctions the surface under five conditions). The other six are accepted and unimplemented.
-Five of them were planned on 2026-09-10 by five parallel sessions as ExecPlans 274 through
-278, none of which has started, and each of which contains its own guess about the shared
+sanctions the surface under five conditions). At this MasterPlan's creation, the other six
+were accepted and unimplemented. Five were planned on 2026-09-10 by five parallel sessions as
+ExecPlans 274 through 278, then unstarted, each containing its own guess about the shared
 pieces: the cursor codec, the pending-timer read, the migration number, the kiroku listing
 primitive and its release, the package version, and the OKF handles. IR-31, composed mounting,
 had no plan before this MasterPlan added plan 302. This MasterPlan coordinates all six requests into one cohort, settles the shared
@@ -218,6 +223,14 @@ source-reporting hydration/aggregate reads (777 core and 25 example cases).
 Shared files include `keiro/keiro.cabal`, `keiro-ops/keiro-ops.cabal`, `keiro-ops/src/Keiro/Ops.hs`, `keiro-ops/src/Keiro/Ops/Embed.hs`, their test suites, `jitsurei/app/Main.hs`, migration manifests/locks/schema snapshots, changelogs, and OKF logs. Later plans extend the prior owner's artifacts and retain unrelated additions. EP-4 completes its timer-read milestone before wiring its instance view, which consumes that read.
 
 EP-7 requires complete listing and real composition evidence. An interim release is possible only as an explicitly rescoped task; it cannot mark a child, request, or this MasterPlan complete while required work is deferred.
+
+The additional pre-tag remediation in
+[MasterPlan 46](46-address-the-rev-20-review-findings-and-the-command-path-performance-regression.md)
+is now Complete across all seven children, including reaction state inspection and required
+legacy provenance labelling. Its accepted release gate at `a4332cfe` proves correctness and
+all six benchmark guards on that source. EP-7 still owns the independent integration and
+interference prerequisites and a fresh release gate after the final version edits; an earlier
+green run does not accept a later candidate.
 
 ## Integration Points
 
@@ -465,10 +478,37 @@ consequences paragraph naming the shipped package and the release that carried i
 
 ## Progress
 
-2026-10-20: All six functional surfaces are implemented: HTTP, workflow pages,
+2026-10-25 status reconciliation at `063ef583`: six of seven children are Complete.
+EP-7 (plan 303) remains In Progress; the implementation cohort and all seven
+MasterPlan 46 remediation children are accepted. The retained
+[release-gate evidence](../../keiro/bench/results/release-gates/README.md) records
+an uninterrupted correctness/all-six-guard pass at `a4332cfe`, with
+`VERIFY_EXIT=0`, `BENCH_EXIT=0` and `BENCH_REGRESSION=PASSED`. This is accepted
+pre-release evidence, not verification of a versioned 0.22.0.0 cohort.
+
+All eight package files remain at 0.21.0.0 and the upgrade blueprint ends at
+that version. The proposed next version remains 0.22.0.0. Rebuild the concrete
+release proposal from the current reconciled changelogs and code, including the
+workflow cursor change, HTTP limits and refusals, reaction state inspection,
+public record/outcome changes and DLQ reservation confirmation. The former
+`/tmp/keiro-mp45-release-review/release.patch` is absent; do not treat that old
+draft or its preview as a current release artifact.
+
+Remaining work belongs to EP-7: finish the release audit and reviewable version,
+changelog and upgrade-edge proposal; obtain the release skill's concrete approval;
+apply the approved edits and verify the final versioned cohort, including
+`nix develop -c just release-gate`, package checks, native flake checks and
+applicable integration evidence; publish all eight packages with documentation,
+tags and a GitHub release; then run the outside-consumer composed HTTP proof.
+Only afterward complete IR-26 through IR-31, finalize ADR distillation and close
+this MasterPlan. Currently IR-26/IR-30 are `in-progress` and the other four are
+`accepted`; none is complete. The next executable work is EP-7 Milestone 1,
+with no unfinished remediation child blocking it.
+
+Historical implementation acceptance (2026-10-20): all six functional surfaces are implemented: HTTP, workflow pages,
 aggregate reads, manager/timer/shard reads, shared feeds and prefix composition.
 EP-1 through EP-6 are Complete after the final integrated core-path gate.
-EP-7 remains In Progress for version approval, publication and consumer proof. The current code
+EP-7 remained In Progress for version approval, publication and consumer proof. That candidate
 (`5893c7eb`) passes full Nix `just verify`, all eight package checks and native
 flake checks: 783 core, 15 retention, 52 ops, 40 HTTP, 26 example and 41 migration
 examples, plus 884 main DSL examples and the conformance/mutation/adoption,
@@ -487,12 +527,13 @@ passes all six writer throughput/p95/allocation median gates against pre-change
 `3bf3ac229f21d6c95179ce49b5e8f6323322f99b`. Raw variation is retained; earlier
 paced/heap prototypes are explicitly superseded diagnostics.
 
-A concrete 0.22.0.0 release patch and one Keiro-only upgrade edge are prepared
-outside the working tree. The major bump accounts for public record/outcome
+At that checkpoint a concrete 0.22.0.0 release patch and one Keiro-only upgrade edge
+were prepared outside the working tree; that temporary patch is no longer available.
+The major bump accounts for public record/outcome
 changes and corrected DLQ reservation confirmation. The upgrade draft validates
 and its debug migration preview selects the exact edge. Version/changelog
 approval, versioned-cohort verification, publication and clean-consumer proof
-remain open; IR-26 through IR-31 are accepted with implementation evidence.
+remained open; the requests carried implementation evidence without release completion.
 
 ## Surprises & Discoveries
 
@@ -661,6 +702,14 @@ interactions between child plans. Provide concise evidence.
 
 
 ## Outcomes & Retrospective
+
+2026-10-25: The functional cohort and subsequent REV-20 remediation are accepted;
+the latter includes the measured release-gate procedure and ADR-58 distillation.
+The remaining initiative work is release preparation, final-candidate verification,
+publication, outside-consumer proof and request/plan closure. Existing October 20
+interference evidence remains identified by its tested candidate; the October 25
+release-gate pass does not silently replace that distinct evidence. No release
+cut or request completion is claimed by this documentation update.
 
 2026-10-20: The six implementation children are locally Complete. HTTP, bounded
 owner reads, shared feed drivers and allocated application composition are

@@ -33,6 +33,11 @@ provenance:
       at: 2026-10-21T13:49:51Z
       mode: "update"
       note: "Require all mandatory MasterPlan 46 fixes and final-candidate release-gate evidence at preflight."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T11:45:15Z
+      mode: "update"
+      note: "Refresh release handoff after all remediation children complete; require rebuilding missing draft and checking final versioned candidate."
 ---
 
 # Release the keiro inspection surface cohort and complete the keiro-ui requests
@@ -77,7 +82,8 @@ acceptance and release requirements remain open until measured. Use its current
 registry and execution sequence when interpreting older dependency text below.
 
 - [x] (2026-10-13) Correctness and hot-path design review applied; implementation remains outstanding.
-- [ ] Validate the review constraints and record the required performance/correctness evidence before marking this plan complete.
+- [ ] Accept the final versioned cohort against the review constraints and required
+      performance/correctness gates; earlier implementation evidence is retained below.
 
 
 - [ ] Milestone 1: preflight: sibling plans complete, the kiroku gate decided, the release
@@ -90,7 +96,30 @@ registry and execution sequence when interpreting older dependency text below.
       MasterPlan 45 closure, and the ADR distillation pass.
 
 
-Current work (2026-10-20): functional candidate `5893c7eb` passes full
+Current handoff (2026-10-25, source `063ef583`): MasterPlan 45 EP-1 through EP-6
+are Complete, and all seven remediation children of
+[MasterPlan 46](../masterplans/46-address-the-rev-20-review-findings-and-the-command-path-performance-regression.md)
+are Complete. This includes plan 319's reaction state inspection, not just its
+required legacy labelling. The
+[accepted release-gate record](../../keiro/bench/results/release-gates/README.md)
+identifies source `a4332cfe`, both zero exit statuses and all six successful
+guards. It satisfies the remediation gate; the final versioned release candidate
+still requires its own gate and this plan's independent integration acceptance.
+
+All eight Cabal versions remain 0.21.0.0; the upgrade blueprint still ends at
+0.21.0.0. Milestone 1 is the next work: rebuild a reviewable 0.22.0.0 proposal
+from the reconciled current tree, complete the documentation/capability audit,
+and prepare the new upgrade edge. The former temporary release patch at
+`/tmp/keiro-mp45-release-review/release.patch` no longer exists. Its earlier
+validation/preview cannot establish the new proposal's validity. Include the
+accepted workflow cursor, HTTP policy/limit and reaction inspector changes as
+well as the original public record/outcome and DLQ changes. Then obtain the
+release skill's concrete approval, apply the approved proposal, regenerate
+required corpus provenance and verify the final cohort before publication.
+Milestones 2 and 3 remain wholly open. IR-26/IR-30 are `in-progress`, the other
+four requests are `accepted`, and none has release completion evidence.
+
+Historical local acceptance (2026-10-20): functional candidate `5893c7eb` passes full
 `just verify`, all eight package checks and native flake checks. Writer schema
 and migration payloads match 0.21.0.0. Five final saturation pairs measure
 -1.66% throughput, -1.70% p95 and -0.01% writer allocation, superseding the
@@ -101,17 +130,11 @@ The 60-second final ownership probes return zero views/connections/wake pump
 and 0.9–1.7 MB post-cleanup heap. Query timings and total allocation are
 diagnostics rather than blanket percentage gates.
 
-Release preflight is concrete: current published/shared version 0.21.0.0;
-proposed 0.22.0.0 for public record and outcome changes and corrected DLQ
-reservation confirmation. `/tmp/keiro-mp45-release-review/release.patch`
-contains exact eight-package/internal-bound/changelog/capability edits and the
-0.21→0.22 Keiro-only upgrade edge, with blueprint/registry version 0.11.0.
-Native blueprint validation and the isolated `seihou agent --debug migrate`
-preview pass. No version edits, tags or uploads have occurred. After local
-acceptance, ask once for the concrete version/changelog approval required by
-`agents/skills/release/SKILL.md`; then apply, regenerate corpus provenance,
-verify the clean versioned cohort and publish in dependency order. Keep requests
-and this plan open until publication and the outside-consumer proof succeed.
+Historical release preparation (2026-10-20): a temporary 0.22.0.0 proposal
+contained eight-package/internal-bound/changelog/capability edits and a Keiro-only
+0.21→0.22 upgrade edge with blueprint/registry version 0.11.0. Its native validation
+and isolated migration preview passed then. That missing draft predates the accepted
+remediation and must be rebuilt and revalidated; it is not the next executable input.
 
 ## Surprises & Discoveries
 
@@ -197,6 +220,12 @@ observations; the HTTP tests prove the reservation and confirmation explicitly.
 
 
 ## Outcomes & Retrospective
+
+2026-10-25: All implementation and mandatory remediation handoffs are accepted,
+including the uninterrupted release-gate proof at `a4332cfe`. Release preparation
+must now incorporate the accepted fixes and replace the missing temporary draft.
+Version approval, final-candidate verification, eight-package publication,
+outside-consumer proof and final request/ADR/MasterPlan closure remain open.
 
 2026-10-20: Integrated local acceptance passes. The six implementation siblings
 are Complete with retained raw capacity/interference and lifecycle evidence.
