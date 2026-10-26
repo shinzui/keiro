@@ -1,6 +1,7 @@
 -- | Thin read-only adapters over application-owned manager inspectors.
 module Keiro.Ops.ProcessManager (Command (..), ShowOptions (..), ListOptions (..), commandParser, validateCommand, isMutation, runCommand) where
 
+import Data.Aeson (object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
@@ -20,23 +21,24 @@ data ShowOptions = ShowOptions {name :: !Text, correlationId :: !Text, timerLimi
 data ListOptions = ListOptions {name :: !Text, after :: !(Maybe InspectionCursor), limit :: !Int}
   deriving stock (Eq, Show)
 
-data Command = Show !ShowOptions | List !ListOptions deriving stock (Eq, Show)
+data Command = Types | Show !ShowOptions | List !ListOptions deriving stock (Eq, Show)
 
 commandParser :: Parser Command
 commandParser =
   hsubparser
-    ( Opt.command
-        "show"
-        ( Opt.info
-            ( Show
-                <$> ( ShowOptions
-                        <$> name
-                        <*> textOption "correlation" "ID"
-                        <*> option positiveIntReader (long "timer-limit" <> Opt.value 20 <> metavar "N")
-                    )
-            )
-            (progDesc "Observe persisted manager state and intended dispatch witnesses")
-        )
+    ( Opt.command "types" (Opt.info (pure Types) (progDesc "List mounted process managers"))
+        <> Opt.command
+          "show"
+          ( Opt.info
+              ( Show
+                  <$> ( ShowOptions
+                          <$> name
+                          <*> textOption "correlation" "ID"
+                          <*> option positiveIntReader (long "timer-limit" <> Opt.value 20 <> metavar "N")
+                      )
+              )
+              (progDesc "Observe persisted manager state and intended dispatch witnesses")
+          )
         <> Opt.command
           "list"
           ( Opt.info
@@ -58,6 +60,7 @@ isMutation :: Command -> Bool
 isMutation = const False
 
 validateCommand :: Command -> Either (Text, Text) ()
+validateCommand Types = Right ()
 validateCommand (Show options)
   | Text.null (Text.strip options.correlationId) = Left ("invalid_correlation_id", "correlation id must not be blank")
   | options.timerLimit < 1 || options.timerLimit > 500 = Left ("invalid_page_size", "timer page size must be 1..500")
@@ -73,10 +76,20 @@ validateCommand (List options)
 runCommand :: PM.ProcessManagerInspectors -> OpsEnv -> Command -> IO OpsOutcome
 runCommand catalog env command = case validateCommand command of
   Left (code, detail) -> pure (InspectionFailed code detail)
-  Right () -> case Map.lookup owner catalog of
-    Nothing -> pure (Failed ("unknown process manager: " <> owner))
-    Just (PM.SomeProcessManagerInspector inspector) -> case command of
-      Show options -> do
+  Right () -> case command of
+    Types ->
+      let summaries = PM.listProcessManagerTypes catalog
+       in pure
+            ( Succeeded
+                ( OpsResult
+                    ["name", "category", "snapshots_configured", "snapshot_policy", "timers_configured"]
+                    [[summary.name, summary.category, if summary.snapshotsConfigured then "true" else "false", summary.snapshotPolicy, maybe "unknown" (\configured -> if configured then "true" else "false") summary.timersConfigured] | summary <- summaries]
+                    (object ["items" .= map PM.processManagerTypeJson summaries])
+                )
+            )
+    Show options -> case Map.lookup options.name catalog of
+      Nothing -> unknown options.name
+      Just (PM.SomeProcessManagerInspector inspector) -> do
         result <- runStoreIO env.store (PM.inspectProcessManagerInstance inspector (PM.InstanceViewRequest options.timerLimit) options.correlationId)
         pure $ case result of
           Left err -> Failed (Text.pack (show err))
@@ -88,7 +101,9 @@ runCommand catalog env command = case validateCommand command of
                   (maybe [] (\view -> [[view.name, view.correlationId, maybe "" id view.stateLabel]]) value)
                   (maybe Aeson.Null PM.processManagerViewJson value)
               )
-      List options -> do
+    List options -> case Map.lookup options.name catalog of
+      Nothing -> unknown options.name
+      Just (PM.SomeProcessManagerInspector inspector) -> do
         result <- runStoreIO env.store (PM.listProcessManagerInstances inspector (PM.InstanceListRequest options.limit options.after))
         pure $ case result of
           Left err -> Failed (Text.pack (show err))
@@ -101,7 +116,7 @@ runCommand catalog env command = case validateCommand command of
                   (PM.instancePageJson page)
               )
   where
-    owner = case command of Show options -> options.name; List options -> options.name
+    unknown owner = pure (Failed ("unknown process manager: " <> owner))
     listError err =
       ( case err of
           PM.InvalidInstancePageSize _ -> "invalid_page_size"

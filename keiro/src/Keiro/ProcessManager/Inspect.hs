@@ -7,6 +7,9 @@ module Keiro.ProcessManager.Inspect
   ( ProcessManagerInspector (..),
     SomeProcessManagerInspector (..),
     ProcessManagerInspectors,
+    ProcessManagerTypeSummary (..),
+    listProcessManagerTypes,
+    processManagerTypeJson,
     processManagerInspector,
     domainProcessManagerInspector,
     reactiveProcessManagerInspector,
@@ -38,6 +41,7 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict (Map)
+import Data.Map.Strict qualified as Map
 import Data.Maybe (mapMaybe)
 import Data.Text qualified as Text
 import Data.UUID qualified as UUID
@@ -47,7 +51,7 @@ import Keiki.Core (BoolAlg, HsPred, RegFile)
 import Keiki.Core qualified as Keiki
 import Keiki.Render.Mermaid (edgeInputName)
 import Keiro.Command
-import Keiro.EventStream (EventStream)
+import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
 import Keiro.EventStream.Validate (ValidatedEventStream, unvalidated)
 import Keiro.Inspection.Aggregate (hydrationSourceJson)
 import Keiro.Inspection.Cursor
@@ -117,6 +121,48 @@ data SomeProcessManagerInspector where
   SomeProcessManagerInspector :: (BoolAlg phi (RegFile rs, ci), Eq co) => ProcessManagerInspector phi rs s ci co -> SomeProcessManagerInspector
 
 type ProcessManagerInspectors = Map Text SomeProcessManagerInspector
+
+-- | Mounted metadata, independent of persisted instances. Names are catalog
+-- lookup keys, including aliases. Timer capability is not currently declared.
+data ProcessManagerTypeSummary = ProcessManagerTypeSummary
+  { name :: !Text,
+    category :: !Text,
+    snapshotsConfigured :: !Bool,
+    snapshotPolicy :: !Text,
+    timersConfigured :: !(Maybe Bool)
+  }
+  deriving stock (Eq, Show, Generic)
+
+-- | Enumerate only descriptor fields; never evaluate a policy predicate.
+-- Lookup names retain the map's ascending order.
+listProcessManagerTypes :: ProcessManagerInspectors -> [ProcessManagerTypeSummary]
+listProcessManagerTypes = map describe . Map.toAscList
+  where
+    describe (lookupName, SomeProcessManagerInspector inspector) =
+      case unvalidated inspector.eventStream of
+        EventStream {stateCodec = codec, snapshotPolicy = policy} ->
+          ProcessManagerTypeSummary lookupName (categoryText inspector.category) (isJust codec) (policyLabel policy) Nothing
+
+-- Keep the constructor match separate from the existential map traversal.
+-- GHC 9.12.4 otherwise mislabels Custom as Never in the optimized callback
+-- sentinel test; OPAQUE also prevents worker/wrapper from removing this boundary.
+{-# OPAQUE policyLabel #-}
+policyLabel :: SnapshotPolicy s -> Text
+policyLabel = \case
+  Never -> "never"
+  Every n -> "every:" <> Text.pack (show n)
+  OnTerminal -> "on_terminal"
+  Custom _ -> "custom"
+
+processManagerTypeJson :: ProcessManagerTypeSummary -> Value
+processManagerTypeJson summary =
+  object
+    [ "name" .= summary.name,
+      "category" .= summary.category,
+      "snapshots_configured" .= summary.snapshotsConfigured,
+      "snapshot_policy" .= summary.snapshotPolicy,
+      "timers_configured" .= summary.timersConfigured
+    ]
 
 data DispatchWitness = EventPresent | NotObserved deriving stock (Generic, Eq, Show)
 

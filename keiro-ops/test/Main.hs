@@ -119,6 +119,7 @@ spec fixture = do
   describe "embedded command tree" do
     it "omits code-dependent commands from the standalone tree" do
       isParseSuccess (parseOps Ops.emptyAppHooks ["pm", "show", "--name", "test", "--correlation", "one"]) `shouldBe` False
+      isParseSuccess (parseOps Ops.emptyAppHooks ["pm", "types"]) `shouldBe` False
       isParseSuccess (parseOps Ops.emptyAppHooks ["aggregate", "types"]) `shouldBe` False
       isParseFailure (parseOps Ops.emptyAppHooks ["wf", "resume-once"]) `shouldBe` True
       isParseFailure (parseOps Ops.emptyAppHooks ["timer", "drain-once"]) `shouldBe` True
@@ -133,6 +134,8 @@ spec fixture = do
     it "mounts every code-dependent command from typed application hooks" do
       isParseSuccess (parseOps embeddedHooks ["pm", "show", "--name", "test", "--correlation", "one"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["pm", "list", "--name", "test"]) `shouldBe` True
+      isParseSuccess (parseOps embeddedHooks ["pm", "types"]) `shouldBe` True
+      isParseSuccess (parseOps embeddedHooks ["pm", "types", "--name", "test"]) `shouldBe` False
       isParseSuccess (parseOps embeddedHooks ["aggregate", "types"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["aggregate", "show", "--name", "counter", "--id", "one"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["aggregate", "snapshot", "--name", "counter", "--id", "one"]) `shouldBe` True

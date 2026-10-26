@@ -14,6 +14,7 @@ import Data.ByteString.Lazy.Char8 qualified as Char8
 import Data.IORef
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
+import Data.Text qualified as Text
 import Network.HTTP.Client qualified as HTTP
 import Network.HTTP.Types (statusCode)
 import Network.WebSockets qualified as WS
@@ -21,6 +22,9 @@ import System.IO (hFlush, hPutStrLn, stderr, stdout)
 import System.Timeout (timeout)
 
 runClients :: [String] -> IO ()
+runClients [portArg, clientsArg, _, secondsArg, mode]
+  | mode `elem` ["pm-types", "pm-types-many"] =
+      runManagerClients (read portArg) (read clientsArg) (read secondsArg) (mode == "pm-types-many")
 runClients [portArg, clientsArg, viewsArg, secondsArg, mode] = do
   let port = read portArg
       clients = read clientsArg
@@ -95,3 +99,43 @@ runClients [portArg, clientsArg, viewsArg, secondsArg, mode] = do
       bad = sum [n | (key, n) <- Map.toList counts, key `notElem` ["http_200", "snapshot", "update"]]
   Char8.putStrLn (encode (good, bad))
 runClients _ = fail "expected PORT CLIENTS VIEWS SECONDS MODE"
+
+-- HTTP-only discovery load: no WebSocket subscriptions or workflow header warmup.
+-- Finite staggered schedules retain the intended four requests per second even
+-- when request time varies; a failed request or late schedule fails the trial.
+runManagerClients :: Int -> Int -> Int -> Bool -> IO ()
+runManagerClients port clients seconds many = do
+  unless (clients == 4 && seconds > 0) (fail "expected four manager discovery clients")
+  let expectedNames = if many then ["alias-" <> Text.justifyRight 4 '0' (Text.pack (show n)) | n <- [1 .. 1000 :: Int]] else ["jitsurei-fulfillment"]
+      expected = object ["items" .= [object ["name" .= name, "category" .= ("fulfillment" :: Text), "snapshots_configured" .= False, "snapshot_policy" .= ("never" :: Text), "timers_configured" .= Null] | name <- expectedNames]]
+  bracket (HTTP.newManager HTTP.defaultManagerSettings {HTTP.managerConnCount = clients}) HTTP.closeManager $ \manager -> do
+    request <- HTTP.parseRequest ("http://127.0.0.1:" <> show port <> "/keiro/pm/types")
+    let fetch = do
+          response <- HTTP.httpLbs request manager
+          unless
+            (statusCode (HTTP.responseStatus response) == 200 && Aeson.eitherDecode (HTTP.responseBody response) == Right expected)
+            (fail "manager discovery poll was refused or returned incorrect metadata")
+    fetch
+    go <- newEmptyMVar
+    successes <- newIORef (0 :: Int)
+    let poll index = do
+          readMVar go
+          threadDelay (index * 1000000 `div` clients)
+          forM_ [1 .. seconds] $ \second -> do
+            -- Sleep until the next tick independently of request duration.
+            withAsync (threadDelay 1000000) $ \tick -> do
+              fetch
+              atomicModifyIORef' successes (\n -> (n + 1, ()))
+              unless (second == seconds) (wait tick)
+    bracket (forM [0 .. clients - 1] (async . poll)) (mapM_ cancel) $ \tasks -> do
+      putStrLn "ready"
+      hFlush stdout
+      instruction <- getLine
+      unless (instruction == "go") (fail "missing measurement control")
+      putMVar go ()
+      finished <- timeout ((seconds + 5) * 1000000) (mapConcurrently_ wait tasks)
+      unless (finished == Just ()) (fail "manager polling did not sustain the intended load")
+    good <- readIORef successes
+    unless (good == clients * seconds) (fail "manager polling load disappeared")
+    hPutStrLn stderr ("manager discovery clients: successes=" <> show good <> " failures=0")
+    Char8.putStrLn (encode (good, 0 :: Int))

@@ -13,6 +13,9 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ### New Features
 
+- Add embedded `pm types` with shared JSON and human metadata output, including
+  empty catalogs and aliases, without requiring a manager name or store reads.
+
 - Add bounded projection-status pages and `projection status`, preserving the
   frozen v1 relation and complete-list compatibility API. Page keys precede
   correlated status reads; no writer index is added. HTTP feed protocol and

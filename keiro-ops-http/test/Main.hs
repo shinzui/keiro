@@ -28,6 +28,7 @@ import Hasql.Pool qualified as Pool
 import Hasql.Pool.Observation qualified as Observation
 import Hasql.Session qualified as Session
 import Hasql.Statement qualified as Statement
+import Jitsurei.Inspection (jitsureiProcessManagerInspectors)
 import Keiro.Ops qualified as Ops
 import Keiro.Ops.Env
 import Keiro.Ops.Http
@@ -159,6 +160,44 @@ spec fixture = do
       forM_ [0, -1, maxBound] $ \seconds ->
         newInspectionBudget defaultInspectionLimits {deliveryDeadlineSeconds = seconds} `shouldThrow` anyIOException
   around (withFreshStore fixture) $ do
+    describe "mounted process-manager discovery" $ do
+      it "serves Jitsurei metadata without journal instances and agrees with the parsed CLI" $ \store -> do
+        let mounted = Ops.emptyAppHooks {Ops.processManagers = Just jitsureiProcessManagerInspectors}
+            expected = object ["items" .= [object ["name" .= ("jitsurei-fulfillment" :: Text), "category" .= ("fulfillment" :: Text), "snapshots_configured" .= False, "snapshot_policy" .= ("never" :: Text), "timers_configured" .= Null]]]
+        app <- opsApplication defaultOpsHttpConfig mounted store
+        response <- call app methodGet "/pm/types" ""
+        simpleStatus response `shouldBe` status200
+        body response `shouldBe` expected
+        case parseArguments mounted ["pm", "types"] of
+          Parsed command -> do
+            Succeeded result <- Ops.runCommand mounted (OpsEnv store Json False [] False) command
+            result.jsonValue `shouldBe` body response
+          _ -> expectationFailure "CLI pm types did not parse"
+        refused <- call app methodPost "/pm/types" ""
+        assertError refused status405 "method_not_allowed"
+        named <- call app methodGet "/pm/types?name=jitsurei-fulfillment" ""
+        assertError named status400 "invalid_request"
+      it "distinguishes absent and empty hooks and bounds large catalogs" $ \store -> do
+        absent <- opsApplication defaultOpsHttpConfig Ops.emptyAppHooks store
+        forM_ ["/pm/types", "/pm/list?name=missing"] $ \path -> do
+          response <- call absent methodGet path ""
+          assertError response status400 "invalid_request"
+        empty <- opsApplication defaultOpsHttpConfig Ops.emptyAppHooks {Ops.processManagers = Just Map.empty} store
+        response <- call empty methodGet "/pm/types" ""
+        simpleStatus response `shouldBe` status200
+        body response `shouldBe` object ["items" .= ([] :: [Value])]
+        let descriptor = snd (Map.findMin jitsureiProcessManagerInspectors)
+            catalog = Map.fromList [("alias-" <> Text.pack (show n), descriptor) | n <- [1 .. 1000 :: Int]]
+            mounted = Ops.emptyAppHooks {Ops.processManagers = Just catalog}
+            config = defaultOpsHttpConfig {inspectionLimits = defaultInspectionLimits {maxResponseBytes = 1024}}
+        bounded <- opsApplication config mounted store
+        oversized <- call bounded methodGet "/pm/types" ""
+        assertError oversized status413 "inspection_result_too_large"
+      it "keeps fresh schema refusal for metadata reads" $ \store -> do
+        app <- opsApplication defaultOpsHttpConfig Ops.emptyAppHooks {Ops.processManagers = Just jitsureiProcessManagerInspectors} store
+        Right () <- Pool.use store.pool (Session.script "ALTER TABLE keiro.keiro_timers ADD COLUMN pm_types_drift text")
+        response <- call app methodGet "/pm/types" ""
+        assertError response status409 "schema_drift"
     describe "workflow page routes" $ do
       it "rejects an unrepresentable outgoing cursor instead of returning an unusable token" $ \store -> do
         result <- Pool.use store.pool (Session.script "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) VALUES ('a',repeat('界',2000),'running'),('b',repeat('界',2000),'running')")
@@ -556,6 +595,27 @@ spec fixture = do
                 Just (Right bytes) | Char8.null bytes -> pure ()
                 _ -> expectationFailure "stopped runner retained an idle connection"
   around (withFreshDatabase fixture) $ do
+    describe "process-manager discovery database boundary" $ do
+      it "performs only aggregate-types verifier work and rejects parsing before borrowing" $ \url ->
+        withStore (defaultConnectionSettings url) $ \store -> do
+          calls <- newIORef (0 :: Int)
+          let observe = \case Observation.ConnectionObservation _ Observation.InUseConnectionStatus -> atomicModifyIORef' calls (\n -> (n + 1, ())); _ -> pure ()
+              settings = (defaultConnectionSettings url) {observationHandler = Just observe}
+              mounted = Ops.emptyAppHooks {Ops.processManagers = Just jitsureiProcessManagerInspectors, Ops.aggregates = Just Map.empty}
+          withOpsInspectionPool defaultInspectionLimits settings $ \pool -> do
+            app <- opsApplication defaultOpsHttpConfig mounted store {pool}
+            before <- readIORef calls
+            invalid <- call app methodGet "/pm/types?name=invalid" ""
+            assertError invalid status400 "invalid_request"
+            readIORef calls `shouldReturn` before
+            aggregate <- call app methodGet "/aggregate/types" ""
+            simpleStatus aggregate `shouldBe` status200
+            afterAggregate <- readIORef calls
+            manager <- call app methodGet "/pm/types" ""
+            simpleStatus manager `shouldBe` status200
+            afterManager <- readIORef calls
+            afterAggregate `shouldSatisfy` (> before)
+            afterManager - afterAggregate `shouldBe` afterAggregate - before
     describe "bounded workflow header" $ do
       it "uses one supported instance read even with 100000 children" $ \url ->
         withStore (defaultConnectionSettings url) $ \store -> do

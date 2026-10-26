@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Legacy reaction provenance is bounded explicit opt-in metadata
 description: Legacy manager writes may record bounded intended-dispatch evidence while default-off writes retain existing metadata, identities and database work.
-timestamp: 2026-10-25T05:14:38Z
+timestamp: 2026-10-26T20:14:45Z
 docId: ADR-55
 status: Accepted
 date: 2026-10-20
@@ -83,6 +83,27 @@ state/list/timer inspection, multi-event acceptance, repeated input-selected
 targets, silent deliveries and misleading legacy-looking metadata.
 
 ## Consequences
+
+Mounted-manager discovery enumerates the application-supplied inspector map in
+ascending lookup-key order. The public name is the catalog key, including aliases,
+because named inspection accepts that key. Discovery includes managers without
+persisted journals and performs no instance, timer, snapshot or journal reads.
+It never evaluates display, membership, stream-resolution, enabled-input or custom
+snapshot-policy callbacks. Snapshot configuration means codec presence; a policy
+label does not imply that a stored snapshot exists. Descriptors currently declare
+no timer capability, so `timers_configured` is null (unknown), independently of
+pending timers. No constructor change, runtime registry, cache or recurring task
+is needed. [Plan 323](../plans/323-list-mounted-process-managers-without-runtime-performance-regressions.md)
+owns the discovery implementation and its separate runtime performance acceptance.
+
+Keep the private snapshot-policy label match behind an `OPAQUE` boundary with the
+GHC 9.12.4 toolchain. The optimized zero-callback regression fixture otherwise
+reports a custom policy as `never`; interpreted execution reports `custom`.
+Separating the constructor match fixes the optimized fixture without evaluating
+its throwing predicate or changing runtime snapshot handling. Source review and
+optimized Core alone did not reveal the incorrect result, so retain the executable
+regression test when changing this boundary. GHC documents the pragma's
+[inlining and worker/wrapper guarantees](https://downloads.haskell.org/ghc/9.12.4/docs/users_guide/exts/pragmas.html#opaque-pragma).
 
 Applications constructing RunCommandOptions records directly must add the new
 field; record updates from defaultRunCommandOptions inherit the disabled policy.

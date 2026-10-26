@@ -16,6 +16,8 @@ import Data.ByteString.Lazy qualified as Lazy
 import Data.ByteString.Lazy.Char8 qualified as LazyChar8Portable
 #ifndef KEIRO_INSPECTION_BASELINE
 import InspectionClients (runClients)
+import Data.Map.Strict qualified as Map
+import Jitsurei.Inspection (jitsureiProcessManagerInspectors)
 #endif
 import Data.ByteString qualified as Bytes
 import Data.List (sort)
@@ -274,7 +276,13 @@ withMount store url mode action
   | otherwise = withOpsInspectionPool defaultInspectionLimits (defaultConnectionSettings url) $ \pool -> do
       let inspected = store {pool = pool}
       withFeedHandle defaultOpsHttpConfig defaultFeedConfig inspected $ \feeds -> do
-        child <- opsApplicationWithFeeds defaultOpsHttpConfig feeds Ops.emptyAppHooks inspected
+        let catalog
+              | mode `elem` ["pm-types-many", "pm-types-many-idle"] = Map.fromList [("alias-" <> Text.justifyRight 4 '0' (number n), snd (Map.findMin jitsureiProcessManagerInspectors)) | n <- [1 .. 1000]]
+              | otherwise = jitsureiProcessManagerInspectors
+            hooks
+              | "pm-types" `Text.isPrefixOf` mode = Ops.emptyAppHooks {Ops.processManagers = Just catalog}
+              | otherwise = Ops.emptyAppHooks
+        child <- opsApplicationWithFeeds defaultOpsHttpConfig feeds hooks inspected
         app <- either (fail . show) pure (composeSurfaces defaultComposeConfig [MountedSurface keiroPrefix child])
         withOpsHttpServer defaultOpsHttpServerConfig {port = 0} app $ \server -> action (Just (server.serverPort, resourceSample feeds))
 
@@ -316,7 +324,7 @@ withPollers mount mode seconds action = case mount of
     (views, clients) = pollingShape mode
 
 inspectionModes :: [Text]
-inspectionModes = ["disabled", "idle", "active-shared", "active-distinct", "slow-reader", "churn"]
+inspectionModes = ["disabled", "idle", "active-shared", "active-distinct", "slow-reader", "churn", "pm-types-idle", "pm-types", "pm-types-many-idle", "pm-types-many"]
 
 #endif
 
@@ -324,6 +332,8 @@ inspectionModes = ["disabled", "idle", "active-shared", "active-distinct", "slow
 -- poll all views, while many clients can share one view's authoritative route.
 pollingShape :: Text -> (Int, Int)
 pollingShape = \case
+  "pm-types" -> (0, 4)
+  "pm-types-many" -> (0, 4)
   "active-shared" -> (1, 1)
   "active-distinct" -> (32, 256)
   "slow-reader" -> (32, 256)

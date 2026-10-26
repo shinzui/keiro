@@ -1,5 +1,8 @@
 # Keiro Guides Log
 
+## 2026-10-26
+* **Update**: Document adjacent aggregate and manager discovery JSON, mounting, aliases and unknown timer configuration.
+
 ## 2026-10-25
 * **Update**: Document parsed mutation origins, JSON confirmation, bounded delivery and fresh feed retirement behavior.
 

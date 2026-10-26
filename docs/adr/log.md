@@ -1,5 +1,10 @@
 # Bundle Update Log
 
+## 2026-10-26
+* **Update**: Retain the optimized custom-policy regression test and opaque metadata-only label boundary for the Nix GHC 9.12.4 toolchain.
+* **Update**: Preserve fresh schema verification and shared route/resource policy for metadata-only pm types.
+* **Update**: Record pure mounted-manager discovery, lookup aliases, snapshot codec semantics and unknown timer capability.
+
 ## 2026-10-25
 * **Update**: Accept uninterrupted red and green release gates at a4332cfe, retaining the sole-command negative perturbation, restoration, all six statuses and process exits.
 * **Update**: Link accepted five-sample baseline recording, actual producer attribution, added-cost refusal and three consecutive complete guard passes.

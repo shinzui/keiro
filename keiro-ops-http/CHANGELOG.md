@@ -8,6 +8,9 @@
 
 ### New Features
 
+- Expose mounted process-manager discovery as `GET /pm/types` through the shared
+  command tree, preserving schema verification and transport resource limits.
+
 - Compose allocated inspection applications under stable `/keiro`, `/kiroku`,
   `/shibuya` and `/pgmq` prefixes with preserved raw paths, shared CORS policy
   and a flag-guarded example using released Kiroku metrics.

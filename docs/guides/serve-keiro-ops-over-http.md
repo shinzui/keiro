@@ -2,7 +2,7 @@
 type: Runbook
 title: Serve Keiro Ops Over HTTP
 description: Mount bounded HTTP inspection and explicitly confirmed operator actions using the supported Keiro command tree.
-timestamp: 2026-10-25T04:48:05Z
+timestamp: 2026-10-26T20:14:45Z
 docId: DOC-30
 tags: [keiro, operations, http, inspection]
 generated:
@@ -75,6 +75,45 @@ oversized results and live schema changes are still checked on the next request.
 Other reads retain their own observation clocks and normal execution paths.
 
 ## Request mapping and confirmation
+
+Mount aggregate and process-manager catalogs in `AppHooks.aggregates` and
+`AppHooks.processManagers` to expose their discovery commands. For Jitsurei,
+use `jitsureiAggregateInspectors` and `jitsureiProcessManagerInspectors` from
+`Jitsurei.Inspection`. The embedded CLI commands `aggregate types --json` and
+`pm types --json` return the same objects as these HTTP reads:
+
+```bash
+curl -fsS http://127.0.0.1:9092/aggregate/types
+curl -fsS http://127.0.0.1:9092/pm/types
+```
+
+The aggregate discovery envelope contains rows such as:
+
+```json
+{"items":[{"name":"incident","category":"incident","snapshots_configured":false,"snapshot_policy":"never"}]}
+```
+
+Jitsurei also mounts the `order` aggregate. Its process-manager catalog returns
+exactly this object, including before any journal instance exists:
+
+```json
+{"items":[{"name":"jitsurei-fulfillment","category":"fulfillment","snapshots_configured":false,"snapshot_policy":"never","timers_configured":null}]}
+```
+
+Process-manager rows are sorted by catalog lookup name, including aliases; use
+that name with `pm show --name` or `pm list --name`. `pm types` takes no `--name`
+option. `snapshots_configured` reports state-codec presence, regardless of whether
+a snapshot is stored or the snapshot policy is `never`. Policies are `never`,
+`every:N`, `on_terminal`, or `custom`; custom predicates are never evaluated for
+discovery. `timers_configured: null` means unknown, rendered as `unknown` in the
+human CLI table. It does not mean false or report pending timer counts.
+
+An explicitly mounted empty catalog (`Just Map.empty`) returns `{"items":[]}`.
+An absent hook (`Nothing`) omits the command and returns 400 `invalid_request`.
+The standalone database-only server has no application catalogs. Discovery
+enumerates in-memory descriptors without journal, state, snapshot, or timer
+reads. HTTP still performs its normal fresh schema verification and applies
+admission, deadlines and response-byte limits on every admitted read.
 
 Path segments are command words followed by positional arguments. Query keys
 use `snake_case` and become `--kebab-case=value` options. Repeated options retain

@@ -103,6 +103,7 @@ import Keiro.DeadLetter.Replay
   )
 import Keiro.DeterministicId (deterministicIdProbes, identitySeedBytes, legacySeedBytes)
 import Keiro.EventStream (Terminality (..))
+import Keiro.EventStream qualified as EventStream
 import Keiro.EventStream.Validate
   ( EventStreamWarning (..),
     ValidatedEventStream,
@@ -5316,6 +5317,37 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           Prelude.sum persistedCounts `shouldBe` fanOut
 
   describe "Keiro.ProcessManager" $ around (withFreshResourceStore fixture) $ do
+    it "discovers sorted lookup names without evaluating instance callbacks" $ \_ -> do
+      let unused = error "discovery invoked an instance callback"
+          legacy =
+            (PMInspection.processManagerInspector pmSnapshotProcessManager (categoryUnsafe "pm:counter") (\_ _ -> unused))
+              { PMInspection.streamFor = \_ -> unused,
+                PMInspection.correlationOf = \_ -> unused,
+                PMInspection.stateLabel = \_ -> unused,
+                PMInspection.enabledInputs = \_ -> unused
+              }
+          definition :: SnapshotPolicy (CounterState, RegFile SnapshotCounterRegs) -> ValidatedSnapshotCounterEventStream
+          definition policy = mkEventStreamOrThrow "discovery" (pmSnapshotCounterEventStreamDef {EventStream.snapshotPolicy = policy, EventStream.resolveStreamName = \_ -> unused})
+          domain = PMInspection.domainProcessManagerInspector domainProcessManager (categoryUnsafe "domain") (\_ _ -> unused)
+          reactive = PMInspection.reactiveProcessManagerInspector counterReactionManager (categoryUnsafe "reactive") (\_ _ -> unused)
+          catalog =
+            Map.fromList
+              [ ("z-alias", PMInspection.SomeProcessManagerInspector legacy),
+                ("a-custom", PMInspection.SomeProcessManagerInspector (legacy {PMInspection.eventStream = definition (Custom (\_ _ _ -> unused))})),
+                ("b-never", PMInspection.SomeProcessManagerInspector (legacy {PMInspection.eventStream = definition Never})),
+                ("c-terminal", PMInspection.SomeProcessManagerInspector (legacy {PMInspection.eventStream = definition OnTerminal})),
+                ("domain", PMInspection.SomeProcessManagerInspector domain),
+                ("reactive", PMInspection.SomeProcessManagerInspector reactive)
+              ]
+          summaries = PMInspection.listProcessManagerTypes catalog
+      PMInspection.listProcessManagerTypes Map.empty `shouldBe` []
+      map (^. #name) summaries `shouldBe` ["a-custom", "b-never", "c-terminal", "domain", "reactive", "z-alias"]
+      map (^. #snapshotPolicy) summaries `shouldBe` ["custom", "never", "on_terminal", "never", "never", "every:2"]
+      map (^. #snapshotsConfigured) summaries `shouldBe` [True, True, True, False, False, True]
+      map (^. #timersConfigured) summaries `shouldBe` replicate 6 Nothing
+      map (^. #category) summaries `shouldBe` ["pm:counter", "pm:counter", "pm:counter", "domain", "reactive", "pm:counter"]
+      encoded <- evaluate (LazyByteString.length (Aeson.encode (map PMInspection.processManagerTypeJson summaries)))
+      encoded `shouldSatisfy` (> 0)
     it "instance view equals the runtime's own rebuild" $ \(storeHandle, StoreRunner runner) -> do
       let options = defaultRunCommandOptions & #inspectionProvenance .~ CaptureInspectionProvenance
           definition = unvalidated pmSnapshotCounterEventStream

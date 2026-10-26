@@ -10,6 +10,12 @@ provenance:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-10-26T19:13:39Z
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-26T19:26:00Z
+      mode: "implement"
+      note: "Establish implementation baseline and implement mounted manager discovery with performance evidence"
 ---
 
 # List mounted process managers without runtime performance regressions
@@ -41,14 +47,55 @@ this plan.
 
 
 - [ ] Milestone 1: Record reproducible pre-change performance controls and a comparable measurement protocol.
-- [ ] Milestone 2: Expose deterministic, metadata-only manager summaries through the library and embedded CLI, with behavior and zero-store-access tests passing.
-- [ ] Milestone 3: Verify the real HTTP path with Jitsurei's catalog, missing/empty hooks, and existing resource/schema policies.
+- [x] Milestone 2 (2026-10-26): Deterministic metadata summaries and embedded `pm types` pass all 786 core and 55 ops tests in Nix, including aliases, all inspector families/policies, forced callback sentinels, and an armed store-access sentinel. Evidence: `keiro/bench/results/pm-types/candidate-tests-final.log`.
+- [x] Milestone 3 (2026-10-26): The representative Jitsurei CLI/HTTP path and all 53 HTTP tests pass in Nix, including missing/empty hooks, response limits, fresh schema refusal and verifier-only pool use. Jitsurei's 25 tests also pass; evidence is in `keiro/bench/results/pm-types/candidate-tests-final.log`.
 - [ ] Milestone 4: Demonstrate no measurable runtime regression, pass the repository gates, and document the shipped interface and evidence.
+
+Implementation started 2026-10-26 from `d61aabcfdaa4af14aef59712f10deb4826f0e99b`,
+preserved in detached `../keiro-pm-types-baseline`. The full pre-change Nix build
+passed. Five durable saturation and five mounted-idle controls are retained under
+`keiro/bench/results/pm-types/`. The pre-change six-guard run passed five guards
+but failed read-model; its focused repeat also fails, on different cases. These
+red controls leave baseline/release acceptance unresolved. The fixed offered rate
+is 50 operations/second against measured median capacity 718.89 operations/second.
+The discovery implementation and all four focused suites pass (919 examples);
+matched performance evidence and the final gate remain underway. Preserve unrelated concurrent plans
+and documentation commits.
 
 
 ## Surprises & Discoveries
 
 
+2026-10-26: Pre-change mounted-idle p95 varies from 7,428 to 8,792 microseconds
+across five 20-second trials, although throughput remains 50.025–50.040 operations
+per second. This is existing measurement noise, not candidate evidence, and may
+prevent the required 1% resolution. Keep raw controls and investigate paired
+uncertainty rather than interpreting paced throughput as unchanged capacity.
+
+2026-10-26: Source inspection of `mori://hasql/hasql/packages/hasql-pool`
+shows that releasing a pool resets connections and leaves it usable. The direct
+handler test instead uses a throwing connection observer, checks that an actual
+store read throws, and then fully renders discovery output using that valid store
+handle. A released-pool sentinel would not prove the intended zero-access boundary.
+
+2026-10-26: The pre-change read-model guard is red before discovery is added:
+the full run fails `serving-binding/versioned-three` at the historical 25%
+ceiling; a focused repeat fails `legacy-three` (+30%) and `repair/100` (+38%).
+Both logs are retained under `keiro/bench/results/pm-types/`. Continue the
+functional implementation and collect attributable measurements, but do not
+change historical CSVs or claim baseline/release acceptance from these results.
+
+2026-10-26: The optimized custom-policy sentinel initially returned `never`
+instead of `custom`, while an interpreted probe reported `custom`. A minimized
+compiled probe confirmed that the packed descriptor still carried `Custom`; the
+summary's fused constructor match was the divergent boundary. Field optics,
+direct selectors, explicit record patterns, an opaque throwing callback and
+`NOINLINE listProcessManagerTypes` did not fix it. A private `OPAQUE policyLabel`
+does: the original optimized core test now passes. Retain this boundary and the
+executable regression test; no command/snapshot runtime implementation or
+dependency pin changes. The package registry lists GHC 9.14.1 as newer, and the
+GHC 9.12.4 release tag is `1b7c33460847bb8017142407b853811fd8d04bff`;
+the project remains on its verified Nix compiler rather than upgrading scope.
 
 ## Decision Log
 
@@ -57,6 +104,12 @@ this plan.
 runtime registry, background refresh, descriptor cache, new descriptor fields, or database
 index. The catalog already contains the metadata needed for discovery, and extra machinery
 would introduce costs and compatibility obligations unrelated to IR-56.
+
+2026-10-26: Use implementation baseline `d61aabcf`, rather than the creation
+commit, for the detached executable and all pre-change controls. Concurrent
+documentation-only commits do not change its production sources. Preserve those
+unrelated commits and new plans, and record the exact final candidate identity
+separately.
 
 2026-10-26: Return the catalog key as `name`, because it is the value accepted by the existing
 `pm show --name` and `pm list --name` lookup. The public map currently permits aliases that

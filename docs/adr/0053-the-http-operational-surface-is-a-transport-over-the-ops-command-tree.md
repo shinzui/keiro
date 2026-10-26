@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: The HTTP operational surface is a transport over the ops command tree
 description: HTTP reuses the supported command grammar and handlers with bounded inspection work, schema agreement, and explicit mutation confirmation.
-timestamp: 2026-10-25T04:48:05Z
+timestamp: 2026-10-26T20:14:45Z
 docId: ADR-53
 status: Accepted
 date: 2026-10-20
@@ -126,6 +126,15 @@ when they intend to reserve messages; GET no longer performs that mutation.
 The default server binds loopback, and host configuration owns admission and
 timeout overrides. SQL LIMIT and pool separation alone do not prove acceptable
 runtime interference.
+
+`pm types` follows this rule: the owning library enumerates mounted descriptor
+metadata, the ops runner renders it, and `GET /pm/types` uses the existing command
+tree. `Nothing` omits the command and fails parsing; `Just Map.empty` is a valid
+empty catalog. Metadata-only handlers need no store reads, but an admitted HTTP
+request still performs fresh schema verification and retains all ordinary resource
+limits. Zero handler SQL is not zero HTTP SQL. Descriptor discovery and its
+runtime isolation evidence are tracked in
+[Plan 323](../plans/323-list-mounted-process-managers-without-runtime-performance-regressions.md).
 
 ## References
 
