@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-26
+* **Update**: IR-60 accepted and linked to ExecPlan 322; implementation and release qualification remain pending.
+
 ## 2026-10-25
 * **Addition**: IR-60 requests exact equality guards for mapped structural enums; Kotei continues with its checked native-enum adapter until upstream support is released.
 
