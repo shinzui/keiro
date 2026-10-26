@@ -4,9 +4,16 @@ title: Support equality guards for mapped structural enums
 description: >-
   Allow a consumer-owned mapped structural enum to participate in exact, type-safe aggregate
   equality guards without introducing a second native enum and an exhaustive adapter.
-timestamp: 2026-10-26T23:15:24Z
+timestamp: 2026-10-26T23:43:06Z
 requestId: IR-60
-status: in-progress
+status: completed
+completedAt: 2026-10-26T23:43:06Z
+resolution: >-
+  Plan 322 implements candidate Language 6 exact equality and inequality for mapped
+  structural enums through their existing total binding, including qualified literals,
+  finite model reconstruction, binding conformance, scoped identity, and replay evidence.
+  Required repository verification passes; package publication and downstream adoption
+  remain separate actions.
 plan: docs/plans/322-support-exact-equality-guards-for-mapped-structural-enums.md
 origin: mori://shinzui/kotei
 ---
@@ -17,7 +24,7 @@ origin: mori://shinzui/kotei
 
 Accepted for implementation through
 [Plan 322](../plans/322-support-exact-equality-guards-for-mapped-structural-enums.md).
-The implementation now checks and compiles the consumer scope fixture, including exact finite equality, qualified literals, reconstruction, binding conformance, and replay. Final repository qualification is in progress; package publication and downstream adoption remain separate.
+Implemented and repository-qualified: the consumer scope fixture checks, scaffolds, compiles, and passes exact finite equality, qualified literals, typed reconstruction, binding conformance, wire-byte, replay, and snapshot checks. All required repository verification passes. Package publication and downstream adoption remain separate.
 
 Proposed from `mori://shinzui/kotei/plans/103-reconstruct-recorded-failure-environments-for-inspection-and-debugging`.
 This is a follow-up improvement, not a prerequisite for that implementation. Kotei can retain

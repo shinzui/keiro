@@ -47,9 +47,9 @@ The concrete adopter is `mori://shinzui/kotei/plans/103-reconstruct-recorded-fai
 - [x] Milestone 1 (2026-10-26): the Language 6 scope fixture scaffolds and its compiled suite passes concrete equality/inequality, finite-domain exclusion, typed model reconstruction, and decoded replay. Verified with `nix develop -c cabal test keiro-dsl-conformance-mapped-structural-enum-equality --test-show-details=direct`.
 - [x] Milestone 2 (2026-10-26): seven generated predicate forms pass all 28 concrete/symbolic input/register combinations, including literals on both sides, self comparisons, and owner-valued constructor writes. Seven restoring mutations detect collapsed bindings, omitted fixtures/domains, wrong inverses, bijective meaning swaps, missing symbols, and incorrect signatures; the restored compiled baseline passes. Focused source tests reject unsupported types/operators and preserve declaration identity, including a shared Haskell owner.
 - [x] Milestone 3 (2026-10-26): single-file/workspace equality rows round-trip separately from nominal rows, binding explanations retain the declared contract, and supported revision pairs compare against their own graphs. Binding/domain/guard changes affect the scope aggregate; fixture/order changes remain replay-neutral; the unrelated control and data-only fold golden retain identity. Exact direct/nested JSON byte vectors and decoded replay pass. The compiled snapshot check preserves codec/layout discriminators, changes the fold discriminator, and agrees with full replay; the final repository gate also exercises the shared runtime snapshot-admission tests.
-- [ ] Milestone 4: affected regression suites, repository verification, documentation, and ADR distillation establish an adoption-ready implementation.
+- [x] Milestone 4 (2026-10-26): `nix develop -c just verify` exits zero, including all 895 DSL unit examples, every compiled DSL suite, seven new restoring mutations, shared runtime snapshot admission, strict ADR/documentation checks, and the 58-entry corpus drift check. The final `nix develop -c cabal build all --enable-tests --enable-benchmarks` and `git diff --check` also exit zero. Adoption guides, changelog, IR-60, ADR-12, and ADR-18 record the implementation and separate release/consumer obligations.
 
-Implementation has verified the first compiled consumer path; the remaining milestones are in progress. Creation evaluated the source and validation paths. The Nix shell reports Z3 4.16.0. The working tree already contained an unrelated edit to `docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md`; preserve it.
+Implementation and repository qualification are complete. Package publication and downstream adoption remain outside this plan. Creation evaluated the source and validation paths. The Nix shell reports Z3 4.16.0. The working tree already contained an unrelated edit to `docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md`; preserve it.
 
 
 ## Surprises & Discoveries
@@ -74,6 +74,12 @@ The general mapped-value operations share a bidirectional `AggregateMapped` patt
 
 ## Outcomes & Retrospective
 
+
+Completed 2026-10-26. Candidate Language 6 now admits direct same-declaration structural enum equality and inequality, qualified literals on either side, and constructor-valued writes through the existing total binding. The consumer fixture uses the same enum inside a required record and in direct command/register fields. Generated concrete and symbolic execution agree across 28 input/register cases, finite keys reconstruct the consumer owner, and direct/nested event JSON retains the exact `pipeline` and `diagnostic` spellings.
+
+All required repository gates pass at implementation checkpoint `93482cb5`, including 895 DSL unit examples, the complete compiled corpus, runtime snapshot fallback, replay/adoption checks, and migrations. Seven restoring mutations distinguish executable law failures from compiler failures; expected-wire checks catch a bijective meaning swap. Data-only and unrelated fold controls remain unchanged. ADR-12 and ADR-18 retain the durable binding, capability, and identity decisions; ADR-46 is unchanged because no traversal boundary moved. The important lesson is to prove the complete consumer path and both binding-law directions before declaring a finite witness exact. Executable fixtures qualify supplied values and every generated enum shape; they do not prove arbitrary Haskell implementations total.
+
+No dependency bounds, published package, downstream adapter, deployment, or retained consumer data were changed. A supporting release and the adopter's own event-codec, register-layout, fold, snapshot, and retained-history evidence remain separate obligations. The extra improvement-request bundle review-metadata limitation is recorded in Surprises & Discoveries and is not a failure of the prescribed repository gate.
 
 
 ## Context and Orientation
