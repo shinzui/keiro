@@ -1,0 +1,38 @@
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.21.0.0 (lib) (file src/Keiro/ProcessManager/Inspect.hs changed)
+ - keiro-0.21.0.0 (test:keiro-test) (dependency rebuilt)
+Preprocessing library for keiro-0.21.0.0...
+Building library for keiro-0.21.0.0...
+[71 of 74] Compiling Keiro.ProcessManager.Inspect ( src/Keiro/ProcessManager/Inspect.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ProcessManager/Inspect.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ProcessManager/Inspect.dyn_o ) [Source file changed]
+src/Keiro/ProcessManager/Inspect.hs:277:19: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager/Inspect.hs:58:1-34
+      (and originally defined in ‘Control.Lens.Indexed’)
+    |
+277 |     probe record (index, target) = do
+    |                   ^^^^^
+
+src/Keiro/ProcessManager/Inspect.hs:340:24: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘view’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager/Inspect.hs:58:1-34
+      (and originally defined in ‘Control.Lens.Getter’)
+    |
+340 | processManagerViewJson view =
+    |                        ^^^^
+
+Preprocessing test suite 'keiro-test' for keiro-0.21.0.0...
+Building test suite 'keiro-test' for keiro-0.21.0.0...
+[24 of 24] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/t/keiro-test/build/keiro-test/keiro-test [Library changed]
+Running 1 test suites...
+Test suite keiro-test: RUNNING...
+
+Keiro.ProcessManager
+  discovers sorted lookup names without evaluating instance callbacks [✔]
+
+Finished in 0.1125 seconds
+1 example, 0 failures
+Test suite keiro-test: PASS
+Test suite logged to:
+/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/t/keiro-test/test/keiro-0.21.0.0-keiro-test.log
+1 of 1 test suites (1 of 1 test cases) passed.
