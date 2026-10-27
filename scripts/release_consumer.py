@@ -162,7 +162,8 @@ def consumer(mode, root=ROOT):
     with (work / "proof.log").open("w") as log:
         def run(command, check=True):
             print("+ " + " ".join(command), flush=True)
-            result = subprocess.run(command, cwd=work, stdout=log, stderr=subprocess.STDOUT)
+            timeout = 120 if "update" in command or "--dry-run" in command else None
+            result = subprocess.run(command, cwd=work, stdout=log, stderr=subprocess.STDOUT, timeout=timeout)
             log.flush()
             if check and result.returncode:
                 raise RuntimeError(f"Consumer command failed ({result.returncode}); see {work / 'proof.log'}")

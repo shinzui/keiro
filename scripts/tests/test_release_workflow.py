@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import io
 import os
 from pathlib import Path
 import subprocess
@@ -171,8 +172,41 @@ class GateControls(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "later correctness attempt"):
             release.check_manifest(first.path, self.inputs(), self.root)
 
+    def test_mutation_during_successful_command_refuses_acceptance(self):
+        (self.root / "justfile").write_text('_verify:\n    @echo mutated >> baseline.csv\n')
+        gate = self.gate()
+        self.assertEqual(gate.execute(), 1)
+        self.assertEqual(gate.manifest["stages"]["correctness"]["status"], 1)
+
+    def test_runtime_flags_and_database_url_invalidate_identity_but_nix_scratch_does_not(self):
+        config = self.root / "cabal.config"
+        config.write_text("repository hackage.haskell.org\n")
+        def tool_output(args, root):
+            return str(config) if args[:2] == ["cabal", "path"] else "fixed-tool-output"
+        with patch.object(release, "output", side_effect=tool_output):
+            # Exercise real config/environment hashing without toolchain probes.
+            with patch.object(release, "source_identity", return_value="fixed-source"):
+                original = release.identity(self.root, {"install-plan": []})
+                for key in ("CFLAGS", "DATABASE_URL", "KEIRO_RETENTION_REPORT_ONLY", "GHC_OPTIONS"):
+                    with self.subTest(key=key), patch.dict(os.environ, {key: "changed"}):
+                        self.assertNotEqual(original, release.identity(self.root, {"install-plan": []}))
+                with patch.dict(os.environ, {"NIX_BUILD_TOP": "/new/scratch", "NIX_LOG_FD": "99"}):
+                    self.assertEqual(original, release.identity(self.root, {"install-plan": []}))
+
 
 class ConsumerControls(unittest.TestCase):
+    def test_database_is_removed_when_migration_fails(self):
+        failure = subprocess.CalledProcessError(1, ["migrator"])
+        with tempfile.TemporaryDirectory() as scratch, patch.object(consumer.subprocess, "run", side_effect=[None, failure, None]) as run:
+            with self.assertRaises(subprocess.CalledProcessError):
+                consumer.health_check("server", "migrator", Path(scratch), Path(scratch), io.StringIO())
+            created = run.call_args_list[0].args[0]
+            dropped = run.call_args_list[-1].args[0]
+            self.assertEqual(created[0], "createdb")
+            self.assertEqual(dropped[0], "dropdb")
+            self.assertEqual(created[-1], dropped[-1])
+            self.assertTrue(created[-1].startswith("keiro_release_"))
+
     def test_default_dependency_closure_ignores_unreachable_git_pins(self):
         units = [
             {"id": "root", "pkg-name": "keiro", "type": "configured", "component-name": "lib", "depends": ["dep"]},

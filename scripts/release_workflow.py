@@ -172,6 +172,7 @@ def preflight(root=ROOT):
     # Registry availability and cheap generated/document policies come FIRST.
     run(["z3", "--version"], root)
     run(["just", "release-static"], root)
+    run(["just", "postgres-start"], root)
     blueprint_preflight(root)
     for package in PACKAGES:
         run(["cabal", "check"], root / package)
@@ -227,22 +228,24 @@ def identity(root=ROOT, plan=None):
     # neither changes the compiler, flags or runtime environment under test.
     relevant_env = {k: digest(v) for k, v in os.environ.items() if
                     k not in ("NIX_BUILD_TOP", "NIX_LOG_FD") and
-                    (k.startswith(("PG", "GHC", "CABAL", "NIX", "KEIRO")) or
-                     k in ("PATH", "LANG", "LC_ALL", "IN_NIX_SHELL"))}
+                    (k.startswith(("PG", "GHC", "CABAL", "NIX", "KEIRO", "LC_", "LD_", "DYLD_", "PKG_CONFIG", "TASTY", "CCACHE_")) or
+                     k in ("PATH", "LANG", "LANGUAGE", "TZ", "IN_NIX_SHELL", "DATABASE_URL",
+                           "CC", "CXX", "CPP", "AR", "AS", "LD", "NM", "RANLIB", "CFLAGS", "CXXFLAGS",
+                           "CPPFLAGS", "LDFLAGS", "CPATH", "LIBRARY_PATH"))}
     config = Path(output(["cabal", "path", "--config-file"], root))
     local_config = {}
     for path in (config, root / "cabal.project.local", root / "cabal.project.freeze"):
         local_config[str(path)] = file_digest(path) if path.exists() else None
-    db = output(["psql", "-X", "-h", str(root / "db"), "-d", "postgres", "-Atc",
-                 "SELECT version(), current_setting('fsync'), current_setting('synchronous_commit'), "
-                 "current_setting('full_page_writes'), pg_postmaster_start_time()"], root)
+    db = output(["psql", "-X", "-h", os.environ.get("PGHOST", str(root / "db")), "-d", "postgres", "-Atc",
+                 "SELECT version(), pg_postmaster_start_time(), "
+                 "(SELECT json_agg(json_build_array(name, setting, unit) ORDER BY name) FROM pg_settings)"], root)
     value = {
         "schema": SCHEMA, "source": source_identity(root),
         "dependencies": digest(sorted(packages, key=lambda p: p["id"])),
         "compiler": output(["ghc", "--info"], root),
         "cabal": output(["cabal", "--numeric-version"], root),
         "z3": output(["z3", "--version"], root),
-        "postgres": db, "machine": (platform.node(), platform.platform()),
+        "postgres": digest(db), "machine": (platform.node(), platform.platform()),
         "environment": relevant_env, "local_config": local_config,
     }
     return value
@@ -353,29 +356,36 @@ def prepare(root=ROOT):
 
 def artifacts(root=ROOT):
     require_clean(root)
+    source = source_identity(root)
     current = version(root)
     target = root / "dist-release" / current
     target.mkdir(parents=True, exist_ok=True)
-    # Serialize all Haddock invocations with verification. No uploads here.
+    # One Cabal plan for every release package avoids per-package flag churn.
+    # The shared workspace lock serializes it with verification. No uploads here.
     run(["cabal", "sdist", *PACKAGES, "--output-directory=" + str(target)], root)
+    run(["cabal", "haddock", "--haddock-for-hackage", "--haddock-hyperlink-source", "--haddock-quickjump", *PACKAGES], root)
     for package in PACKAGES:
-        run(["cabal", "haddock", "--haddock-for-hackage", "--haddock-hyperlink-source", "--haddock-quickjump", package], root)
         shutil.copy2(root / "dist-newstyle" / f"{package}-{current}-docs.tar.gz", target)
     hashes = {p.name: file_digest(p) for p in sorted(target.glob("*.tar.gz"))}
     expected = {f"{p}-{current}{suffix}.tar.gz" for p in PACKAGES for suffix in ("", "-docs")}
     if set(hashes) != expected:
         raise RuntimeError("Expected exactly eight source and eight documentation archives")
-    atomic_json(target / "artifacts.json", {"version": current, "source": source_identity(root), "sha256": hashes})
+    if source_identity(root) != source:
+        raise RuntimeError("Candidate changed while building archives; rerun release-artifacts")
+    atomic_json(target / "artifacts.json", {"version": current, "source": source, "sha256": hashes})
     print(f"Prepared sixteen archives and checksums in {target.relative_to(root)}")
 
 
 def check_manifest(path, inputs, root=ROOT):
     manifest = json.loads(path.read_text())
-    if not manifest.get("accepted") or manifest.get("identity") != digest(inputs):
+    if (manifest.get("schema") != SCHEMA or not manifest.get("accepted")
+            or manifest.get("identity") != digest(inputs)):
         raise RuntimeError("Release manifest is not accepted for the current inputs")
     if set(manifest["stages"]) != {"correctness", *GUARDS}:
         raise RuntimeError("Release manifest does not contain all seven stages")
     for stage, reference in manifest["stages"].items():
+        if reference.get("status") != 0:
+            raise RuntimeError(f"Manifest stage is not successful: {stage}")
         receipt_path = root / reference["receipt"]
         if file_digest(receipt_path) != reference["sha256"]:
             raise RuntimeError(f"Receipt checksum changed: {stage}")
