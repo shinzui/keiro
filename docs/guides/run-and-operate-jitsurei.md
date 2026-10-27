@@ -7,11 +7,20 @@ tags: [keiro, jitsurei, operations, runbook]
 generated:
   by: human:nadeem
   at: 2026-08-14T07:37:58Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Run And Operate Jitsurei
 
-From the repository root, build the example package and executable:
+From the repository root, enter the Nix development shell. All commands below
+run inside it, with the project compiler, PostgreSQL, Z3, and verification tools:
+
+```bash
+nix develop
+z3 --version
+```
+
+Build the example package and executable:
 
 ```bash
 cabal build jitsurei:lib:jitsurei jitsurei:exe:jitsurei-demo
@@ -50,8 +59,8 @@ the registration after service migrations have succeeded.
 Production services should not depend on those runtime DDL initializers.
 Instead, run `keiro-migrate` before the application starts, then apply your
 service migrations for application tables such as `jitsurei_order_summary`.
-Keiro owns framework tables like `keiro_snapshots`, `keiro_read_models`, and
-`keiro_timers` in the dedicated `keiro` schema; your service owns its query
+Keiro owns framework tables like `keiro.keiro_snapshots`, `keiro.keiro_read_models`, and
+`keiro.keiro_timers` in the dedicated `keiro` schema; your service owns its query
 tables, indexes, and reporting views in a schema you choose (the example uses
 `jitsurei`) — see
 [Read Models And Projections](../user/read-models-and-projections.md#choosing-your-projection-schema).
@@ -67,7 +76,7 @@ Create or refresh the disposable repository-local database, then point the
 embedded command at it:
 
 ```bash
-just jitsurei-all
+just jitsurei
 export PGHOST="$PWD/db"
 export PGDATABASE=jitsurei
 export PGUSER="$(whoami)"
@@ -202,7 +211,22 @@ cabal test keiro-test
 cabal test jitsurei-test
 ```
 
-Or `just haskell-verify`, which runs the same set plus the diagram check. The
-links from this guide into `jitsurei/` source files are plain repository-relative
-paths; check them by hand when you move or rename a module. They used to be
-verified by the generated docs website, which was removed on 2026-07-23.
+`just haskell-verify` builds the workspace, runs the runtime, operations,
+retention, PGMQ, DSL, and Jitsurei suites, and checks the diagrams.
+`just user-documentation-validate` validates both documentation bundles and
+their graphs. `just verify` adds the repository policy and adoption proofs and
+runs a disposable demo through `scripts/verify-jitsurei.sh`; the interactive
+`JITSUREI_DATABASE` is preserved. Use a fresh `JITSUREI_DATABASE` when rehearsing
+a changed unreleased migration.
+
+For read-only inspection with the embedded hooks, start with:
+
+```bash
+cabal run jitsurei-demo -- ops aggregate types --json
+cabal run jitsurei-demo -- ops pm types --json
+```
+
+Optional transports share the same command handlers. Continue with
+[HTTP serving](serve-keiro-ops-over-http.md),
+[WebSocket feeds](stream-keiro-inspection-views.md), or
+[one-listener composition](compose-runtime-inspection-surfaces.md).

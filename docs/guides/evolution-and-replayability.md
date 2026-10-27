@@ -7,9 +7,13 @@ tags: [keiro, evolution, replay, guide]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:08:09Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Evolution And Replayability
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 This guide is for a developer changing a keiro service that is **already
 deployed** — one whose event log, snapshots, timers, workflow journals, and
@@ -727,7 +731,7 @@ The safe procedure today:
    database. A seeded/full divergence is a failed deploy gate.
 4. Rebuild any read models whose projections depend on the changed fold
    ([Read Models](../user/read-models-and-projections.md)).
-5. If you cannot bump (emergency), delete the affected `keiro_snapshots` rows;
+5. If you cannot bump (emergency), delete the affected `keiro.keiro_snapshots` rows;
    the miss path is benign.
 
 The triple and manual obligation are recorded in
@@ -762,7 +766,7 @@ hand-written fold-body change.
 The event log is not the only place your old shapes live. Each of these
 surfaces outlives a deploy and has its own (often weaker) evolution story:
 
-**Timer payloads (`keiro_timers`).** A process-manager timer carries an opaque
+**Timer payloads (`keiro.keiro_timers`).** A process-manager timer carries an opaque
 JSON payload built at schedule time (`keiro/src/Keiro/Timer/Types.hs`); the
 fire action decodes it — possibly weeks later, under newer code. There is no
 versioning and no upcast hook. A fire decoder that rejects the old shape
@@ -785,9 +789,11 @@ and
 [Failure, retries, and resurrection](durable-workflows.md#failure-retries-and-resurrection).
 The workflow snapshot's fixed sentinel
 shape hash (`keiro.workflow.stepmap.v1`) deliberately does not protect per-step
-types — the step decode is the intended failure point. The safe procedure is
-never to change a journaled result type in place: **rename the step**
-([Durable Workflows](durable-workflows.md#versioning-a-running-workflow-rename-a-step-or-patch)).
+types — the step decode is the intended failure point. Preserve a reader for
+every retained result. A new step name creates a fresh action; it does not
+migrate an old result and can repeat an already-completed side effect. Review
+in-flight instances before making that change
+([Durable Workflows](durable-workflows.md#versioning-a-running-workflow-preserve-a-step-add-a-step-or-patch)).
 Awakeable payloads are journaled step results too (`awk:<uuid>`) and follow the
 same rule.
 
@@ -857,11 +863,13 @@ The safe procedure is contract-first, additive-first:
 ## Evolving workflows
 
 The full treatment is in
-[Durable Workflows](durable-workflows.md#versioning-a-running-workflow-rename-a-step-or-patch);
+[Durable Workflows](durable-workflows.md#versioning-a-running-workflow-preserve-a-step-add-a-step-or-patch);
 the evolution-relevant rules in brief:
 
-- **One step changed:** rename its `StepName`. A renamed step has no journaled
-  history, so it runs fresh. Never change a journaled result type in place
+- **One step changed:** preserve its `StepName` and retained result reader for
+  a source refactor. Use a new name only for an intentional new action, after
+  accounting for in-flight runs and repeated side effects. A rename does not
+  repair an incompatible result codec
   (see [journals above](#persisted-payloads-outside-the-event-log)).
 - **Cross-cutting change:** wrap it in `patch (PatchId "...")` and add the id
   to `activePatches` in the same deploy; in-flight instances keep the old

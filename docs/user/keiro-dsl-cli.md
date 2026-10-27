@@ -7,18 +7,22 @@ tags: [keiro, dsl, cli, reference]
 generated:
   by: anthropic-claude-code/claude-opus-5
   at: 2026-09-28T00:00:00Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Keiro DSL Command Reference
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 This page describes every `keiro-dsl` command and its options. It is part of the [Keiro DSL Reference](keiro-dsl-reference.md), which
 introduces the language, its versions, and source file structure.
 
 ## Command reference
 
-The examples below use Cabal from the Keiro repository. If
-`keiro-dsl/bin` is on `PATH`, replace `cabal run -v0 keiro-dsl --` with
-`keiro-dsl`.
+The examples below use Cabal from the Keiro repository. If the installed
+`keiro-dsl` executable is on `PATH`, replace `cabal run -v0 keiro-dsl --`
+with `keiro-dsl`.
 
 Every command that accepts `FILE` accepts a `.keiro` source, a
 `.keiro-workspace` manifest, or `/dev/stdin`.

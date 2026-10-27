@@ -7,9 +7,13 @@ tags: [keiro, projections, rebuilds, runbook]
 generated:
   by: human:nadeem
   at: 2026-08-14T02:24:56Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Offline Projection Rebuilds
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 Keiro's catalog rebuild is offline for one projection group: it fences that
 group's writers, takes its query models out of service, rebuilds to one captured

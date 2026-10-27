@@ -7,16 +7,17 @@ tags: [keiro, inbox, idempotency, reference]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:05:10Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Idempotent Inbox
 
-The `Keiro.Inbox` module guarantees that a local handler runs **at most
-once** per integration event, even when Kafka redelivers the same
-message. Kafka redelivery is not unusual — it happens on consumer
-crash, rebalance, offset retry, or producer republish from the
-[outbox][outbox] — and an inbox is the receiving side of the same
-at-least-once contract.
+`Keiro.Inbox` commits a handler's transactional SQL together with a durable
+receipt keyed by source and dedupe identity. Retained completed receipts prevent
+that work from committing twice on redelivery. The handler can execute again
+after rollback or a transaction retry; network effects outside PostgreSQL need
+their own idempotency. Kafka can redeliver after a crash, rebalance, offset
+retry, or producer republish from the [outbox][outbox].
 
 [outbox]: ./outbox.md
 
@@ -25,7 +26,7 @@ at-least-once contract.
 `runInboxTransaction` runs in **one Postgres transaction**:
 
 1. Compute the dedupe key from the chosen policy.
-2. Try to insert a new `keiro_inbox` row with `status = 'processing'`.
+2. Try to insert a new `keiro.keiro_inbox` row with `status = 'processing'`.
 3. If the insert succeeded → run the handler, then update the row to
    `completed`, all in this transaction.
 4. If the insert conflicted on `(source, dedupe_key)` → look up the
@@ -71,7 +72,7 @@ collision resistance.
 
 ## Choosing a retention window
 
-The `keiro_inbox` table grows with every received message. Garbage
+The `keiro.keiro_inbox` table grows with every received message. Garbage
 collection removes completed rows older than a retention window:
 
 ```haskell
@@ -82,9 +83,9 @@ deleted <- garbageCollectCompleted (30 * day) now
 The retention window defines the duplicate-detection window: a
 redelivery that arrives *after* a row has been deleted is processed as
 new. Choose a window that exceeds the maximum delivery delay you
-tolerate from the broker — Kafka can hold pending messages on a
-partition for as long as `retention.ms` (default 7 days). 30 days is a
-safe default for most consumers.
+tolerate from the broker, producer replay, retained dead letters, and operator
+redrive. Derive the window from those policies rather than assuming that one
+broker retention setting covers every source of replay.
 
 Failed rows are not deleted by `garbageCollectCompleted`; they remain
 in the table for operator inspection until manually resolved.
@@ -94,7 +95,7 @@ in the table for operator inspection until manually resolved.
 `runInboxDelegated`, `runInboxDelegatedWithRetries`, and
 `runInboxDelegatedBatch` are the no-`Store` alternative for consumers whose
 downstream state transition already records the durable receipt. They compute
-the same dedupe key, pass it to the handler, and write **no** `keiro_inbox`
+the same dedupe key, pass it to the handler, and write **no** `keiro.keiro_inbox`
 row; the handler reports `DelegatedFresh a` or `DelegatedDuplicate`, which map
 to `InboxProcessed` and `InboxDuplicate`. `runInboxDelegatedWithRetries` takes
 a caller-owned `DelegatedRetryContext` (built with `mkDelegatedRetryContext`).
@@ -144,10 +145,12 @@ before changing a producer or consumer shape.
 ## Schema
 
 The inbox table is created by `keiro-migrate` from the native Keiro component's
-embedded `0003-keiro-inbox.sql` migration:
+embedded `0003-keiro-inbox.sql` migration and extended by later migrations.
+This excerpt omits envelope fields; the crash-recovery migration also adds
+`attempt_count` for bounded failure accounting:
 
 ```sql
-CREATE TABLE keiro_inbox (
+CREATE TABLE keiro.keiro_inbox (
   source TEXT NOT NULL,
   dedupe_key TEXT NOT NULL,
   message_id TEXT,
@@ -163,6 +166,7 @@ CREATE TABLE keiro_inbox (
   received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   completed_at TIMESTAMPTZ,
   failed_at TIMESTAMPTZ,
+  attempt_count BIGINT NOT NULL DEFAULT 0,
   last_error TEXT,
   PRIMARY KEY (source, dedupe_key)
 );

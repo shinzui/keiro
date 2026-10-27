@@ -7,6 +7,7 @@ tags: [keiro, read-models, projections, reference]
 generated:
   by: process:codex-cli
   at: 2026-10-11T21:11:39Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Read Models And Projections
@@ -821,7 +822,7 @@ rows remain compatible and unchanged.
 
 ## Initialize Legacy Metadata
 
-The compatibility `keiro_read_models` table — which stores each model's version, shape hash,
+The compatibility `keiro.keiro_read_models` table — which stores each model's version, shape hash,
 status, and build timestamp — is created by `keiro-migrate`; see
 [Database Migrations](migrations.md). Tests get it from the migrated template
 database (the `keiro-test-support` `withMigratedSuite` fixture).
@@ -847,7 +848,7 @@ data QueryCursorAuthority
 `q` is your query input type. `r` is your result type. `schema` is the
 PostgreSQL schema your read-model *data* table lives in (see
 [Choosing Your Projection Schema](#choosing-your-projection-schema)); it is
-entirely separate from Keiro's own `keiro` schema, where the `keiro_read_models`
+entirely separate from Keiro's own `keiro` schema, where the `keiro.keiro_read_models`
 registry lives.
 
 Keiro still does not create your application read-model tables — your migrations
@@ -930,7 +931,7 @@ Store.withStore (keiroConnectionSettings connString "app_reads") $ \store ->
     Store.runTransaction createOrderSummaryTable  -- your qualified CREATE TABLE
 ```
 
-Keiro's own framework metadata (`keiro_read_models`, `keiro_projection_dedup`)
+Keiro's own framework metadata (`keiro.keiro_read_models`, `keiro.keiro_projection_dedup`)
 stays in the `keiro` schema and is unaffected by your choice.
 
 ## Query Freshness
@@ -959,9 +960,11 @@ Use:
 
 `WaitForHead` is a bounded captured-head wait, not a claim of linearizability. The head is
 captured once at query start. A model fed from multiple categories should use an explicit
-position target or an all-stream owner with `EntireVisibleLog`. The current whole-store
-head implementation remains the visible-head seam owned by Plan 238; final tail-GC
-acceptance is gated on that plan.
+position target or an all-stream owner with `EntireVisibleLog`. The whole-store
+head uses Kiroku's public payload-free visible-global-head effect and returns
+zero when no event remains. It is distinct from the authoritative append counter,
+which retains positions after hard deletion. See
+[durable subscription positions](operations.md#durable-subscription-positions).
 
 `PositionWaitOptions`:
 
@@ -978,12 +981,14 @@ Truthful `WaitForPosition` requires `target = Just position`. A missing target r
 `ReadModelMissingCursor`. Catalog construction catches owner-level missing or ambiguous
 cursor capabilities earlier with deterministic validation diagnostics.
 
-### 0.12 compatibility and 0.13 removal
+### Migrating the legacy consistency API
 
-The physical `ReadModel` record and legacy vocabulary remain source-compatible for the
-0.12 migration window. New code should migrate mechanically:
+The physical `ReadModel` record and legacy vocabulary remain in 0.22.0.0
+because the frozen Language 4 read-model generator still emits them. Their
+removal follows retirement of that generator in a later major release, rather
+than the previously proposed 0.13 deadline. New code should migrate mechanically:
 
-| 0.11 API | Exact behavior retained in 0.12 | Truthful replacement |
+| Legacy API | Retained behavior | Current replacement |
 |---|---|---|
 | `Eventual` | Execute immediately. | `Immediate` |
 | `Strong` + `EntireLog` | Capture the visible whole-store head and poll the named cursor. | `WaitForHead EntireVisibleLog` |
@@ -996,12 +1001,12 @@ The physical `ReadModel` record and legacy vocabulary remain source-compatible f
 The exact-behavior column applies to models with real durable cursors. A cursorless model
 built with `NoQueryCursor` fails fast with `ReadModelMissingCursor` through `waitFor` and
 deprecated `Strong` or targeted `PositionWait` overrides, exactly as it does through
-`runQueryWithFreshness`; no 0.11 source can construct the private cursorless
-compatibility representation.
+`runQueryWithFreshness`; old direct record construction always supplies a named
+subscription rather than the private cursorless representation.
 
 `ConsistencyMode`, `StrongScope`, their constructors, `subscriptionName`,
 `defaultConsistency`, `strongScope`, `defaultStrongWaitOptions`, and `runQueryWith` are
-deprecated and scheduled for removal in 0.13. To migrate a direct record, move its
+deprecated and retained until the Language 4 generator retires. To migrate a direct record, move its
 identity/table/query fields into `ReadModelBlueprint`, use `NoQueryCursor` for inline
 models or `DurableQueryCursor subscription` for async models, then choose the builder
 matching the old default. Use `runQueryWithFreshness` for per-call overrides.
@@ -1009,10 +1014,11 @@ matching the old default. Use `runQueryWithFreshness` for per-call overrides.
 ## Querying
 
 ```haskell
-runQuery readModel input
-runQueryWithFreshness freshness readModel input
+runQuery metrics readModel input
+runQueryWithFreshness metrics freshness readModel input
 ```
 
+`metrics` is `Maybe KeiroMetrics`; pass `Nothing` when metrics are disabled.
 Register each model once when its projection starts:
 
 ```haskell

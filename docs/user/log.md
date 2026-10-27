@@ -1,5 +1,10 @@
 # Keiro User Documentation Log
 
+## 2026-10-27
+* **Update**: Align getting started, package availability, core concepts, production status, and the roadmap with the eight-package 0.22.0.0 release and current pre-1.0 language policy.
+* **Update**: Correct command options, application hooks, codec/DSL API mappings, transactional async deduplication, durable checkpoint observations, and manager discovery; qualify current framework table names.
+* **Update**: Document framework/PGMQ migration cutovers, namespace subscription scope, PostgreSQL verification baseline and UUIDv7 fallback, and Nix-shell verification commands; refresh navigation to HTTP, feeds, and composition.
+
 ## 2026-10-26
 * **Update**: Document candidate structural enum equality, binding qualification, and adapter-release adoption (Plan 322).
 

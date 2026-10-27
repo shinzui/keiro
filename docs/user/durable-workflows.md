@@ -7,10 +7,13 @@ tags: [keiro, workflows, durability, reference]
 generated:
   by: human:nadeem
   at: 2026-08-14T15:06:34Z
-timestamp: 2026-10-25T04:48:05Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Durable Workflows
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 Durable workflows let you write a long-running, multi-step process as an ordinary
 imperative function whose **named** checkpoints are journaled, so it can pause —
@@ -85,7 +88,7 @@ cancelChild     :: (IOE :> es, Store :> es) => ChildHandle a -> Eff es Bool
   is durable, replay returns it without re-running the action. A crash after an
   external effect succeeds but before the journal append commits runs the action
   again, so step effects are at-least-once and must be idempotent.
-- `sleepNamed name delta` arms a `keiro_timers` row and suspends; the timer
+- `sleepNamed name delta` arms a `keiro.keiro_timers` row and suspends; the timer
   worker's fire appends a `sleep:<name>` completion. `sleep delta` is the ordinal
   convenience form. Drain workflow-sleep timers with `runWorkflowTimerWorker`.
 - `awakeableNamed name` allocates an opaque, random `AwakeableId`, journals it
@@ -121,10 +124,11 @@ newtype PatchId = PatchId { unPatchId :: Text }
   an instance that is fresh at this point (run the new logic), `False` for one
   already in flight when the patch shipped (keep the old logic). The decision is
   journaled once under `patch:<pid>` and replayed verbatim forever. This is an
-  escape hatch for changes that cross-cut multiple steps; for a single-step
-  change, **rename the step** instead (a renamed `StepName` has no journaled
-  history, so its action runs fresh) rather than reaching for `patch`. Never
-  reuse a retired `PatchId`.
+  escape hatch for changes that cross-cut multiple steps. Preserve a retained
+  step's name and result reader for source refactors. A new `StepName` creates
+  a fresh action, so use it only when repeating that action for in-flight runs
+  is intentional and safe. Renaming does not migrate an incompatible recorded
+  result. Never reuse a retired `PatchId`.
 
 Changing a journaled step-result type in place makes resume fail. See
 [Deploy Ordering](deploy-ordering.md#8-treat-workflow-step-results-as-permanent)
@@ -151,9 +155,9 @@ opaque allocation; `awk:<uuid>` holds its resolved payload. The `patch` decision
 (EP-49) is likewise a `StepRecorded` under the `patch:` prefix, and
 `continueAsNew` (EP-48) adds the one terminal `WorkflowContinuedAsNew` rotation
 marker. The runtime keeps two tables in the `keiro` schema:
-`keiro_workflow_steps` (the step-lookup index that backs replay and
-unfinished-workflow discovery) and `keiro_awakeables` (pending external
-completions); child links live in `keiro_workflow_children`.
+`keiro.keiro_workflow_steps` (the step-lookup index that backs replay and
+unfinished-workflow discovery) and `keiro.keiro_awakeables` (pending external
+completions); child links live in `keiro.keiro_workflow_children`.
 
 ## The resume worker
 
@@ -168,7 +172,7 @@ defaultWorkflowResumeOptions :: WorkflowResumeOptions
 ```
 
 `resumeWorkflowsOnce` discovers workflows with progress to make — one index
-query over `keiro_workflows` returning instances that are `running`, or
+query over `keiro.keiro_workflows` returning instances that are `running`, or
 `suspended` with a due wake hint — and re-invokes each through its registered
 `WorkflowDef`, short-circuiting journaled steps. Discovery is *exact*: a
 workflow parked on an unresolved awakeable, child, or future-dated sleep is
@@ -217,7 +221,7 @@ you on its own. A custom wake source owes four things:
 4. **An instance-row write on every lifecycle transition**, in the transaction
    that performs it. Delivering through `appendJournalEntry` does this for you.
    A transition that appends nothing — abandoning a pending wake, as
-   `cancelAwakeable` does — must write `keiro_workflows` itself, or the workflow
+   `cancelAwakeable` does — must write `keiro.keiro_workflows` itself, or the workflow
    is never re-examined and never observes the abandonment.
    ([ADR 23](../adr/0023-workflow-discovery-is-exact-and-the-instance-row-is-the-complete-wake-ledger.md))
 

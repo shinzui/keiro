@@ -7,9 +7,13 @@ tags: [keiro, dsl, workspaces, scaffold, reference]
 generated:
   by: anthropic-claude-code/claude-opus-5
   at: 2026-10-13T23:30:33Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Keiro DSL Workspaces and Generated Code
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 This page covers multi-file service workspaces, the conformance package
 generated for each service, and which scaffolded files Keiro owns versus the
@@ -122,6 +126,27 @@ Scaffolding has two ownership classes:
 Never edit a generated module. Change the specification and scaffold again.
 If generated code does not represent the checked declaration faithfully, that
 is a toolchain defect rather than an invitation to patch the output.
+
+### Regenerating with the 0.22 toolchain
+
+Preserve the service's selected language, naming edition, output root, runtime
+package, and workspace options. Re-scaffold machine-owned output, reconcile the
+Cabal fragment, and compile all create-once modules without overwriting their
+bodies. Run the generated service conformance target against retained evidence.
+
+An upgrade from before 0.21 regenerates every aggregate `BehaviorContract.hs`,
+including aggregates without hole-owned initial edges. Services with live
+hole-owned initial transitions also need history-backed behavior witnesses.
+Names containing reserved word segments use whole-name boundaries, such as
+`jobType…` rather than `jobtype…`; update affected create-once query bindings
+and imports manually. The 0.22 structural-enum equality path adds declaration-
+specific fold evidence only where used, and literal-guard harnesses select
+fixtures by canonical key rather than declaration order.
+
+The [DSL changelog](../../keiro-dsl/CHANGELOG.md) and
+[upgrade edges](../../blueprints/keiro-upgrade/README.md) carry the complete
+source API changes. Updating the package does not promote a Language 5 service
+to candidate Language 6 or approve a retained-history migration.
 
 ### Generated Haskell imports
 

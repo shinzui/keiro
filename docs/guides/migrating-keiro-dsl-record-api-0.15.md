@@ -7,13 +7,16 @@ tags: [keiro, dsl, record-api, migration]
 generated:
   by: human:nadeem
   at: 2026-08-23T19:54:01Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Migrating to the keiro-dsl 0.15 record API
 
-The next PVP-breaking `keiro-dsl` release removes package-authored product
-selector functions and replaces owner-prefixed record labels with concise semantic
-labels. It does not change `.keiro` syntax, parsed meaning, JSON or wire keys,
+This historical migration covers `keiro-dsl` 0.14 → 0.15. The 0.15 release
+removed package-authored product selector functions and replaced owner-prefixed
+record labels with concise semantic labels. These conventions still apply in
+0.22.0.0; follow the [upgrade blueprint](../../blueprints/keiro-upgrade/README.md)
+for the additional changes in intervening releases. It does not change `.keiro` syntax, parsed meaning, JSON or wire keys,
 diagnostics, fingerprints, or runtime behavior.
 
 The exhaustive current-to-target map is the checked

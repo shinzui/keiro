@@ -7,9 +7,13 @@ tags: [keiro, pgmq, work-queues, tutorial]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:05:47Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Work Queues
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 An order ships. Somewhere, a customer needs to hear about it. That work does not
 belong in the command transaction — it is slow, it talks to a third party, and
@@ -178,8 +182,11 @@ the absolute head of each group: a failed, invisible, or delayed head blocks its
 own successors, while distinct group heads can be claimed together and remain
 independently eligible. Keiro's current handlers are serial, so this does not
 promise parallel execution. Ordering is not deduplication — delivery is still
-at-least-once. `FifoHeads` needs `shibuya-pgmq-adapter ^>=0.16` and a PGMQ
-server at 1.12 or later.
+at-least-once. Grouped-head reads require a PGMQ server at 1.12 or later.
+The current Keiro cohort uses adapter `^>=0.18.0.0` and the PGMQ 0.7 Haskell
+family; see the [queue runtime and migration cohort](../user/work-queues.md#runtime-and-migration-cohort).
+Apply PGMQ migration 0007 before traffic and retain polling for partitioned
+queues, which no longer emit insert notifications.
 
 Grouped reads match against a GIN index on the queue's `headers` column, so
 ordered queues must be provisioned with it. That is what `ensureOrderedJobQueue`

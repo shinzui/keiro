@@ -7,9 +7,13 @@ tags: [keiro, brownfield, migration, transducers]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:08:09Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Brownfield Migration And Transducer Modeling
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 This guide is for a team moving an existing service onto Keiro when production
 history, wire shapes, and downstream readers already exist. It assumes the team
@@ -262,7 +266,7 @@ is complete. GHC and the generated harness remain the enforcement boundaries.
 
 Under Language 5 a brownfield type that nests a domain ID or enum inside a
 record had to either flatten it to `Text`/`typeid` or declare a `mapped opaque`
-twin. Candidate Language 6 (`language keiro-dsl 6`; not yet published) lets an
+twin. Candidate Language 6 (`language keiro-dsl 6`; shipped in the toolchain, without a stable language contract) lets an
 existing `id`, `enum`, or `mapped nominal` declaration appear as a leaf in
 structural records, unions, containers, typed workqueue fields, and read-model
 query inputs/results, keyed maps as `Map[DeclaredId] Value`, and contract event

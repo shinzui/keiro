@@ -7,12 +7,18 @@ tags: [keiro, guides, navigation]
 generated:
   by: process:codex-cli
   at: 2026-10-12T03:53:45Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Keiro Guides
 
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
+
 These guides teach Keiro through `jitsurei`, a sibling Cabal package in this
-repository. The package is not pseudocode: it builds as part of this workspace,
+repository. These guides target the 0.22.0.0 package set; historical migration
+guides identify their original source and target versions. The example package
+builds as part of this workspace,
 and `cabal test jitsurei-test` exercises the behavior described here.
 
 Start with the overview, then follow the path that matches the part of Keiro you
@@ -101,6 +107,12 @@ are adopting:
 - [Run And Operate Jitsurei](run-and-operate-jitsurei.md) collects build,
   migration, catalog rebuild rehearsal, embedded operator, and
   production-readiness commands.
+- [Serve Keiro Ops Over HTTP](serve-keiro-ops-over-http.md) mounts bounded
+  inspection and confirmed mutations with an inspection-owned pool.
+- [Stream Keiro Inspection Views](stream-keiro-inspection-views.md) adds shared
+  first-page WebSocket feeds and paired poll recovery.
+- [Compose Runtime Inspection Surfaces](compose-runtime-inspection-surfaces.md)
+  mounts allocated owner applications under stable prefixes on one listener.
 - [Dead Letters And Replay](../user/dead-letters.md) is the operator reference
   for rejected dispatches and subscription replay.
 - [Integration Events With Kafka](integration-events-with-kafka.md) describes

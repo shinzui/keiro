@@ -7,9 +7,13 @@ tags: [keiro, projections, rebuilds, runbook]
 generated:
   by: human:nadeem
   at: 2026-08-14T08:55:48Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Online Schema-Versioned Projection Rebuilds
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 Use an online rebuild when a projection group must change schema without exposing an
 empty or partially replayed table. Keiro provisions a candidate generation beside the

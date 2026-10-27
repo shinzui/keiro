@@ -7,12 +7,18 @@ tags: [keiro, navigation, user-guide]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:06:27Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Keiro User Guide
 
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
+
 Keiro is a Haskell library for building Postgres-backed event-sourced
-applications. It gives application code a typed event-stream contract, command
+applications and durable workflows. The eight published Keiro packages share
+the 0.22.0.0 release; `jitsurei` is the repository's executable example.
+Keiro gives application code a typed event-stream contract, command
 execution with optimistic concurrency, optional snapshots, read-model helpers,
 process managers, routers, durable timers, a transactional outbox and idempotent
 inbox for cross-context integration events, and OpenTelemetry tracing.
@@ -96,9 +102,12 @@ pieces those modules import.
   codec, queue, decide, timer, integration, and workflow changes.
 - [Operations](operations.md): database requirements, schema initialization,
   workers, catalog-backed rebuild commands, retries, idempotency, and the
-  production checklist.
-- [Roadmap](roadmap.md): capability matrix, v1.x workflow substrate, read-side
-  maturity work, adoption milestones, and the v2 durable-execution direction.
+  production checklist. Optional transports have dedicated guides for
+  [HTTP serving](../guides/serve-keiro-ops-over-http.md),
+  [WebSocket feeds](../guides/stream-keiro-inspection-views.md), and
+  [one-listener composition](../guides/compose-runtime-inspection-surfaces.md).
+- [Roadmap](roadmap.md): the 0.22 capability matrix, remaining runtime and
+  adoption work, and the pre-1.0 language retirement policy.
 - [API Reference](api-reference.md): module-by-module public surface.
 - [Production Status](production-status.md): what is production-shaped today and
   what remains intentionally deferred.
@@ -110,9 +119,9 @@ For a complete, guide-backed example, start with
 package as their source of truth and can be verified with
 `cabal test jitsurei-test`.
 
-## Current v1 scope
+## Current release scope
 
-The v1 library includes:
+The current package set includes:
 
 - typed stream names through `Keiro.Stream`;
 - event codecs, schema-version metadata, event type validation, and upcasters
@@ -142,8 +151,11 @@ The v1 library includes:
 - the pre-deploy real-log replay gate through `Keiro.ReplayAudit`;
 - Postgres-native work queues through the `keiro-pgmq` package (see
   [Work Queues](work-queues.md));
+- bounded application-owned aggregate and manager inspection, workflow pages,
+  pending timers, shard observations, and projection-status pages through
+  `keiro-ops`, with optional HTTP and shared feeds through `keiro-ops-http`;
 - OpenTelemetry command/producer/consumer spans and opt-in worker metrics
-  through `Keiro.Telemetry`.
+  through `Keiro.Telemetry`;
 - checked `.keiro` specifications, structural/opaque consumer-owned mappings,
   generated binding/codec conformance, safe scaffolding, compatibility-vector
   diffs, historical codec comparison, and supported-root coverage reporting

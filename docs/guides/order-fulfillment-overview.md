@@ -7,9 +7,13 @@ tags: [keiro, jitsurei, order-fulfillment, tutorial]
 generated:
   by: process:codex-cli
   at: 2026-10-11T21:11:39Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Order Fulfillment Overview
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 The worked example deliberately demonstrates an atomic inline order summary.
 For a new application, default query models to asynchronous delivery and use
@@ -80,6 +84,7 @@ Run the example tests from the repository root:
 cabal test jitsurei-test
 ```
 
-You should see twenty-five examples pass. If a guide claim is not backed by one of
-those tests or by a linked `jitsurei/src/` module, treat that as a documentation
-bug.
+The suite covers the command path, coordinated and versioned catalog rebuilds,
+repair/resume, dispatch, timers, snapshots, and durable workflows. If a guide
+claim is not backed by a test or a linked `jitsurei/src/` module, treat that as a
+documentation bug.

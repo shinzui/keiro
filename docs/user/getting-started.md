@@ -7,6 +7,7 @@ tags: [keiro, getting-started, tutorial]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:06:27Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Getting Started
@@ -19,25 +20,31 @@ runtime.
 
 You need:
 
-- GHC 9.12.x.
-- PostgreSQL 18 or newer. Kiroku's schema uses `uuidv7()`.
+- GHC 9.12.4, as supplied by the repository Nix shell.
+- PostgreSQL 18 for this checkout's test and expected-schema baseline. Kiroku
+  also supplies `kiroku.uuidv7()` on PostgreSQL 17; the UUID generator alone
+  does not impose an 18-only requirement. See [Database Requirements](operations.md#database-requirements).
 - Kiroku and Keiro schemas applied in the target database. For production, run
   `keiro-migrate`; see [Database Migrations](migrations.md).
 - Application code that runs `Effectful` with Kiroku's `Store` effect and
   `Error StoreError` where command execution can fail.
 
 Keiro and its Keiki and Kiroku dependencies are published on Hackage. Depend
-on the released packages that share one version:
+on the Keiro packages from one coordinated release (currently 0.22.0.0).
+Keiki and Kiroku have their own version series:
 
 ```cabal
 build-depends:
-  keiro-core ^>=0.17.0.0,
-  keiro ^>=0.17.0.0,
-  keiro-migrations ^>=0.17.0.0
+  keiro-core ^>=0.22.0.0,
+  keiro ^>=0.22.0.0,
+  keiro-migrations ^>=0.22.0.0
 ```
 
-Add `keiro-pgmq ^>=0.17.0.0` for work queues and `keiro-dsl ^>=0.17.0.0` for
-the typed-spec toolchain.
+Add `keiro-pgmq ^>=0.22.0.0` for work queues and `keiro-dsl ^>=0.22.0.0` for
+the typed-spec toolchain. `keiro-ops`, `keiro-ops-http`, and
+`keiro-test-support` are published at the same Keiro version; add the ones your
+application uses. Language 5 remains the stable DSL contract; Language 6 is
+available in this release as a candidate.
 
 ## Add Keiro To An Application
 
@@ -64,8 +71,11 @@ import Keiro.Timer
 prevents accidental stream mixups at compile time.
 
 ```haskell
+orderCategory :: StreamCategory OrderEventStream
+orderCategory = categoryUnsafe "order"
+
 orderStream :: Stream OrderEventStream
-orderStream = stream "order-123"
+orderStream = entityStream orderCategory "123"
 ```
 
 For ordinary aggregates, the type parameter is usually the aggregate's
@@ -140,7 +150,7 @@ submitOrder orderId command =
   runCommand
     defaultRunCommandOptions
     orderEventStream
-    (stream ("order-" <> orderId))
+    (entityStream orderCategory orderId)
     command
 ```
 
@@ -168,8 +178,13 @@ fixture.
 From the Keiro repository:
 
 ```bash
-cabal build all
-cabal test keiro-test
+nix develop -c z3 --version
+nix develop -c cabal build all --enable-tests --enable-benchmarks
+nix develop -c cabal test keiro-test jitsurei-test --test-show-details=direct
+nix develop -c just user-documentation-validate
 ```
 
-`keiro-test` exercises the core paths against an ephemeral PostgreSQL database.
+`keiro-test` and `jitsurei-test` exercise the core paths and worked examples
+against ephemeral PostgreSQL databases. For all DSL suites use
+`nix develop -c cabal test keiro-dsl:tests`; the `:tests` target includes every
+conformance suite. The full repository gate is `nix develop -c just verify`.

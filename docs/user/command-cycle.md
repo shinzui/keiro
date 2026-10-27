@@ -7,6 +7,7 @@ tags: [keiro, commands, concurrency, idempotency]
 generated:
   by: process:codex-cli
   at: 2026-10-11T21:11:39Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Command Cycle
@@ -63,8 +64,10 @@ data RunCommandOptions = RunCommandOptions
   , metrics :: Maybe KeiroMetrics
   , verifyReplayOnAppend :: Bool
   , seedVerifySampleRate :: Int
+  , seedVerifyInFlightLimit :: Int
   , tracer :: Maybe Tracer
   , metadata :: Maybe Value
+  , inspectionProvenance :: InspectionProvenancePolicy
   }
 ```
 
@@ -85,7 +88,9 @@ codec always adds the `schemaVersion` key, and these keys are merged on top.
 - post-append replay verification enabled;
 - one asynchronous snapshot-seed verification per 1000 snapshot hits;
 - no `tracer` (no spans emitted);
-- no `metadata`.
+- no `metadata`;
+- `seedVerifyInFlightLimit = 1`;
+- `inspectionProvenance = NoInspectionProvenance`.
 
 `verifyReplayOnAppend` witnesses a bad just-committed batch immediately by
 replaying it from the pre-command state. Because the append has committed, a
@@ -100,6 +105,12 @@ thread and compares canonical encoded `(state, registers)`. A mismatch emits
 `keiro.snapshot.seed.divergence` and a structured log containing the stream,
 seed version, and both SHA-256 digests. It never blocks the command and never
 writes a snapshot. Set the rate to `1` to verify every hit or `0` to disable it.
+
+Construct options by updating `defaultRunCommandOptions`.
+`seedVerifyInFlightLimit` caps concurrent sampled verification per process; zero
+removes that cap. `inspectionProvenance` is an explicit opt-in for bounded legacy
+process-manager evidence, not a requirement for command execution. See
+[manager inspection](process-managers-and-timers.md#inspecting-process-managers).
 
 ## Running A Command
 

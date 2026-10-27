@@ -7,25 +7,27 @@ tags: [keiro, production, maturity, reference]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:06:27Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Production Status
 
-Keiro v1 is production-shaped for controlled early use. It is not yet a
+Keiro 0.22.0.0 is production-shaped for controlled early use. It is not yet a
 turnkey, externally polished framework.
 
 ## Availability
 
-The five published packages — `keiro-core`, `keiro`, `keiro-pgmq`,
-`keiro-migrations`, and `keiro-dsl` — are on Hackage and share one version.
-They are released together, each with its own git tag. `keiro-test-support` and
-`jitsurei` are internal and are not published.
+The eight published packages — `keiro-core`, `keiro`, `keiro-pgmq`,
+`keiro-migrations`, `keiro-dsl`, `keiro-ops`, `keiro-ops-http`, and
+`keiro-test-support` — are on Hackage at 0.22.0.0. They are released together,
+each with its own git tag. `jitsurei` is the internal worked-example package.
+See [Getting Started](getting-started.md) for dependencies and
+[Deploy Ordering](deploy-ordering.md) before upgrading.
 
-Every library and executable dependency carries a PVP upper bound, so a
-breaking upstream release cannot silently enter your build plan. The corollary
-is that upper bounds may lag a dependency you already run; a Hackage metadata
-revision, not a new release, is the normal fix. Test-suite-only dependencies
-are deliberately left open — they do not affect consumers.
+Library, executable, and test-suite dependency bounds are declared in the Cabal
+files. Keep consumers on one Keiro cohort and review upstream release notes
+before changing bounds. A tested metadata revision can widen compatibility;
+source or behavior changes require a package release.
 
 ## What Is Implemented
 
@@ -63,9 +65,15 @@ Grouped by functionality. Unless noted, everything below lives in `keiro` and
 
 - same-transaction SQL continuations for inline projections;
 - read-model metadata, consistency modes, and position waits;
-- explicitly registered read models; atomically fenced rebuilds; category-scoped
-  strong reads; and async projection outcomes that prevent checkpointing fenced
-  events.
+- validated catalogs with explicit target ownership and query suppliers;
+- registered read models, independent delivery/freshness contracts, and bounded
+  post-commit position waits;
+- coordinated fixed-head offline rebuilds, schema-versioned online rebuilds,
+  resume, atomic cutover, and stream-scoped repair;
+- managed append/projection fences and guarded catalog preconditions that roll
+  back refused appends;
+- transactional async dedup receipts, with outcomes that prevent checkpointing
+  fenced events.
 
 ### Coordination
 
@@ -126,6 +134,9 @@ Grouped by functionality. Unless noted, everything below lives in `keiro` and
   sub-second wakeups for the resume worker and subscription loops over kiroku's
   existing per-store notifier, with a durable poll fallback and no new
   connections;
+- category-namespace subscriptions through the released
+  [Kiroku Store](mori://shinzui/kiroku/packages/kiroku-store) 0.12 cohort;
+  Keiro catalog/DSL sources remain all-stream or exact-category declarations;
 - consumer-group sharding for category subscriptions (`Keiro.Subscription.Shard`,
   `runShardedSubscriptionGroup`): a pool of identical workers leases kiroku
   consumer-group buckets to drain a high-volume category disjointly, with
@@ -145,6 +156,10 @@ Grouped by functionality. Unless noted, everything below lives in `keiro` and
   handshake, preview/`--force` mutations, stable JSON, and application hooks for
   bounded workflow resume, timer drain, candidate-code replay audit, and typed
   catalog rebuilds;
+- application-owned aggregate/manager catalogs, bounded workflow/timer/projection
+  pages, pure `pm types` discovery, and database-clock shard observations;
+- optional `keiro-ops-http` HTTP operations, shared first-page WebSocket feeds,
+  and stable-prefix composition using the same owner reads and command handlers;
 - the `keiro-dsl` typed-spec toolchain across aggregates, process managers,
   routers, integration, queues, read models, and durable workflows, including
   structural/opaque consumer mappings, total bindings, generated private-event
@@ -152,9 +167,11 @@ Grouped by functionality. Unless noted, everything below lives in `keiro` and
   finite historical codec comparison, and supported-root coverage reports.
   Language 5 is the published stable contract; Language 6 (process
   reactions, delegated intake, `ordering fifo-heads`, nominal structural
-  leaves, keyed maps, and checked value mappings) is a candidate, not yet a
-  compatibility contract. Languages 1 through 4 are deprecated and scheduled
-  for removal.
+  leaves, keyed maps, checked values, contract lists, mapped-register
+  construction, and structural enum equality) ships as a candidate, not a stable
+  compatibility contract. Languages 1–4 are deprecated today; Languages 1–5 and
+  legacy positional managers are scheduled to retire before 1.0 under
+  [ADR 49](../adr/0049-language-6-is-the-sole-pre-1-0-coverage-and-data-support-baseline.md).
 
 The repository test suite exercises these paths against an ephemeral PostgreSQL
 database.
@@ -176,21 +193,28 @@ Keiro is a reasonable fit when:
 Keiro is not yet a good fit when:
 
 - you need a stable public API for third-party consumers;
-- you need exactly-once async projections without user-side idempotency;
+- you need atomic subscription checkpoint advancement with projection SQL;
 - you need positional-history durable execution (Temporal-style step identity
   derived from call order) — Keiro's runtime uses **named** steps that are stable
   across source reordering, by design;
 - you need built-in schema migration tooling for user read models;
-- you need a complete sample application and extensive Haddocks before adoption;
-- your deployment cannot run PostgreSQL 18+.
+- you need complete public Haddocks and a stable third-party API before adoption.
+
+The repository verification and schema-inspection baseline is PostgreSQL 18.
+Kiroku also supplies UUIDv7 support on PostgreSQL 17; see
+[Database Requirements](operations.md#database-requirements) before selecting
+a different full-stack server baseline.
 
 ## Known v1 Limits
 
 ### Async projections are at-least-once
 
-The current Shibuya/Kiroku subscription boundary does not combine user SQL and
-checkpoint advancement in one transaction. Async projection handlers must be
-idempotent.
+The subscription boundary does not combine user SQL and checkpoint advancement
+in one transaction. Keiro does commit a projection's dedup receipt and handler
+SQL together, suppressing duplicate application while that receipt is retained.
+A crash can still repeat delivery; pruned receipts no longer protect older
+events. Keep handler SQL idempotent where practical and size receipt retention
+against redelivery and rebuild windows.
 
 Inline projections can be transactional with the command append.
 
@@ -202,7 +226,8 @@ crash-recovery resume worker, and journal snapshots. Step identity is by **name*
 not call-order position, so it is stable across source reordering. Continue-as-new
 journal rotation (`continueAsNew`/`restoreSeed`) keeps unbounded histories bounded,
 and the `patch` API gives stable, journaled branch decisions for cross-cutting
-workflow-logic changes (prefer renaming a step for single-step changes). One sharp
+workflow-logic changes. Preserve names/codecs for retained steps; a new name
+creates a new action and needs an explicit in-flight rollout policy. One sharp
 edge to plan for: rotating with `continueAsNew` abandons any awakeable id already
 handed to an external system, because the next generation re-runs the allocation
 step and hands out a fresh id — re-notify the holder from that step. V1 process
@@ -233,10 +258,11 @@ runtime primitives directly. `keiro-ops` now provides the supported operational
 facade. The DSL provides generated aggregate authoring over the transducer
 contract; a Decider-style facade was declined (see
 [plan 7](../plans/7-internal-decider-style-ergonomic-facade-over-runcommand.md)).
-Durable subscription checkpoint inventory is still waiting on the
-owning Kiroku API tracked by
-`mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2`; Keiro does not
-query Kiroku's private subscription tables as a workaround.
+Durable checkpoint inventory is implemented through Kiroku's public
+`subscriptionCheckpointInventory`; `stream subscriptions` and
+`projection position` expose it. Position distance uses the separately observed
+visible head and is not a relevant-event backlog count. See
+[Operations](operations.md#durable-subscription-positions).
 
 ### Migration ownership is split
 
@@ -260,5 +286,5 @@ Use Keiro v1 in production only with explicit guardrails:
   milestone.
 
 For an internal system with those controls, the core paths are ready to trial.
-For broad external adoption, the library needs more examples, Haddocks, release
-discipline, and the remaining v1.x ergonomics.
+Broader external adoption still needs stronger API stability guarantees,
+broader Haddock coverage, and consumer-specific operational qualification.

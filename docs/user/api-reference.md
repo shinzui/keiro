@@ -1,7 +1,7 @@
 ---
 type: Reference
 title: API Reference
-timestamp: 2026-10-25T05:14:38Z
+timestamp: 2026-10-27T21:15:00Z
 description: Map Keiro's public modules and their user-facing interfaces.
 docId: DOC-2
 tags: [keiro, api, modules, reference]
@@ -43,7 +43,7 @@ Types and functions:
 - `stream`
 - `streamName`
 - `mapStreamName`
-- `StreamCategory (..)`, `CategoryError (..)`, `category`, `categoryUnsafe`,
+- `StreamCategory`, `CategoryError (..)`, `category`, `categoryUnsafe`,
   `categoryName`, `categoryText`
 - `StreamIdSegment (..)`, `entityStream`, `entityStreamId`
 
@@ -104,6 +104,26 @@ names/order, arity, and field types match exactly. Any mismatch is a compile
 error directing the author to fill the create-once binding skeleton instead.
 The derivation constructs/destructs values only; it cannot change keys, tags,
 presence, nullability, or defaults.
+
+## Nominal, refined, and checked-value codecs
+
+The `keiro-core` package also exposes:
+
+- `Keiro.Codec.Nominal`: `NominalBinding`, labelled fixture cases, and domain/
+  representation round-trip laws for total consumer-owned nominal bindings.
+- `Keiro.Codec.IdDomain`: versioned `IdDomainContract` values, `IdAdmission`,
+  and canonical TypeID validation. V7-only and V5-or-V7 admission are distinct
+  declaration contracts; admission does not select a generator.
+- `Keiro.Codec.CalendarDay`: the frozen calendar-day JSON policy, historical
+  and canonical text readers, and canonical rendering.
+- `Keiro.Codec.TextSet`: array decoding with set normalization and canonical
+  unique Unicode code-point-ordered writes.
+- `Keiro.Codec.Base16Bytes` and `Keiro.Codec.Refined`: checked base16 parsing
+  and canonical lowercase encoding without losing empty values or leading zeroes.
+
+Use the declared generated codec policy for persisted mappings. A finite fixture
+corpus supplies evidence for binding laws; it does not prove them universally.
+See [Types and Mappings](keiro-dsl-types-and-mappings.md).
 
 ## `Keiro.EventStream`
 
@@ -191,7 +211,7 @@ Types and functions:
 - `DomainCommandHandler (..)`
 - `CommandError (..)`
 - `HydrationReplayReason (..)`
-- `RunCommandOptions (..)`
+- `RunCommandOptions (..)`, `InspectionProvenancePolicy (..)`
 - `defaultRunCommandOptions`
 - `runCommand`
 - `runDomainCommand`
@@ -205,7 +225,8 @@ Types and functions:
 - `DomainSqlCommandOutcome (..)`,
   `runDomainCommandWithSqlEventsControlled`
 - `commandErrorClass`
-- `Hydrated (..)`, `hydrate`, `hydrateFull`, `hydrateSeeded`
+- `Hydrated (..)`, `hydrate`, `hydrateFull`, `hydrateSeeded`, `hydrateWithSource`
+- `HydrationSource (..)`, `FullReplayReason (..)`, `inspectionRunCommandOptions`
 
 The `hydrate*` helpers expose the read-only half of the cycle (rebuild
 `(state, registers)` at a version) for tooling and diagnostics; `commandErrorClass`
@@ -213,7 +234,9 @@ maps a `CommandError` onto a stable class string for metrics and logs.
 
 Use it for the canonical load, streaming replay, decide, append command cycle.
 Commands may append zero, one, or many produced events as one store batch.
-All three runners require `ValidatedEventStream` as their stream argument.
+Command runners require `ValidatedEventStream` as their stream argument.
+Read-only hydration helpers take the raw `EventStream`; use `unvalidated` to
+inspect an already-validated definition.
 Transactional runners also require `KirokuStoreResource` so Kiroku's configured
 event enrichment runs before append preparation.
 
@@ -256,7 +279,7 @@ Types and functions:
 - `lookupSnapshot`
 - `writeSnapshotRow`
 
-Use it for operational tooling. The `keiro_snapshots` table is created by
+Use it for operational tooling. The `keiro.keiro_snapshots` table is created by
 `keiro-migrate`; see [Database Migrations](migrations.md).
 
 ## `Keiro.Projection`
@@ -273,10 +296,14 @@ Types and functions:
 - `runDomainCommandWithProjections`
 - `runCommandWithCatalogProjections`
 - `runDomainCommandWithCatalogProjections`
+- `GuardedCatalogOutcome (..)`, `CatalogPreconditionContext`,
+  `ProjectionWriteBinding (..)`, `catalogPreconditionBindings`,
+  `runDomainCommandWithCatalogProjectionsGuarded`
 - `applyAsyncProjection`
 - `applyAsyncProjectionFromCatalog`
 - `applyAsyncProjectionUnfenced`
-- `pruneAsyncProjectionDedupBefore`
+- `pruneAsyncProjectionDedupBefore`, `countAsyncProjectionDedupForBefore`,
+  `pruneAsyncProjectionDedupForBefore`
 - `recordProjectionGlobalPositionDistance`
 - `recordProjectionLag` (deprecated compatibility alias)
 
@@ -296,7 +323,10 @@ append lock interval and can slow unrelated writers.
 
 The domain-aware inline runners apply only accepted event pairs. Typed
 rejection/no-op returns its `DomainCommandOutcome` without invoking projection
-SQL. A catalog fence after an accepted append is represented separately because
+SQL. The guarded catalog runner additionally permits a relational refusal
+through `PreconditionRefused`; the append and all transaction-local work roll
+back. See [Guarded Catalog Commands](../guides/guarded-catalog-commands.md).
+A catalog fence after an accepted append is represented separately because
 the condemned transaction has no durable command outcome.
 
 ## `Keiro.Projection.Catalog`
@@ -440,7 +470,8 @@ Types and functions:
 - `categoryHeadPosition`
 - re-exports from `Keiro.ReadModel.Schema`.
 
-Deprecated 0.12 compatibility, scheduled for removal in 0.13:
+Deprecated compatibility retained for the frozen Language 4 generator; it
+retires with that generator in a later major release:
 
 - `ConsistencyMode (..)`
 - `StrongScope (..)`
@@ -502,8 +533,7 @@ Types and functions:
   `RebuildVerificationProgress`
 - `StreamReprojectionRequest`, `StreamReprojectionError`, and
   `StreamReprojectionReport`
-- `validateStreamReprojectionAdmission`
-- `reprojectStream` and `reprojectStreamTx`
+- `reprojectStream`
 - `startCatalogRebuild`
 - `resumeCatalogRebuild`
 - `inspectCatalogRebuild`
@@ -824,8 +854,8 @@ modules directly, the same way you import `Keiro.Timer` or `Keiro.Outbox`.
   `gcWorkflowsOnce`, `runWorkflowGcWorker`: the operator-scheduled retention
   sweep over terminal instances.
 - `Keiro.Workflow.Schema`, `.Awakeable.Schema`, `.Child.Schema` — the SQL layer
-  over `keiro_workflows`, `keiro_workflow_steps`, `keiro_awakeables`, and
-  `keiro_workflow_children`, for operational tooling.
+  over `keiro.keiro_workflows`, `keiro.keiro_workflow_steps`, `keiro.keiro_awakeables`, and
+  `keiro.keiro_workflow_children`, for operational tooling.
 
 Use it for long-running processes that read as one function with in-line waits.
 See [Durable Workflows](durable-workflows.md) for the authoring surface and the
@@ -857,7 +887,7 @@ Types and functions:
 - `resizeShardCount`, `resizeShardCountTx`, `ShardCountResizeReport (..)`
 - `ShardResizeActiveLeases (..)`, `ShardCountMismatch (..)`
 - `Keiro.Subscription.Shard.Worker` adds `runShardedSubscriptionGroup`
-- `Keiro.Subscription.Shard.Schema` holds the `keiro_subscription_shards` SQL
+- `Keiro.Subscription.Shard.Schema` holds the `keiro.keiro_subscription_shards` SQL
 
 Use it to run a pool of identical workers over one Kiroku consumer group: each
 bucket is leased, so the pool re-divides automatically when a worker joins,
@@ -1040,9 +1070,19 @@ and null summaries. Both commands are read-only, use
 `subscriptionCheckpointInventory` plus `storeHeadPosition`, and are available
 without an `AppHooks` capability.
 
+Build application capabilities by updating `emptyAppHooks`. `aggregates` and
+`processManagers` mount typed inspection catalogs, `workflowResume` and
+`timerFire` mount executable recovery behavior, and `replayAudit` and
+`projectionCatalog` mount candidate-code validation/rebuild operations. Pure
+`aggregate types` and `pm types` list mounted descriptors. `OpsOutcome` includes
+`InspectionFailed` for structured inspection errors; exhaustive embedders must
+handle it. The optional HTTP package uses these same hooks.
+
 `pgmq dlq read|redrive|archive|purge --queue NAME` operates a Keiro job's
 dead-letter queue without a hook. `read` decodes visible entries, including
-`original_headers`; the three mutations preview first. Forced `purge` calls the
+`original_headers`. All four operations are mutations: `read` reserves entries
+for 30 seconds and increments read counts, so it too previews and exits 1
+without `--force`. Forced `purge` calls the
 guarded `purgeDlq` and fails without deleting when an inspection left rows
 hidden: the global `--force` authorizes the purge after preview but does not
 bypass that refusal. See [Operations](operations.md#pgmq-dead-letter-queues).
@@ -1100,7 +1140,12 @@ nodes and available directly:
   `purgeDlqForce` is the unconditional escape hatch.
 - `Keiro.PGMQ.Runtime` / `Keiro.PGMQ.Metrics` — worker wiring and instruments.
 
-The package requires the `pgmq-*` 0.6 family and `shibuya-pgmq-adapter ^>=0.16.1.0` on `shibuya-core ^>=0.10.0.0`.
+The 0.22.0.0 package uses the [PGMQ family](mori://shinzui/pgmq-hs)
+`>=0.7.0.0 && <0.8`,
+[shibuya-pgmq-adapter](mori://shinzui/shibuya-pgmq-adapter/packages/shibuya-pgmq-adapter)
+`^>=0.18.0.0`, and [shibuya-core](mori://shinzui/shibuya/packages/shibuya-core)
+`^>=0.12.0.0`. Apply PGMQ migration 0007 before queue traffic and retain polling
+for partitioned queues, which no longer emit insert notifications.
 Grouped-head FIFO (`FifoHeads`) additionally needs a deployed PGMQ extension 1.12
 or later; other orderings add no server requirement.
 
@@ -1162,8 +1207,16 @@ axes independently.
 Candidate Language 6 grows the public AST: `ProcessNode` carries
 `body :: ProcessBody` (`LegacyProcessBody` or `ReactionProcessBody`),
 `IntakeNode` gains `idempotence :: IdempotenceMode`, `WqOrdering` gains
-`WqFifoHeads`, `ContractType` gains `CDeclaredId`, and `TypeExpr` gains
-`TKeyedMap`. Exhaustive matches and positional construction must handle them.
+`WqFifoHeads`, and `TypeExpr` gains `TKeyedMap`. `ContractType` is
+`CScalar ContractScalarType | CList ContractScalarType`; `CDeclaredId` and
+the other scalar constructors belong to `ContractScalarType`. Mapped construction
+adds optional write-lift fields and checked expression nodes; 0.22 adds
+`AggregateStructuralEnum`, `StructuralEnumEqualityGuards`,
+`StructuralProjection.rootEnum`, and scaffold/workspace
+`structuralEnumEqualities`. Exhaustive matches and direct construction must
+handle these fields and cases. The [DSL changelog](../../keiro-dsl/CHANGELOG.md)
+and [0.22 upgrade edge](../../blueprints/keiro-upgrade/migrations/0.21.0.0-to-0.22.0.0.md)
+list source API adaptations; the stable Language 5 contract is unchanged.
 `checkReport` and `workspaceCheckReport` take a `CheckedService`.
 
 Most applications use the executable instead: `parse`, `check`, `scaffold`,

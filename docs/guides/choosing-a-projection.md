@@ -7,6 +7,7 @@ tags: [keiro, projections, read-models, decision-guide]
 generated:
   by: process:codex-cli
   at: 2026-10-11T21:11:39Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Choosing A Projection
@@ -58,9 +59,12 @@ Declare separate owners and rebuild groups where dependencies allow independent
 lifecycles. Avoid a foreign key from the identity index to an async row that may
 not exist yet. Do not bypass genuine dependencies merely to split groups.
 
-This is a modeling recommendation. The proposed guarded catalog command API in
-[ExecPlan 306](../plans/306-support-atomic-relational-preconditions-for-synchronous-catalog-commands.md)
-is not yet implemented or released. Do not copy private catalog SQL to emulate it.
+Use `runDomainCommandWithCatalogProjectionsGuarded` when that identity
+precondition must participate in the command transaction. It resolves serving
+bindings under the group fence, runs the precondition before projection apply,
+and rolls back the append on `PreconditionRefused`.
+[Guarded Catalog Commands](guarded-catalog-commands.md) gives the supported
+recipe and callback boundaries.
 
 Kiroku's append holds the global `$all` row lock until transaction end. Every
 inline handler and post-append guard extends that interval and can delay unrelated
@@ -73,11 +77,14 @@ An inline handler sees the typed events emitted by the command path on which it
 is installed. This limits its event scope; it does not make inline delivery the
 default for aggregate-local query models.
 
-An asynchronous worker can consume one Kiroku category or `AllStreams`. Use a
+A catalog source selects one Kiroku category or `AllStreams`. Use a
 category when every relevant stream shares one category and unrelated traffic
 should not determine the cursor. Use `AllStreams` for a genuinely global view.
 Record that scope in the catalog's `SourceDeclaration`; it determines replay
-selection and whether a query's `WaitForHead` request is reachable.
+selection and whether a query's `WaitForHead` request is reachable. Kiroku also
+supports `CategoryNamespace` subscriptions for colon-separated category families;
+that upstream target does not add a namespace source to Keiro's projection
+catalog or DSL.
 
 Source scope does not change delivery semantics. A category projection is still
 at least once, and an all-stream query can still choose `Immediate` freshness.

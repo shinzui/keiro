@@ -7,9 +7,13 @@ tags: [keiro, routers, process-managers, incident-response]
 generated:
   by: process:codex-cli
   at: 2026-10-11T21:11:39Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Coordinating Incident Response: Routers And Process Managers Together
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 Keiro has two fan-out primitives, and they are named after the two Enterprise
 Integration Patterns (Hohpe & Woolf, *Enterprise Integration Patterns*) they

@@ -38,7 +38,7 @@ okf_version: "0.2"
 - [Durable Outbox](outbox.md) - Reference durable outgoing integration handoff, ordering, dead letters, and publishing.
 - [Production Status](production-status.md) - State Keiro's production maturity, supported adoption posture, and intentionally deferred work.
 - [Read Models And Projections](read-models-and-projections.md) - Reference projection catalogs, delivery modes, query freshness, and rebuild lifecycles.
-- [Keiro Roadmap](roadmap.md) - Track capability maturity, adoption milestones, and future durable-execution direction.
+- [Keiro Roadmap](roadmap.md) - Track the 0.22 capability baseline, remaining runtime work, adoption boundaries, and pre-1.0 language stability.
 - [Snapshots](snapshots.md) - Reference advisory snapshots, fold versions, hydration behavior, and operations.
 - [Work Queues](work-queues.md) - Reference typed PGMQ jobs, workers, retries, FIFO groups, and dead-letter operations.
 

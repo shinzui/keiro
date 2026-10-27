@@ -7,9 +7,13 @@ tags: [keiro, migration, validation, event-streams]
 generated:
   by: human:nadeem
   at: 2026-07-24T13:06:07Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Migrating to `ValidatedEventStream`
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 This guide is for **downstream consumers of keiro** (services and apps that build
 `EventStream`s and run commands against them) migrating across the change
@@ -17,11 +21,20 @@ introduced by keiro ExecPlan
 [`docs/plans/84-enforce-replay-safety-with-a-validatedeventstream-at-the-keiro-command-boundary.md`](../plans/84-enforce-replay-safety-with-a-validatedeventstream-at-the-keiro-command-boundary.md).
 
 It is written to be followed with no prior context beyond your own repository.
-The registered downstream projects (from `mori registry dependents shinzui/keiro`)
-are `danwa`, `kanmon`, `kawa`, `keiro-runtime-docs`, `keiro-runtime-jitsurei`,
-`keiro-runtime-patterns`, `kikan`, `kioku`, `kizashi`, `kotei`, `meibo`,
-`mori-app`, and `shikigami`; `mori-app` also has a package-level dependency on
-keiro. Re-run that command before starting a fleet migration — the list drifts.
+This boundary is already part of the current 0.22.0.0 API. To inventory a fleet
+that still needs this source migration, query the live registry instead of
+using a historical downstream list:
+
+```bash
+mori registry dependents shinzui/keiro --packages
+```
+
+The qualified project names and package-level dependency records identify which
+consumers to inspect; the migration itself remains application-owned.
+
+The validation-wrapper change itself needs no payload migration. A framework
+upgrade can still include independent database and dependency cutovers; follow
+[Deploy Ordering](../user/deploy-ordering.md#framework-cohort-upgrades) as well.
 
 For the conceptual guarantee behind the migration, see
 [Replayability Safety](../user/replay-safety.md).

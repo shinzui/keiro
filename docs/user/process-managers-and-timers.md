@@ -2,7 +2,7 @@
 type: Explanation
 title: Process Managers And Timers
 description: Explain event-sourced coordination, deterministic command IDs, and durable timer workers.
-timestamp: 2026-10-25T05:14:38Z
+timestamp: 2026-10-27T21:15:00Z
 docId: DOC-17
 tags: [keiro, process-managers, timers, coordination]
 generated:
@@ -259,7 +259,7 @@ codec-versioning caveats.
 
 ## Timer Schema
 
-The `keiro_timers` table and its due-timer index are created by `keiro-migrate`;
+The `keiro.keiro_timers` table and its due-timer index are created by `keiro-migrate`;
 see [Database Migrations](migrations.md). Tests get them from the migrated
 template database (the `keiro-test-support` `withMigratedSuite` fixture).
 

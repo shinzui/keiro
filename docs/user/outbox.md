@@ -7,6 +7,7 @@ tags: [keiro, outbox, integration-events, reference]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:06:27Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Durable Outbox
@@ -20,7 +21,7 @@ publish to Kafka before the domain event is committed — leaking events
 that did not happen.
 
 The outbox solves both. A producer-subscription writes one
-`keiro_outbox` row per mapped private event in the same Postgres
+`keiro.keiro_outbox` row per mapped private event in the same Postgres
 transaction that advances its subscription checkpoint. A separate
 publisher worker drains the rows into Kafka and marks each row sent,
 rejected, retryable, or dead.
@@ -49,7 +50,7 @@ deduplication.
 2. A checkpointed `IntegrationProducer` subscription reads each
    recorded private event, maps it to a public
    `IntegrationEventDraft`, derives deterministic outbox and message IDs
-   from the producer/source-event coordinates, and writes one `keiro_outbox` row in the same transaction
+   from the producer/source-event coordinates, and writes one `keiro.keiro_outbox` row in the same transaction
    that advances its subscription cursor.
 3. The publisher worker (`publishClaimedOutbox`) claims rows with
    `FOR UPDATE SKIP LOCKED` plus a configurable ordering policy,
@@ -162,7 +163,7 @@ no longer block their key. They remain in the table for operator
 inspection:
 
 ```sql
-SELECT * FROM keiro_outbox WHERE status = 'dead';
+SELECT * FROM keiro.keiro_outbox WHERE status = 'dead';
 ```
 
 Without a terminal state, an unclassified repeatedly failing row would freeze its key
@@ -229,10 +230,11 @@ before changing a live integration contract.
 ## Schema and storage
 
 The outbox table is created by `keiro-migrate` from the native Keiro component's
-embedded `0002-keiro-outbox.sql` migration:
+embedded `0002-keiro-outbox.sql` migration and extended by later migrations.
+This is an excerpt of the current storage shape, not standalone migration SQL:
 
 ```sql
-CREATE TABLE keiro_outbox (
+CREATE TABLE keiro.keiro_outbox (
   outbox_id UUID PRIMARY KEY,
   message_id TEXT NOT NULL,
   source TEXT NOT NULL,

@@ -1,7 +1,7 @@
 ---
 type: Tutorial
 title: Snapshots And Hydration
-timestamp: 2026-10-21T00:26:46Z
+timestamp: 2026-10-27T21:15:00Z
 description: Add advisory snapshots to aggregate hydration while preserving event-log authority.
 docId: DOC-21
 tags: [keiro, snapshots, hydration, tutorial]
@@ -105,7 +105,7 @@ version, and seeded/full SHA-256 digests when it finds a mismatch. Configure
 `RunCommandOptions.seedVerifySampleRate`; `1` verifies every snapshot hit and
 `0` disables the witness.
 
-The snapshot test initializes `keiro_snapshots`, runs `PlaceOrder` and
+The snapshot test initializes `keiro.keiro_snapshots`, runs `PlaceOrder` and
 `ApprovePayment` through `snapshotOrderEventStream`, then queries the snapshot
 row and expects stream version 2. See
 [`../../jitsurei/test/Main.hs`](../../jitsurei/test/Main.hs).

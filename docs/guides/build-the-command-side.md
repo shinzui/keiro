@@ -7,9 +7,13 @@ tags: [keiro, commands, aggregates, tutorial]
 generated:
   by: human:nadeem
   at: 2026-08-11T15:02:25Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Build The Command Side
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 The command side starts with a typed stream, a raw `EventStream` definition, and
 a validated stream value. A typed stream is a `Stream a`, where the type

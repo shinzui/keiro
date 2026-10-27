@@ -7,20 +7,21 @@ tags: [keiro, dsl, mappings, adoption]
 generated:
   by: process:codex-cli
   at: 2026-10-26T23:15:24Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Checked Mapping Adoption
 
 Checked mappings let an application keep its domain types while the Keiro DSL
 owns a declared, inspectable persistence shape. The capabilities in this guide
-belong to candidate Language 6. Repository evidence makes them eligible for a
-future package and language publication, but this guide does not mean that a
-release was published or that any particular consumer's retained history was
-approved for adoption.
+belong to candidate Language 6 and ship in the released 0.22.0.0 toolchain.
+Package publication does not stabilize the Language 6 contract or approve any
+particular consumer's retained history for adoption. The candidate can still
+change before language publication; Language 5 remains the stable contract.
 
 The compiled example is the
 [`checked-mapping-replay` workspace](../../keiro-dsl/test/fixtures/checked-mapping-replay-workspace/service.keiro-workspace).
-It combines the five new capabilities in one `ReplayEnvelope`:
+It combines five checked-value families in one `ReplayEnvelope`:
 
 | Capability | Example declaration | Frozen policy |
 |---|---|---|

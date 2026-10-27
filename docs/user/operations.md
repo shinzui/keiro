@@ -2,7 +2,7 @@
 type: Runbook
 title: Operations
 description: Deploy and operate Keiro applications, workers, rebuilds, retries, and production checks.
-timestamp: 2026-10-25T05:14:38Z
+timestamp: 2026-10-27T21:15:00Z
 docId: DOC-15
 tags: [keiro, operations, deployment, runbook]
 generated:
@@ -11,6 +11,9 @@ generated:
 ---
 
 # Operations
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 This page collects deployment and runtime concerns for Keiro applications.
 
@@ -48,11 +51,13 @@ mounted from the candidate application binary with `Keiro.Ops.AppHooks` and
 `runOpsInvocation` into an existing parser):
 
 ```haskell
-Ops.AppHooks
+Ops.emptyAppHooks
   { workflowResume = Just (applicationWorkflowRegistry, resumeOptions)
   , timerFire = Just applicationTimerFire
   , replayAudit = Just (Ops.OpsAuditConfig applicationAuditTargets)
   , projectionCatalog = Just applicationCatalogOperations
+  , aggregates = Just applicationAggregateInspectors
+  , processManagers = Just applicationProcessManagerInspectors
   }
 ```
 
@@ -86,19 +91,21 @@ keiro-ops stream subscriptions
 keiro-ops stream subscriptions --json
 ```
 
-Human output repeats the store position captured by the same Kiroku statement:
+Human output includes Kiroku's authoritative append frontier (`store_position`)
+and Keiro's separately observed reachable event head (`visible_store_head`):
 
 ```text
-subscription  member  checkpoint_position  checkpoint_updated_at       store_position  global_position_distance
-orders        0       35                   2026-08-09T14:00:00Z         42              7
-orders        1       40                   2026-08-09T14:01:00Z         42              2
+subscription  member  checkpoint_position  checkpoint_updated_at       store_position  visible_store_head  global_position_distance
+orders        0       35                   2026-08-09T14:00:00Z         45              42                  7
+orders        1       40                   2026-08-09T14:01:00Z         45              42                  2
 ```
 
 The JSON automation surface is stable:
 
 ```json
 {
-  "store_position": 42,
+  "store_position": 45,
+  "visible_store_head": 42,
   "checkpoints": [
     {
       "subscription": "orders",
@@ -124,7 +131,8 @@ missing subscription returns an empty `members` array and `null` summaries; it
 does not manufacture member zero or checkpoint zero.
 
 `global_position_distance` is the non-negative subtraction of a durable
-checkpoint from the captured global store cursor. It is not an event count:
+checkpoint from `visible_store_head`, clamped at zero. `store_position` is
+reported separately and may be higher after deletion. The distance is not an event count:
 filtered, category, hard-deleted, and sharded histories may skip global
 positions. A true relevant-event lag needs a compatible source frontier and a
 definition supplied by the owning library, so there is deliberately no
@@ -164,9 +172,14 @@ The `/keiro/ws` socket and HTTP child share the same inspection budget.
 
 Keiro runs on PostgreSQL through Kiroku and Hasql.
 
-Kiroku's schema requires PostgreSQL 18 or newer because it uses `uuidv7()`.
-Deployments on PostgreSQL 17 or older fail schema initialization unless you
-provide a compatible `uuidv7()` function yourself.
+The Nix shell and Keiro's checked-in expected-schema snapshot use PostgreSQL 18.
+Use that baseline for the verification and inspection commands in these guides.
+Kiroku's migrations also support PostgreSQL 17: they provide the schema-qualified
+`kiroku.uuidv7()` fallback there and an alias to the builtin on 18. A missing
+unqualified `uuidv7()` is therefore not an inherent 17-only deployment blocker.
+Validate the complete Keiro/application migration and schema-inspection path
+before selecting another server major. The owning migration contract is
+[mori://shinzui/kiroku/packages/kiroku-store-migrations](mori://shinzui/kiroku/packages/kiroku-store-migrations).
 
 ## Schema Initialization
 
@@ -196,10 +209,10 @@ Typical deployments have:
 - projection workers for async read models;
 - process-manager and router workers consuming subscription streams;
 - timer workers polling due timers;
-- outbox publisher workers that drain `keiro_outbox` (`claimOutboxBatch` /
+- outbox publisher workers that drain `keiro.keiro_outbox` (`claimOutboxBatch` /
   `publishClaimedOutbox`) to the configured destination;
 - operational jobs for rebuilds, repairs, and inbox GC
-  (`garbageCollectCompleted` pruning completed `keiro_inbox` rows).
+  (`garbageCollectCompleted` pruning completed `keiro.keiro_inbox` rows).
 - operator tooling that lists rejected dispatches and replays Kiroku
   subscription dead letters through idempotent handlers.
 
@@ -386,7 +399,7 @@ per-stream visibility.
 
 Truncation hides events; it does not delete them. Kiroku's `$all`, category,
 and subscription reads remain unchanged. Keiro snapshots are rows in
-`keiro_snapshots`, not Kiroku's snapshot-event convention; coverage is based on
+`keiro.keiro_snapshots`, not Kiroku's snapshot-event convention; coverage is based on
 the snapshot row's recorded stream version. See [Snapshots](snapshots.md) for
 the snapshot contract.
 
@@ -458,7 +471,7 @@ Mutations preview before force. Three application-aware tasks remain:
   `keiro-ops wf awakeable cancel UUID`; an operator-supplied completion uses
   `keiro-ops wf awakeable signal UUID --payload JSON`. These commands wrap
   `cancelAwakeable` and `signalAwakeable`, which transition the
-  `keiro_awakeables` row (`awakeable_id`, `owner_workflow_id`, `status`, `payload`)
+  `keiro.keiro_awakeables` row (`awakeable_id`, `owner_workflow_id`, `status`, `payload`)
   to `cancelled` or `completed`; the next resume observes a cancellation and the
   awakeable `await` throws so the workflow author's compensation runs. Repair a
   parent stuck on a never-finishing child by driving or cancelling the child
@@ -517,7 +530,7 @@ no-op until the corresponding worker or runner is given the handle.
 
 Outbox publisher (`Keiro.Outbox`):
 
-- `keiro.outbox.backlog` — Gauge, `{event}` — claimable rows waiting in `keiro_outbox`,
+- `keiro.outbox.backlog` — Gauge, `{event}` — claimable rows waiting in `keiro.keiro_outbox`,
   recorded each poll pass. Alert when it grows without draining.
 - `keiro.outbox.published` — Counter, `{event}` — successfully published rows. Watch for
   the rate dropping to zero while backlog rises.
@@ -718,6 +731,7 @@ timer and shard reads are available in the standalone tree too. These commands
 are read-only and require no `--force`:
 
 ```bash
+jitsurei-demo ops pm types --json
 jitsurei-demo ops pm show --name jitsurei-fulfillment --correlation order-100 --timer-limit 20 --json
 jitsurei-demo ops pm list --name jitsurei-fulfillment --limit 50 --json
 keiro-ops timer pending list --manager jitsurei-fulfillment --correlation order-100 --limit 100 --json
@@ -725,10 +739,12 @@ keiro-ops shard list --json
 keiro-ops shard status --subscription orders-shard --json
 ```
 
-The HTTP application derives `GET /pm/show`, `GET /pm/list`,
+The HTTP application derives `GET /pm/types`, `GET /pm/show`, `GET /pm/list`,
 `GET /timer/pending/list`, `GET /shard/list` and `GET /shard/status` from the same
 command grammar and handlers. Use underscore query keys such as `timer_limit`.
 Manager routes are present only when the application mounts the catalog.
+`pm types` is pure catalog discovery: it reads no store state and reports only
+mounted manager descriptors, not instances discovered from history.
 
 Pending timer pages have this shape (the final page omits `next_cursor`):
 

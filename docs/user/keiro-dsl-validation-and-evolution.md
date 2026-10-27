@@ -7,6 +7,7 @@ tags: [keiro, dsl, validation, evolution, reference]
 generated:
   by: process:codex-cli
   at: 2026-10-14T15:11:47Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Keiro DSL Validation and Evolution
@@ -51,6 +52,10 @@ Languages 1 through 4, and sources without a preamble, are deprecated and
 scheduled for removal; `check` and `scaffold` print a `language contract:`
 notice for such a source, and it should be migrated to Language 5. Gate CI with
 `--min-language 5` so that no deprecated source is accepted.
+Language 5 remains stable in 0.22.0.0;
+[ADR 49](../adr/0049-language-6-is-the-sole-pre-1-0-coverage-and-data-support-baseline.md)
+schedules Languages 1–5 and legacy positional managers to retire before 1.0.
+That future policy does not stabilize the current Language 6 candidate.
 
 A source that declares `language keiro-dsl 6` selects the candidate contract.
 `check` and `scaffold` accept it, and the `--report-out` JSON records

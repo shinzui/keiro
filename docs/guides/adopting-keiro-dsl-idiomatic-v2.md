@@ -7,11 +7,14 @@ tags: [keiro, dsl, generated-code, migration]
 generated:
   by: human:nadeem
   at: 2026-08-23T19:54:01Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Adopting keiro-dsl generated Haskell idiomatic-v2
 
-`idiomatic-v2` is a Haskell presentation edition for scaffold output. It gives
+`idiomatic-v2` is the generated Haskell presentation edition introduced with
+0.15 and retained in the 0.22.0.0 toolchain. This guide applies to existing
+`legacy-v1`/`idiomatic-v1` scaffold ledgers; new scaffolds already use v2. It gives
 generated records concise repeated labels, suppresses product selector functions,
 and moves `DuplicateRecordFields`, `NoFieldSelectors`, and `OverloadedRecordDot` into
 the generated Cabal fragment. Constructor names, constructor arity, field order,

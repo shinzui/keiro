@@ -1,451 +1,154 @@
 ---
 type: Reference
 title: Keiro Roadmap
-description: Track capability maturity, adoption milestones, and future durable-execution direction.
+description: Track the 0.22 capability baseline, remaining runtime work, adoption boundaries, and pre-1.0 language stability.
 docId: DOC-21
 tags: [keiro, roadmap, planning, reference]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:06:27Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Keiro Roadmap
 
-This roadmap translates the internal plans in `docs/masterplans/`,
-`docs/plans/`, and `docs/research/` into the user-visible delivery path. It is
-written for teams planning adoption: what exists now, what is expected next, and
-which workflow features are deliberately later.
-
-This is not a date commitment. It is the intended order and shape of the work.
-
-The current baseline is the published `0.17.0.0` package line described in
-`CHANGELOG.md`. See `docs/user/production-status.md` for adoption posture.
-
-## At A Glance
-
-| Phase | Theme | User-visible outcome |
-|---|---|---|
-| Current baseline | Event-sourcing v1 core (published 0.17.0.0 line) | The v1 substrate plus structural/opaque consumer mappings, compatibility-vector evolution reports, migration-evidence tooling, process reactions, delegated intake, and replay-safe producer identity ship in the coordinated package line on Hackage. |
-| Phase 1 | Stabilize existing core | Complete: multi-event command output landed, the repository test suite exercises the core paths, and migrations/snapshots have production guidance. |
-| Phase 2 | Complete v1 workflow substrate | Complete: outbox, inbox, OpenTelemetry tracing and metrics, process-manager snapshot guidance, and the timer stuck-row recovery API and runbook. |
-| Phase 3 | Read-side maturity | Async projections, subscriptions, and position waits get stronger consistency and scaling options. |
-| Phase 4 | Adoption and ergonomics | The worked-examples app and guides exist; remaining work is full Haddocks, a public stability policy, and higher-level facades. |
-| Phase 5 | v2 durable execution | Complete: a named-step `Workflow es a` runtime with durable sleep, awakeables, child workflows, a crash-recovery resume worker, journal snapshots, and `keiro.workflow.*` observability ships on top of the v1 substrate. Phase-2 additions (MasterPlan 6) add continue-as-new journal rotation (`continueAsNew`/`restoreSeed`), the versioning/patch API (`patch`), LISTEN/NOTIFY push delivery (`Keiro.Wake`), and consumer-group sharding for category subscriptions (`Keiro.Subscription.Shard`). |
-
-## Capability Matrix
-
-| Capability | Status | Notes |
-|---|---|---|
-| Typed streams, codecs, upcasters | Available now | Public v1 authoring surface. |
-| Command cycle | Available now | `runCommand`, `ValidatedEventStream` replayability checks, optimistic retry, caller-supplied event ids, same-transaction SQL continuations, and ambient command metadata. |
-| Multi-event command output | Available now | One command appends zero, one, or many events in one optimistic-concurrency batch. |
-| Snapshots | Available now | The default codec uses `keiki-codec-json` and shape hashes; `defaultStateCodecWithFold` adds a hand-owned `FoldVersion`, and snapshot hydration plus tail replay is tested. |
-| Read models and projections | Available now | Inline is transactional and receives `RecordedEvent` metadata; async is at-least-once today. |
-| Process managers | Available now | V1 workflow substrate for sagas and choreography. |
-| Process reactions | Available now | `Keiro.ProcessManager.Reaction`: explicit no-advance and accepted-only follow-ups, atomic saga/timer mutation, and target-keyed dispatch identity. Moving an existing manager to it is a drained identity migration. |
-| Routers (effectful fan-out) | Available now | `Keiro.Router`: stateless content-based router / recipient list; targets resolved effectfully from read models. |
-| Durable timers | Available now | Polling worker, timer table, and a stuck-row recovery API (find/requeue/cancel/dead-letter) with an operations runbook. |
-| Native migrations | Available now | `keiro-migrate` composes Kiroku and Keiro `pg-migrate` components in dependency order, including `keiro_outbox`, `keiro_inbox`, and dispatch dead letters. |
-| Transactional outbox | Available now | `Keiro.Outbox` + `keiro_outbox`: per-key ordering, backoff, dead-lettering, and a Kafka producer adapter. Canonical producers derive replay-safe deterministic message IDs and count content drift as `keiro.outbox.identity.conflict`. |
-| Inbox deduplication | Available now | `Keiro.Inbox` + `keiro_inbox`: claim/retry/release/dead transitions, GC, and Shibuya + Kafka adapters. `Keiro.Inbox.Delegated` lets a downstream state transition own the durable receipt instead. |
-| Integration events | Available now | `Keiro.Integration.Event`: canonical cross-context envelope with W3C trace context and Kafka header helpers. |
-| OpenTelemetry tracing | Available now | `Keiro.Telemetry`: Internal (command), Producer (outbox), and Consumer spans; opt-in via `RunCommandOptions.tracer`. |
-| Worker metrics | Available now | `Keiro.Telemetry` exposes opt-in OpenTelemetry metrics for the outbox, inbox, timer, and async-projection workers plus the command, snapshot, dispatch, and workflow paths. The full catalogue is in [Operations](operations.md#metric-catalogue). |
-| Push delivery and subscription sharding | Available now | `Keiro.Wake` wakes poll-loop workers from Kiroku's existing notifier (no new connections, durable poll fallback); `Keiro.Subscription.Shard` leases consumer-group buckets across a worker pool with coordinator-free failover. |
-| Pre-deploy replay audit | Available now | `Keiro.ReplayAudit` replays real streams through a candidate binary in `AuditTargeted` or `AuditFull` mode and blocks a deploy on `auditExitCode`. |
-| Postgres work queues | Available now | `keiro-pgmq`: PGMQ-backed job queues with retry/DLQ policy and the versioned `keiroJobCodec` envelope. `FifoHeads` safely batches independent group heads (PGMQ 1.12+), and DLQ purge refuses while inspected rows remain hidden. See [Work Queues](work-queues.md). |
-| Typed service specifications | Available now | `keiro-dsl` adds structural/opaque consumer mappings, total bindings and generated codecs, binding skeletons/explanations, conformance harnesses, six-surface compatibility vectors, historical codec comparison, and supported-root coverage reporting alongside the existing node families. Language 5 is the published stable contract and Language 6 (reactions, delegated intake, `fifo-heads`, checked value mappings) is a candidate; Languages 1 through 4 are deprecated and scheduled for removal. |
-| Operator console | Available now | `keiro-ops` provides schema-checked inspection, preview/`--force` mutations, and stable JSON. Candidate applications mount workflow resume, timer drain, replay audit, and catalog rebuild commands through `AppHooks`. |
-| Exactly-once async projections | Planned v1.x / upstream-dependent | Blocks on transactional Shibuya/Kiroku checkpoint handling. |
-| Prefix subscriptions | Planned v1.x / upstream-dependent | Needed for `pm:` and future `wf:` stream families at scale. |
-| Durable execution runtime | Available now | `Keiro.Workflow`: named-step `Workflow es a`, durable `sleep`, awakeables, child workflows, a crash-recovery resume worker, and journal snapshots (`keiro_workflow_steps` + `keiro_awakeables`). Continue-as-new journal rotation (`continueAsNew`/`restoreSeed`) keeps unbounded histories bounded; the `patch` API gives stable, journaled branch decisions for cross-cutting workflow-logic changes. A parked workflow is idle-free: discovery is exact, so idle cost does not scale with the number of suspended workflows ([what suspension costs](durable-workflows.md#what-suspension-costs)). |
+This page separates the shipped **0.22.0.0** baseline from remaining work.
+It describes adoption constraints, not delivery dates. The
+[root changelog](../../CHANGELOG.md) records release changes;
+[Production Status](production-status.md) describes the current adoption posture.
 
 ## Current Baseline
 
-Keiro v1 is a library-shaped event-sourcing framework on PostgreSQL. The
-packages share the coordinated `0.17.0.0` line; consult the release notes and
-package registry before choosing a published bound.
+Eight published packages share the Keiro version: `keiro-core`, `keiro`,
+`keiro-pgmq`, `keiro-dsl`, `keiro-migrations`, `keiro-ops`, `keiro-ops-http`,
+and `keiro-test-support`. `jitsurei` is the repository's runnable example.
+The workspace uses GHC 9.12.4 and PostgreSQL 18 through `nix develop`.
 
-Implemented today:
-
-- typed stream names through `Keiro.Stream`;
-- event codecs, schema versions, known event-type validation, and upcasters
-  through `Keiro.Codec`;
-- structural consumer bindings through `Keiro.Codec.Structural`, plus checked
-  structural/opaque declarations, generated codecs, compatibility vectors, and
-  migration-evidence reports through `keiro-dsl`;
-- the author-facing `EventStream` contract around Keiki `SymTransducer`, plus
-  the `ValidatedEventStream` command boundary for replayability safety;
-- `runCommand` with optimistic concurrency retry, caller-supplied event ids,
-  ambient metadata, multi-event command output, and same-transaction SQL
-  continuations;
-- advisory snapshots for faster hydration;
-- read-model metadata, inline projections (which receive `RecordedEvent`
-  metadata), async projection helpers, position waits, and rebuild scaffolding;
-- event-sourced process managers and typed process reactions
-  (`Keiro.ProcessManager.Reaction`);
-- routers for stateless, effectful fan-out (`Keiro.Router`);
-- durable timer storage and polling workers;
-- a transactional outbox (`Keiro.Outbox`) with per-key ordering, backoff,
-  dead-lettering, and a Kafka producer adapter;
-- an idempotent inbox (`Keiro.Inbox`) with claim/retry/release/dead
-  transitions, GC, and Shibuya + Kafka adapters;
-- the cross-context integration-event envelope (`Keiro.Integration.Event`);
-- OpenTelemetry command/producer/consumer spans and opt-in worker metrics
-  (`Keiro.Telemetry`);
-- native `pg-migrate` components for Kiroku and Keiro framework tables;
-- the `jitsurei` worked-examples package and long-form guides under
-  `docs/guides/`.
-- the `keiro-ops` standalone and embeddable operations console, with Jitsurei
-  demonstrating the application-owned hooks;
-
-Current adoption posture:
-
-- Good fit for controlled internal use where the team owns deployment,
-  dependency revisions, migrations, and worker operations.
-- Not yet a polished public framework with stable third-party API guarantees and
-  full Haddocks.
-- Async handlers must be idempotent until exactly-once checkpoint handling
-  lands.
-
-## Phase 1: Stabilize Existing Core (Complete)
-
-Goal: make the implemented v1 baseline coherent with current dependency APIs
-and production migration workflow. This phase shipped in `0.1.0.0`.
-
-| Work item | Status | Outcome |
+| Capability | Shipped behavior | Adoption boundary |
 |---|---|---|
-| Multi-event command output | Complete | One command appends zero, one, or many events in one optimistic-concurrency batch. |
-| Migration validation | Complete | `keiro-migrate` is exercised by the test suite and documented as the production path. |
-| Snapshot codec close-out | Complete | Snapshot hydration plus tail replay is tested; `StateCodec` usage is documented. |
+| Typed streams and codecs | Category-safe stream construction, event-type validation, schema versions, upcasters, structural/nominal/refined mappings | Applications own retained-history compatibility. |
+| Command execution | `ValidatedEventStream`, streaming replay, optimistic retries, multi-event appends, typed rejection/no-op outcomes, transactional SQL continuations | External retries need stable event IDs; network effects need durable handoff. |
+| Snapshots and replay audit | Advisory snapshots, fold fingerprints, sampled seed verification, real-log candidate-code audit | A sampled runtime witness does not replace a pre-deploy replay gate. |
+| Projection catalogs | Validated ownership, inline/async delivery, query-supplier resolution, freshness choices, group fencing | Applications own DDL, SQL, reset truthfulness, and replay adapters. |
+| Rebuilds and repair | Fixed-head coordinated offline rebuilds, schema-versioned online catch-up/cutover, resume, and stream-scoped repair | Clear/preserve policy and verification remain explicit application choices. |
+| Guarded catalog commands | Transaction-local relational preconditions with typed refusal and rollback | Keep invariant state small; inline SQL extends the global append-lock interval. |
+| Coordination | Legacy process managers, typed reactions, routers, durable timers, rejected-dispatch records | Reaction identity differs from positional dispatch; switching requires a drained cutover. |
+| Durable workflows | Named steps, durable sleep, awakeables, children, resume, snapshots, `patch`, and `continueAsNew` | Keep replayed step names/result codecs compatible and external effects idempotent. |
+| Messaging | Transactional outbox, deterministic producer identities, inbox deduplication, delegated intake, Kafka adapters | Delivery remains at-least-once; identity and retention policies are part of the contract. |
+| Work queues | Typed PGMQ jobs, versioned payloads, retries, DLQ operations, `FifoHeads`, partitioned provisioning | PGMQ migration 0007 precedes traffic; partitioned queues retain polling. |
+| Delivery and scale-out | Push wakeups with poll fallback and leased category-subscription sharding | Size concurrency against database capacity; notifications are hints. |
+| Migrations | Dependency-ordered native plan, ledger verification, live schema checks, legacy history import | Upgrade ordering can require stopped workers or writers. |
+| Operations | Schema-checked CLI, mounted aggregate/manager discovery and state, bounded workflow/timer/projection pages, shard observations | Application-specific capabilities are mounted through `emptyAppHooks` updates. |
+| HTTP and feeds | Optional HTTP operations, shared first-page WebSocket feeds, stable-prefix application composition | Use a dedicated inspection store, explicit budgets, and paired poll recovery. |
+| Typed specifications | Stable Language 5 and candidate Language 6 in the released `keiro-dsl` toolchain | Package publication does not stabilize the candidate language. |
 
-### Multi-event command output
+## Read-side And Subscription Maturity
 
-Keiki allows one accepted command to emit zero, one, or many events, and Keiro
-adopts that shape end to end:
+### Async delivery and deduplication
 
-- `runCommand` appends the whole emitted event batch in order.
-- `eventsAppended` reports the batch length.
-- Hydration replays stored multi-event command output correctly.
-- Snapshots see the final settled state after the whole emitted batch.
-- Inline projections and `runCommandWithSqlEvents` receive every produced event.
-- Process-manager and router dispatch remain idempotent when a command emits
-  multiple events.
+Async subscription delivery is at-least-once. Keiro's async apply transaction
+commits the dedup receipt and handler SQL together, so retained receipts suppress
+reapplication of the same projection/event identity. Subscription checkpoint
+advancement remains a separate boundary: delivery can repeat after a crash.
+Pruning dedup receipts beyond the replay window removes that protection for the
+pruned events. Keep handler SQL idempotent where practical.
 
-User impact: command handlers can model richer domain transitions without
-forcing artificial one-event commands.
+Combining application writes with subscription checkpoint advancement remains
+upstream-dependent. Do not assume the current API provides that transaction.
+See [Asynchronous Projections](../guides/asynchronous-projections.md).
 
-### Migration validation
+### Category and namespace subscriptions
 
-`keiro-migrate` applies Kiroku and Keiro framework migrations through
-`pg-migrate`,
-including the `keiro_outbox` and `keiro_inbox` tables.
+The [Kiroku Store](mori://shinzui/kiroku/packages/kiroku-store) 0.12 cohort
+ships `CategoryNamespace`, alongside `AllStreams` and exact `Category` targets.
+For example, namespace `pm` includes category `pm` and colon-separated
+descendants such as `pm:billing`; it is not an arbitrary stream-name prefix or
+wildcard. Namespace catch-up scans global windows, so sparse matches still incur
+scan work and each consumer-group member performs its own scan.
 
-Production path:
+Stop affected subscription workers before applying Kiroku migration 0016, then
+restart new binaries before creating namespace bindings. Older binaries must
+not manage those bindings. See [Deploy Ordering](deploy-ordering.md).
 
-- Run the composed native migration plan before application startup.
-- Start Kiroku with runtime schema initialization disabled.
-- Keep application read-model tables in the application's own migration set.
-- Compose application-owned `MigrationComponent` values after the Kiroku and
-  Keiro components when one executable owns the whole database plan.
-
-User impact: teams get one explicit migration entry point for the event store
-plus Keiro framework tables.
-
-### Snapshot codec close-out
-
-Keiro uses `keiki-codec-json` and `regFileShapeHash` in the default snapshot
-codec.
-
-Delivered:
-
-- Snapshot hydration plus tail replay is covered by the test suite.
-- Guidance on when authors use Keiro `StateCodec` versus direct
-  `Keiki.Codec.JSON` helpers is documented in `docs/user/snapshots.md`.
-
-Remaining nicety: published performance numbers for moderately large register
-files.
-
-User impact: long-lived streams and process-manager state streams can use
-snapshots without hand-written register-file walkers.
-
-## Phase 2: Complete v1 Workflow Substrate
-
-Goal: finish the v1 workflow features that sit between "process managers and
-timers exist" and "teams can run real saga/choreography workflows comfortably."
-The outbox and inbox shipped in `0.1.0.0`; the process-manager hardening
-guidance and worker metrics have since shipped, completing this phase.
-
-| Work item | Status | API or table | Outcome |
-|---|---|---|---|
-| Transactional outbox | Available now | `Keiro.Outbox`, `keiro_outbox` | Side-effect intents are committed atomically with event/projection writes and delivered asynchronously. |
-| Inbox deduplication | Available now | `Keiro.Inbox`, `keiro_inbox` | External messages are handled idempotently by `(source, message_id)`. |
-| OpenTelemetry tracing | Available now | `Keiro.Telemetry` | Command, producer, and consumer spans are emitted, with W3C trace-context propagation. |
-| Process-manager hardening | Complete | `Keiro.ProcessManager`, `Keiro.Timer` | Deterministic command ids, correlation/causation metadata, the `pm:` convention, snapshot-policy guidance with a tested PM-snapshot example, and a timer stuck-row recovery API plus runbook. |
-| Worker metrics | Complete | `Keiro.Telemetry` metrics | Operators can see projection lag, timer/outbox/inbox backlog, fire lag, duplicates, dead letters, and stuck timers on a metrics exporter. |
-
-### Transactional outbox (Available now)
-
-The outbox is for side effects that cannot safely run inside the database
-transaction: HTTP calls, email, webhooks, downstream queues, and third-party API
-requests.
-
-As shipped:
-
-- `keiro_outbox` stores side-effect intents written inside the same transaction
-  as an event append, inline projection, or process-manager state advance.
-- Each row records destination, payload, attempt count, backoff schedule, and
-  correlation/causation attributes.
-- `claimOutboxBatch` claims rows for a worker; `publishClaimedOutbox` publishes
-  them with per-key (head-of-line) ordering.
-- Rows are dead-lettered after a configurable max-attempt count.
-- A Kafka producer adapter ships with the library.
-- Downstream delivery remains at-least-once, so external handlers must be
-  idempotent.
-
-User impact: handlers can request external side effects without making network
-calls inside the database transaction.
-
-### Inbox deduplication (Available now)
-
-The inbox is the receive-side dual of the outbox.
-
-As shipped:
-
-- `keiro_inbox` records external messages keyed by `(source, message_id)`.
-- Handlers run inside `runInboxTransaction` / `runInboxTransactionWithKey`, with
-  claim/retry/release/dead transitions.
-- Duplicate external deliveries short-circuit safely.
-- `garbageCollectCompleted` reclaims completed rows.
-- Shibuya and Kafka consumer adapters ship with the library.
-
-User impact: pgmq, webhook, Kafka, and external-message consumers get a standard
-duplicate-detection path.
-
-### Process-manager workflow hardening (Complete)
-
-Process managers (and routers) are the v1 workflow substrate. The hardening work
-is now complete: the operational polish around state, timers, and recovery shipped.
-
-Already in place:
-
-- Deterministic command ids derived from process-manager name, correlation id,
-  source event id, and emit index.
-- Causation and correlation metadata carried on emitted commands.
-- The `pm:<name>-<correlation>` state-stream convention.
-- Snapshot-policy guidance for long-running managers, backed by a tested
-  PM-state-stream snapshot example (`docs/user/snapshots.md`,
-  `describe "Keiro.ProcessManager snapshots"` in `keiro/test/Main.hs`).
-- A timer stuck-row recovery API (`findStuckTimers`, `requeueStuckTimer`,
-  `cancelTimer`, `deadLetterTimer`, and a `maxAttempts` worker option) with the
-  recovery runbook in `docs/user/operations.md`.
-- Worker metrics (see below).
-
-User impact: v1 covers sagas and choreography workflows without a separate
-durable-execution runtime.
-
-### Worker metrics (Complete)
-
-Tracing spans were already emitted through `Keiro.Telemetry`; worker metrics have
-now shipped alongside them. The instrument set is opt-in via an SDK `Meter`
-(`newKeiroMetrics`) and no-op by default, covering the four worker families:
-outbox, inbox, timer, and async-projection backlog/lag gauges plus
-published/retried/dead-lettered/processed/duplicate/failed/wait-timeout counters
-and timer fire-lag and attempt histograms — so operators can alert on workers
-rather than only trace individual runs. See the metric catalogue in
-`docs/user/operations.md`.
-
-## Phase 3: Read-side And Subscription Maturity
-
-Goal: improve consistency, scaling, and latency for projections and
-subscriptions.
-
-| Work item | Status | Constraint | Expected outcome |
-|---|---|---|---|
-| Exactly-once async projections | Upstream-dependent | Needs transactional Shibuya/Kiroku checkpoint handling | User SQL and checkpoint advancement commit together. |
-| Prefix subscriptions | Upstream-dependent | Needs Kiroku subscription target beyond exact category | `pm:`, future `wf:`, and multi-stream families become easier to observe. |
-| LISTEN/NOTIFY waits for `PositionWait` | Planned | Mechanism shipped (`Keiro.Wake`); `Keiro.ReadModel` waits are not wired to it yet | `PositionWait` can wake by notification instead of polling. |
-
-### Exactly-once async projections
-
-Current async projections are at-least-once. The missing upstream shape is a
-Shibuya/Kiroku handler that runs user SQL and subscription checkpoint advancement
-in one transaction.
-
-Until that lands:
-
-- async projection handlers must be idempotent;
-- `source_event_id` or equivalent unique keys are the recommended dedup path;
-- inline projections remain the strongly consistent read-side path.
-
-After it lands:
-
-- async projection writes and checkpoint advancement commit atomically;
-- many user-side dedup tables become optional rather than mandatory;
-- the same transaction boundary can support process-manager subscription
-  handlers where exact checkpointing matters.
-
-### Category and prefix subscriptions
-
-Kiroku currently supports all-stream or exact-category subscriptions. Keiro
-needs prefix-style subscriptions for larger deployments.
-
-Expected uses:
-
-- observe every process-manager stream under `pm:`;
-- observe every future workflow stream under `wf:`;
-- support multi-stream read models without registering every stream family
-  manually.
-
-Near-term workaround: register one subscription per known category or process
-manager. Prefix subscriptions are the scaling and operability improvement.
+Keiro's projection catalog, DSL source declarations, and category sharding
+helpers retain their declared all-stream/exact-category contracts. An upstream
+namespace target does not automatically extend these surfaces. Workflow resume
+uses its own exact runnable-instance discovery and does not require a namespace
+subscription.
 
 ### Position waits and push delivery
 
-The push mechanism itself has shipped: `Keiro.Wake` duplicates the broadcast
-channel of Kiroku's existing per-store listener, so a worker can wait for an
-append notification with a durable poll fallback and **no new database
-connections**. The workflow resume worker and the sharded-subscription worker
-already use it.
+`Keiro.Wake` and push-aware workers already use Kiroku's existing notifier with
+a durable poll fallback. `Keiro.ReadModel` position waits still poll; wiring wake
+hints into that path remains separate work. Notifications can reduce latency,
+but durable checkpoints remain the correctness authority.
 
-What remains is wiring it into `Keiro.ReadModel`: `PositionWait` still polls.
+For new query models, default to async delivery and `Immediate` freshness.
+When a response needs a projected view, wait for the command's committed
+position after the append returns. Reserve inline work for a stated atomic
+invariant. See [Choosing A Projection](../guides/choosing-a-projection.md).
 
-Benefits when it lands:
+## Language And API Stability
 
-- lower read-after-write latency for `PositionWait`;
-- fewer polling queries under high request volume.
+Language 5 remains the published stable contract and is what `keiro-dsl new`
+selects. Language 6 ships as a candidate, including process reactions, delegated
+intake, `fifo-heads`, nominal structural leaves, checked value mappings, contract
+lists, mapped-register construction, and exact structural enum equality.
+The [DSL reference](keiro-dsl-reference.md) lists the gates and topic references.
 
-The correctness rule stays the same either way: a Postgres `NOTIFY` is
-best-effort, so push is an optimization over a durable poll, never a replacement
-for one.
+The pre-1.0 policy in
+[ADR 49](../adr/0049-language-6-is-the-sole-pre-1-0-coverage-and-data-support-baseline.md)
+selects Language 6 as the eventual sole coverage/data-support baseline.
+Languages 1–4 are deprecated today; Languages 1–5 and legacy positional managers
+are scheduled to retire before 1.0. That future retirement does not make the
+candidate stable today or make an existing service's data migration automatic.
 
-## Phase 4: Adoption And API Ergonomics
+The Haskell API is still pre-1.0 and can break between coordinated releases.
+Regenerate machine-owned output, preserve create-once application modules, and
+compile consumers against one package cohort. Source API migrations belong in
+release notes and the [upgrade blueprint](../../blueprints/keiro-upgrade/README.md).
 
-Goal: make the library easier to learn, operate, and upgrade.
+## Adoption And API Ergonomics
 
-| Work item | Status | Expected outcome |
-|---|---|---|
-| Worked-examples app | Available now | `jitsurei` shows commands, snapshots, read models, PMs, routers, timers, outbox, inbox, and integration events together. |
-| Long-form guides | Available now | `docs/guides/` covers the command side, event evolution, the DSL guarantee ledger, brownfield structural adoption, read models, PMs & timers, snapshots, integration events, routers, and combined examples. |
-| Operator console | Available now | `keiro-ops` covers database-generic operations; `opsCommandTree` and `AppHooks` mount application-code-dependent commands. |
-| Haddocks | Partially complete | Each public module gets reference docs and copy-pasteable examples. |
-| Stability policy | Planned | Users know what can break before a stronger public API milestone. |
-| Read-model migration guide | Planned | Application-owned query tables have clear migration ownership. |
-| Decider-style facade | Declined | Keiro will not support a Decider facade; see [plan 7](../plans/7-internal-decider-style-ergonomic-facade-over-runcommand.md). |
+The worked application, guide-backed tests, generated conformance harnesses,
+replay evidence gates, CLI, HTTP transport, and feeds are available. Remaining
+adoption work includes broader Haddock coverage, a stronger public stability
+policy, and consumer-specific production qualification.
 
-Remaining work:
+Application responsibilities remain explicit:
 
-- Broader Haddocks for each public module.
-- Public stability policy for API changes and migration compatibility.
-- Release discipline around dependency pinning and local sibling packages.
-- Stronger docs for application-owned read-model migrations.
-- Production checklist covering workers, dead letters, timer repair, outbox
-  drain repair, projection rebuilds, and snapshot GC.
+- own read-model migrations, SQL, codecs, and historical-corpus selection;
+- rehearse database upgrades, restores, rebuilds, and operator repair;
+- test replay and idempotency against retained production-shaped history;
+- measure the actual writer, projection, inspection, and worker workload.
 
-Decider support was rejected. The historical exploration in plan 7 is closed
-and is not part of the adoption or API ergonomics backlog.
-
-## Phase 5: v2 Durable Execution
-
-Shipped: a durable-execution runtime (`Keiro.Workflow`) that layers on top of —
-and does not replace — the v1 event-sourcing and process-manager substrate.
-
-V1 workflow means:
-
-- process managers;
-- routers;
-- durable timers;
-- outbox and inbox;
-- projections;
-- idempotent commands;
-- snapshots for long-lived state streams.
-
-V2 durable execution means journaled functions with named steps.
-
-| Feature | Shipped v2 shape |
-|---|---|
-| Authoring model | `Workflow es a` |
-| Durable side effects | `step "name" action` journals a result by explicit step name. |
-| Replay | Recorded step results are returned without re-running side effects. |
-| Sleep | `sleepNamed`/`sleep`, backed by the v1 timer table. |
-| Journal storage | Kiroku streams named `wf:<workflow-name>-<workflow-id>`. |
-| Step lookup | `keiro_workflow_steps` indexes journaled steps for fast lookup. |
-| External completion | `keiro_awakeables` stores externally completed durable promises (`awakeable`/`signalAwakeable`/`cancelAwakeable`). |
-| Child workflows | Parent journals child handles so it can `spawnChild`/`awaitChild`/`cancelChild`. |
-| Resume worker | `resumeWorkflowsOnce` discovers and re-invokes unfinished workflows from a registry. Discovery is exact — a workflow parked on an unresolved wake source is not returned — and a pass can advance several candidates at once (`maxConcurrentAdvances`, default 1). |
-| Snapshots | `runWorkflowWith` + `snapshotPolicy` compact long journals via `workflowStateCodec`. |
-| Observability | `keiro.workflow.*` metrics and a `workflow <name>` span. |
-| Continue-as-new | **Available** — `continueAsNew`/`restoreSeed` rotate a long-running workflow onto a fresh journal generation, keeping per-generation history bounded without losing state (§6.4, MasterPlan 6). |
-| Versioning / patch | **Available** — `patch :: PatchId -> Eff es Bool` gives a stable, journaled branch decision so in-flight instances keep old logic while fresh ones take new logic across step boundaries (§6.5, MasterPlan 6). Prefer renaming a step for single-step changes. |
-
-The key design decision is named steps, not positional history. Step identity is
-explicit and stable across source-code reordering, avoiding Temporal-style
-runtime nondeterminism caused by ordinary code movement.
-
-Scale posture: a workflow suspended on an awakeable, a child, or a future-dated
-sleep costs the resume worker nothing until something happens to it, so idle
-cost does not scale with the number of parked workflows. What does cost passes
-is due sleeps waiting on a timer worker (drain them in batches with
-`drainWorkflowSleepTimers`), crash retries on their backoff ladder, and journal
-replay per re-invocation — `snapshotPolicy` defaults to `Never`, so
-suspend-heavy or long-journal workflows should set `Every n`. See
-[What suspension costs](durable-workflows.md#what-suspension-costs).
-
-User impact: teams can now write imperative long-running workflows with durable
-checkpoints, sleeps, external completion handles, and child workflows, without
-adopting a separate workflow server. See the
-[Durable Workflows guide](../guides/durable-workflows.md) and the
-[user reference](durable-workflows.md).
+No calibrated throughput or latency promise follows from the presence of a
+benchmark or a bounded API. In particular, guarded commands and inline handlers
+extend the shared append transaction.
 
 ## Durable Execution Boundaries
 
-The v2 runtime now ships; the items below record what was required to treat it as
-production-shaped and which pieces remain genuinely deferred.
+The named-step durable runtime is implemented, including journal rotation,
+patches, child completion/cancellation, push-aware resume, and journal snapshots.
+These features are available in the current package set.
 
-Delivered (EP-38…EP-44 under MasterPlan 5):
+A parked workflow is excluded from runnable discovery until its wake condition
+changes. Due sleep timers, crash retries, and replay still cost work. Set an
+appropriate snapshot policy for long journals and size resume concurrency
+against the store pool. See
+[What suspension costs](durable-workflows.md#what-suspension-costs).
 
-- step-result codecs and schema evolution (per-step `ToJSON`/`FromJSON`);
-- unfinished-workflow discovery and a crash-recovery resume worker;
-- stuck awakeable repair (`cancelAwakeable`);
-- child-workflow cancellation semantics (`cancelChild`);
-- observability for journal replay versus live execution
-  (`keiro.workflow.steps.replayed` vs `keiro.workflow.steps.executed`).
-
-Delivered in phase 2 (EP-48…EP-51 under MasterPlan 6):
-
-- continue-as-new journal rotation for unbounded histories
-  (`continueAsNew`/`restoreSeed`);
-- the versioning / patch API for cross-cutting workflow-logic changes (`patch`);
-- LISTEN/NOTIFY push delivery for the resume worker and subscription loops
-  (`Keiro.Wake`, push-aware `runWorkflowResumeWorkerPush`) — sub-second wakeups
-  with a durable poll fallback, adding no new connections (§6.11);
-- consumer-group sharding for category subscriptions
-  (`Keiro.Subscription.Shard`, `runShardedSubscriptionGroup`) — a pool of
-  identical workers leases kiroku consumer-group buckets, draining a category
-  disjointly with automatic, coordinator-free failover (§6.8–§6.9).
-
-Still deferred (rejected or demand-driven, see §6 of the workflow roadmap):
-
-- multi-region / global ordering, server-side scripted projections, the schema
-  registry, and field-level encryption (§6.6, §6.7, §6.10, §6.12).
-
-Why v1 is still the right foundation:
-
-- A process manager is effectively a workflow with explicit event-driven steps.
-- The v2 runtime layers journaled named steps on the same Kiroku event log.
-- V2 reuses the command cycle, timers, snapshots, codecs, migration story, and
-  worker conventions from v1.
+A step's external action and its result journal are separate commits. A crash
+between them can repeat the action. Renaming a step creates a new durable action;
+it is not a compatibility-preserving edit for retained runs. `continueAsNew`
+starts a new generation and requires re-notifying holders of newly allocated
+awakeable IDs. See [Deploy Ordering](deploy-ordering.md) and
+[Durable Workflows](durable-workflows.md).
 
 ## Longer-term Possibilities
 
-These are intentionally outside the current v1 and v2 commitments.
-
-| Possibility | Why later |
-|---|---|
-| Schema registry | Most useful for multi-team or polyglot event consumers. |
-| Field-level encryption | Requires application-specific key-management choices. |
-| Multi-region operation | Requires a global-ordering story outside the current single-Postgres design. |
-| Binary or compressed snapshots | Useful for hot, large states; JSON remains operator-friendly for v1. |
-
-Server-side scripted projections are not on the roadmap. The design explicitly
-rejects that model because it is operationally fragile and hard to debug.
+Schema-registry integration, field-level encryption, alternative snapshot
+encodings, and multi-region operation remain demand-driven design work.
+The current runtime assumes one PostgreSQL ordering authority. Server-side
+scripted projections were declined; a Decider-style facade was also declined
+in favor of the validated transducer and generated authoring surface.

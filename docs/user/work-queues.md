@@ -7,9 +7,13 @@ tags: [keiro, pgmq, work-queues, reference]
 generated:
   by: human:nadeem
   at: 2026-09-18T00:12:21Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Work Queues
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 The `keiro-pgmq` package gives an application a typed background-job queue on
 top of [PGMQ](https://github.com/pgmq/pgmq) (the PostgreSQL-native message
@@ -23,6 +27,24 @@ handler.
 This is a separate package from `keiro`. Add `keiro-pgmq` to `build-depends` and
 import `Keiro.PGMQ` for the whole surface, or the individual modules
 (`Keiro.PGMQ.Runtime`, `.Codec`, `.Job`, `.Dlq`, `.Metrics`).
+
+## Runtime and migration cohort
+
+Keiro 0.22.0.0 uses the [PGMQ family](mori://shinzui/pgmq-hs)
+`>=0.7.0.0 && <0.8`, the
+[PGMQ adapter](mori://shinzui/shibuya-pgmq-adapter/packages/shibuya-pgmq-adapter)
+`^>=0.18.0.0`, and
+[Shibuya Core](mori://shinzui/shibuya/packages/shibuya-core) `^>=0.12.0.0`.
+Apply the PGMQ component's migration 0007 through your application's migration
+plan before queue traffic. `keiro-migrate` alone does not include PGMQ.
+Partitioned queues no longer emit insert notifications; retain durable polling.
+
+Custom low-level interpreters must handle the new peek/lookup/metrics
+operations, and exhaustive reconciliation matches must handle queue-name
+collisions and partitioned-notification refusal. Adapter DLQ envelopes now add
+`original_queue`; Keiro's existing browsing, header preservation, and redrive
+contract remains compatible. See the
+[0.22 upgrade edge](../../blueprints/keiro-upgrade/migrations/0.21.0.0-to-0.22.0.0.md).
 
 ## Work queue or outbox?
 

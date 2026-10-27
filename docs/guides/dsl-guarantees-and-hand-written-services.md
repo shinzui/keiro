@@ -7,6 +7,7 @@ tags: [keiro, dsl, guarantees, service-design]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:08:09Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # The Guarantee Ledger: DSL and Hand-Written Services
@@ -58,7 +59,9 @@ No one gate checks everything.
 
 Keiki's `validateTransducer` is the pure validation umbrella for the state
 machine that actually runs. Its structured warning vocabulary includes five
-replay-soundness families (`shinzui/keiki` `src/Keiki/Core.hs:1983-2033`):
+replay-soundness families in
+[Keiki](mori://shinzui/keiki/packages/keiki), project-relative
+`src/Keiki/Core.hs` (source-artifact URI pending):
 
 - `HiddenInput` means an edge consumes command information that its events do
   not carry, so replay cannot reconstruct the command.
@@ -73,8 +76,9 @@ replay-soundness families (`shinzui/keiki` `src/Keiki/Core.hs:1983-2033`):
 
 The default umbrella runs those checks alongside determinism and reachability,
 and a clean result means the machine can replay the logs it produces, subject
-to honest constructor descriptions (`shinzui/keiki`
-`src/Keiki/Core.hs:2127-2188`). This is a property of the Keiki value, not of
+to honest constructor descriptions. The validation implementation belongs to
+[Keiki](mori://shinzui/keiki/packages/keiki), project-relative
+`src/Keiki/Core.hs` (source-artifact URI pending). This is a property of the Keiki value, not of
 whether that value came from a spec.
 
 Keiro-core makes that validation part of the service boundary. Command runners

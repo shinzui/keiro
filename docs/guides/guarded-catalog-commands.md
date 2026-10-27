@@ -7,6 +7,7 @@ tags: [keiro, commands, projections, transactions]
 generated:
   by: process:codex-cli
   at: 2026-10-12T18:26:16Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Guarded Catalog Commands
@@ -26,7 +27,8 @@ query waits. Implementation and correctness validation are complete in
 The owner deferred exhaustive performance testing; the partial measurements
 provide no calibrated throughput or latency guarantee. A bounded indexed guard
 still extends the global append-lock interval, and refusal can incur WAL and
-vacuum work. Package publication remains separate. Downstream adoption belongs to
+vacuum work. The API ships in Keiro 0.22.0.0; package publication does not
+qualify a downstream workload or its retained history. Downstream adoption belongs to
 `mori://shinzui/rei/plans/249-expose-categories-and-custom-properties-with-shared-typed-assignment-semantics`.
 
 ## Keep command authority small

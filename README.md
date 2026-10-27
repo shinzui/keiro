@@ -2,9 +2,9 @@
 
 keiro is a Haskell **framework** for **event sourcing and workflow
 orchestration** on PostgreSQL. It composes a set of sibling libraries — an
-append-only event store ([kiroku](https://github.com/shinzui/kiroku)), a pure
-state-machine core ([keiki](https://github.com/shinzui/keiki)), and supervised
-subscription workers ([shibuya](https://github.com/shinzui/shibuya)) — into a
+append-only event store ([kiroku](mori://shinzui/kiroku)), a pure
+state-machine core ([keiki](mori://shinzui/keiki)), and supervised
+subscription workers ([shibuya](mori://shinzui/shibuya)) — into a
 runtime that an application builds on and runs against its own Postgres
 database. There is no separate workflow server, no second replicated log, and no
 parallel storage path for "workflow state" versus "domain events": everything is
@@ -36,12 +36,14 @@ keiro unifies two engines over a **single Postgres event log**:
   concurrency appends and total, replay-safe folds.
 - a **durable-execution engine** (the `Workflow` effect). Write a long-running
   process as an ordinary `effectful` computation; each named `step` journals its
-  result into a kiroku stream (`wf:<name>-<id>`), so a crash resumes from the
-  last recorded step without re-running committed work. Suspension primitives —
+  result into a kiroku stream (`wf:<name>-<id>`), so replay reuses recorded
+  results. An action that completed before its result was journaled can run
+  again after a crash; external effects still need idempotency. Suspension
+  primitives —
   `sleep`, `awakeable` (external signal), and child workflows — journal as
   ordinary step records, and a resume worker recovers in-flight runs. Replay is
-  keyed by step *name*, not source position, so refactoring the workflow body is
-  safe.
+  keyed by step *name*, not source position. Preserve names and result codecs
+  for retained steps; use `patch` for changes to replayed control flow.
 
 The two engines share one substrate — kiroku streams in your Postgres — so
 domain events, process-manager state, and workflow journals sit on one timeline,
@@ -58,12 +60,15 @@ motivation and an honest account of what keiro deliberately gives up.
   with optimistic concurrency — including a **transactional step**
   (`runCommandWithSql`) that appends events, updates inline projections, and
   writes outbox/timer rows in one Postgres transaction (`Keiro.Command`);
-- advisory snapshots that never become load-bearing (`Keiro.Snapshot`);
+- snapshot-assisted hydration with compatibility checks and full-replay fallback
+  while history is retained (`Keiro.Snapshot`);
 - validated projection catalogs spanning query models, application-owned
   targets, typed inline/async owners, and deterministic sources; plus
   category-scoped strong reads and atomically fenced, fixed-head coordinated
   rebuilds with resumable progress (`Keiro.ReadModel`, `Keiro.Projection`,
   `Keiro.Projection.Catalog`);
+- guarded catalog commands that roll back the append and projection writes
+  when an application-owned relational precondition refuses;
 - event-sourced process managers, routers, and durable timers
   (`Keiro.ProcessManager`, `Keiro.Router`, `Keiro.Timer`);
 - a **durable-execution runtime** — named-step journaling, crash-safe replay and
@@ -79,31 +84,38 @@ motivation and an honest account of what keiro deliberately gives up.
   evolution (`keiro-dsl`);
 - native dependency-ordered database migration components and the
   `keiro-migrate` CLI (`keiro-migrations`, `pg-migrate`);
+- bounded aggregate, workflow, manager, timer, shard, and projection inspection
+  through `keiro-ops`, plus optional HTTP and WebSocket feeds in `keiro-ops-http`;
 - OpenTelemetry telemetry across every delivery and handler (`Keiro.Telemetry`).
 
 ## Runtime stack
 
 keiro is a framework, not a server. It builds on the author's sibling libraries:
 
-- **[kiroku](https://github.com/shinzui/kiroku)** — PostgreSQL append-only event
+- **[kiroku](mori://shinzui/kiroku)** — PostgreSQL append-only event
   store with gap-free contiguous global positions;
-- **[keiki](https://github.com/shinzui/keiki)** — the pure `SymTransducer`
+- **[keiki](mori://shinzui/keiki)** — the pure `SymTransducer`
   state-machine core used by the event-sourcing side;
-- **[shibuya](https://github.com/shinzui/shibuya)** — subscription and worker
+- **[shibuya](mori://shinzui/shibuya)** — subscription and worker
   supervision, with pgmq and Kafka adapters;
-- **[pgmq-hs](https://github.com/shinzui/pgmq-hs)** — the Postgres-native message
-  queue behind `keiro-pgmq` and the outbox drain;
+- **[pgmq-hs](mori://shinzui/pgmq-hs)** — the Postgres-native message
+  queue behind `keiro-pgmq` work queues;
 
 and the wider ecosystem — **hasql** and **effectful** for database access and
 effect handling, and **Streamly** for streaming reads and worker loops.
 
 ## Packages
 
+The eight published packages below share the **0.22.0.0** release. `jitsurei`
+is the repository's worked-example package. See [Getting Started](docs/user/getting-started.md)
+for application dependencies and [Deploy Ordering](docs/user/deploy-ordering.md)
+before upgrading an existing database.
+
 - `keiro/` — the framework library (command cycle, snapshots, read models,
   projections, process managers, routers, timers, durable workflows,
   inbox/outbox, telemetry). See [`keiro/README.md`](keiro/README.md) for the
   full overview.
-- `keiro-core/` — stable, dependency-light contract modules (`Keiro.Codec`,
+- `keiro-core/` — dependency-light contract modules (`Keiro.Codec`,
   `Keiro.EventStream`, `Keiro.Integration.Event`, `Keiro.Prelude`,
   `Keiro.Snapshot.Policy`, `Keiro.Stream`) shared by the other packages.
 - `keiro-pgmq/` — PostgreSQL job-queue (PGMQ) integration: a reusable
@@ -116,8 +128,8 @@ effect handling, and **Streamly** for streaming reads and worker loops.
 - `keiro-ops/` — schema-checked operational CLI and embeddable command tree for
   inspection, safe preview/`--force` repair, stable JSON, workflow/timer hooks,
   replay audits, and typed catalog rebuilds.
-- `keiro-ops-http/` — embeddable HTTP operations with bounded inspection and
-  preview/confirm mutations.
+- `keiro-ops-http/` — opt-in HTTP operations, shared WebSocket first-page feeds,
+  one-listener composition, and preview/confirm mutations.
 - `keiro-test-support/` — shared PostgreSQL test fixtures for the test suites.
 - `jitsurei/` — guide-backed, runnable worked examples, including one-catalog
   live/async application and a mixed clear/preserve rebuild with fencing and
@@ -125,26 +137,45 @@ effect handling, and **Streamly** for streaming reads and worker loops.
 
 ## Building
 
-From this directory:
+Use the project's Nix development shell. It supplies GHC 9.12.4, PostgreSQL 18,
+Z3, and the repository verification tools:
 
 ```bash
-cabal build all
-cabal test all
+nix develop
+z3 --version
+cabal build all --enable-tests --enable-benchmarks
+cabal test all --test-show-details=direct
+just user-documentation-validate
 ```
 
-The test suites use ephemeral PostgreSQL databases, so a `postgres` toolchain
-must be on `PATH` (the Nix dev shell provides one).
+The tests create ephemeral PostgreSQL databases. For the full repository gate,
+run `nix develop -c just verify`. Its demo run creates and removes a private
+database; it preserves the interactive `JITSUREI_DATABASE`.
+
+To run the worked examples interactively from the shell:
+
+```bash
+just jitsurei
+```
+
+Use `JITSUREI_DATABASE=keiro_inspection_demo just jitsurei` for a fresh demo
+database when testing a changed unreleased migration. See
+[Run And Operate Jitsurei](docs/guides/run-and-operate-jitsurei.md) for the
+individual demos and embedded operations commands.
 
 ## Documentation
 
 - User-facing documentation starts at [`docs/user/README.md`](docs/user/README.md).
-- The stable Language 5 DSL reference starts at
+- The DSL reference covers stable Language 5 and candidate Language 6 at
   [`docs/user/keiro-dsl-reference.md`](docs/user/keiro-dsl-reference.md).
 - Migration setup and operations start at
   [`docs/user/migrations.md`](docs/user/migrations.md).
 - Long-form, guide-backed examples start at
   [`docs/guides/README.md`](docs/guides/README.md) and use the `jitsurei`
   package as their executable source.
+- Operations transports: [HTTP](docs/guides/serve-keiro-ops-over-http.md),
+  [WebSocket feeds](docs/guides/stream-keiro-inspection-views.md), and
+  [composition](docs/guides/compose-runtime-inspection-surfaces.md).
 - Motivation and comparison to adjacent systems: [`docs/why-keiro.md`](docs/why-keiro.md).
 - Profile-governed design research starts at
   [`docs/research/index.md`](docs/research/index.md); implementation plans live
@@ -157,15 +188,13 @@ models/projections, process managers, routers, timers, transactional messaging,
 dead-letter tooling, named-step durable execution, typed-spec scaffolding, and
 native migrations are implemented — production-shaped for controlled early
 use, not yet a 1.0. keiro is Haskell-only and single-region Postgres by design;
-exactly-once async projection checkpoints and higher-level ergonomic facades
-remain future-facing. See
+async delivery remains at-least-once, with transactional projection deduplication
+while receipts are retained. Language 6 ships as a candidate in the released
+toolchain; it has not acquired a stable language compatibility contract.
+Languages 1–4 are deprecated, and Languages 1–5 plus legacy positional managers
+are scheduled to retire before 1.0. See
 [`docs/user/production-status.md`](docs/user/production-status.md).
 
 ## License
 
 BSD-3-Clause.
-
-Repository verification uses `nix develop -c just verify`. Its demo run creates
-and removes a private database; the interactive `JITSUREI_DATABASE` is preserved.
-Use `JITSUREI_DATABASE=keiro_inspection_demo just jitsurei` when testing a changed unreleased
-migration against a fresh interactive demo without altering an older demo.

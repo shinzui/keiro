@@ -7,6 +7,7 @@ tags: [keiro, dsl, adoption, decision-guide]
 generated:
   by: process:codex
   at: 2026-10-13T23:30:33Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Choosing `keiro-dsl`: Benefits, Costs, and Fit
@@ -251,12 +252,18 @@ when many specifications move together.
 
 Language 6 is a **candidate**, not a published contract. Language 5 is the
 published stable contract, and `keiro-dsl new` writes it. Languages 1 through 4
-are deprecated and scheduled for removal. Declaring `language keiro-dsl 6` opts a specification into
-delegated inboxes, first-class process reactions, structural nominal leaves,
-declared contract IDs, keyed maps, checked value mappings, and
+are deprecated today. Languages 1–5 and legacy positional managers are scheduled
+to retire before 1.0 under
+[ADR 49](../adr/0049-language-6-is-the-sole-pre-1-0-coverage-and-data-support-baseline.md).
+Declaring `language keiro-dsl 6` opts a specification into delegated inboxes,
+first-class process reactions, structural nominal leaves, declared contract IDs,
+contract lists, keyed maps, checked values, mapped-register construction, exact
+structural enum equality, and
 `ordering fifo-heads` (which requires Language 6; a Language 5 queue must keep
-a published ordering with batch size one). Because the candidate is unpublished, released-only services should
-stay on Language 5 until it is published.
+a stable FIFO ordering with batch size one). These features ship in the
+0.22.0.0 toolchain, but the candidate language can still change in place.
+Services requiring a stable language contract should stay on Language 5 until
+the successor contract is published.
 
 Canonical pretty printing is not a lossless formatter. The frontend retains exact ownership spans
 but intentionally drops comments and whitespace before lowering; tools that need trivia-preserving

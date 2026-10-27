@@ -7,9 +7,13 @@ tags: [keiro, migrations, upgrade, runbook]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:06:27Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Upgrading To The Keiro Schema
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 `keiro-migrations 0.1.0.0` created Keiro's framework tables (`keiro_snapshots`,
 `keiro_read_models`, `keiro_timers`, `keiro_outbox`, `keiro_inbox`,

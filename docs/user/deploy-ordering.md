@@ -7,6 +7,7 @@ tags: [keiro, deployment, compatibility, operations]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:06:27Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Deploy Ordering
@@ -31,6 +32,29 @@ rebalance.
 Multiple names may appear when one finding crosses more than one durable
 boundary; an absent rollout entry means compatibility is not conditional on a
 deployment order.
+
+## Framework Cohort Upgrades
+
+Keep all used Keiro packages on the same release; the current cohort is
+0.22.0.0. Framework migrations can impose a stopped-worker or stopped-writer
+boundary independently of application codec changes. Follow
+[Database Migrations](migrations.md#upgrading-to-02200) and the
+[versioned upgrade edges](../../blueprints/keiro-upgrade/README.md).
+
+The 0.22 cohort requires stopped affected subscription workers for Kiroku 0016,
+then Store 0.12 binaries before namespace bindings are used. Apply PGMQ 0007
+before queue traffic; partitioned queues retain polling. Earlier upgrade edges
+include Kiroku 0012's all-log backfill/write cutover, 0013/0014's subscription
+changes, and 0015's name-index build. Treat these as database operations, not
+ordinary rolling source upgrades.
+
+Direct Shibuya `Ingested` constructors now supply
+`deliveryStatus = pure DeliveryCurrent`; construct `AppConfig` by updating
+`defaultAppConfig`. Update `RunCommandOptions` from `defaultRunCommandOptions`
+and `AppHooks` from `emptyAppHooks` to retain defaults for new inspection fields.
+Restart stored default workflow inspection pagination at the first page after
+upgrading: the default cursor family is now `wf-key2`. Creation-order and legacy
+listing cursors retain their separate contracts.
 
 ## 1. Start From The Durable Boundary
 
@@ -242,7 +266,7 @@ before any pre-cutover event is replayed. See
 and [Migrating existing producers](outbox.md#migrating-existing-producers).
 
 Switching an intake between table and delegated idempotence is breaking
-(`IntakeIdempotenceModeChanged`): `keiro_inbox` rows and downstream receipt IDs
+(`IntakeIdempotenceModeChanged`): `keiro.keiro_inbox` rows and downstream receipt IDs
 are different histories. Drain in-flight delivery and define a replay boundary
 at cutover. See
 [Integration Events](integration-events.md#choosing-inbox-idempotence-ownership).

@@ -7,7 +7,7 @@ tags: [keiro, integration-events, kafka, guide]
 generated:
   by: human:nadeem
   at: 2026-07-24T13:06:07Z
-timestamp: 2026-09-18T04:05:47Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Integration Events With Kafka
@@ -145,7 +145,7 @@ The consuming service reads from the topic, normalizes each record
 into a `KafkaInboundRecord`, calls `integrationEventFromKafka` to
 reconstruct the EP-19 envelope, and hands the result to
 `runInboxTransaction`. `runInboxTransaction` records the receipt in
-`keiro_inbox` and runs the local handler in the **same** Postgres
+`keiro.keiro_inbox` and runs the local handler in the **same** Postgres
 transaction.
 
 If Kafka redelivers the same message (consumer rebalance, offset
@@ -296,7 +296,7 @@ receive**.
 - **Auto dead-letter** transitions a row to `status = 'dead'` after
   `maxAttempts` consecutive failures so a permanently-broken row stops
   freezing its key. Operators see stuck messages with
-  `SELECT * FROM keiro_outbox WHERE status = 'dead';`.
+  `SELECT * FROM keiro.keiro_outbox WHERE status = 'dead';`.
 - **Kafka** gives at-least-once delivery and per-partition ordering
   for records sharing a key. It does not give cross-key order; it does
   not give exactly-once across topics or services.

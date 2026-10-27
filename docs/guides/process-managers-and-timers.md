@@ -7,9 +7,13 @@ tags: [keiro, process-managers, timers, guide]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:05:47Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Process Managers And Timers
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 A process manager reacts to one stream and emits commands to another stream.
 `jitsurei` uses this to model fulfillment: when an order receives

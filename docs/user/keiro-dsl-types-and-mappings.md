@@ -7,9 +7,13 @@ tags: [keiro, dsl, types, mappings, reference]
 generated:
   by: openai-codex/gpt-6.1-sol
   at: 2026-10-26T23:15:24Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Keiro DSL Types and Mappings
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 This page covers the shared declarations and types that every node can use:
 IDs, enums, rules, nominal declarations, direct aggregate types, and
@@ -710,5 +714,6 @@ an aggregate uses it. Binding, canonical identity, domain, and guard changes may
 invalidate snapshots and require replay review. Fixture-label edits and constructor
 reordering do not change that identity. Event strings retain their declared
 spellings; event-codec parity alone does not establish register-layout, fold, or
-snapshot compatibility. This is candidate implementation support, not a published
-release or approval of a downstream migration.
+snapshot compatibility. This support ships in the 0.22.0.0 toolchain while
+Language 6 remains a candidate. Package publication neither stabilizes the
+language contract nor approves a downstream migration.

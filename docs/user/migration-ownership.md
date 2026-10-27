@@ -7,9 +7,13 @@ tags: [keiro, migrations, ownership, postgres]
 generated:
   by: human:nadeem
   at: 2026-08-14T16:35:45Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Migration Ownership
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 Keiro applications usually have three PostgreSQL schema owners:
 

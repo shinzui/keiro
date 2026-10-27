@@ -2,7 +2,7 @@
 type: Runbook
 title: Database Migrations
 description: Install, upgrade, and verify Keiro framework database migrations.
-timestamp: 2026-10-14T03:37:57Z
+timestamp: 2026-10-27T21:15:00Z
 docId: DOC-14
 tags: [keiro, migrations, database, operations]
 generated:
@@ -11,6 +11,9 @@ generated:
 ---
 
 # Database Migrations
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 Keiro uses two framework-owned PostgreSQL schemas:
 
@@ -39,6 +42,33 @@ files. Runtime code contains no second copy of the framework DDL.
 The old timestamped Codd files, expected-schema snapshot, and lock manifest are
 retained only as cutover evidence and opt-in legacy verification. They are not
 the normal migration runner.
+
+## Upgrading to 0.22.0.0
+
+The framework plan contains **48 migrations**: 16 from
+[kiroku-store-migrations](mori://shinzui/kiroku/packages/kiroku-store-migrations)
+and 32 from Keiro. PGMQ is a separately composed component and is not included
+in that count. Inspect the embedded plan rather than using the count as a
+substitute for ledger verification.
+
+For an existing deployment:
+
+1. Stop affected subscription workers before applying Kiroku migration 0016.
+2. Apply the complete framework plan with the 0.22.0.0 migrator, then verify its
+   ledger and live schema.
+3. Restart with the Kiroku Store 0.12 cohort before creating namespace bindings.
+   Older binaries must not manage those bindings.
+4. If the service uses PGMQ, apply its released migration 0007 through the
+   application's composed plan before queue traffic. Partitioned queues no
+   longer emit insert notifications; retain polling.
+
+An upgrade from an older cohort can also include Kiroku 0012's backfill/write
+cutover, 0013/0014's subscription topology/binding changes, and 0015's
+transactional name-index build. Review every intervening release rather than
+applying only the latest namespace instruction. The
+[upgrade blueprint](../../blueprints/keiro-upgrade/README.md) and
+[Deploy Ordering](deploy-ordering.md#framework-cohort-upgrades) describe these
+boundaries. Rehearse data-bearing upgrades on a restored clone.
 
 ## Inspect and apply
 
@@ -177,7 +207,8 @@ Who needs the re-baseline:
 | Never reached `0010` — every ordinary PostgreSQL 17 upgrade, the path this Kiroku release fixes | Nothing. `0010` is still pending and applies from the corrected payload |
 | Ephemeral or template-per-suite test databases | Nothing. They apply the whole plan from scratch |
 
-The fixup ships with `kiroku-store-migrations` as
+The fixup ships with
+[mori://shinzui/kiroku/packages/kiroku-store-migrations](mori://shinzui/kiroku/packages/kiroku-store-migrations) as
 `ledger-fixups/2026-08-16-rebaseline-0010-checksum.sql`. It rewrites one
 checksum, touches no schema, and is idempotent — a second run, or a run against
 a database that applied the corrected payload, matches no rows. It assumes

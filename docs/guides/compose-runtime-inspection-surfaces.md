@@ -2,7 +2,7 @@
 type: Runbook
 title: Compose Runtime Inspection Surfaces
 description: Mount supported inspection applications under stable prefixes on one listener.
-timestamp: 2026-10-25T04:48:05Z
+timestamp: 2026-10-27T21:15:00Z
 docId: DOC-32
 tags: [keiro, operations, http, inspection, composition]
 generated:
@@ -43,15 +43,20 @@ the handle and store.
 For `kiroku`, allocate `newKirokuMetrics inspectionStore`, obtain
 `storeServerProviders metricsConfig metrics inspectionStore`, then mount
 `combinedAppWithProviders metricsConfig metrics [] providers` from released
-`mori://shinzui/kiroku/packages/kiroku-metrics` 0.3.0.1. These providers allocate
+`mori://shinzui/kiroku/packages/kiroku-metrics` (`^>=0.4.0.0` in the
+0.22.0.0 composition example). These providers allocate
 no independent server thread; active sockets own their child work. Mount other
 owners only through their public `Application` constructors. Released
-`mori://shinzui/shibuya/packages/shibuya-metrics` 0.10.0.1 exposes
+`mori://shinzui/shibuya/packages/shibuya-metrics` 0.12.0.0 exposes
 `combinedApp config master socketState dependencyChecks`. Allocate its
 `newWebSocketState` once and call `shutdownWebSockets` when the host releases
 that mount; validate the owner configuration as its public constructor requires.
-`mori://shinzui/pgmq-hs/packages/pgmq-inspect` exists in the owner checkout but
-is not yet on Hackage (2026-10-20); do not add it to a published default build.
+`mori://shinzui/pgmq-hs/packages/pgmq-inspect` is published as 0.7.0.0.
+Its `Pgmq.Inspect.withInspectApplication config env` scopes an embeddable WAI
+application. Build `env` with `poolEnv` over a dedicated inspection pool;
+`listenerSettings = Nothing` selects poll-only feeds. Keep that callback alive
+for the mount lifetime. The repository composition example currently mounts
+Keiro and Kiroku only; Shibuya and PGMQ mounts remain host-owned integrations.
 Related upstream work is tracked by
 `mori://shinzui/shibuya/masterplans/7-browser-ready-processor-inspection-and-control-surface`
 and `mori://shinzui/pgmq-hs/okf/improvement-requests/concepts/IR-3`.

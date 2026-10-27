@@ -7,9 +7,13 @@ tags: [keiro, dsl, language-5, language-6, reference]
 generated:
   by: process:codex-cli
   at: 2026-10-14T04:19:11Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Keiro DSL Reference
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 `keiro-dsl` is Keiro's build-time language for describing an event-sourced
 service. A checked `.keiro` source can generate Haskell domain types, codecs,
@@ -19,15 +23,18 @@ ordinary Keiro APIs; the DSL is not interpreted in production.
 
 This reference describes **Language 5**, the published stable language and
 recommended contract for new released-only specifications, and **Language 6**,
-the candidate that extends it. They are the only supported languages; this
-reference does not document Languages 1 through 4, which are deprecated and
-scheduled for removal. Sources begin with:
+the candidate that extends it. This reference documents those two contracts.
+Languages 1 through 4 remain deprecated compatibility implementations.
+[ADR 49](../adr/0049-language-6-is-the-sole-pre-1-0-coverage-and-data-support-baseline.md)
+schedules Languages 1–5 and legacy positional managers to retire before 1.0;
+that policy does not promote Language 6 today. Sources begin with:
 
 ```keiro
 language keiro-dsl 5
 ```
 
-**Language 6** is the active candidate. It is registered and fully checked,
+**Language 6** ships in the 0.22.0.0 toolchain as the active candidate.
+Package releases and stable language publication are separate decisions. It is registered and fully checked,
 scaffolded, and conformance-tested, but it has not crossed the published
 compatibility boundary: the candidate may still be corrected in place until it
 is published. It extends Language 5 with the following additions:
@@ -45,6 +52,8 @@ is published. It extends Language 5 with the following additions:
 | `Day` calendar days and `Set Text` text sets | [Checked value wire policies](keiro-dsl-types-and-mappings.md#checked-value-wire-policies) |
 | `mapped refined` base16 byte values | [Refined values](keiro-dsl-types-and-mappings.md#refined-values) |
 | `domain=typeid-v5-or-v7` ID admission | [IDs](keiro-dsl-types-and-mappings.md#ids) |
+| Complete mapped-register `initial` and `mapped(expression)` writes through versioned `write-lift` | [Mapped register construction](keiro-dsl-aggregates.md#mapped-register-construction-in-candidate-language-6) |
+| Same-declaration structural enum equality and qualified constructor literals | [Structural enum equality](keiro-dsl-types-and-mappings.md#exact-equality-for-structural-enums-candidate-language-6) |
 
 Each addition is refused below Language 6 with
 `LanguageFeatureRequiresVersion`, and each is inert for a source that does not

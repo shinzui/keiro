@@ -7,9 +7,13 @@ tags: [keiro, routers, fan-out, tutorial]
 generated:
   by: human:nadeem
   at: 2026-08-14T17:05:11Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Routers And Effectful Fan-Out
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 A [process manager](process-managers-and-timers.md) fans one event out to other
 streams when the set of targets is a *pure* function of the event — its `handle`

@@ -7,9 +7,13 @@ tags: [keiro, dsl, mappings, adoption]
 generated:
   by: openai-codex/gpt-6.1-sol
   at: 2026-10-26T23:15:24Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Adopting Mapped Consumer Surfaces
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 Published stable `keiro-dsl` Language 5 can carry one mapped declaration through every
 supported private consumer surface: aggregate commands, private events and

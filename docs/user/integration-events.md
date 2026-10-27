@@ -7,7 +7,7 @@ tags: [keiro, integration-events, messaging]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:05:10Z
-timestamp: 2026-09-15T20:23:47Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Integration Events
@@ -160,7 +160,7 @@ binary format; the inbox and outbox preserve those bytes verbatim.
 ## Choosing inbox idempotence ownership
 
 Table-backed intake remains the default. `runInboxTransaction` inserts a
-`keiro_inbox` receipt and runs the handler in the same transaction. It provides
+`keiro.keiro_inbox` receipt and runs the handler in the same transaction. It provides
 a bounded deduplication window, retry status, backlog inspection, and failed-row
 visibility.
 

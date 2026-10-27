@@ -1,7 +1,7 @@
 ---
 type: Reference
 title: Snapshots
-timestamp: 2026-10-21T00:26:46Z
+timestamp: 2026-10-27T21:15:00Z
 description: Reference advisory snapshots, fold versions, hydration behavior, and operations.
 docId: DOC-22
 tags: [keiro, snapshots, hydration, reference]
@@ -14,11 +14,13 @@ generated:
 
 Snapshots speed up hydration by storing an encoded `(state, registers)` seed for
 a stream. They are advisory: if a snapshot is missing, incompatible, corrupt, or
-too old, Keiro falls back to full replay.
+too old, Keiro falls back to full replay while history is retained. After
+stream truncation, a compatible snapshot must cover the hidden prefix; see
+[Stream Truncation](operations.md#stream-truncation).
 
 ## Enable The Schema
 
-The `keiro_snapshots` table is created by `keiro-migrate`; see
+The `keiro.keiro_snapshots` table is created by `keiro-migrate`; see
 [Database Migrations](migrations.md). Tests get it from the migrated template
 database (the `keiro-test-support` `withMigratedSuite` fixture).
 

@@ -7,9 +7,13 @@ tags: [keiro, workflows, durability, tutorial]
 generated:
   by: human:nadeem
   at: 2026-08-14T17:05:11Z
+timestamp: 2026-10-27T21:15:00Z
 ---
 
 # Durable Workflows
+
+For commands run from this repository, enter `nix develop` first. It supplies
+the project compiler, PostgreSQL, and Z3 used by the tests.
 
 This guide walks a **durable workflow** end to end: a named `reserve-inventory`
 step, a durable `cooling-off` sleep, a `payment-webhook` awakeable resolved by an
@@ -98,7 +102,7 @@ sleepNamed :: (Workflow :> es, Store :> es, IOE :> es) => StepName -> NominalDif
 ```
 
 `sleepNamed (StepName "cooling-off") delta` schedules a row in the existing
-`keiro_timers` table and suspends the run. When a timer worker fires the row, it
+`keiro.keiro_timers` table and suspends the run. When a timer worker fires the row, it
 appends a `sleep:cooling-off` completion to the journal, so the next run continues
 past the sleep. The delay survives a process restart with no external scheduler.
 `sleep delta` is the ordinal convenience form (`sleep:0`, `sleep:1`, …); prefer
@@ -299,7 +303,7 @@ into its callback system.
 `failed`/`transientErrors`/`leaseSkipped`/`paced`/`sleepDue`/
 `unregisteredNames`);
 `runWorkflowResumeWorker` loops it on a poll interval. Discovery is a single
-index query over the `keiro_workflows` instance table, and it is **exact**: an
+index query over the `keiro.keiro_workflows` instance table, and it is **exact**: an
 instance is returned when it is `running`, or `suspended` with a due wake hint,
 and never otherwise. It does **not** use a kiroku `wf:` prefix subscription, so
 the runtime has no upstream dependency. An unfinished workflow whose name is
@@ -468,7 +472,7 @@ myWakeSource key = awaitStep (StepName ("mysrc:" <> key)) $ do
 
 The fourth obligation has no code in that sketch because it is easy to miss:
 **every lifecycle transition of your durable row must leave the owning
-`keiro_workflows` row discoverable, in the same transaction.** Delivering through
+`keiro.keiro_workflows` row discoverable, in the same transaction.** Delivering through
 `appendJournalEntry` gets this for free. A transition that appends *nothing* —
 abandoning a pending wake — must write the instance row itself. Skip it and the
 workflow is never re-examined; under exact discovery that is a permanent strand,
