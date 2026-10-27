@@ -12,8 +12,39 @@ default:
     just --list
 
 [group('meta')]
-verify: mapped-structural-enum-equality-proof consumer-enum-literal-proof mapped-register-construction-proof process-compose-check jitsurei-verify haskell-verify adr-validate research-validate capabilities-validate reviews-validate bug-reports-validate user-documentation-validate terminology-validate extension-policy dsl-api-boundaries keiro-reexports record-migration-policy generated-name-policy conformance-corpus-policy process-reaction-proof initial-hole-proof replay-compatibility checked-mapping-adoption
+verify:
+    python3 scripts/release_workflow.py locked -- just _verify
+
+[private]
+_verify: mapped-structural-enum-equality-proof consumer-enum-literal-proof mapped-register-construction-proof process-compose-check jitsurei-verify haskell-verify adr-validate research-validate capabilities-validate reviews-validate bug-reports-validate user-documentation-validate terminology-validate extension-policy dsl-api-boundaries keiro-reexports record-migration-policy generated-name-policy conformance-corpus-policy process-reaction-proof initial-hole-proof replay-compatibility checked-mapping-adoption
     cabal test keiro-migrations-test
+
+# Run before compilation. Registry reachability and generated inventories must
+# not first be discovered after the test suites finish.
+[group('meta')]
+release-static: terminology-validate record-migration-policy adr-validate research-validate capabilities-validate reviews-validate bug-reports-validate user-documentation-validate extension-policy dsl-api-boundaries keiro-reexports
+    scripts/check-generated-name-policy.sh --paths-only
+    python3 -m unittest discover -s scripts/tests -p 'test_release*.py'
+
+[group('meta')]
+release-prepare:
+    python3 scripts/release_workflow.py prepare
+
+[group('meta')]
+release-preflight:
+    python3 scripts/release_workflow.py preflight
+
+[group('meta')]
+release-artifacts:
+    python3 scripts/release_workflow.py artifacts
+
+[group('meta')]
+release-consumer mode:
+    python3 scripts/release_consumer.py {{mode}}
+
+[group('meta')]
+release-ready manifest:
+    python3 scripts/release_workflow.py ready {{manifest}}
 
 # Strict OKF enforcement for the architecture-decision bundle (docs/adr,
 # registered as OKF bundle "adrs" in mori.dhall). Fails on any profile
@@ -54,7 +85,7 @@ generated-name-policy:
 
 [group('haskell')]
 corpus-regen:
-    cabal run -v0 keiro-dsl-corpus-regen -- regenerate
+    python3 scripts/release_workflow.py locked -- cabal run -v0 keiro-dsl-corpus-regen -- regenerate
 
 [group('meta')]
 conformance-corpus-policy:
@@ -162,27 +193,12 @@ haskell-test:
 bench-regression *guards:
     scripts/bench-regression.sh {{guards}}
 
-# The release gate: the correctness gate, then every benchmark regression
-# guard, with both exit statuses recorded inside one retained log under
-# keiro/bench/results/release-gates/ so a failed guard cannot be mistaken for
-# a pass. The release skill (agents/skills/release/SKILL.md) requires this
-# recipe before any tag and commits the log with the release.
+# Preflight always runs. Matching successful stages can be reused for 24 hours;
+# the manifest references original checksum-verified logs rather than splicing
+# them. --fresh forces every stage. Failed correctness never starts benchmarks.
 [group('meta')]
-release-gate:
-    #!/usr/bin/env bash
-    set -uo pipefail
-    mkdir -p keiro/bench/results/release-gates
-    log="keiro/bench/results/release-gates/$(date -u +%Y%m%dT%H%M%SZ)-$(git rev-parse --short HEAD).log"
-    { echo "commit $(git rev-parse HEAD)"; echo "started $(date -u +%FT%TZ)"; uptime; } | tee "$log"
-    just verify 2>&1 | tee -a "$log"
-    verify_status=${PIPESTATUS[0]}
-    echo "VERIFY_EXIT=$verify_status" | tee -a "$log"
-    just bench-regression 2>&1 | tee -a "$log"
-    bench_status=${PIPESTATUS[0]}
-    echo "BENCH_EXIT=$bench_status" | tee -a "$log"
-    echo "finished $(date -u +%FT%TZ)" | tee -a "$log"
-    echo "log: $log"
-    [ "$verify_status" -eq 0 ] && [ "$bench_status" -eq 0 ]
+release-gate *args:
+    python3 scripts/release_workflow.py gate {{args}}
 
 [group('haskell')]
 haskell-verify: haskell-build haskell-test

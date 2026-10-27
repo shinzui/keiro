@@ -4,6 +4,11 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
+if [[ $# -gt 1 || ( $# -eq 1 && "$1" != --paths-only ) ]]; then
+  echo "usage: $0 [--paths-only]" >&2
+  exit 2
+fi
+
 failed=0
 
 while IFS= read -r haskell_file; do
@@ -31,6 +36,8 @@ fi
 # an underscore mutation is rejected before writes. It deliberately leaves
 # snake_case strings, comments, and hand-owned function bodies outside the
 # repository path/declaration scan above.
-cabal test keiro-dsl-test --test-options='--match Haskell.name-audit'
+if [[ "${1:-}" != --paths-only ]]; then
+  cabal test keiro-dsl-test --test-options='--match Haskell.name-audit'
+fi
 
 echo "generated Haskell name policy: OK"

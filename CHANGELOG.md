@@ -6,6 +6,13 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+### Other Changes
+
+- Prepare release versions and generated inventories before verification, preflight
+  registry/blueprint/package prerequisites, and serialize workspace build writers.
+  Release gates stop after failed correctness and retain resumable stage receipts;
+  prebuilt archives are checked with isolated HTTPS consumers before and after upload.
+
 ## 0.22.0.0 — 2026-10-27
 
 ### Breaking Changes

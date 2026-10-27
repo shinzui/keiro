@@ -1,5 +1,32 @@
 # Release-gate evidence
 
+## Resumable release evidence (plan 326)
+
+`just release-gate` now runs mandatory preflight followed by correctness and all
+six guards. Correctness failure stops before any guard. Stage receipts (`*-<stage>.json`)
+record command, input identity, status, timestamps, initial load and log checksum.
+`*-manifest.json` references the original receipts and their checksums; original
+logs remain separate. `accepted: true` requires all seven stages to pass.
+
+Retries reuse only successful matching evidence less than 24 hours old. The
+identity includes tracked source bytes/modes, resolved plan, compiler, relevant
+environment, local Cabal configuration and PostgreSQL server/settings. Only this
+evidence directory and plan 326 execution notes are excluded from source identity.
+Other documentation changes conservatively invalidate reuse. Preflight always
+reruns. A newer failure or interrupted attempt supersedes an old pass; missing,
+stale or modified logs refuse reuse. `just release-gate --fresh` runs every stage.
+This replaces the old uninterrupted combined-log restriction, not any numerical
+guard, baseline or workload rule in [ADR-58](../../../../docs/adr/0058-benchmark-release-gates-require-isolated-fixed-workloads-and-attributed-baselines.md).
+
+Commit the accepted manifest **and every referenced receipt and log**. Before
+publication, `just release-ready <manifest>` also checks all sixteen archive
+checksums and the current staged-consumer proof. Archive and consumer commands
+only prepare/verify local files; they do not upload or create tags. See the
+[release skill](../../../../agents/skills/release/SKILL.md) for the complete sequence.
+
+The historical evidence below remains valid under its original policy and is
+not automatically imported into the new receipt format.
+
 ## Keiro 0.22.0.0
 
 The final candidate at `b2be482b` passes the complete

@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Benchmark release gates require isolated fixed workloads and attributed baselines
 description: Release benchmark evidence uses isolated fixtures, fixed measured work, explicit growth bounds and reproducible baselines whose changes have attributed causes.
-timestamp: 2026-10-25T11:07:22Z
+timestamp: 2026-10-27T19:00:00Z
 docId: ADR-58
 status: Accepted
 date: 2026-10-21
@@ -24,11 +24,33 @@ interference cannot distinguish a runtime regression from a different workload.
 
 Release candidates run the correctness gate followed by all six benchmark guards through
 `just release-gate`: five historical CSV comparisons and the producer same-process ratio
-guard. Retain the combined log, individual statuses, tested source revision/tree and environment.
+guard. Retain the manifest, individual stage receipts and original checksum-verified logs,
+tested source revision/tree and environment. Release preparation and verification share
+a workspace lock; failed preflight or correctness never starts benchmark work.
 A failed or inconclusive comparison is not acceptance. Implementation changes after a passing
 run require new evidence; committing evidence alone must preserve the identity of the tested
 source. This gate supplements the inspection cohort's independent interference and correctness
 gates and mandatory plan completions.
+
+Plan 326 replaces the original uninterrupted-log restriction with explicit resumable
+stage evidence. Preflight always runs, including registry connectivity, document and
+generated-inventory policy, packaging, blueprint entailments and dependency solving.
+Correctness and each of the six guards have separate receipts. Reuse requires identical
+tracked source (excluding retained release evidence and plan 326 execution notes), resolved
+dependency plan, toolchain, relevant environment and local Cabal configuration, and the same
+PostgreSQL server/settings, within 24 hours. Any other documentation or source edit
+conservatively invalidates reuse. A newer red or interrupted attempt supersedes an old pass.
+Missing or altered logs and receipts refuse acceptance; the manifest links the original
+records rather than representing several attempts as one uninterrupted measurement.
+`--fresh` forces all stages. No numerical guard or baseline rule changes.
+
+Build all source/documentation archives before publication. An isolated consumer with an
+explicit secure HTTPS configuration and its own package cache tests those exact source
+archives and checks HTTP health against a disposable migrated database. A readiness check
+binds accepted stage evidence, source and all sixteen archive checksums to that successful
+consumer proof. A second Hackage-only consumer verifies publication; only index/solve lag
+has bounded retries. Neither consumer copies credentials or rewrites the global index.
+
 
 Each benchmark group owns its disposable migrated fixture. The benchmark name/tree is static,
 while workload setup and representative database warm-up run only for selected scenarios.
@@ -114,3 +136,5 @@ Timing-sensitive release evidence is run on a quiet machine independently of dev
 - [Full passing gate](../../keiro/bench/results/release-gates/20261025T104300Z-a4332cfe.log).
 - [ADR-42](0042-producer-outbox-identity-is-a-versioned-source-event-contract.md).
 - [ADR-48](0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md).
+
+- [Plan 326](../plans/326-make-releases-preflighted-resumable-and-isolated.md) defines resumable evidence, preparation and consumer acceptance.

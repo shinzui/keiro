@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-27
+* **Update**: ADR-58: require preflight and serialized release writers; replace uninterrupted-log acceptance with matching fresh stage receipts, exact archive checksums and isolated HTTPS consumer proofs (plan 326).
+
 ## 2026-10-26
 * **Update**: Gate structural enum equality in Language 6 and scope fold identity to actual use (Plan 322).
 * **Update**: Derive exact structural enum equality from total bindings and finite declaration-tagged projections (Plan 322).
