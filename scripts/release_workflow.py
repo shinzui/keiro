@@ -127,6 +127,19 @@ def corpus_clean(root=ROOT):
         raise RuntimeError("Commit or stash corpus edits before regeneration (checked before compiling):\n" + status)
 
 
+def published_blueprint(owner, relative):
+    if output(["git", "status", "--porcelain", "--", relative], owner):
+        raise RuntimeError(f"Entailed blueprint has unpublished working-tree edits: {relative}")
+    run(["git", "fetch", "-q", "origin"], owner)
+    head = output(["git", "ls-remote", "origin", "HEAD"], owner).split()
+    if not head or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", head[0]):
+        raise RuntimeError("Cannot resolve the upstream default branch for the entailed blueprint")
+    local = output(["git", "rev-parse", "HEAD:" + relative], owner)
+    published = output(["git", "rev-parse", head[0] + ":" + relative], owner)
+    if local != published:
+        raise RuntimeError(f"Entailed blueprint differs from the published default branch: {relative}; sync/push its owner first")
+
+
 def blueprint_preflight(root=ROOT):
     current = version(root)
     tags = output(["git", "tag", "--list", "keiro-*"], root).splitlines()
@@ -152,13 +165,7 @@ def blueprint_preflight(root=ROOT):
                 raise RuntimeError(f"Add the canonical Mori owner of entailed blueprint {name} to preflight")
             owner = Path(output(["mori", "path", owners[name]], root))
             relative = "blueprints/" + name
-            if output(["git", "status", "--porcelain", "--", relative], owner):
-                raise RuntimeError(f"Entailed blueprint has unpublished working-tree edits: {owners[name]}")
-            run(["git", "fetch", "-q", "origin"], owner)
-            commit = output(["git", "log", "-1", "--format=%H", "--", relative], owner)
-            remotes = output(["git", "branch", "-r", "--contains", commit], owner)
-            if not any(b.strip().startswith("origin/") for b in remotes.splitlines()):
-                raise RuntimeError(f"Push the entailed blueprint first: {owners[name]} ({commit})")
+            published_blueprint(owner, relative)
             target = modules / name
             if not target.exists():
                 shutil.copytree(owner / relative, target)

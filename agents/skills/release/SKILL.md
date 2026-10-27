@@ -363,7 +363,8 @@ nix flake check
 cheap policy/documentation checks, both generated inventories, eight `cabal
 check` invocations, local blueprint validation and a dry-run dependency solve.
 It previews the upgrade chain from disposable local blueprint copies, validates
-entailed edges and verifies their owning blueprint commits are on `origin`.
+entailed edges and verifies each owning blueprint payload exactly matches the published default branch.
+A feature-branch push does not satisfy that prerequisite.
 It never substitutes the user's installed Seihou copies. An unknown entailed
 blueprint owner is a preflight failure; add its canonical Mori owner mapping
 rather than skipping the check.

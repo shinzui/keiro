@@ -151,6 +151,25 @@ class GateControls(unittest.TestCase):
                 release.prepare(self.root)
             command.assert_not_called()
 
+    def test_blueprint_on_feature_branch_does_not_count_as_published(self):
+        blueprint = self.root / "blueprints/example/blueprint.dhall"
+        blueprint.parent.mkdir(parents=True)
+        blueprint.write_text("published payload\n")
+        self.git("add", str(blueprint.relative_to(self.root)))
+        self.git("commit", "-qm", "test: publish blueprint")
+        origin = self.root / ".git/control-origin.git"
+        self.git("init", "--bare", "-q", str(origin))
+        self.git("--git-dir", str(origin), "symbolic-ref", "HEAD", "refs/heads/published")
+        self.git("remote", "add", "origin", str(origin))
+        self.git("push", "-q", "origin", "HEAD:published")
+        release.published_blueprint(self.root, "blueprints/example")
+        blueprint.write_text("feature-only payload\n")
+        self.git("add", str(blueprint.relative_to(self.root)))
+        self.git("commit", "-qm", "test: feature-only prerequisite")
+        self.git("push", "-q", "origin", "HEAD:feature")
+        with self.assertRaisesRegex(RuntimeError, "published default branch"):
+            release.published_blueprint(self.root, "blueprints/example")
+
     def test_concurrent_writer_refuses(self):
         script = Path(release.__file__).resolve()
         code = (f"import sys; sys.path.insert(0, {str(script.parent)!r}); "
