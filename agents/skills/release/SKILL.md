@@ -369,6 +369,12 @@ It never substitutes the user's installed Seihou copies. An unknown entailed
 blueprint owner is a preflight failure; add its canonical Mori owner mapping
 rather than skipping the check.
 
+Hackage metadata reads retry transient transport, truncation, rate-limit and
+server failures at most three times per dependency, with 20-second timeouts and
+one/two-second backoff. Partial responses never count as publication evidence.
+Missing, deprecated or unpreferred releases fail immediately. Queued metadata
+work is cancelled after a terminal failure.
+
 Correctness then runs the full existing `verify` suite. A failed preflight or
 correctness stage stops immediately, before benchmarks. Once correctness passes,
 all six guards run, including after one guard fails, so diagnostics remain

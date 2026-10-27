@@ -232,6 +232,33 @@ class GateControls(unittest.TestCase):
 
 
 class ConsumerControls(unittest.TestCase):
+    def test_truncated_metadata_is_refetched_not_accepted_as_partial_json(self):
+        # Even a partial body containing valid JSON must be fetched again.
+        truncated = release.http.client.IncompleteRead(b'{"1.0":"normal"}')
+        with patch.object(release.urllib.request, "urlopen", side_effect=[truncated, io.BytesIO(b'{"1.0":"normal"}')]) as request:
+            with patch.object(release.time, "sleep") as sleep:
+                release.check_publication(("example", "1.0"))
+            self.assertEqual(request.call_count, 2)
+            sleep.assert_called_once_with(1)
+
+    def test_metadata_transport_retries_are_bounded(self):
+        with patch.object(release.urllib.request, "urlopen", side_effect=release.http.client.IncompleteRead(b"partial")) as request:
+            with patch.object(release.time, "sleep") as sleep:
+                with self.assertRaisesRegex(RuntimeError, "example after 3 attempts"):
+                    release.check_publication(("example", "1.0"))
+            self.assertEqual(request.call_count, 3)
+            self.assertEqual([c.args[0] for c in sleep.call_args_list], [1, 2])
+
+    def test_missing_or_unpreferred_release_is_not_retried(self):
+        missing = release.urllib.error.HTTPError("https://hackage.haskell.org/package/example.json", 404, "missing", {}, None)
+        for response in (missing, io.BytesIO(b'{"1.0":"unpreferred"}')):
+            with patch.object(release.urllib.request, "urlopen", side_effect=[response]) as request:
+                with patch.object(release.time, "sleep") as sleep:
+                    with self.assertRaises(RuntimeError):
+                        release.check_publication(("example", "1.0"))
+                self.assertEqual(request.call_count, 1)
+                sleep.assert_not_called()
+
     def test_database_is_removed_when_migration_fails(self):
         failure = subprocess.CalledProcessError(1, ["migrator"])
         with tempfile.TemporaryDirectory() as scratch, patch.object(consumer.subprocess, "run", side_effect=[None, failure, None]) as run:

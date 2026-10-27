@@ -4,11 +4,12 @@
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import contextlib
 import datetime as dt
 import fcntl
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
@@ -22,6 +23,7 @@ import tempfile
 import time
 import uuid
 import urllib.request
+import urllib.error
 
 ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = Path("keiro/bench/results/release-gates")
@@ -195,7 +197,14 @@ def preflight(root=ROOT):
     plan = json.loads((root / "dist-newstyle/cache/plan.json").read_text())
     dependencies = published_dependencies(plan)
     with ThreadPoolExecutor(max_workers=8) as pool:
-        list(pool.map(check_publication, sorted(dependencies)))
+        futures = [pool.submit(check_publication, package) for package in sorted(dependencies)]
+        try:
+            for future in as_completed(futures):
+                future.result()
+        except BaseException:
+            for future in futures:
+                future.cancel()
+            raise
     print(f"HACKAGE_DEPENDENCIES: {len(dependencies)} released default library/executable dependencies", flush=True)
     run(["scripts/check-conformance-corpus.sh"], root)
     return plan
@@ -228,10 +237,23 @@ def published_dependencies(plan):
 
 def check_publication(package):
     name, selected = package
-    with urllib.request.urlopen(f"https://hackage.haskell.org/package/{name}.json", timeout=20) as response:
-        versions = json.load(response)
-    if versions.get(selected) != "normal":
-        raise RuntimeError(f"Dependency is missing, deprecated or unpreferred on Hackage: {name}-{selected}")
+    request = urllib.request.Request(f"https://hackage.haskell.org/package/{name}.json",
+                                     headers={"Accept": "application/json", "User-Agent": "keiro-release-preflight"})
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                versions = json.load(response)
+        except (OSError, http.client.HTTPException, json.JSONDecodeError) as error:
+            if isinstance(error, urllib.error.HTTPError) and 400 <= error.code < 500 and error.code != 429:
+                raise RuntimeError(f"Hackage metadata unavailable for {name}: HTTP {error.code}") from error
+            if attempt == 2:
+                raise RuntimeError(f"Hackage metadata unavailable for {name} after 3 attempts: {type(error).__name__}") from error
+            print(f"RETRY(metadata {name})={attempt + 1}/3: {type(error).__name__}", flush=True)
+            time.sleep(2 ** attempt)
+            continue
+        if not isinstance(versions, dict) or versions.get(selected) != "normal":
+            raise RuntimeError(f"Dependency is missing, deprecated or unpreferred on Hackage: {name}-{selected}")
+        return
 
 
 def identity(root=ROOT, plan=None):

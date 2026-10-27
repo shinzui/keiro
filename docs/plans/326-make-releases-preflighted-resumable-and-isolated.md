@@ -34,6 +34,13 @@ A maintainer can prepare one final version, discover missing infrastructure and 
 
 The existing release recipe unconditionally starts benchmarks after correctness failure. The skill additionally reruns suites after the full gate. The 0.22 release spent 92 minutes across four gate attempts, compared with 24 minutes for the final passing attempt; sixteen uploads took about twelve seconds. These measurements motivate orchestration changes, not weaker numerical thresholds. A live preflight also exposed a supposedly static name-policy recipe compiling a test suite; preflight now runs its path/declaration scan only, while full verification retains the original runtime assertions. Separate Nix shell entries change NIX_BUILD_TOP even with the same toolchain; only that scratch location and the logging descriptor are excluded from the relevant-environment fingerprint.
 
+Two resume attempts encountered truncated Hackage metadata (`IncompleteRead`) before
+any expensive work resumed. Metadata reads now re-fetch complete responses with bounded
+per-dependency retries; missing/unpreferred releases still refuse immediately. A full
+82ad8439 attempt passed correctness and five guards but refused two command no-op cases
+at roughly 25–26 percent over baseline. Those failures remain diagnostic evidence;
+baselines and thresholds have not moved. The revised helper recovered a real truncated pgmq-config response during a successful 216-dependency preflight. A focused command guard passed all 15 cases (54.23 seconds); both no-op cases were about 14 percent above baseline. The revised helper needs fresh candidate evidence.
+
 ## Decision Log
 
 On 2026-10-27 the user authorized all five retrospective recommendations: early preflight, a single prepared candidate and serialized build writers, fail-fast correctness, explicit resumability, and an isolated HTTPS consumer. The active intention is inherited from the approved session capture. Upstream blueprint publication means its complete local payload matches the remote default branch, rather than merely appearing on some remote feature branch; a real Git control demonstrates that distinction.
@@ -42,7 +49,7 @@ Successful stages may be reused only for a clean candidate with identical tested
 
 ## Outcomes & Retrospective
 
-Preparation, static/environmental preflight and 24 focused refusal/reuse/isolation controls pass. Native Nix checks pass. The first development gate was intentionally interrupted when review found an exclusion tied to this plan number; all Markdown ExecPlan/MasterPlan documents now have the same execution-note treatment, while code in those directories and ADR/guide policy remain inputs. Interrupted stage records cannot authorize reuse; the driver now writes an unaccepted manifest before starting its first stage. All sixteen archives built and staged/published consumers both returned healthy HTTP responses with no schema drift. Final gate, receipt-reuse and readiness acceptance remain in progress; no new release is being published.
+Preparation, static/environmental preflight and 27 focused refusal/reuse/isolation controls pass. Native Nix checks pass. The first development gate was intentionally interrupted when review found an exclusion tied to this plan number; all Markdown ExecPlan/MasterPlan documents now have the same execution-note treatment, while code in those directories and ADR/guide policy remain inputs. Interrupted stage records cannot authorize reuse; the driver now writes an unaccepted manifest before starting its first stage. All sixteen archives built and staged/published consumers both returned healthy HTTP responses with no schema drift. Final gate, receipt-reuse and readiness acceptance remain in progress; no new release is being published.
 
 ## Context and Orientation
 
@@ -66,11 +73,16 @@ From the repository root, implement `scripts/release_workflow.py`, `scripts/rele
 
 ```bash
 nix develop -c python3 -m unittest discover -s scripts/tests -p 'test_release*.py'
+nix develop -c just release-prepare
+# Review and commit the prepared candidate before the gate.
 nix develop -c just release-preflight
 nix develop -c just release-gate
-nix develop -c just release-consumer staged
-nix develop -c just release-consumer published
 nix flake check
+nix develop -c just release-artifacts
+nix develop -c just release-consumer staged
+nix develop -c just release-ready keiro/bench/results/release-gates/<run>-manifest.json
+# Published mode verifies the existing Hackage release; it never uploads.
+nix develop -c just release-consumer published
 ```
 
 Stage and commit the implementation before a real gate because the corpus check requires committed generated inputs. Use a Conventional Commit with both the ExecPlan and Intention trailers. Keep the release version at 0.22.0.0; this is workflow work, not another release.
