@@ -11,8 +11,8 @@ logs remain separate. `accepted: true` requires all seven stages to pass.
 Retries reuse only successful matching evidence less than 24 hours old. The
 identity includes tracked source bytes/modes, resolved plan, compiler, relevant
 environment, local Cabal configuration and PostgreSQL server/settings. Only this
-evidence directory and plan 326 execution notes are excluded from source identity.
-Other documentation changes conservatively invalidate reuse. Preflight always
+evidence directory and Markdown ExecPlan and MasterPlan documents are excluded from source identity.
+Other documentation and non-Markdown files in plan directories invalidate reuse. Preflight always
 reruns. A newer failure or interrupted attempt supersedes an old pass; missing,
 stale or modified logs refuse reuse. `just release-gate --fresh` runs every stage.
 This replaces the old uninterrupted combined-log restriction, not any numerical

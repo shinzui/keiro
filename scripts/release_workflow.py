@@ -25,7 +25,6 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = Path("keiro/bench/results/release-gates")
-PLAN = "docs/plans/326-make-releases-preflighted-resumable-and-isolated.md"
 PACKAGES = (
     "keiro-core", "keiro", "keiro-pgmq", "keiro-migrations",
     "keiro-test-support", "keiro-dsl", "keiro-ops", "keiro-ops-http",
@@ -80,6 +79,14 @@ def evidence_path(path):
     return path.startswith(EVIDENCE.as_posix() + "/")
 
 
+def execution_note(path):
+    return path.endswith(".md") and path.startswith(("docs/plans/", "docs/masterplans/"))
+
+
+def excluded_source(path):
+    return evidence_path(path) or execution_note(path)
+
+
 def source_identity(root=ROOT):
     """Hash actual tracked bytes and modes, never traverse dependency stores."""
     entries = output(["git", "ls-files", "-s", "-z"], root).split("\0")
@@ -88,7 +95,7 @@ def source_identity(root=ROOT):
         if not entry:
             continue
         metadata, name = entry.split("\t", 1)
-        if evidence_path(name) or name == PLAN:
+        if excluded_source(name):
             continue
         path = root / name
         if path.is_symlink():
@@ -100,10 +107,11 @@ def source_identity(root=ROOT):
 
 
 def require_clean(root=ROOT):
-    # Retained evidence and this plan's execution notes cannot change tested code.
+    # Retained evidence and plan documents cannot change tested code. Other
+    # documentation, including guides, inventories and ADR policy, stays strict.
     changed = output(["git", "diff", "HEAD", "--name-only"], root).splitlines()
     untracked = output(["git", "ls-files", "--others", "--exclude-standard"], root).splitlines()
-    invalid = [p for p in changed + untracked if not evidence_path(p) and p != PLAN]
+    invalid = [p for p in changed + untracked if not excluded_source(p)]
     if invalid:
         raise RuntimeError("Commit the candidate before the release gate: " + ", ".join(invalid[:12]))
 
@@ -278,6 +286,7 @@ class Gate:
         self.manifest = {"schema": SCHEMA, "commit": output(["git", "rev-parse", "HEAD"], root),
                          "inputs": inputs, "identity": digest(inputs), "started": time.time(), "stages": {}}
         self.path = self.directory / (self.run_id + "-manifest.json")
+        atomic_json(self.path, self.manifest)
 
     def stage(self, name, command):
         expected = digest({"inputs": self.inputs, "command": command})

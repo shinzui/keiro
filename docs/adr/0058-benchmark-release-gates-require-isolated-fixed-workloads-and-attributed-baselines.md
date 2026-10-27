@@ -36,7 +36,7 @@ Plan 326 replaces the original uninterrupted-log restriction with explicit resum
 stage evidence. Preflight always runs, including registry connectivity, document and
 generated-inventory policy, packaging, blueprint entailments and dependency solving.
 Correctness and each of the six guards have separate receipts. Reuse requires identical
-tracked source (excluding retained release evidence and plan 326 execution notes), resolved
+tracked source (excluding retained release evidence and Markdown ExecPlan and MasterPlan documents), resolved
 dependency plan, toolchain, relevant environment and local Cabal configuration, and the same
 PostgreSQL server/settings, within 24 hours. Any other documentation or source edit
 conservatively invalidates reuse. A newer red or interrupted attempt supersedes an old pass.

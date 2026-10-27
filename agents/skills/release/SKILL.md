@@ -381,7 +381,7 @@ identity, status, time and log checksum. Re-running `just release-gate` reuses
 only matching, checksum-verified successful stages less than 24 hours old. Source,
 versions, scripts/recipes, baseline, dependency plan, compiler, relevant environment,
 local Cabal configuration or PostgreSQL server identity changes invalidate reuse.
-Retained evidence and plan 326's execution notes are excluded from source identity;
+Retained evidence and Markdown ExecPlan and MasterPlan documents are excluded from source identity;
 other documentation edits conservatively invalidate it too. Preflight always
 reruns. A newer failure or interrupted attempt supersedes an older pass.
 

@@ -126,16 +126,34 @@ class GateControls(unittest.TestCase):
 
     def test_evidence_and_plan_notes_preserve_source_identity(self):
         initial = release.source_identity(self.root)
-        path = self.root / release.PLAN
-        path.parent.mkdir(parents=True)
-        path.write_text("execution notes\n")
-        self.git("add", str(path.relative_to(self.root)))
-        self.assertEqual(initial, release.source_identity(self.root))
+        for name in ("docs/plans/999-next-release.md", "docs/masterplans/999-next-initiative.md"):
+            path = self.root / name
+            path.parent.mkdir(parents=True)
+            path.write_text("execution notes\n")
+            self.git("add", name)
+            self.assertEqual(initial, release.source_identity(self.root))
         evidence = self.root / release.EVIDENCE / "result.json"
         evidence.parent.mkdir(parents=True)
         evidence.write_text("{}\n")
         self.git("add", str(evidence.relative_to(self.root)))
         self.assertEqual(initial, release.source_identity(self.root))
+
+    def test_policy_documents_and_code_inside_plan_directories_are_inputs(self):
+        initial = release.source_identity(self.root)
+        for name in ("docs/adr/policy.md", "docs/plans/fixture.hs"):
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("material input\n")
+            self.git("add", name)
+            self.assertNotEqual(initial, release.source_identity(self.root))
+            self.git("reset", "-q", "HEAD", "--", name)
+
+    def test_interrupted_gate_has_an_unaccepted_manifest(self):
+        gate = self.gate()
+        manifest = json.loads(gate.path.read_text())
+        self.assertFalse(manifest.get("accepted", False))
+        with self.assertRaisesRegex(RuntimeError, "not accepted"):
+            release.check_manifest(gate.path, self.inputs(), self.root)
 
     def test_uncommitted_candidate_refuses(self):
         (self.root / "baseline.csv").write_text("uncommitted change\n")

@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-27
+* **Update**: ADR-58: exclude Markdown execution plans and master plans from runtime input identity so progress updates do not repeat successful checks; retain strict policy, guide, inventory and executable source inputs.
 * **Update**: ADR-58: require preflight and serialized release writers; replace uninterrupted-log acceptance with matching fresh stage receipts, exact archive checksums and isolated HTTPS consumer proofs (plan 326).
 
 ## 2026-10-26
