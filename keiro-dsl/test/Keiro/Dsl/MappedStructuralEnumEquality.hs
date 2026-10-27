@@ -175,6 +175,29 @@ mappedStructuralEnumEqualitySpec = describe "mapped structural enum equality" $ 
         fingerprint = either (error . show) id (aggregateFoldFingerprintForService dataOnly (aggregate dataOnly))
     expected <- TIO.readFile "test/fixtures/mapped-structural-enum-data-only-fold.golden"
     fingerprint <> "\n" <> surface <> "\n" `shouldBe` expected
+  it "samples literal-guarded commands by projected wire key instead of fixture order" $ do
+    source <- fixture
+    let harnessFor checked = do
+          errors checked `shouldBe` []
+          let modules = scaffoldServiceModules (defaultContext "mapped-structural-enum-equality") checked
+          firewallBreaches modules `shouldBe` []
+          pure (moduleText "ScopeGate/Harness.hs" modules)
+        sampled filters = "(case [value | (_, value) <- NonEmpty.toList (fixtureCases Bindings.requiredScopeFixtures), " <> filters <> "] of value : _ -> value; [] -> error \"enum guard requires a matching supplied fixture\")"
+    harness <- parseChecked source >>= harnessFor
+    harness `shouldSatisfy` T.isInfixOf "import Generated.MappedStructuralEnumEquality.StructuralProjections qualified as StructuralProjections"
+    harness `shouldSatisfy` T.isInfixOf "(Match (MatchData Bindings.initialScope "
+    harness `shouldSatisfy` T.isInfixOf ("(Differ (DifferData " <> sampled "value /= Bindings.initialScope")
+    harness `shouldSatisfy` T.isInfixOf ("(EqRight (EqRightData " <> sampled "fieldWitnessGet StructuralProjections.requiredScopeWitness value == \"pipeline\"")
+    harness `shouldSatisfy` T.isInfixOf ("(EqLeft (EqLeftData " <> sampled "fieldWitnessGet StructuralProjections.requiredScopeWitness value == \"pipeline\"")
+    harness `shouldSatisfy` T.isInfixOf ("(NeRight (NeRightData " <> sampled "fieldWitnessGet StructuralProjections.requiredScopeWitness value /= \"diagnostic\"")
+    harness `shouldSatisfy` T.isInfixOf ("(NeLeft (NeLeftData " <> sampled "fieldWitnessGet StructuralProjections.requiredScopeWitness value /= \"diagnostic\"")
+    combined <- parseChecked (replaceGuard "cmd.requiredScope != reg.requiredScope && cmd.requiredScope != RequiredScope.DiagnosticScope" source) >>= harnessFor
+    combined `shouldSatisfy` T.isInfixOf ("(Match (MatchData " <> sampled "value /= Bindings.initialScope, fieldWitnessGet StructuralProjections.requiredScopeWitness value /= \"diagnostic\"")
+    alternative <- parseChecked (replaceGuard "cmd.requiredScope == RequiredScope.DiagnosticScope || cmd.requiredScope == RequiredScope.PipelineScope" source) >>= harnessFor
+    alternative `shouldSatisfy` T.isInfixOf ("(Match (MatchData " <> sampled "fieldWitnessGet StructuralProjections.requiredScopeWitness value == \"diagnostic\"")
+    unguarded <- parseChecked (stripGuards source) >>= harnessFor
+    unguarded `shouldSatisfy` (not . T.isInfixOf "StructuralProjections")
+    unguarded `shouldSatisfy` (not . T.isInfixOf "fieldWitnessGet")
 
 fixture :: IO Text
 fixture = TIO.readFile "test/fixtures/mapped-structural-enum-equality.keiro"

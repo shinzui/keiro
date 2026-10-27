@@ -14,6 +14,12 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   consumer owners; structural conformance checks exhaustive enum shapes, fixture
   coverage, and projection owner/key laws. Records, unions, opaque mappings,
   ordering, arithmetic, and additional nested traversal remain excluded.
+- Generated harnesses sample a structural enum command field whose guard compares
+  qualified literals by projected wire key through the structural projection
+  witness, combined with any register-inequality exclusion. Supplied fixture
+  order is not a harness contract; a guard no supplied fixture satisfies fails
+  with an explicit error. `projectionWitnessName` and `structuralProjectionModule`
+  are exported from `Keiro.Dsl.Scaffold`.
 - Equality use adds a versioned declaration-specific fold segment, binding
   explanations, and distinct `structural-enum-equality` scaffold/workspace ledger
   rows. Data-only mappings and unrelated fold identities retain their bytes.

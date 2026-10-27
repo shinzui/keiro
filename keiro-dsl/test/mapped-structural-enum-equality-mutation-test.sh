@@ -54,6 +54,19 @@ try:
     if result.returncode == 0 or 'FAIL  expected enum wire meanings' not in result.stdout:
         raise RuntimeError('bijective swap escaped expected-wire assertion:\n' + result.stdout)
     print('PASS  mutation: bijective meaning swap', flush=True)
+    # Fixture order is not a harness contract: generated sampling selects by
+    # projected wire key and register initial, so a reordered supply must pass.
+    restore()
+    contents = binding.read_text()
+    old = 'FixtureCases (("pipeline", Domain.PipelineScope) :| [("diagnostic", Domain.DiagnosticScope)])'
+    new = 'FixtureCases (("diagnostic", Domain.DiagnosticScope) :| [("pipeline", Domain.PipelineScope)])'
+    if contents.count(old) != 1:
+        raise RuntimeError('fixture order anchor is not unique')
+    binding.write_text(contents.replace(old, new))
+    result = run()
+    if result.returncode != 0:
+        raise RuntimeError('reordered fixtures broke the generated harness:\n' + result.stdout)
+    print('PASS  control: fixture order is not a sampling contract', flush=True)
     for label, old, new, marker in [
         ('missing binding symbol', 'requiredScopeBinding = StructuralBinding toShape fromShape', 'requiredScopeBinding = missingScopeBinding', 'missingScopeBinding'),
         ('wrong binding signature', 'requiredScopeBinding :: StructuralBinding Domain.RequiredScope', 'requiredScopeBinding :: StructuralBinding Domain.Request', "Couldn't match type"),

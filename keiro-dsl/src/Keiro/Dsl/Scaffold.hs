@@ -90,6 +90,8 @@ module Keiro.Dsl.Scaffold
     resolveAgg,
     nominalEqualityUsedInGeneratedExpressions,
     projectionSpecs,
+    projectionWitnessName,
+    structuralProjectionModule,
     resolveProjectionModules,
     nominalProjectionModule,
     codecMappedDeclarations,

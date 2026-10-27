@@ -16,12 +16,22 @@ provenance:
       at: 2026-10-26T19:17:42Z
       verdict: "changes-requested"
       note: "Author self-review: require an explicit Language 6 capability gate and older-language negative coverage; shared-Haskell-owner test currently stops at MappedImportConflict, not expression identity."
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-26T23:57:32Z
+      verdict: "approved"
+      note: "Implementation review: Language 6 gating, exact finite witnesses, use-scoped fold identity, wire bytes, snapshot and replay verified by rerunning compiled suite, unit subset, mutation script and corpus check; advisory notes only"
   revisions:
     - model: "gpt-6.1-sol"
       harness: "codex-cli"
       at: 2026-10-26T22:49:17Z
       mode: "implement"
       note: "Implement checked structural enum equality and consumer qualification"
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-27T00:27:56Z
+      mode: "update"
+      note: "Review follow-up: harness samples literal-guarded structural enum commands by projected wire key"
 ---
 
 # Support exact equality guards for mapped structural enums
@@ -63,6 +73,8 @@ The full unit regression also maintains an explicit list of Language 6 fixture e
 
 The general mapped-value operations share a bidirectional `AggregateMapped` pattern over ordinary mappings and the new checked enum variant. Capability admission inspects the enum evidence first, while codecs, samples, initials, and writes keep their established structural paths. Declaration-specific equality uses a separate versioned canonical segment; no global capability fold segment is added.
 
+A post-completion review on 2026-10-26 found that harness sampling only honored command/register comparisons: a command guarded against a qualified literal sampled the first supplied fixture, so swapping the two fixtures in the hand-owned bindings failed eight generated acceptance and forward/replay assertions without any semantic change. Sampling now filters supplied fixtures by projected wire key through the generated witness, combined with the register-initial exclusion, and the mutation runner keeps a reordered-fixture control that must pass.
+
 
 ## Decision Log
 
@@ -79,7 +91,7 @@ Completed 2026-10-26. Candidate Language 6 now admits direct same-declaration st
 
 All required repository gates pass at implementation checkpoint `93482cb5`, including 895 DSL unit examples, the complete compiled corpus, runtime snapshot fallback, replay/adoption checks, and migrations. Seven restoring mutations distinguish executable law failures from compiler failures; expected-wire checks catch a bijective meaning swap. Data-only and unrelated fold controls remain unchanged. ADR-12 and ADR-18 retain the durable binding, capability, and identity decisions; ADR-46 is unchanged because no traversal boundary moved. The important lesson is to prove the complete consumer path and both binding-law directions before declaring a finite witness exact. Executable fixtures qualify supplied values and every generated enum shape; they do not prove arbitrary Haskell implementations total.
 
-No dependency bounds, published package, downstream adapter, deployment, or retained consumer data were changed. A supporting release and the adopter's own event-codec, register-layout, fold, snapshot, and retained-history evidence remain separate obligations. The extra improvement-request bundle review-metadata limitation is recorded in Surprises & Discoveries and is not a failure of the prescribed repository gate.
+No dependency bounds, published package, downstream adapter, deployment, or retained consumer data were changed. A supporting release and the adopter's own event-codec, register-layout, fold, snapshot, and retained-history evidence remain separate obligations. The extra improvement-request bundle review-metadata limitation is recorded in Surprises & Discoveries and is not a failure of the prescribed repository gate. The review follow-up made generated harness sampling independent of supplied fixture order without changing checked semantics, generated codecs, or fold identity.
 
 
 ## Context and Orientation

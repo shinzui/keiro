@@ -902,6 +902,7 @@ emitHarness goldens a =
         ++ ["step" | not (null (initialSyntheticProbeEntries a))]
         ++ ["validateTransducer"]
         ++ ["fieldWitnessAgrees" | not (null (nominalScalarHarnessTypes a)) || not (null (enforcedConsumerNominalIdHarnessTypes a))]
+        ++ ["fieldWitnessGet" | harnessSamplesByProjectedKey a]
         ++ ["(!)" | not (null replayTransitions) && not (null ((.regs) a))]
     upcastAssertions =
       [ "(" <> tshow (upcastLabel e m) <> ", upcasts" <> (.name) e <> ")"
@@ -931,6 +932,7 @@ emitHarness goldens a =
           ++ generatedNominalTypeImportsForService (aggregateCheckedService a) ((.context) a) (generatedNominalHarnessTypes a)
           ++ mappedHarnessImports a
           ++ nominalHarnessImports a
+          ++ ["import " <> structuralProjectionModule ((.context) a) <> " qualified as StructuralProjections" | harnessSamplesByProjectedKey a]
           ++ aggregateHarnessImports a
           ++ T.lines (renderPlannedImports (harnessImportPlan a))
           ++ goldenImports
@@ -1208,33 +1210,103 @@ commandCtorExpr a transition rc =
 commandSampleValue :: Agg -> Transition -> Text -> ResolvedAggregateType -> Text
 commandSampleValue aggregate transition name valueType = case valueType of
   AggregateStructuralEnum evidence
-    | Just register <- find matchesRegister aggregate.regs,
-      guardEquatesCommandAndRegister transition name ->
-        regInitialValueForHarness aggregate register
-    | Just register <- find matchesRegister aggregate.regs,
-      guardComparesCommandAndRegister OpNeq transition name,
-      Just graph <- aggregate.typeGraph,
-      Just (ResolvedStructural declaration _) <- Map.lookup evidence.key graph.declarations ->
-        "(case [value | (_, value) <- NonEmpty.toList (fixtureCases " <> renderHarnessReference aggregate (harnessQualifiedValueReference declaration.fixtures) <> "), value /= " <> regInitialValueForHarness aggregate register <> "] of value : _ -> value; [] -> error \"enum inequality requires an alternative fixture\")"
+    | Just register <- structuralEnumRegisterEquality aggregate transition name evidence ->
+        registerInitialSample aggregate register
+    | Just declaration <- structuralEnumDeclaration aggregate evidence,
+      filters@(_ : _) <- structuralEnumSampleFilters aggregate transition name evidence ->
+        "(case [value | (_, value) <- NonEmpty.toList (fixtureCases " <> renderHarnessReference aggregate (harnessQualifiedValueReference declaration.fixtures) <> "), " <> T.intercalate ", " filters <> "] of value : _ -> value; [] -> error \"enum guard requires a matching supplied fixture\")"
   AggregateNominal _
     | guardEquatesCommandAndRegister transition name -> case find matchesRegister ((.regs) aggregate) of
-        Just register -> regInitialValueForHarness aggregate register
+        Just register -> registerInitialSample aggregate register
         Nothing -> fallback
   _ -> fallback
   where
     fallback = sampleValue aggregate name valueType
     matchesRegister register = (.name) register == name && (.valueType) register == valueType
-    regInitialValueForHarness owner register = case (.initial) register of
-      InitialNominal _ value -> renderHarnessReference owner (harnessQualifiedValueReference value)
-      InitialMapped _ value -> renderHarnessReference owner (harnessQualifiedValueReference value)
-      _ -> case (.valueType) register of
-        AggregateNominal nominal -> case (.ownership) nominal of
-          ConsumerNominal {} -> renderRegisterInitial ((.initial) register)
-          GeneratedNominal ->
-            fromMaybe
-              (renderRegisterInitial ((.initial) register))
-              (generatedIdSampleName nominal <$ generatedIdSampleHaskell owner nominal)
-        _ -> renderRegisterInitial ((.initial) register)
+
+registerInitialSample :: Agg -> ResolvedRegister -> Text
+registerInitialSample owner register = case (.initial) register of
+  InitialNominal _ value -> renderHarnessReference owner (harnessQualifiedValueReference value)
+  InitialMapped _ value -> renderHarnessReference owner (harnessQualifiedValueReference value)
+  _ -> case (.valueType) register of
+    AggregateNominal nominal -> case (.ownership) nominal of
+      ConsumerNominal {} -> renderRegisterInitial ((.initial) register)
+      GeneratedNominal ->
+        fromMaybe
+          (renderRegisterInitial ((.initial) register))
+          (generatedIdSampleName nominal <$ generatedIdSampleHaskell owner nominal)
+    _ -> renderRegisterInitial ((.initial) register)
+
+structuralEnumDeclaration :: Agg -> StructuralEnumEquality -> Maybe StructuralDecl
+structuralEnumDeclaration aggregate evidence =
+  case aggregate.typeGraph >>= Map.lookup evidence.key . (.declarations) of
+    Just (ResolvedStructural declaration _) -> Just declaration
+    _ -> Nothing
+
+-- | The same-named register when the guard equates the command field with it.
+-- That comparison forces the register initial as the sample.
+structuralEnumRegisterEquality :: Agg -> Transition -> Text -> StructuralEnumEquality -> Maybe ResolvedRegister
+structuralEnumRegisterEquality aggregate transition name evidence
+  | guardEquatesCommandAndRegister transition name = structuralEnumRegister aggregate name evidence
+  | otherwise = Nothing
+
+structuralEnumRegister :: Agg -> Text -> StructuralEnumEquality -> Maybe ResolvedRegister
+structuralEnumRegister aggregate name evidence =
+  find (\register -> (.name) register == name && (.valueType) register == AggregateStructuralEnum evidence) aggregate.regs
+
+-- | Fixture filters for a structural enum command field that is not forced to
+-- the register initial: a register inequality excludes that initial, and each
+-- qualified literal compared directly with the field constrains the projected
+-- wire key through the generated witness. The first supplied fixture passing
+-- every filter is sampled, so fixture order is not a harness contract.
+structuralEnumSampleFilters :: Agg -> Transition -> Text -> StructuralEnumEquality -> [Text]
+structuralEnumSampleFilters aggregate transition name evidence =
+  [ "value /= " <> registerInitialSample aggregate register
+  | Just register <- [structuralEnumRegister aggregate name evidence],
+    guardComparesCommandAndRegister OpNeq transition name
+  ]
+    <> structuralEnumLiteralFilters aggregate transition name evidence
+
+structuralEnumLiteralFilters :: Agg -> Transition -> Text -> StructuralEnumEquality -> [Text]
+structuralEnumLiteralFilters aggregate transition name evidence =
+  [ "fieldWitnessGet StructuralProjections." <> witness <> " value " <> (if operator == OpEq then "==" else "/=") <> " " <> tshow wire
+  | Just witness <- [aggregate.typeGraph >>= \graph -> projectionWitnessName graph evidence.key ""],
+    (operator, constructor) <- commandLiteralComparisons transition name (unMappedKey evidence.key),
+    Just wire <- [lookup constructor (NE.toList evidence.constructors)]
+  ]
+
+-- | Qualified literals of one declaration compared with a command field by
+-- @==@ or @!=@. Conjunctions contribute every comparison; a disjunction
+-- contributes only its first alternative, since satisfying it satisfies the
+-- guard.
+commandLiteralComparisons :: Transition -> Text -> Name -> [(CmpOp, Name)]
+commandLiteralComparisons transition name typeName = maybe [] collect transition.guard
+  where
+    collect = \case
+      EAnd left right -> collect left <> collect right
+      EOr left _ -> collect left
+      ECmp operator left right
+        | operator `elem` [OpEq, OpNeq] ->
+            [(operator, constructor) | Just constructor <- [literalOperand left right, literalOperand right left]]
+      _ -> []
+    literalOperand (EPath _ CommandRoot [field]) (ELiteral _ (LiteralQualified literalType constructor))
+      | field == name && literalType == typeName = Just constructor
+    literalOperand _ _ = Nothing
+
+-- | Whether a synthetic probe samples a command field by projected wire key,
+-- which requires the generated structural projection witnesses.
+harnessSamplesByProjectedKey :: Agg -> Bool
+harnessSamplesByProjectedKey aggregate =
+  or
+    [ not (null (structuralEnumLiteralFilters aggregate transition name evidence))
+    | entry <- initialSyntheticProbeEntries aggregate,
+      let transition = (.transition) entry,
+      command <- (.commands) aggregate,
+      (.name) command == (.command) transition,
+      (identity, AggregateStructuralEnum evidence) <- (.fields) command,
+      let name = (.dslName) identity,
+      Nothing <- [structuralEnumRegisterEquality aggregate transition name evidence]
+    ]
 
 guardEquatesCommandAndRegister :: Transition -> Text -> Bool
 guardEquatesCommandAndRegister = guardComparesCommandAndRegister OpEq
@@ -1557,6 +1629,7 @@ harnessReservedQualifiers =
       "Map",
       "NominalProjections",
       "NonEmpty",
+      "StructuralProjections",
       "T"
     ]
 

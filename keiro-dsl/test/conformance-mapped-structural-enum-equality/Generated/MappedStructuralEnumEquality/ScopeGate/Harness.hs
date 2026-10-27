@@ -5,7 +5,7 @@ module Generated.MappedStructuralEnumEquality.ScopeGate.Harness (harnessAssertio
 import Generated.MappedStructuralEnumEquality.ScopeGate.Domain
 import Generated.MappedStructuralEnumEquality.ScopeGate.Codec (encodeScopeGateEvent, parseScopeGateEvent, scopeGateCodec, encodeRequestMapped, decodeRequestMapped, encodeRequiredScopeMapped, decodeRequiredScopeMapped)
 import Generated.MappedStructuralEnumEquality.ScopeGate.Transducer (scopeGateTransducer)
-import Keiki.Core (applyEventsEither, defaultValidationOptions, step, validateTransducer, (!))
+import Keiki.Core (applyEventsEither, defaultValidationOptions, step, validateTransducer, fieldWitnessGet, (!))
 import Keiro.Codec (eventType)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as AesonKey
@@ -14,6 +14,7 @@ import Data.Either (isLeft)
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text qualified as T
 import Keiro.Codec.Structural (FixtureCases (..))
+import Generated.MappedStructuralEnumEquality.StructuralProjections qualified as StructuralProjections
 import Conformance.MappedStructuralEnumEquality.Bindings qualified as Bindings
 
 -- | (label, passed). A driver runs these and exits non-zero on any False,
@@ -79,31 +80,31 @@ acceptMatch =
 
 acceptDiffer :: Bool
 acceptDiffer =
-  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (Differ (DifferData (case [value | (_, value) <- NonEmpty.toList (fixtureCases Bindings.requiredScopeFixtures), value /= Bindings.initialScope] of value : _ -> value; [] -> error "enum inequality requires an alternative fixture") (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
+  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (Differ (DifferData (case [value | (_, value) <- NonEmpty.toList (fixtureCases Bindings.requiredScopeFixtures), value /= Bindings.initialScope] of value : _ -> value; [] -> error "enum guard requires a matching supplied fixture") (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
     Just (v, _, _) -> v == ScopeGateDone
     Nothing -> False
 
 acceptEqRight :: Bool
 acceptEqRight =
-  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (EqRight (EqRightData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
+  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (EqRight (EqRightData (case [value | (_, value) <- NonEmpty.toList (fixtureCases Bindings.requiredScopeFixtures), fieldWitnessGet StructuralProjections.requiredScopeWitness value == "pipeline"] of value : _ -> value; [] -> error "enum guard requires a matching supplied fixture") (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
     Just (v, _, _) -> v == ScopeGateDone
     Nothing -> False
 
 acceptEqLeft :: Bool
 acceptEqLeft =
-  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (EqLeft (EqLeftData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
+  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (EqLeft (EqLeftData (case [value | (_, value) <- NonEmpty.toList (fixtureCases Bindings.requiredScopeFixtures), fieldWitnessGet StructuralProjections.requiredScopeWitness value == "pipeline"] of value : _ -> value; [] -> error "enum guard requires a matching supplied fixture") (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
     Just (v, _, _) -> v == ScopeGateDone
     Nothing -> False
 
 acceptNeRight :: Bool
 acceptNeRight =
-  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (NeRight (NeRightData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
+  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (NeRight (NeRightData (case [value | (_, value) <- NonEmpty.toList (fixtureCases Bindings.requiredScopeFixtures), fieldWitnessGet StructuralProjections.requiredScopeWitness value /= "diagnostic"] of value : _ -> value; [] -> error "enum guard requires a matching supplied fixture") (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
     Just (v, _, _) -> v == ScopeGateDone
     Nothing -> False
 
 acceptNeLeft :: Bool
 acceptNeLeft =
-  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (NeLeft (NeLeftData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
+  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (NeLeft (NeLeftData (case [value | (_, value) <- NonEmpty.toList (fixtureCases Bindings.requiredScopeFixtures), fieldWitnessGet StructuralProjections.requiredScopeWitness value /= "diagnostic"] of value : _ -> value; [] -> error "enum guard requires a matching supplied fixture") (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
     Just (v, _, _) -> v == ScopeGateDone
     Nothing -> False
 
@@ -136,7 +137,7 @@ forwardReplayMatch =
 -- replay the emitted chain, and compare the final vertex and every register.
 forwardReplayDiffer :: [(String, Bool)]
 forwardReplayDiffer =
-  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (Differ (DifferData (case [value | (_, value) <- NonEmpty.toList (fixtureCases Bindings.requiredScopeFixtures), value /= Bindings.initialScope] of value : _ -> value; [] -> error "enum inequality requires an alternative fixture") (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
+  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (Differ (DifferData (case [value | (_, value) <- NonEmpty.toList (fixtureCases Bindings.requiredScopeFixtures), value /= Bindings.initialScope] of value : _ -> value; [] -> error "enum guard requires a matching supplied fixture") (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
     Nothing -> [(prefix <> "forward step accepted", False)]
     Just (forwardVertex, forwardRegs, emitted) ->
       case mapM (\event -> parseScopeGateEvent (eventType scopeGateCodec event) (encodeScopeGateEvent event)) emitted of
@@ -155,7 +156,7 @@ forwardReplayDiffer =
 -- replay the emitted chain, and compare the final vertex and every register.
 forwardReplayEqRight :: [(String, Bool)]
 forwardReplayEqRight =
-  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (EqRight (EqRightData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
+  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (EqRight (EqRightData (case [value | (_, value) <- NonEmpty.toList (fixtureCases Bindings.requiredScopeFixtures), fieldWitnessGet StructuralProjections.requiredScopeWitness value == "pipeline"] of value : _ -> value; [] -> error "enum guard requires a matching supplied fixture") (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
     Nothing -> [(prefix <> "forward step accepted", False)]
     Just (forwardVertex, forwardRegs, emitted) ->
       case mapM (\event -> parseScopeGateEvent (eventType scopeGateCodec event) (encodeScopeGateEvent event)) emitted of
@@ -174,7 +175,7 @@ forwardReplayEqRight =
 -- replay the emitted chain, and compare the final vertex and every register.
 forwardReplayEqLeft :: [(String, Bool)]
 forwardReplayEqLeft =
-  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (EqLeft (EqLeftData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
+  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (EqLeft (EqLeftData (case [value | (_, value) <- NonEmpty.toList (fixtureCases Bindings.requiredScopeFixtures), fieldWitnessGet StructuralProjections.requiredScopeWitness value == "pipeline"] of value : _ -> value; [] -> error "enum guard requires a matching supplied fixture") (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
     Nothing -> [(prefix <> "forward step accepted", False)]
     Just (forwardVertex, forwardRegs, emitted) ->
       case mapM (\event -> parseScopeGateEvent (eventType scopeGateCodec event) (encodeScopeGateEvent event)) emitted of
@@ -193,7 +194,7 @@ forwardReplayEqLeft =
 -- replay the emitted chain, and compare the final vertex and every register.
 forwardReplayNeRight :: [(String, Bool)]
 forwardReplayNeRight =
-  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (NeRight (NeRightData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
+  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (NeRight (NeRightData (case [value | (_, value) <- NonEmpty.toList (fixtureCases Bindings.requiredScopeFixtures), fieldWitnessGet StructuralProjections.requiredScopeWitness value /= "diagnostic"] of value : _ -> value; [] -> error "enum guard requires a matching supplied fixture") (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
     Nothing -> [(prefix <> "forward step accepted", False)]
     Just (forwardVertex, forwardRegs, emitted) ->
       case mapM (\event -> parseScopeGateEvent (eventType scopeGateCodec event) (encodeScopeGateEvent event)) emitted of
@@ -212,7 +213,7 @@ forwardReplayNeRight =
 -- replay the emitted chain, and compare the final vertex and every register.
 forwardReplayNeLeft :: [(String, Bool)]
 forwardReplayNeLeft =
-  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (NeLeft (NeLeftData (snd (NonEmpty.head (fixtureCases Bindings.requiredScopeFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
+  case step scopeGateTransducer (ScopeGateReady, initialScopeGateRegs) (NeLeft (NeLeftData (case [value | (_, value) <- NonEmpty.toList (fixtureCases Bindings.requiredScopeFixtures), fieldWitnessGet StructuralProjections.requiredScopeWitness value /= "diagnostic"] of value : _ -> value; [] -> error "enum guard requires a matching supplied fixture") (snd (NonEmpty.head (fixtureCases Bindings.requestFixtures))))) of
     Nothing -> [(prefix <> "forward step accepted", False)]
     Just (forwardVertex, forwardRegs, emitted) ->
       case mapM (\event -> parseScopeGateEvent (eventType scopeGateCodec event) (encodeScopeGateEvent event)) emitted of
