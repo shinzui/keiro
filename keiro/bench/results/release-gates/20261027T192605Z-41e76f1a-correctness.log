@@ -1,0 +1,1374 @@
+{"identity": "9c01474b809959dfe47718f8c481ef4572dde920131720d86ffab1e38b90b4d3", "command": ["just", "_verify"]}
+bash keiro-dsl/test/mapped-structural-enum-equality-mutation-test.sh
+PASS  mutation: collapsed binding
+PASS  mutation: omitted fixture branch
+PASS  mutation: omitted finite-domain alternative
+PASS  mutation: wrong inverse
+PASS  mutation: bijective meaning swap
+PASS  control: fixture order is not a sampling contract
+PASS  mutation: missing binding symbol
+PASS  mutation: wrong binding signature
+PASS  restored baseline
+bash keiro-dsl/test/consumer-enum-literal-sampling-test.sh
+PASS: consumer enum literal guard compiles and samples by canonical key
+bash keiro-dsl/test/mapped-register-construction-mutation-test.sh
+PASS  validateTransducer is empty
+PASS  golden round-trip: Created
+PASS  golden round-trip: Marked
+PASS  golden round-trip: Pinged
+PASS  golden round-trip: Awakened
+PASS  golden round-trip: ClosedEvent
+PASS  golden round-trip: Reopened
+PASS  accepts Create from LifecycleEmpty
+PASS  forward/replay equality: Create from LifecycleEmpty -- final vertex
+PASS  forward/replay equality: Create from LifecycleEmpty -- register dormantSince
+PASS  forward/replay equality: Create from LifecycleEmpty -- register automatic
+PASS  structural/opaque boundary fixtures: conformance.MaybeTime.json@1
+PASS  structural/opaque codec round-trip: conformance.MaybeTime.json@1/none
+PASS  structural/opaque codec round-trip: conformance.MaybeTime.json@1/present
+PASS  structural/write-lift fixture labels: MaybeTime
+PASS  structural/write-lift case: MaybeTime/epoch
+PASS  structural/write-lift case: MaybeTime/later
+PASS  generated guarded initial write selects no timestamp
+PASS  generated mapped lift writes the command timestamp
+PASS  automatic awakening clears the timestamp
+PASS  dormant complement retains a freshly lifted timestamp
+PASS  explicit awakening and reopening clear the timestamp
+PASS  complementary guard verification remains disjoint
+PASS  every predicate retains generated ownership and verification
+PASS  forward, encoded replay, and full replay agree
+PASS  all consumer behavior witnesses pass
+PASS  lift version participates in fold and snapshot identity
+PASS  snapshot codec preserves the complete lifted register file
+PASS  mapped lift occurs only inside declared register slots
+PASS: mutation fails its named gate: lift contradicts declared cases
+PASS: mutation fails its named gate: lift provenance omitted from generated identity
+PASS: mutation fails its named gate: head event no longer recovers the command
+PASS: mutation fails its named gate: generated sibling guard bypassed
+PASS: mutation fails its named gate: generated mapped slot bypassed
+PASS: mutation fails its named gate: lift moved into event output
+PASS: mutation fails its named gate: mapped projection wrapped inside a lift
+PASS: mutation fails its named gate: projection hidden under arithmetic
+PASS: mutation fails its named gate: Hole combined with a declared write
+PASS  validateTransducer is empty
+PASS  golden round-trip: Created
+PASS  golden round-trip: Marked
+PASS  golden round-trip: Pinged
+PASS  golden round-trip: Awakened
+PASS  golden round-trip: ClosedEvent
+PASS  golden round-trip: Reopened
+PASS  accepts Create from LifecycleEmpty
+PASS  forward/replay equality: Create from LifecycleEmpty -- final vertex
+PASS  forward/replay equality: Create from LifecycleEmpty -- register dormantSince
+PASS  forward/replay equality: Create from LifecycleEmpty -- register automatic
+PASS  structural/opaque boundary fixtures: conformance.MaybeTime.json@1
+PASS  structural/opaque codec round-trip: conformance.MaybeTime.json@1/none
+PASS  structural/opaque codec round-trip: conformance.MaybeTime.json@1/present
+PASS  structural/write-lift fixture labels: MaybeTime
+PASS  structural/write-lift case: MaybeTime/epoch
+PASS  structural/write-lift case: MaybeTime/later
+PASS  generated guarded initial write selects no timestamp
+PASS  generated mapped lift writes the command timestamp
+PASS  automatic awakening clears the timestamp
+PASS  dormant complement retains a freshly lifted timestamp
+PASS  explicit awakening and reopening clear the timestamp
+PASS  complementary guard verification remains disjoint
+PASS  every predicate retains generated ownership and verification
+PASS  forward, encoded replay, and full replay agree
+PASS  all consumer behavior witnesses pass
+PASS  lift version participates in fold and snapshot identity
+PASS  snapshot codec preserves the complete lifted register file
+PASS  mapped lift occurs only inside declared register slots
+
+mapped register construction
+  extends only candidate syntax while preserving runtime capabilities [✔]
+  checks and round-trips write-only target initial and a Time lift [✔]
+  refuses mapped syntax in Language 5 at its marker [✔]
+  keeps Language 5 initial roots and Language 6 qualified roots unambiguous [✔]
+  diagnoses command initial shadowing and preserves continued initial paths [✔]
+  keeps initial-named ID literal syntax outside the contextual construction marker [✔]
+  rejects absent lifts, incomplete blocks, and duplicate declarations at their boundary [✔]
+  rejects invalid initial targets and mapped source types before generation [✔]
+  rejects predicates even with a Bool lift source [✔]
+  preserves exclusive generated guard/write ownership [✔]
+  records lift provenance and round-trips new obligation kinds [✔]
+  decodes mapping ledgers written before the optional lift field existed [✔]
+  resolves each real revision for lift removal and source replacement [✔]
+  versions used behavior, excluding evidence and unused lifts from fold identity [✔]
+  frames used lift provenance as compact JSON, preserving arbitrary version characters [✔]
+  keeps another aggregate using only whole-value copies unchanged [✔]
+  pins multiple used-lift tuples and escaped version text in write order [✔]
+  keeps historical scaffold records and their mapping drift baseline readable [✔]
+  reports both lift metadata codes with the complete build-only vector [✔]
+  keeps event, queue, query, and projection-only lifts build-only and replay-neutral [✔]
+  fails invalid actual revisions rather than manufacturing a fold identity [✔]
+  checks structural record, enum, union, bare, and refined initial targets [✔]
+  compiles fresh opaque lift skeletons for every admitted scalar with strict imports [✔]
+  qualifies a consumer type that collides with the Time lift source [✔]
+  preserves create-once opaque implementations and reports later missing symbols [✔]
+  retains lift declaration and child locations in a multi-member workspace [✔]
+
+Finished in 11.2813 seconds
+26 examples, 0 failures
+PGHOST="/Users/shinzui/Keikaku/bokuno/keiro/db" PGDATA="/Users/shinzui/Keikaku/bokuno/keiro/db/db" PGLOG="/Users/shinzui/Keikaku/bokuno/keiro/db/postgres.log" PGUSER="shinzui" PGDATABASE="keiro" JITSUREI_DATABASE="jitsurei" process-compose -f process-compose.yaml --dry-run
+{"level":"debug","error":"could not locate `process-compose` in any of the following paths: [/Users/shinzui/Library/Application Support /Users/shinzui/.nix-profile/etc/xdg /run/current-system/sw/etc/xdg /nix/var/nix/profiles/default/etc/xdg]","time":"2026-10-27T12:30:13-07:00","message":"Path not found for process compose config home"}
+{"level":"debug","error":"could not locate `process-compose` in any of the following paths: [/Users/shinzui/Library/Application Support /Users/shinzui/.nix-profile/etc/xdg /run/current-system/sw/etc/xdg /nix/var/nix/profiles/default/etc/xdg]","time":"2026-10-27T12:30:13-07:00","message":"Path not found for process compose config home"}
+Validated 3 configured processes from 2 files.
+PGHOST="/Users/shinzui/Keikaku/bokuno/keiro/db" PGDATA="/Users/shinzui/Keikaku/bokuno/keiro/db/db" PGLOG="/Users/shinzui/Keikaku/bokuno/keiro/db/postgres.log" PGUSER="shinzui" bash scripts/verify-jitsurei.sh
+Running demos in disposable database keiro_jitsurei_verify_1793129413_68672_23451
+just db-create "keiro_jitsurei_verify_1793129413_68672_23451"
+mkdir -p "/Users/shinzui/Keikaku/bokuno/keiro/db" .dev
+if [ ! -d "/Users/shinzui/Keikaku/bokuno/keiro/db/db" ]; then PGDATA="/Users/shinzui/Keikaku/bokuno/keiro/db/db" initdb --auth=trust --no-locale --encoding=UTF8; fi
+pg_ctl status -D "/Users/shinzui/Keikaku/bokuno/keiro/db/db" >/dev/null || pg_ctl start -w -D "/Users/shinzui/Keikaku/bokuno/keiro/db/db" -l "/Users/shinzui/Keikaku/bokuno/keiro/db/postgres.log" -o "--unix_socket_directories='/Users/shinzui/Keikaku/bokuno/keiro/db'" -o "-c listen_addresses=''"
+just create-database "keiro_jitsurei_verify_1793129413_68672_23451"
+PGHOST="/Users/shinzui/Keikaku/bokuno/keiro/db" createdb "keiro_jitsurei_verify_1793129413_68672_23451" 2>/dev/null || PGHOST="/Users/shinzui/Keikaku/bokuno/keiro/db" psql -d "keiro_jitsurei_verify_1793129413_68672_23451" -Atqc 'SELECT 1' >/dev/null
+cabal run keiro-migrate -- up --database-url "host=/Users/shinzui/Keikaku/bokuno/keiro/db dbname=keiro_jitsurei_verify_1793129413_68672_23451 user=shinzui"
+Resolving dependencies...
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-migrations-0.22.0.0 (lib) (configuration changed)
+ - keiro-migrations-0.22.0.0 (exe:keiro-migrate) (configuration changed)
+Configuring library for keiro-migrations-0.22.0.0...
+Preprocessing library for keiro-migrations-0.22.0.0...
+Building library for keiro-migrations-0.22.0.0...
+[1 of 5] Compiling Keiro.Migrations.Internal.Definition ( src/Keiro/Migrations/Internal/Definition.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.22.0.0/build/Keiro/Migrations/Internal/Definition.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.22.0.0/build/Keiro/Migrations/Internal/Definition.dyn_o ) [Flags changed]
+[2 of 5] Compiling Keiro.Migrations ( src/Keiro/Migrations.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.22.0.0/build/Keiro/Migrations.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.22.0.0/build/Keiro/Migrations.dyn_o ) [Flags changed]
+[3 of 5] Compiling Keiro.Migrations.Internal.EmbedFile ( src/Keiro/Migrations/Internal/EmbedFile.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.22.0.0/build/Keiro/Migrations/Internal/EmbedFile.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.22.0.0/build/Keiro/Migrations/Internal/EmbedFile.dyn_o ) [Flags changed]
+[4 of 5] Compiling Keiro.Migrations.History.Codd ( src/Keiro/Migrations/History/Codd.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.22.0.0/build/Keiro/Migrations/History/Codd.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.22.0.0/build/Keiro/Migrations/History/Codd.dyn_o ) [Flags changed]
+[5 of 5] Compiling Keiro.Migrations.SchemaCheck ( src/Keiro/Migrations/SchemaCheck.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.22.0.0/build/Keiro/Migrations/SchemaCheck.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.22.0.0/build/Keiro/Migrations/SchemaCheck.dyn_o ) [Flags changed]
+Configuring executable 'keiro-migrate' for keiro-migrations-0.22.0.0...
+Preprocessing executable 'keiro-migrate' for keiro-migrations-0.22.0.0...
+Building executable 'keiro-migrate' for keiro-migrations-0.22.0.0...
+[2 of 2] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.22.0.0/x/keiro-migrate/build/keiro-migrate/keiro-migrate [Library changed]
+started=2026-10-27 19:30:28.689785 UTC
+finished=2026-10-27 19:30:28.752019 UTC
+kiroku/0001-kiroku-bootstrap outcome=applied_now duration_ms=17
+kiroku/0002-add-subscription-dead-letters outcome=applied_now duration_ms=2
+kiroku/0003-notify-trigger-append-guard outcome=applied_now duration_ms=1
+kiroku/0004-dead-letters-event-id-index outcome=applied_now duration_ms=0
+kiroku/0005-index-hygiene-and-streams-fillfactor outcome=applied_now duration_ms=1
+kiroku/0006-stream-name-length-check outcome=applied_now duration_ms=0
+kiroku/0007-stream-truncate-before outcome=applied_now duration_ms=0
+kiroku/0008-schema-management-comment outcome=applied_now duration_ms=0
+kiroku/0009 outcome=applied_now duration_ms=1
+kiroku/0010 outcome=applied_now duration_ms=2
+kiroku/0011 outcome=applied_now duration_ms=0
+kiroku/0012 outcome=applied_now duration_ms=1
+kiroku/0013 outcome=applied_now duration_ms=0
+kiroku/0014 outcome=applied_now duration_ms=0
+kiroku/0015 outcome=applied_now duration_ms=1
+kiroku/0016 outcome=applied_now duration_ms=0
+keiro/0001-keiro-bootstrap outcome=applied_now duration_ms=2
+keiro/0002-keiro-outbox outcome=applied_now duration_ms=2
+keiro/0003-keiro-inbox outcome=applied_now duration_ms=1
+keiro/0004-keiro-timer-recovery outcome=applied_now duration_ms=0
+keiro/0005-keiro-workflow-steps outcome=applied_now duration_ms=1
+keiro/0006-keiro-awakeables outcome=applied_now duration_ms=1
+keiro/0007-keiro-workflow-children outcome=applied_now duration_ms=1
+keiro/0008-keiro-workflow-generation outcome=applied_now duration_ms=1
+keiro/0009-keiro-subscription-shards outcome=applied_now duration_ms=1
+keiro/0010-keiro-messaging-crash-recovery outcome=applied_now duration_ms=1
+keiro/0011-keiro-workflows-instances outcome=applied_now duration_ms=1
+keiro/0012-keiro-workflow-gc-index outcome=applied_now duration_ms=0
+keiro/0013-keiro-workflows-wake-after outcome=applied_now duration_ms=0
+keiro/0014-keiro-projection-dedup outcome=applied_now duration_ms=1
+keiro/0015-keiro-outbox-claim-order-index outcome=applied_now duration_ms=0
+keiro/0016-keiro-inbox-drop-received-idx outcome=applied_now duration_ms=0
+keiro/0017-schema-management-comment outcome=applied_now duration_ms=0
+keiro/0018 outcome=applied_now duration_ms=1
+keiro/0019-keiro-snapshots-state-shape-hash outcome=applied_now duration_ms=0
+keiro/0020-keiro-workflow-children-failure-reason outcome=applied_now duration_ms=0
+keiro/0021-keiro-workflows-exact-discovery outcome=applied_now duration_ms=1
+keiro/0022 outcome=applied_now duration_ms=1
+keiro/0023 outcome=applied_now duration_ms=3
+keiro/0024 outcome=applied_now duration_ms=0
+keiro/0025 outcome=applied_now duration_ms=5
+keiro/0026 outcome=applied_now duration_ms=2
+keiro/0027 outcome=applied_now duration_ms=3
+keiro/0028 outcome=applied_now duration_ms=0
+keiro/0029 outcome=applied_now duration_ms=1
+keiro/0030 outcome=applied_now duration_ms=0
+keiro/0031 outcome=applied_now duration_ms=2
+keiro/0032 outcome=applied_now duration_ms=0
+
+PGHOST="/Users/shinzui/Keikaku/bokuno/keiro/db" PGDATABASE="keiro_jitsurei_verify_1793129413_68672_23451" PG_CONNECTION_STRING="host=/Users/shinzui/Keikaku/bokuno/keiro/db dbname=keiro_jitsurei_verify_1793129413_68672_23451 user=shinzui" cabal run jitsurei-demo -- all
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-pgmq-0.22.0.0 (lib) (configuration changed)
+ - keiro-ops-0.22.0.0 (lib) (configuration changed)
+ - jitsurei-0.1.0.0 (lib) (configuration changed)
+ - jitsurei-0.1.0.0 (exe:jitsurei-demo) (configuration changed)
+Configuring library for keiro-pgmq-0.22.0.0...
+Preprocessing library for keiro-pgmq-0.22.0.0...
+Building library for keiro-pgmq-0.22.0.0...
+[1 of 6] Compiling Keiro.PGMQ.Codec ( src/Keiro/PGMQ/Codec.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.22.0.0/build/Keiro/PGMQ/Codec.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.22.0.0/build/Keiro/PGMQ/Codec.dyn_o ) [Flags changed]
+[2 of 6] Compiling Keiro.PGMQ.Runtime ( src/Keiro/PGMQ/Runtime.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.22.0.0/build/Keiro/PGMQ/Runtime.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.22.0.0/build/Keiro/PGMQ/Runtime.dyn_o ) [Flags changed]
+[3 of 6] Compiling Keiro.PGMQ.Job   ( src/Keiro/PGMQ/Job.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.22.0.0/build/Keiro/PGMQ/Job.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.22.0.0/build/Keiro/PGMQ/Job.dyn_o ) [Flags changed]
+[4 of 6] Compiling Keiro.PGMQ.Metrics ( src/Keiro/PGMQ/Metrics.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.22.0.0/build/Keiro/PGMQ/Metrics.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.22.0.0/build/Keiro/PGMQ/Metrics.dyn_o ) [Flags changed]
+[5 of 6] Compiling Keiro.PGMQ.Dlq   ( src/Keiro/PGMQ/Dlq.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.22.0.0/build/Keiro/PGMQ/Dlq.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.22.0.0/build/Keiro/PGMQ/Dlq.dyn_o ) [Flags changed]
+[6 of 6] Compiling Keiro.PGMQ       ( src/Keiro/PGMQ.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.22.0.0/build/Keiro/PGMQ.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.22.0.0/build/Keiro/PGMQ.dyn_o ) [Flags changed]
+Configuring library for keiro-ops-0.22.0.0...
+Configuring library for jitsurei-0.1.0.0...
+Preprocessing library for jitsurei-0.1.0.0...
+Building library for jitsurei-0.1.0.0...
+Preprocessing library for keiro-ops-0.22.0.0...
+Building library for keiro-ops-0.22.0.0...
+[ 1 of 19] Compiling Keiro.Ops.Env    ( src/Keiro/Ops/Env.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Env.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Env.dyn_o ) [Flags changed]
+[ 2 of 19] Compiling Keiro.Ops.Parse  ( src/Keiro/Ops/Parse.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Parse.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Parse.dyn_o ) [Flags changed]
+[ 3 of 19] Compiling Keiro.Ops.Render ( src/Keiro/Ops/Render.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Render.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Render.dyn_o ) [Flags changed]
+[ 4 of 19] Compiling Keiro.Ops.Rebuild ( src/Keiro/Ops/Rebuild.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Rebuild.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Rebuild.dyn_o ) [Flags changed]
+[ 5 of 19] Compiling Keiro.Ops.Projection ( src/Keiro/Ops/Projection.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Projection.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Projection.dyn_o ) [Flags changed]
+src/Keiro/Ops/Projection.hs:103:18: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘head’ shadows the existing binding
+      imported from ‘Prelude’ at src/Keiro/Ops/Projection.hs:42:1-14
+      (and originally defined in ‘ghc-internal-9.1204.0:GHC.Internal.List’)
+    |
+103 |     Right (page, head) ->
+    |                  ^^^^
+
+src/Keiro/Ops/Projection.hs:119:17: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘value’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops/Projection.hs:41:1-42
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+119 |           Right value -> Right . (value,) <$> storeHeadPosition
+    |                 ^^^^^
+
+src/Keiro/Ops/Projection.hs:228:29: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘value’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops/Projection.hs:41:1-42
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+228 | positionInt (GlobalPosition value) = value
+    |                             ^^^^^
+
+src/Keiro/Ops/Projection.hs:258:12: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘value’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops/Projection.hs:41:1-42
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+258 | shellQuote value = "'" <> Text.replace "'" "'\"'\"'" value <> "'"
+    |            ^^^^^
+
+[ 6 of 19] Compiling Keiro.Ops.ProcessManager ( src/Keiro/Ops/ProcessManager.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/ProcessManager.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/ProcessManager.dyn_o ) [Flags changed]
+[ 7 of 19] Compiling Keiro.Ops.Pgmq   ( src/Keiro/Ops/Pgmq.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Pgmq.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Pgmq.dyn_o ) [Flags changed]
+[ 8 of 19] Compiling Keiro.Ops.Outbox ( src/Keiro/Ops/Outbox.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Outbox.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Outbox.dyn_o ) [Flags changed]
+[ 9 of 19] Compiling Keiro.Ops.Inbox  ( src/Keiro/Ops/Inbox.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Inbox.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Inbox.dyn_o ) [Flags changed]
+[10 of 19] Compiling Keiro.Ops.Aggregate ( src/Keiro/Ops/Aggregate.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Aggregate.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Aggregate.dyn_o ) [Flags changed]
+[11 of 19] Compiling Keiro.Ops.ReplayAudit ( src/Keiro/Ops/ReplayAudit.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/ReplayAudit.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/ReplayAudit.dyn_o ) [Flags changed]
+[12 of 19] Compiling Keiro.Ops.Shard  ( src/Keiro/Ops/Shard.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Shard.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Shard.dyn_o ) [Flags changed]
+src/Keiro/Ops/Shard.hs:21:29: warning: [GHC-38856] [-Wunused-imports]
+    The import of ‘:>’ from module ‘Effectful’ is redundant
+   |
+21 | import Effectful (Eff, IOE, (:>))
+   |                             ^^^^
+
+[13 of 19] Compiling Keiro.Ops.Snapshot ( src/Keiro/Ops/Snapshot.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Snapshot.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Snapshot.dyn_o ) [Flags changed]
+[14 of 19] Compiling Keiro.Ops.Stream ( src/Keiro/Ops/Stream.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Stream.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Stream.dyn_o ) [Flags changed]
+[15 of 19] Compiling Keiro.Ops.Timer  ( src/Keiro/Ops/Timer.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Timer.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Timer.dyn_o ) [Flags changed]
+[16 of 19] Compiling Keiro.Ops.Workflow ( src/Keiro/Ops/Workflow.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Workflow.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Workflow.dyn_o ) [Flags changed]
+src/Keiro/Ops/Workflow.hs:351:26: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops/Workflow.hs:58:1-49
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+351 | validateCommand (Inspect command) = either (Left . inspectionError) Right $ case command of
+    |                          ^^^^^^^
+
+[17 of 19] Compiling Keiro.Ops.Embed  ( src/Keiro/Ops/Embed.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Embed.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/Embed.dyn_o ) [Flags changed]
+[18 of 19] Compiling Keiro.Ops.WorkflowHeaderCache ( src/Keiro/Ops/WorkflowHeaderCache.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/WorkflowHeaderCache.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops/WorkflowHeaderCache.dyn_o ) [Flags changed]
+[19 of 19] Compiling Keiro.Ops        ( src/Keiro/Ops.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/build/Keiro/Ops.dyn_o ) [Flags changed]
+src/Keiro/Ops.hs:198:33: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+198 | validateCommand (ProcessManager command) = ProcessManager.validateCommand command
+    |                                 ^^^^^^^
+
+src/Keiro/Ops.hs:199:28: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+199 | validateCommand (Aggregate command) = Aggregate.validateCommand command
+    |                            ^^^^^^^
+
+src/Keiro/Ops.hs:200:27: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+200 | validateCommand (Workflow command) = Workflow.validateCommand command
+    |                           ^^^^^^^
+
+src/Keiro/Ops.hs:201:24: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+201 | validateCommand (Timer command) = Timer.validateCommand command
+    |                        ^^^^^^^
+
+src/Keiro/Ops.hs:202:29: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+202 | validateCommand (Projection command) = Projection.validateCommand command
+    |                             ^^^^^^^
+
+src/Keiro/Ops.hs:208:18: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+208 |   ProcessManager command -> ProcessManager.isMutation command
+    |                  ^^^^^^^
+
+src/Keiro/Ops.hs:209:13: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+209 |   Aggregate command -> Aggregate.isMutation command
+    |             ^^^^^^^
+
+src/Keiro/Ops.hs:227:39: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+227 | runCommandWithHeaderCache _ hooks env command = do
+    |                                       ^^^^^^^
+
+src/Keiro/Ops.hs:236:51: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+236 | runCommandWithReadEncoding encode cache hooks env command = case command of
+    |                                                   ^^^^^^^
+
+src/Keiro/Ops.hs:249:18: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+249 |   ProcessManager command -> maybe (pure (Failed "process-manager inspection hook is not mounted")) (\catalog -> ProcessManager.runCommand catalog env command) hooks.processManagers
+    |                  ^^^^^^^
+
+src/Keiro/Ops.hs:250:13: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+250 |   Aggregate command -> maybe (pure (Failed "aggregate inspection hook is not mounted")) (\catalog -> Aggregate.runCommand env catalog command) hooks.aggregates
+    |             ^^^^^^^
+
+Configuring executable 'jitsurei-demo' for jitsurei-0.1.0.0...
+Preprocessing executable 'jitsurei-demo' for jitsurei-0.1.0.0...
+Building executable 'jitsurei-demo' for jitsurei-0.1.0.0...
+[2 of 2] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/x/jitsurei-demo/build/jitsurei-demo/jitsurei-demo [Library changed]
+[jitsurei] connecting to host=/Users/shinzui/Keikaku/bokuno/keiro/db dbname=keiro_jitsurei_verify_1793129413_68672_23451 user=shinzui
+[jitsurei:fulfillment] running order fulfillment demo for demo-20261027193049761717000000
+[jitsurei:fulfillment] appending PlaceOrder with the order-summary inline projection
+CommandResult {target = Stream {name = StreamName "order-demo-20261027193049761717000000"}, streamVersion = StreamVersion 1, globalPosition = Just (GlobalPosition 1), eventsAppended = 1}
+[jitsurei:fulfillment] appending ApprovePayment with the same projection
+CommandResult {target = Stream {name = StreamName "order-demo-20261027193049761717000000"}, streamVersion = StreamVersion 2, globalPosition = Just (GlobalPosition 2), eventsAppended = 1}
+[jitsurei:fulfillment] order stream after payment
+  StreamVersion 1 GlobalPosition 0 OrderPlaced (OrderPlacedData {orderId = OrderId "demo-20261027193049761717000000", sku = Sku "SKU-RED-MUG", quantity = Quantity 3})
+  StreamVersion 2 GlobalPosition 0 PaymentApproved (PaymentApprovedData {orderId = OrderId "demo-20261027193049761717000000", paymentRef = PaymentRef "pay_demo"})
+[jitsurei:fulfillment] jitsurei_order_summary row
+Right (Just (OrderSummary {orderId = OrderId "demo-20261027193049761717000000", sku = Sku "SKU-RED-MUG", quantity = Quantity 3, status = "paid", lastSeen = GlobalPosition 2}))
+[jitsurei:fulfillment] running fulfillment process-manager worker for PaymentApproved
+[jitsurei:fulfillment] fulfillment process-manager worker drained one adapter message
+[jitsurei:fulfillment] order stream after process manager dispatch
+  StreamVersion 1 GlobalPosition 0 OrderPlaced (OrderPlacedData {orderId = OrderId "demo-20261027193049761717000000", sku = Sku "SKU-RED-MUG", quantity = Quantity 3})
+  StreamVersion 2 GlobalPosition 0 PaymentApproved (PaymentApprovedData {orderId = OrderId "demo-20261027193049761717000000", paymentRef = PaymentRef "pay_demo"})
+  StreamVersion 3 GlobalPosition 0 OrderPacked (OrderPackedData {orderId = OrderId "demo-20261027193049761717000000"})
+[jitsurei:fulfillment] fulfillment process-manager stream
+  StreamVersion 1 GlobalPosition 0 FulfillmentObserved (FulfillmentObservedData {orderId = OrderId "demo-20261027193049761717000000", status = "payment-approved"})
+[jitsurei] connecting to host=/Users/shinzui/Keikaku/bokuno/keiro/db dbname=keiro_jitsurei_verify_1793129413_68672_23451 user=shinzui
+[jitsurei:snapshots] running snapshot demo for snapshot-20261027193049787778000000
+[jitsurei:snapshots] appending PlaceOrder through snapshotOrderEventStream
+[jitsurei:snapshots] appending ApprovePayment; Every 2 writes keiro_snapshots at stream version 2
+[jitsurei:snapshots] order stream
+  StreamVersion 1 GlobalPosition 0 OrderPlaced (OrderPlacedData {orderId = OrderId "snapshot-20261027193049787778000000", sku = Sku "SKU-SNAPSHOT", quantity = Quantity 2})
+  StreamVersion 2 GlobalPosition 0 PaymentApproved (PaymentApprovedData {orderId = OrderId "snapshot-20261027193049787778000000", paymentRef = PaymentRef "pay_snapshot"})
+[jitsurei:snapshots] keiro_snapshots rows for order stream
+SnapshotView {streamName = "order-snapshot-20261027193049787778000000", streamVersion = StreamVersion 2, state = Object (fromList [("registers",Object (fromList [])),("state",String "Paid")]), stateCodecVersion = 1, regfileShapeHash = "0b262a9e301796f7a5b36bb6ea874e9ffccf7d1b4aff78a8d4b5436bd23914a6"}
+[jitsurei] connecting to host=/Users/shinzui/Keikaku/bokuno/keiro/db dbname=keiro_jitsurei_verify_1793129413_68672_23451 user=shinzui
+[jitsurei:paging] seeding jitsurei_service_oncall for checkout-paging-20261027193049801164000000
+[jitsurei:paging] resolved roster read-model rows
+Right [Responder {responderId = ResponderId "alice", tier = 1},Responder {responderId = ResponderId "bob", tier = 1},Responder {responderId = ResponderId "carol", tier = 2}]
+[jitsurei:paging] routing IncidentRaised to page streams
+RouterResult {commandResults = [PMCommandAppended (CommandResult {target = Stream {name = StreamName "page-inc-paging-20261027193049801164000000-alice"}, streamVersion = StreamVersion 1, globalPosition = Just (GlobalPosition 7), eventsAppended = 1}),PMCommandAppended (CommandResult {target = Stream {name = StreamName "page-inc-paging-20261027193049801164000000-bob"}, streamVersion = StreamVersion 1, globalPosition = Just (GlobalPosition 8), eventsAppended = 1}),PMCommandAppended (CommandResult {target = Stream {name = StreamName "page-inc-paging-20261027193049801164000000-carol"}, streamVersion = StreamVersion 1, globalPosition = Just (GlobalPosition 9), eventsAppended = 1})]}
+[jitsurei:paging] page stream for alice
+  StreamVersion 1 GlobalPosition 0 PageSent (PageSentData {incidentId = IncidentId "inc-paging-20261027193049801164000000", responderId = ResponderId "alice"})
+[jitsurei:paging] page stream for bob
+  StreamVersion 1 GlobalPosition 0 PageSent (PageSentData {incidentId = IncidentId "inc-paging-20261027193049801164000000", responderId = ResponderId "bob"})
+[jitsurei:paging] page stream for carol
+  StreamVersion 1 GlobalPosition 0 PageSent (PageSentData {incidentId = IncidentId "inc-paging-20261027193049801164000000", responderId = ResponderId "carol"})
+[jitsurei] connecting to host=/Users/shinzui/Keikaku/bokuno/keiro/db dbname=keiro_jitsurei_verify_1793129413_68672_23451 user=shinzui
+[jitsurei:escalation] running incident escalation demo for inc-esc-20261027193049814623000000
+[jitsurei:escalation] raising the incident aggregate
+[jitsurei:escalation] running the paging router from the persisted IncidentRaised
+RouterResult {commandResults = [PMCommandAppended (CommandResult {target = Stream {name = StreamName "page-inc-esc-20261027193049814623000000-alice"}, streamVersion = StreamVersion 1, globalPosition = Just (GlobalPosition 11), eventsAppended = 1}),PMCommandAppended (CommandResult {target = Stream {name = StreamName "page-inc-esc-20261027193049814623000000-bob"}, streamVersion = StreamVersion 1, globalPosition = Just (GlobalPosition 12), eventsAppended = 1})]}
+[jitsurei:escalation] running EscalationProcess for IncidentRaised; this persists esc-* saga data and a timer
+ProcessManagerResult {managerResult = PMStateAppended (CommandResult {target = Stream {name = StreamName "esc-inc-esc-20261027193049814623000000"}, streamVersion = StreamVersion 1, globalPosition = Just (GlobalPosition 13), eventsAppended = 1}), commandResults = [], timersScheduled = 1}
+[jitsurei:escalation] keiro_timers rows for incident
+TimerView {processManagerName = "jitsurei-escalation", correlationId = "inc-esc-20261027193049814623000000", status = "scheduled", attempts = 0, fired = False}
+[jitsurei:escalation] acknowledging Alice's page and feeding PageAcknowledged to EscalationProcess
+ProcessManagerResult {managerResult = PMStateAppended (CommandResult {target = Stream {name = StreamName "esc-inc-esc-20261027193049814623000000"}, streamVersion = StreamVersion 2, globalPosition = Just (GlobalPosition 15), eventsAppended = 1}), commandResults = [PMCommandAppended (CommandResult {target = Stream {name = StreamName "incident-inc-esc-20261027193049814623000000"}, streamVersion = StreamVersion 2, globalPosition = Just (GlobalPosition 16), eventsAppended = 1})], timersScheduled = 0}
+[jitsurei:escalation] firing the due timer after acknowledgement; the incident aggregate rejects escalation benignly
+Just (TimerRow {timerId = TimerId 23bb0364-c550-5271-beac-7c5b114996e1, processManagerName = "jitsurei-escalation", correlationId = "inc-esc-20261027193049814623000000", fireAt = 2026-05-23 12:05:00 UTC, payload = Object (fromList [("incidentId",String "inc-esc-20261027193049814623000000"),("kind",String "escalation")]), status = Firing, attempts = 1, firedEventId = Nothing})
+[jitsurei:escalation] incident stream
+  StreamVersion 1 GlobalPosition 0 IncidentRaised (IncidentRaisedData {incidentId = IncidentId "inc-esc-20261027193049814623000000", service = Service "checkout-esc-20261027193049814623000000", severity = Sev1, raisedAt = 2026-05-23 12:00:00 UTC})
+  StreamVersion 2 GlobalPosition 0 IncidentAcknowledged (IncidentAcknowledgedData {incidentId = IncidentId "inc-esc-20261027193049814623000000"})
+[jitsurei:escalation] escalation saga stream
+  StreamVersion 1 GlobalPosition 0 RaiseNoted (RaiseNotedData {incidentId = IncidentId "inc-esc-20261027193049814623000000"})
+  StreamVersion 2 GlobalPosition 0 AcknowledgeNoted (AcknowledgeNotedData {incidentId = IncidentId "inc-esc-20261027193049814623000000"})
+[jitsurei:escalation] Alice page stream
+  StreamVersion 1 GlobalPosition 0 PageSent (PageSentData {incidentId = IncidentId "inc-esc-20261027193049814623000000", responderId = ResponderId "alice"})
+  StreamVersion 2 GlobalPosition 0 PageAcknowledged (PageAcknowledgedData {incidentId = IncidentId "inc-esc-20261027193049814623000000", responderId = ResponderId "alice"})
+[jitsurei:escalation] Bob page stream
+  StreamVersion 1 GlobalPosition 0 PageSent (PageSentData {incidentId = IncidentId "inc-esc-20261027193049814623000000", responderId = ResponderId "bob"})
+[jitsurei:escalation] keiro_timers rows for incident
+TimerView {processManagerName = "jitsurei-escalation", correlationId = "inc-esc-20261027193049814623000000", status = "fired", attempts = 1, fired = True}
+[jitsurei] connecting to host=/Users/shinzui/Keikaku/bokuno/keiro/db dbname=keiro_jitsurei_verify_1793129413_68672_23451 user=shinzui
+[jitsurei:agent-qual] seeding jitsurei_area_chapters
+[jitsurei:agent-qual] area read-model rows
+(Right [ChapterTarget {member = MemberId "m1", chapter = ChapterId "c1"},ChapterTarget {member = MemberId "m2", chapter = ChapterId "c2"}],Right [ChapterTarget {member = MemberId "m2", chapter = ChapterId "c2"},ChapterTarget {member = MemberId "m3", chapter = ChapterId "c3"}])
+[jitsurei:agent-qual] routing the transaction to de-duplicated chapter streams
+RouterResult {commandResults = [PMCommandAppended (CommandResult {target = Stream {name = StreamName "chapter-m1-c1"}, streamVersion = StreamVersion 1, globalPosition = Just (GlobalPosition 17), eventsAppended = 1}),PMCommandAppended (CommandResult {target = Stream {name = StreamName "chapter-m2-c2"}, streamVersion = StreamVersion 1, globalPosition = Just (GlobalPosition 18), eventsAppended = 1}),PMCommandAppended (CommandResult {target = Stream {name = StreamName "chapter-m3-c3"}, streamVersion = StreamVersion 1, globalPosition = Just (GlobalPosition 19), eventsAppended = 1})]}
+[jitsurei:agent-qual] chapter-m1-c1
+  StreamVersion 1 GlobalPosition 0 TransactionRecorded (TransactionRecordedData {txnId = TxnId "txn-agent-20261027193049836903000000"})
+[jitsurei:agent-qual] chapter-m2-c2
+  StreamVersion 1 GlobalPosition 0 TransactionRecorded (TransactionRecordedData {txnId = TxnId "txn-agent-20261027193049836903000000"})
+[jitsurei:agent-qual] chapter-m3-c3
+  StreamVersion 1 GlobalPosition 0 TransactionRecorded (TransactionRecordedData {txnId = TxnId "txn-agent-20261027193049836903000000"})
+[jitsurei] connecting to host=/Users/shinzui/Keikaku/bokuno/keiro/db dbname=keiro_jitsurei_verify_1793129413_68672_23451 user=shinzui
+[jitsurei:workflow] running durable order-fulfillment workflow for workflow-20261027193049847265000000
+[jitsurei:workflow] first run: invoking the workflow
+  step reserve-inventory ran (reservation RES-workflow-20261027193049847265000000)
+[jitsurei:workflow] first run outcome: Suspended (armed the cooling-off sleep)
+[jitsurei:workflow] firing the cooling-off sleep timer
+  timer worker fired sleep:cooling-off -> journal
+  published payment-webhook awakeable id: 66a7fcb8-eea8-4685-a494-045c4361204b
+[jitsurei:workflow] resume pass 1: ResumeSummary {discovered = 1, advanced = 1, resumed = 1, completed = 0, stillSuspended = 1, unknownName = 0, failed = 0, transientErrors = 0, leaseSkipped = 0, paced = 0, sleepDue = 0, unregisteredNames = fromList []}
+  (replayed reserve-inventory + sleep:cooling-off, parked on the payment-webhook awakeable)
+[jitsurei:workflow] signalling the payment-webhook awakeable (simulated webhook)
+  signalAwakeable payment-webhook -> True
+  step charge ran (charge CHG-workflow-20261027193049847265000000 for pay_demo)
+[jitsurei:workflow] resume pass 2: ResumeSummary {discovered = 1, advanced = 1, resumed = 1, completed = 0, stillSuspended = 1, unknownName = 0, failed = 0, transientErrors = 0, leaseSkipped = 0, paced = 0, sleepDue = 0, unregisteredNames = fromList []}
+  child step create-shipment ran (tracking TRK-workflow-20261027193049847265000000-ship)
+[jitsurei:workflow] resume pass 3: ResumeSummary {discovered = 1, advanced = 1, resumed = 1, completed = 1, stillSuspended = 0, unknownName = 0, failed = 0, transientErrors = 0, leaseSkipped = 0, paced = 0, sleepDue = 0, unregisteredNames = fromList []}
+[jitsurei:workflow] resume pass 4: ResumeSummary {discovered = 1, advanced = 1, resumed = 1, completed = 1, stillSuspended = 0, unknownName = 0, failed = 0, transientErrors = 0, leaseSkipped = 0, paced = 0, sleepDue = 0, unregisteredNames = fromList []}
+[jitsurei:workflow] final outcome: Completed "TRK-workflow-20261027193049847265000000-ship"
+[jitsurei:workflow] order-fulfillment journal (wf:order-fulfillment-workflow-20261027193049847265000000)
+  StreamVersion 1 GlobalPosition 0 StepRecorded {stepName = "reserve-inventory", result = String "RES-workflow-20261027193049847265000000", recordedAt = 2026-10-27 19:30:49.854503 UTC}
+  StreamVersion 2 GlobalPosition 0 StepRecorded {stepName = "sleep:cooling-off", result = Null, recordedAt = 2026-10-27 19:30:49.857088 UTC}
+  StreamVersion 3 GlobalPosition 0 StepRecorded {stepName = "awkid:payment-webhook", result = String "66a7fcb8-eea8-4685-a494-045c4361204b", recordedAt = 2026-10-27 19:30:49.859986 UTC}
+  StreamVersion 4 GlobalPosition 0 StepRecorded {stepName = "publish-payment-webhook-id", result = Array [], recordedAt = 2026-10-27 19:30:49.861918 UTC}
+  StreamVersion 5 GlobalPosition 0 StepRecorded {stepName = "awk:66a7fcb8-eea8-4685-a494-045c4361204b", result = Object (fromList [("amountCents",Number 4200.0),("paymentRef",String "pay_demo")]), recordedAt = 2026-10-27 19:30:49.862991 UTC}
+  StreamVersion 6 GlobalPosition 0 StepRecorded {stepName = "charge", result = String "CHG-workflow-20261027193049847265000000", recordedAt = 2026-10-27 19:30:49.86493 UTC}
+  StreamVersion 7 GlobalPosition 0 StepRecorded {stepName = "child:workflow-20261027193049847265000000-ship", result = Array [], recordedAt = 2026-10-27 19:30:49.865833 UTC}
+  StreamVersion 8 GlobalPosition 0 StepRecorded {stepName = "child:workflow-20261027193049847265000000-ship:result", result = Object (fromList [("ok",String "TRK-workflow-20261027193049847265000000-ship")]), recordedAt = 2026-10-27 19:30:49.868706 UTC}
+  StreamVersion 9 GlobalPosition 0 WorkflowCompleted {recordedAt = 2026-10-27 19:30:49.870062 UTC}
+[jitsurei:workflow] ship-order child journal (wf:ship-order-workflow-20261027193049847265000000-ship)
+  StreamVersion 1 GlobalPosition 0 StepRecorded {stepName = "create-shipment", result = String "TRK-workflow-20261027193049847265000000-ship", recordedAt = 2026-10-27 19:30:49.867635 UTC}
+  StreamVersion 2 GlobalPosition 0 WorkflowCompleted {recordedAt = 2026-10-27 19:30:49.868145 UTC}
+[jitsurei:workflow] --- simulated restart: re-opening the store ---
+[jitsurei] connecting to host=/Users/shinzui/Keikaku/bokuno/keiro/db dbname=keiro_jitsurei_verify_1793129413_68672_23451 user=shinzui
+  restart: resume worker discovery found no unfinished work for order-fulfillment-workflow-20261027193049847265000000
+[jitsurei:workflow] durability proven: completed workflow journal survived restart
+ResourceMetricsExport
+  ScopeMetricsExport
+    Gauge keiro.workflow.awakeables.pending Awakeables awaiting an external signal. {awakeable} isInt=True nPts=1
+  ScopeMetricsExport
+    Histogram keiro.workflow.journal.length Journal event count of a workflow at completion. {event} nPts=1
+  ScopeMetricsExport
+    Sum keiro.dispatch.failed Process-manager/router dispatch commands that failed. {command} monotonic=True isInt=True nPts=1
+  ScopeMetricsExport
+    Sum keiro.workflow.steps.replayed Workflow steps short-circuited to a recorded result (a journal hit). {step} monotonic=True isInt=True nPts=1
+  ScopeMetricsExport
+    Sum keiro.dispatch.duplicates Process-manager/router dispatch commands skipped as duplicate deterministic event ids. {command} monotonic=True isInt=True nPts=1
+  ScopeMetricsExport
+    Sum keiro.workflow.resumed Workflow re-invocations performed by the resume worker. {workflow} monotonic=True isInt=True nPts=1
+  ScopeMetricsExport
+    Gauge keiro.timer.stuck Timers stuck in the Firing state past threshold. {timer} isInt=True nPts=1
+  ScopeMetricsExport
+    Sum keiro.timer.requeued Timers moved from firing back to scheduled after a stale claim. {timer} monotonic=True isInt=True nPts=1
+  ScopeMetricsExport
+    Histogram keiro.timer.fire.lag Delay between a timer's scheduled time and when it fired. ms nPts=1
+  ScopeMetricsExport
+    Sum keiro.snapshot.read.misses Snapshot lookups that fell back to full replay. {read} monotonic=True isInt=True nPts=1
+  ScopeMetricsExport
+    Gauge keiro.timer.backlog Due timers awaiting firing. {timer} isInt=True nPts=1
+  ScopeMetricsExport
+    Gauge keiro.workflow.active Workflow runs currently in progress in this process. {workflow} isInt=True nPts=1
+  ScopeMetricsExport
+    Histogram keiro.timer.attempts Number of attempts a timer took to fire. {attempt} nPts=1
+  ScopeMetricsExport
+    Sum keiro.workflow.steps.executed Workflow steps that ran their action (a journal miss). {step} monotonic=True isInt=True nPts=1
+cabal build all
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - jitsurei-0.1.0.0 (exe:jitsurei-diagrams) (configuration changed)
+ - keiro-dsl-0.22.0.0 (lib:generated-haskell-language-internal) (additional components to build)
+ - keiro-dsl-behavior-complete-report-0.0.0.0 (exe:keiro-dsl-behavior-complete-report) (configuration changed)
+ - keiro-dsl-conformance-service-runtime-0.0.0.0 (lib) (configuration changed)
+ - keiro-ops-0.22.0.0 (exe:keiro-ops) (configuration changed)
+ - keiro-ops-http-0.22.0.0 (lib) (configuration changed)
+ - keiro-test-support-0.22.0.0 (lib) (configuration changed)
+ - keiro-dsl-0.22.0.0 (lib) (dependency rebuilt)
+ - keiro-ops-http-0.22.0.0 (exe:keiro-ops-http-compose-example) (configuration changed)
+ - keiro-ops-http-0.22.0.0 (exe:keiro-ops-http) (configuration changed)
+ - keiro-dsl-corpus-regen-0.1.0.0 (exe:keiro-dsl-corpus-regen) (dependency rebuilt)
+ - keiro-dsl-codec-compare-artifact-info-0.1.0.0 (exe:keiro-dsl-codec-compare-artifact-info) (configuration changed)
+ - keiro-dsl-0.22.0.0 (exe:keiro-dsl) (dependency rebuilt)
+Configuring executable 'keiro-dsl-behavior-complete-report' for keiro-dsl-behavior-complete-report-0.0.0.0...
+Configuring executable 'jitsurei-diagrams' for jitsurei-0.1.0.0...
+Configuring executable 'keiro-ops' for keiro-ops-0.22.0.0...
+Configuring library for keiro-dsl-conformance-service-runtime-0.0.0.0...
+Configuring library for keiro-test-support-0.22.0.0...
+Configuring library for keiro-ops-http-0.22.0.0...
+Preprocessing library 'generated-haskell-language-internal' for keiro-dsl-0.22.0.0...
+Building library 'generated-haskell-language-internal' for keiro-dsl-0.22.0.0...
+Preprocessing library for keiro-dsl-0.22.0.0...
+Building library for keiro-dsl-0.22.0.0...
+Configuring executable 'keiro-dsl-codec-compare-artifact-info' for keiro-dsl-codec-compare-artifact-info-0.1.0.0...
+Preprocessing executable 'keiro-dsl-corpus-regen' for keiro-dsl-corpus-regen-0.1.0.0...
+Building executable 'keiro-dsl-corpus-regen' for keiro-dsl-corpus-regen-0.1.0.0...
+Preprocessing executable 'keiro-dsl' for keiro-dsl-0.22.0.0...
+Building executable 'keiro-dsl' for keiro-dsl-0.22.0.0...
+Preprocessing executable 'keiro-dsl-behavior-complete-report' for keiro-dsl-behavior-complete-report-0.0.0.0...
+Building executable 'keiro-dsl-behavior-complete-report' for keiro-dsl-behavior-complete-report-0.0.0.0...
+Preprocessing library for keiro-test-support-0.22.0.0...
+Preprocessing executable 'jitsurei-diagrams' for jitsurei-0.1.0.0...
+Building library for keiro-test-support-0.22.0.0...
+Building executable 'jitsurei-diagrams' for jitsurei-0.1.0.0...
+Preprocessing library for keiro-ops-http-0.22.0.0...
+Building library for keiro-ops-http-0.22.0.0...
+Preprocessing executable 'keiro-ops' for keiro-ops-0.22.0.0...
+Building executable 'keiro-ops' for keiro-ops-0.22.0.0...
+Preprocessing library for keiro-dsl-conformance-service-runtime-0.0.0.0...
+Building library for keiro-dsl-conformance-service-runtime-0.0.0.0...
+[2 of 2] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.22.0.0/x/keiro-ops/build/keiro-ops/keiro-ops [Library changed]
+[2 of 2] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/x/jitsurei-diagrams/build/jitsurei-diagrams/jitsurei-diagrams [Library changed]
+[15 of 15] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-behavior-complete-report-0.0.0.0/x/keiro-dsl-behavior-complete-report/build/keiro-dsl-behavior-complete-report/keiro-dsl-behavior-complete-report [Library changed]
+Configuring executable 'keiro-ops-http' for keiro-ops-http-0.22.0.0...
+Configuring executable 'keiro-ops-http-compose-example' for keiro-ops-http-0.22.0.0...
+Preprocessing executable 'keiro-dsl-codec-compare-artifact-info' for keiro-dsl-codec-compare-artifact-info-0.1.0.0...
+Building executable 'keiro-dsl-codec-compare-artifact-info' for keiro-dsl-codec-compare-artifact-info-0.1.0.0...
+[12 of 12] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-codec-compare-artifact-info-0.1.0.0/x/keiro-dsl-codec-compare-artifact-info/build/keiro-dsl-codec-compare-artifact-info/keiro-dsl-codec-compare-artifact-info [Library changed]
+Preprocessing executable 'keiro-ops-http' for keiro-ops-http-0.22.0.0...
+Building executable 'keiro-ops-http' for keiro-ops-http-0.22.0.0...
+Preprocessing executable 'keiro-ops-http-compose-example' for keiro-ops-http-0.22.0.0...
+Building executable 'keiro-ops-http-compose-example' for keiro-ops-http-0.22.0.0...
+[2 of 2] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-http-0.22.0.0/x/keiro-ops-http-compose-example/build/keiro-ops-http-compose-example/keiro-ops-http-compose-example [Library changed]
+[2 of 2] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-http-0.22.0.0/x/keiro-ops-http/build/keiro-ops-http/keiro-ops-http [Library changed]
+cabal test keiro-test
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.22.0.0 (test:keiro-test) (configuration changed)
+Configuring test suite 'keiro-test' for keiro-0.22.0.0...
+Preprocessing test suite 'keiro-test' for keiro-0.22.0.0...
+Building test suite 'keiro-test' for keiro-0.22.0.0...
+[24 of 24] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.22.0.0/t/keiro-test/build/keiro-test/keiro-test [Library changed]
+Running 1 test suites...
+Test suite keiro-test: RUNNING...
+
+Keiro.Workflow.Inspection
+  opaque cursors
+    round-trips Unicode and exact timestamps, rejects foreign kinds and oversized tokens [✔]
+  rechecks every header field against its exact image, including old and far-future dates [✔]
+  rejects header images before returning oversized text or escaped JSON [✔]
+  reads fresh, owner-scoped headers through a reused session action [✔]
+  rejects an outgoing cursor that clients could not resume within the cursor limit [✔]
+  preserves large ordinary keys and includes them in both list orderings [✔]
+  pages wide keys without an obsolete exceptional-population limit [✔]
+  orders by id before name and refuses the old key cursor kind [✔]
+  classifies every stored row identically in Haskell and SQL without modifying rows [✔]
+  pages key order completely, and omits continuation on a full final page [✔]
+  pages newest creation first including tied timestamps and observes an empty page clock [✔]
+  rejects sizes and malformed or cross-order cursors before reading [✔]
+  applies half-open creation and update windows [✔]
+  observes then-current inserts strictly beyond the cursor [✔]
+  independently pages journal and steps and rejects cross-owner and rotated generation cursors [✔]
+  pages children and directly allocated awakeables through their owning tables [✔]
+  raises the runtime's decode error instead of returning a partial corrupt journal [✔]
+Keiro.Projection.Catalog
+  derives typed live handlers, registrations, inventory, and one stable fingerprint [✔]
+  resolves several query models to one multi-target owner without list-order dependence [✔]
+  derives cursor authority from the owner and validates waiting scope [✔]
+  fingerprints freshness and cursor policy only in the owning group slice [✔]
+  rejects empty and split-owner query target sets with stable derived diagnostics [✔]
+  keeps supply derived from canonical owner and observed-target facts [✔]
+  fingerprints and renders checkpoint policy without changing subscription identity [✔]
+  reports missing and independent duplicate owners with every claim site [✔]
+  accumulates stable identity and reference diagnostics independent of input order [✔]
+  rejects duplicate physical tables and runtime registry names [✔]
+  rejects cross-group writes, dependency cycles, and unsafe replay combinations [✔]
+  accepts every explicit policy except current-head seeding after a replayable clear [✔]
+  rejects all-stream/category overlap while accepting distinct category fan-in [✔]
+  rejects duplicate and malformed rebuild verification identities [✔]
+  projection revisions
+    accepts a v1/v2 bridge and inventories every durable revision fact canonically [✔]
+    constructs physical target mappings only when they are closed-world total [✔]
+    accumulates stable bridge diagnostics for incomplete revisions and stale read contracts [✔]
+    fingerprints revision schema, provider, validator, handler, replay, verification, and promotion order [✔]
+    validates and fingerprints stream-scoped repair policy in the owning revision [✔]
+    rejects unknown, duplicate, cross-group, target, dedup, and identity stream policies [✔]
+  external read contracts
+    validates and inventories a versioned all-row contract canonically [✔]
+    accumulates query, shape, revision, SQL, collision, generation, and immutable-signature diagnostics [✔]
+    fingerprints every contract fact in only the owning group slice [✔]
+  keeps baseline removal comparison separate from single-catalog validity [✔]
+  does not invoke an effectful callback for an invalid catalog [✔]
+  labels legacy values as unmanaged without changing their behavior [✔]
+canonical catalog fingerprint preimages
+  renders adversarial trees injectively [✔]
+  separates the boundary-shift source collision [✔]
+  separates newline line forgery through dedup names [✔]
+  separates colliding sources inside one rebuild group slice [✔]
+  retains order-insensitive catalog and slice identities [✔]
+  keeps an existing group slice stable under an additive catalog change [✔]
+  spells canonical identities with explicit format prefixes [✔]
+catalog evolution adoption
+  previews and transactionally adopts a changed slice and query schema [✔]
+  refuses unregistered and non-live groups without partially adopting [✔]
+  classifies and adopts a live slice-v1 stored fingerprint [✔]
+  adopts only stale-format failed groups while preserving their fence [✔]
+  adopts a renamed query registration completely [✔]
+  inserts an added query registration during adoption [✔]
+  does not orphan a query registration moved to an out-of-scope group [✔]
+  keeps an inserted registration fenced when adopting a failed stale-format group [✔]
+projection catalog operations reports
+  derives complete versioned inventory and destructive preview from one catalog [✔]
+  renders stream-scoped repair policy in the stable catalog inventory JSON [✔]
+  does not construct operations or invoke a callback for an invalid catalog [✔]
+projection catalog operations actions
+  keeps registered preview read-only and starts a zero-event rebuild from catalog facts [✔]
+  inspects and resumes a failed run without caller-supplied fleet lists [✔]
+  abandons a failed run with durable group and run evidence [✔]
+catalog rebuild groups
+  registers a validated fleet atomically and refuses group-slice drift [✔]
+  publishes conservative checkpoint status without reading private Kiroku storage [✔]
+  keeps adversarial checkpoint inventory and large status listings fail-safe [✔]
+  registers an additive catalog without disturbing the existing group slice [✔]
+  prepares a mixed preserve-parent/clear-child group and derives reset state [✔]
+  condemns missing subscription names and rolls back targets, fences, dedup, and matched member resets [✔]
+  clears a foreign-key parent and child through one multi-table truncate [✔]
+  rolls preparation back when an undeclared foreign key blocks truncate [✔]
+  waits for an in-flight async apply before preparing the group [✔]
+guarded catalog commands
+  uses durable PostgreSQL settings for paired benchmark fixtures [✔]
+  discards an OCC-conflicting decision before fresh refusal [✔]
+  discards an OCC-conflicting decision before exhaustion [✔]
+  returns a silent decision after OCC retry without invoking a guard [✔]
+  opens distinct backends in the same database and schema [✔]
+  preserves encode failures before callback or append [✔]
+  reuses canonical identity keys without replacing the original payload [✔]
+  does not advance a snapshot or fixture effects on refusal [✔]
+  rebuilds both catalog owners without invoking the command guard [✔]
+  preserves early catalog mismatch even for a selected silent command [✔]
+  preserves sorted group, declared handler, then event delivery order [✔]
+  rolls back a refusing guard's marker, events, global links and inline rows [✔]
+  never invokes a faulting inline handler after refusal [✔]
+  commits the complete four-event batch only after a successful guard [✔]
+  skips catalog and callback SQL for IgnoreNote [✔]
+  skips catalog and callback SQL for RejectNote [✔]
+  keeps unmatched commands and genuine guard SQL failures operational [✔]
+  gives a missing catalog precedence over duplicate refusal [✔]
+  gives a rebuilding catalog precedence over duplicate refusal [✔]
+  gives a failed catalog precedence over duplicate refusal [✔]
+  uses an inline-only set while the rich group is fenced, and rejects a broad set [✔]
+  retains the original payload through duplicate calls, archive and replay [✔]
+  races independent stores with a paused rich worker, reverse=False [✔]
+  races independent stores with a paused rich worker, reverse=True [✔]
+  observes an append lock wait then commits the first writer [✔]
+  observes an append lock wait then rolls back the first writer [✔]
+  re-evaluates the callback after a one-time driver 40001 retry [✔]
+  re-evaluates the callback after a one-time driver 40P01 retry [✔]
+  waits after commit and retries the same receipt when the rich view catches up [✔]
+  reads a newly committed winner after a driver retry, under the append protocol [✔]
+guarded catalog commands serving revisions
+  protects a writer before promotion to v1 [✔]
+WARNING:  there is no transaction in progress
+  admits a writer coherently after waiting for promotion to v1 [✔]
+  protects a writer before promotion to v2 [✔]
+WARNING:  there is no transaction in progress
+  admits a writer coherently after waiting for promotion to v2 [✔]
+  refuses an unknown serving revision before invoking the guard [✔]
+  refuses an incomplete serving generation map before invoking the guard [✔]
+managed external read contracts
+  leaves schema verification clean after reconciling an all-rows contract [✔]
+  fences lifecycle transitions, holds cutover behind readers, and enforces execute-only grants [✔]
+  enforces the all-row small-model boundary before returning partial results [✔]
+  revalidates retirement after a reader waits for the lifecycle lock [✔]
+  refuses rolling downgrades and preserves consumer-owned dependents [✔]
+  wraps a selective keyed implementation without granting the implementation itself [✔]
+  refuses a keyed implementation whose set result differs from the public row type [✔]
+versioned target PostgreSQL mechanics
+  provisions an incompatible candidate transactionally and rolls failed provisioning back [✔]
+  keeps OID identity explicit and demonstrates that dependent views follow the retired relation [✔]
+WARNING:  "wal_level" is insufficient to publish logical changes
+HINT:  Set "wal_level" to "logical" before creating subscriptions.
+  detects every deliberately unsupported clone feature without mutating the serving table [✔]
+  uses deterministic all-target order and one deadline that rolls a blocked cutover back [✔]
+  detects when a paused generation name is rebound to a different relation [✔]
+schema-versioned rebuild lifecycle
+  persists serving and candidate generations and resumes the same run without reprovisioning [✔]
+  rolls provisioner failures back with no run, lease, or untracked sibling [✔]
+  rolls typed schema-validation failure back after candidate DDL [✔]
+  uses the restricted clone path only for an exact-shape repair [✔]
+  remaps cloned primary-key and identity-sequence names during promotion [✔]
+  returns typed restricted-clone findings without leaving a candidate [✔]
+  refuses a deterministic staging-name collision and rolls earlier target work back [✔]
+  abandons staging generations, releases retention, and repeats as a no-op [✔]
+  dispatches async writes through the persisted serving revision and fails closed when code is absent [✔]
+  captures a durable final head and atomically promotes every target [✔]
+  keeps an additive all-row v1 contract on the old generation during replay and projects the promoted table to its stable result type [✔]
+  activates a breaking v2 contract atomically and fails the old contract with KR003 [✔]
+  keeps v1 current after a breaking promotion only through an explicit compatibility implementation [✔]
+  converges across two replay rounds while live v1 stays serving and backfills async dedup [✔]
+  refuses oversized staged dedup evidence before fencing and succeeds after checkpoint lag is reduced [✔]
+  uses the Kiroku lease to refuse hard deletion for the full active run [✔]
+  fails closed when the original retention lease expires [✔]
+  revalidates candidate DDL under the cutover locks and resumes after repair [✔]
+  previews retired blockers and drops only an unreferenced generation [✔]
+schema-versioned cutover concurrency
+  bounds writer-fence row contention and remains unfenced [✔]
+  bounds promotion group-row contention without undoing prepared evidence [✔]
+  bounds two independently contended target relations, keeps readers on v1, and resumes promotion [✔]
+  exposes only the old or new status tuple during a promotion transaction [✔]
+  bounds promotion behind a slow guarded reader and resumes after it exits [✔]
+  refuses a reader whose statement snapshot crosses promotion and succeeds on retry [✔]
+schema-versioned release fault injection
+  rolls every cutover boundary back to one v1 authority and resumes the same incompatible v2 promotion [✔]
+targeted stream reprojection
+  repairs only the selected stream and transactionally backfills redelivery evidence [✔]
+  refuses an oversized stream before taking the group-wide repair fence [✔]
+  rolls clear, replay, and dedup back when verification fails [✔]
+  rolls back clearer and decode failures without dedup evidence [✔]
+  refuses truncated and soft-deleted streams before target mutation [✔]
+  refuses an active rebuild and an unavailable persisted serving revision [✔]
+  waits for an append-first catalog writer and replays its committed event [✔]
+  holds the group writer fence until one-stream repair commits [✔]
+  serializes hard deletion behind the stream guard [✔]
+  rolls target and dedup changes back when the repair backend is interrupted [✔]
+pre-canonical rebuild recovery
+  recovers a group stranded mid-rebuild by migration 0024 [✔]
+  abandons a pre-canonical run whose process died while running [✔]
+  never abandons a pre-canonical run that is no longer the group's active run [✔]
+  never abandons a terminal pre-canonical run [✔]
+process-manager replay observation contract
+  accepts an unchanged target-keyed continuation trace [✔]
+  rejects a migration from positional to target-keyed command identity [✔]
+  rejects manager, correlation, source interpretation, timer, and witness drift independently [✔]
+  rejects same-target reorder and payload changes [✔]
+catalog replay runner
+  merges interleaved categories in global order and promotes only complete evidence [✔]
+  reads each source event once while draining a multi-source rebuild [✔]
+  counts irrelevant adapter participation even when no event applies [✔]
+  never extends the captured head when matching events arrive during verification [✔]
+  reconciles a preserved target without deleting roots absent from history [✔]
+  rolls a failed chunk back and resumes the exact contract without duplicate writes [✔]
+  refuses to resume after replay-adapter declaration order changes [✔]
+  resumes an interrupted two-adapter rebuild when declaration order is unchanged [✔]
+  keeps an order swap registration-compatible and abandonable but refuses drifted abandon [✔]
+  applies replay-adapter effects in declaration order [✔]
+  retains committed pages across verification failure and rejects catalog drift on resume [✔]
+  refuses to resume a stale replay contract under the v4 runner [✔]
+  refuses promotion when a required adapter participation row is missing [✔]
+  applies merged multi-source chunks in ascending global order across buffer boundaries [✔]
+  cross-source ordering sweep
+    preserves ascending order for seed 1 at page size 1 [✔]
+    preserves ascending order for seed 1 at page size 2 [✔]
+    preserves ascending order for seed 1 at page size 3 [✔]
+    preserves ascending order for seed 2 at page size 1 [✔]
+    preserves ascending order for seed 2 at page size 2 [✔]
+    preserves ascending order for seed 2 at page size 3 [✔]
+    preserves ascending order for seed 3 at page size 1 [✔]
+    preserves ascending order for seed 3 at page size 2 [✔]
+    preserves ascending order for seed 3 at page size 3 [✔]
+    preserves ascending order for seed 4 at page size 1 [✔]
+    preserves ascending order for seed 4 at page size 2 [✔]
+    preserves ascending order for seed 4 at page size 3 [✔]
+    preserves ascending order for seed 5 at page size 1 [✔]
+    preserves ascending order for seed 5 at page size 2 [✔]
+    preserves ascending order for seed 5 at page size 3 [✔]
+    preserves ascending order for seed 6 at page size 1 [✔]
+    preserves ascending order for seed 6 at page size 2 [✔]
+    preserves ascending order for seed 6 at page size 3 [✔]
+catalog rebuild promotion redelivery
+  promotion leaves redelivery safe for a clear-before-replay async projection [✔]
+  promotion leaves redelivery safe for a preserve-and-reconcile async projection [✔]
+  resumes a verification failure with redelivery safety and an honest fence [✔]
+  reports vanished checkpoint rows and resumes promotion after repair [✔]
+truthful read-model construction
+  builds an immediate inline model without exposing a durable cursor [✔]
+  allows an immediate model to retain a cursor for per-call waits [✔]
+  rejects waiting defaults without a durable cursor [✔]
+  rejects a position-waiting default without a concrete target [✔]
+  round-trips honest waiting defaults through the compatibility record [✔]
+  normalizes the historical no-target position wait to immediate [✔]
+serialized aggregate replay compatibility
+  crosses the PostgreSQL event envelope before candidate decoding [✔]
+complete transition-prefix observations
+  keeps a source-module refactor equivalent at every complete prefix [✔]
+  rejects a truncated multi-event transition word [✔]
+  reports changed writes, retired inverse edges, and lost head data [✔]
+  turns a semantic prefix drift into a compatibility failure [✔]
+cross-version workflow replay compatibility
+  continues a captured prefix under a source-only refactor without repeating its effect [✔]
+  fails closed when candidate code cannot decode a captured result [✔]
+  exposes a decoder that succeeds with changed meaning at the first stable key [✔]
+  treats a renamed step as new work and therefore rejects it as a pure refactor [✔]
+  keeps an in-flight instance on its recorded patch branch [✔]
+  reuses an indexed await result without rearming under candidate code [✔]
+  continues from a baseline-carried seed after continueAsNew [✔]
+catalog-fenced inline projections
+  rolls back the event append and target write while its group rebuilds [✔]
+  waits for an in-flight writer before preparing and clearing its group [✔]
+  dispatches inline writes through the persisted serving revision before appending [✔]
+Keiro
+  exposes the package metadata version [✔]
+  keeps package metadata as the only version authority [✔]
+Keiro.Telemetry metrics
+  records instrument names and values through an SDK meter [✔]
+  records nothing through a Nothing handle [✔]
+Kiroku retry exhaustion observability
+  dead-letters after the configured delivery bound, emits the metric, and advances [✔]
+Keiro.Stream
+  wraps and unwraps kiroku stream names [✔]
+  validates categories, rejecting the dash boundary and reserved names [✔]
+  builds entity streams that round-trip through kiroku's category rule [✔]
+  entityStreamId renders ids via StreamIdSegment (Text and String) [✔]
+  rejects blank entity stream id segments [✔]
+Keiro.DeadLetter
+  records a dispatch dead letter idempotently [✔]
+Keiro.Codec
+  encodes current events with type tags and schema-version metadata [✔]
+  round-trips current events [✔]
+  decodes by the stored tag, not by payload shape (H1) [✔]
+  runs upcasters in source-version order [✔]
+  rejects gaps in upcaster chains [✔]
+  validates codec construction invariants [✔]
+  rejects future-version, malformed metadata, and incomplete upcaster chains [✔]
+  rejects recorded events with unknown type tags [✔]
+Keiro.Codec.Structural
+  checks both total binding laws [✔]
+  delegates encoding to the generated shape codec [✔]
+  propagates only shape decode failures before total construction [✔]
+Keiro.Codec.Nominal
+  checks both total nominal binding laws [✔]
+  retains labelled expected-wire fixtures [✔]
+Keiro.EventStream
+  constructs an author-facing EventStream contract [✔]
+  evaluates snapshot policies with explicit terminality [✔]
+  rejects snapshot policies without a state codec [✔]
+EventStream replay-safety (validateEventStream)
+  every production-intent stream validates clean [✔]
+mkEventStream
+  rejects duplicate upcaster sources at the stream boundary [✔]
+  rejects a missing upcaster rung at the stream boundary [✔]
+  includes the stream label when throwing for an invalid codec [✔]
+  keeps invalid codecs available through the unchecked escape hatch [✔]
+  rejects a hidden-input stream by label [✔]
+  rejects a head-unrecoverable multi-event stream [✔]
+  rejects replay inversion ambiguity [✔]
+  rejects an unguarded command-field read [✔]
+  rejects a silent edge that writes registers [✔]
+  rejects a silent edge that changes vertex [✔]
+  keeps replay-contract checks enabled when caller options weaken them [✔]
+  provides a loudly named unchecked escape hatch [✔]
+  accepts every production-intent stream [✔]
+  rejects a snapshot codec whose initial register file contains an uninitialized slot [✔]
+  accepts the same snapshot stream when every initial register is initialized [✔]
+  rejects a bare EventStream at runCommand (compile-time) [✔]
+Keiro.Command
+  typed domain command outcomes
+    returns the exact ordered accepted batch and compatibility result [✔]
+    attributes sibling silent edges and returns typed rejection and no-op [✔]
+    keeps unmatched and ambiguous selection failures as CommandError [✔]
+    retains validated rejection of state-changing silent edges [✔]
+    runs SQL once with the exact accepted event pairs [✔]
+    skips SQL callbacks and inline projections for rejection and no-op [✔]
+    applies inline projections atomically for accepted domain events [✔]
+    preserves catalog outcomes while skipping catalog SQL for silent decisions [✔]
+    discards an accepted conflict attempt and returns the rehydrated silent decision [✔]
+    records only bounded decision classes on successful spans and metrics [✔]
+    keeps all five process-manager target outcomes distinguishable [✔]
+    keeps all five router target outcomes distinguishable [✔]
+    acks domain rejection and no-op in coordinator workers without leaking payloads [✔]
+  creates a stream and appends the first command event [✔]
+  reports no global position for a no-op after prior events [✔]
+  surfaces runtime edge ambiguity without appending [✔]
+  rehydrates prior events before appending a second command event [✔]
+  rejects hydration after truncation without a covering snapshot [✔]
+  rejects hydration when truncation lands inside a command batch [✔]
+  hydrates normally after truncation covered by a snapshot [✔]
+  uses caller-supplied event ids for idempotent command batches [✔]
+  retries an optimistic conflict after rehydrating the winning event [✔]
+  reports true retry attempts and command conflict metrics when the retry budget is exhausted [✔]
+  records the successful retry attempt on the command span [✔]
+  counts duplicate deterministic command events [✔]
+  fails fast when a soft-deleted stream causes a conflict fixpoint [✔]
+  surfaces decode failure during hydration [✔]
+  surfaces a typed no-inverting-edge hydration failure [✔]
+  fails hydration after guard tightening without a replay-only twin (plan 143 reproduction) [✔]
+  replays black-acuity history through the replay-only twin and keeps serving the live rule [✔]
+  rejects a new command in the removed region under the twin-bearing machine [✔]
+  surfaces a typed queue-mismatch hydration failure with the failing version [✔]
+  surfaces a truncated multi-event chain as HydrationTruncatedChain [✔]
+  surfaces ambiguous inversion during hydration [✔]
+  truncates command span error status descriptions [✔]
+  rolls back the append when inline SQL condemns the transaction [✔]
+  appends all events emitted by one accepted command [✔]
+  counts and traces a just-appended batch that cannot replay [✔]
+  skips replay verification for a snapshot-less stream when disabled [✔]
+  witnesses replay divergence on the transactional SQL append path [✔]
+  replays a prior multi-event command before appending the next batch [✔]
+  passes the complete multi-event batch to inline SQL in append order [✔]
+  command metadata is merged into stored event metadata [✔]
+  reconstructed RecordedEvents match the stored batch [✔]
+  runCommand emits a Command span with the stream name, db.system.name, and keiro.events.appended [✔]
+Keiro.Command enrichment parity
+  applies the store enrichment hook to both command append paths [✔]
+Keiro.Inspection.Aggregate
+  inspects the command fold and snapshot, while deleted streams have no folded state [✔]
+  advances one raw page through rejected rows without losing the look-ahead row [✔]
+Keiro.Snapshot
+  reports an ErrorCall when strict encoding reaches an empty register slot [✔]
+  writes a snapshot after policy threshold [✔]
+  does not fail a committed command when the post-commit snapshot write fails [✔]
+  does not fail a committed command when strict snapshot encoding fails [✔]
+  reports snapshot and corrupt-seed sources without changing the folded state [✔]
+  distinguishes absent snapshot streams and no codec during inspection hydration [✔]
+  observes absent and present snapshots with a database clock [✔]
+  hydrates from snapshot and replays only the tail [✔]
+  falls back when snapshot JSON is corrupt [✔]
+  falls back when shape hash mismatches [✔]
+  invalidates a snapshot when the control-state shape changes [✔]
+  uses the fold fingerprint as a snapshot discriminator [✔]
+  composes the hand-owned fold version into the state discriminator [✔]
+  full-replays under a changed fold and persists the new discriminator [✔]
+  pins the manual-contract hazard when fold logic changes without a discriminator bump [✔]
+{"event":"keiro.snapshot.seed.divergence","fullDigest":"fa18a3fa0fdf9055bc829a0d064a646bbd73c15dfad16ade7c92f358778169d0","level":"error","seedVersion":2,"seededDigest":"72b5577be5337ffc7a7b9ba584792a67211c5610cbaa6aa97fef43d633f70d52","stream":"snapshot-seed-sampled-divergence"}
+  samples a stale accepted seed without failing the command or writing a snapshot [✔]
+{"event":"keiro.snapshot.seed.divergence","fullDigest":"dbeab0df97effb4ec7b8b3e998b675e8744dfa29dcf50eb3e64cbd0044c4e6f8","level":"error","seedVersion":10000,"seededDigest":"241a356022385d042cf66da5ba0fa9c20822600fe31f2f539e6de706fc62f901","stream":"snapshot-seed-verification-bounded"}
+  bounds sampled full replays to one process-wide task and counts skipped samples [✔]
+{"event":"keiro.snapshot.seed.divergence","fullDigest":"dbeab0df97effb4ec7b8b3e998b675e8744dfa29dcf50eb3e64cbd0044c4e6f8","level":"error","seedVersion":1000,"seededDigest":"241a356022385d042cf66da5ba0fa9c20822600fe31f2f539e6de706fc62f901","stream":"snapshot-seed-verification-unbounded"}
+{"event":"keiro.snapshot.seed.divergence","fullDigest":"dbeab0df97effb4ec7b8b3e998b675e8744dfa29dcf50eb3e64cbd0044c4e6f8","level":"error","seedVersion":1000,"seededDigest":"241a356022385d042cf66da5ba0fa9c20822600fe31f2f539e6de706fc62f901","stream":"snapshot-seed-verification-unbounded"}
+{"event":"keiro.snapshot.seed.divergence","fullDigest":"dbeab0df97effb4ec7b8b3e998b675e8744dfa29dcf50eb3e64cbd0044c4e6f8","level":"error","seedVersion":1000,"seededDigest":"241a356022385d042cf66da5ba0fa9c20822600fe31f2f539e6de706fc62f901","stream":"snapshot-seed-verification-unbounded"}
+{"event":"keiro.snapshot.seed.divergence","fullDigest":"dbeab0df97effb4ec7b8b3e998b675e8744dfa29dcf50eb3e64cbd0044c4e6f8","level":"error","seedVersion":1000,"seededDigest":"241a356022385d042cf66da5ba0fa9c20822600fe31f2f539e6de706fc62f901","stream":"snapshot-seed-verification-unbounded"}
+  allows unbounded sampled verification when the limit is zero [✔]
+{"event":"keiro.snapshot.seed.verification.failed","level":"error","reason":"intentional seed verification replay failure"}
+{"event":"keiro.snapshot.seed.verification.failed","level":"error","reason":"intentional seed verification replay failure"}
+  releases a verification slot after an unexpected replay exception [✔]
+  disables sampled seed verification at rate zero [✔]
+  falls back after operator truncation [✔]
+  writes snapshots after applying a complete multi-event command batch [✔]
+  writes a snapshot when a multi-event append crosses an Every boundary [✔]
+  allows an incompatible snapshot codec to replace a higher-version row [✔]
+Keiro.ReplayAudit
+  accepts only stream names in the configured category [✔]
+  catches a removed inverting edge while skipping unaffected streams [✔]
+  proves a replay-only twin preserves the stored guard-tightening history [✔]
+  reports a stale accepted snapshot seed as a divergence [✔]
+  keeps clean digests stable and resumes without re-auditing [✔]
+Keiro.Connection projection schema
+  places a read-model table in a configured schema, separate from keiro metadata [✔]
+Keiro.ReadModel
+  queries inline projection with Eventual consistency [✔]
+  reads the minimum checkpoint across consumer-group subscription members [✔]
+  returns no subscription position for an empty durable inventory [✔]
+  returns the newest visible position after a stream is hard deleted [✔]
+  Strong returns immediately on an empty log [✔]
+  rejects truthful waits when an immediate inline model has no cursor [✔]
+  waitFor fails fast on a cursorless model instead of burning the timeout [✔]
+  deprecated Strong and PositionWait overrides fail fast on a cursorless model [✔]
+  Strong returns immediately when the subscription is already at the store head [✔]
+  Strong blocks until the subscription reaches the store head captured at query start [✔]
+  Strong and WaitForHead return promptly after workflow GC hard-deletes the newest events [✔]
+  Strong and WaitForHead still time out when visible events outrun the subscription [✔]
+  Strong and WaitForHead return when their category is caught up despite another active category [✔]
+  inline projection populates actor and source_event_id from command metadata [✔]
+  waits for async projection cursor with PositionWait [✔]
+  times out when PositionWait target is not reached [✔]
+  rejects a truthful position wait without a target [✔]
+  does not write the registry row on repeated read-model queries [✔]
+  rejects an unregistered model without creating a registry row [✔]
+  handles concurrent explicit read-model registration [✔]
+  rejects stale read-model schema [✔]
+  surfaces unknown read-model statuses with the raw status text [✔]
+  ignores duplicate async event by source_event_id [✔]
+  deduplicates async projection application across transactions and reopens after pruning [✔]
+  rebuild repopulates the projection table through the supported workflow [✔]
+  startRebuild on a cursorless model skips the checkpoint reset and completes [✔]
+  keeps a non-empty-log rebuild offline when replay applies nothing [✔]
+  fences live async application while a model is rebuilding [✔]
+  keeps a live applier out of the rebuild window and reopens it after promotion [✔]
+  tracks rebuild state transitions [✔]
+  records matching global position distance and projection lag gauges [✔]
+  reports zero global position distance after the newest events are hard deleted [✔]
+  counts a position-wait timeout in the timeout counter [✔]
+process reaction API feasibility
+  keeps the supplied witness on the first event of an accepted multi-event batch [✔]
+  runs no accepted callback from an optimistic attempt discarded by rehydration [✔]
+  exposes one accepted and one rehydrated-silent result when the same source races [✔]
+  allows a receipt-free silent delivery to accept after unrelated saga progress [✔]
+  shows that a negative silent probe cannot fence a later unconditional timer transaction [✔]
+  cancels a timer in the same transaction as an accepted saga append [✔]
+  rolls back both an accepted saga append and transactional cancellation when condemned [✔]
+  keeps transactional cancellation idempotent and protects terminal and foreground-owned rows [✔]
+Keiro.ProcessManager.Reaction
+  commits accepted saga timers before ordered target fan-out and recovers duplicates [✔]
+  runs no-advance and silent unconditional effects without accepted-only effects [✔]
+  retries missing same-target dispatches after a later command commits [✔]
+  compares cross-build partial recovery traces and locates changed command meaning [✔]
+  reconciles a concurrent target loser that rehydrates to a silent result [✔]
+  preserves timer statement order, Once payloads, and later-source Rearm updates [✔]
+  rolls back saga and earlier timer writes when later timer SQL fails [✔]
+  rejects undecodable, foreign-stream, and wrong-target identity collisions [✔]
+  pages accepted witnesses at 256, 1024, and 4096 event history depths [✔]
+  runs the public-only handwritten reported and acknowledged example [✔]
+  worker finalizes each success and duplicate exactly once [✔]
+  worker applies target rejection policy with the overall dispatch index [✔]
+  worker handles typed silence as a successful delivery [✔]
+  worker records manager failures at index minus one [✔]
+  worker uses bounded witness reasons and poison callbacks [✔]
+  worker lets asynchronous cancellation escape without acknowledging [✔]
+  scales worker fan-out across 8, 32, and 128 same and distinct targets [✔]
+Keiro.ProcessManager
+  discovers sorted lookup names without evaluating instance callbacks [✔]
+  instance view equals the runtime's own rebuild [✔]
+  advances manager listings across rejected raw rows [✔]
+  inspects modern reaction state without inventing input-dependent dispatch provenance [✔]
+  records source provenance for explicit inspection capture [✔]
+  advances manager state, emits a deterministic target command once, and schedules a timer [✔]
+  schedules timers when the manager command emits no events [✔]
+  treats duplicate input delivery as idempotent state and command dispatch [✔]
+  bridges a pre-UTF-8 process-manager state and command redelivery [✔]
+  bridges a pre-UTF-8 domain process-manager state and command redelivery [✔]
+  replays a Kiroku dead letter freshly and deduplicates a second replay [✔]
+  reports an already-processed Kiroku dead letter without appending [✔]
+  keeps multiple workflow process managers isolated by configured streams and categories [✔]
+  worker finalizes AckOk through the ack handle on success [✔]
+  worker halts instead of acking when a target dispatch is rejected [✔]
+  dead-letters a rejected dispatch and continues to the next event [✔]
+  skips a rejected dispatch without writing a dead-letter row [✔]
+  dead-letters a manager-state rejection at emit index minus one [✔]
+  keeps rejected-dispatch dead letters idempotent on source redelivery [✔]
+  records dispatch failures through worker metrics [✔]
+  classifies transient store failures as retry and deterministic command failures as halt [✔]
+  worker applies poison-message policy on decode failure [✔]
+  folds a concurrent duplicate target dispatch to PMCommandDuplicate [✔]
+  folds a concurrent duplicate manager-state append to PMStateDuplicate [✔]
+Keiro.ProcessManager duplicate confirmation
+  rejects a duplicate report carrying a different id [✔]
+  rejects a matching id that exists only in another stream [✔]
+  confirms matching and id-less duplicate reports when the id is in the target stream [✔]
+  rejects non-duplicate command failures [✔]
+Keiro.ProcessManager snapshots
+  writes a snapshot of the manager state stream after the policy threshold [✔]
+  hydrates the manager from its snapshot and replays only the tail [✔]
+Keiro.Router
+  RouterSelection validates positive runtime invariants [✔]
+  RouterSelection sorts, deduplicates, caps, and rejects conflicts before dispatch [✔]
+  RouterSelection exposes stable public dead-letter code, detail, and rendering [✔]
+  RouterSelection performs no target callback on conflict or overflow and dispatches exactly at the cap [✔]
+  RouterSelection retains successful targets after a later target dispatch fails [✔]
+  RouterSelection preserves target-keyed stable union across result drift [✔]
+  RouterSelection worker lowers the complete empty and failure policy matrices [✔]
+  encodes colon-bearing and non-ASCII id components without collisions [✔]
+  resolves targets effectfully and fans out one command per target [✔]
+  reports every dispatch as a duplicate on replay, writing no new events [✔]
+  dedups by target identity when a redelivered resolve reorders targets after a partial dispatch [✔]
+  dispatches a target added by resolve drift instead of misreading it as a duplicate [✔]
+  keeps full-completion order swaps idempotent [✔]
+  keeps dispatches to targets dropped by a later resolve attempt [✔]
+  keeps repeated commands to one target distinct within a resolve batch [✔]
+  drains an adapter, dispatching one command per resolved target for every message [✔]
+  finalizes AckHalt rather than AckOk when a dispatched command fails [✔]
+  dead-letters a rejected router dispatch and acknowledges the source event [✔]
+  finalizes AckRetry for a transient thrown resolver error and continues [✔]
+  finalizes AckHalt for a deterministic thrown resolver error [✔]
+  folds a concurrent duplicate router dispatch to PMCommandDuplicate [✔]
+  dedups a pre-upgrade positional router dispatch during the transition [✔]
+  bridges a pre-UTF-8 positional router redelivery with a non-ASCII key [✔]
+  bridges a pre-UTF-8 domain router redelivery with a non-ASCII key [✔]
+Keiro.Timer foreground consumer
+  preflights original work and invokes one callback for competing authorized resumes [✔]
+  orders renewal and completion against recovery on independent stores [✔]
+Keiro.Timer
+  pages pending timers in due order without mutating rows [✔]
+  rejects invalid pending timer requests before database work [✔]
+  guards dead resume ownership and retains attempts when parked [✔]
+  refuses every ineligible claim without changing any persisted column [✔]
+  claims literal empty and Unicode reasons and preserves original work [✔]
+  expires without revival and re-parks independently of ordinary recovery [✔]
+  inspects absent timers and preserves legacy metadata through every lifecycle [✔]
+  preserves empty, populated, and Unicode dead reasons verbatim [✔]
+  filters dead timers by exact owner and literal reason, preserving NULL [✔]
+  bounds pages, traverses UUID order, and leaves every stored column unchanged [✔]
+  continues after a deleted cursor and observes new eligibility only above it [✔]
+  renders authorized original work beyond empty pages and rechecks revoked permissions [✔]
+  validates worker options before startup [✔]
+  claims a due timer, fires a command, and marks it complete once [✔]
+  records timer backlog, fire lag, attempts, and stuck count [✔]
+  finds a firing timer with findStuckTimers and requeues it for re-firing [✔]
+  re-fires a timer stranded by a crashed worker [✔]
+  does not requeue a fresh firing row [✔]
+  requeueStuckAfter = Nothing preserves a stranded firing row [✔]
+  does not claim a cancelled timer [✔]
+  dead-letters a timer that exceeds the attempt ceiling and never reclaims it [✔]
+  markTimerFired does not resurrect a dead timer [✔]
+  records a row stranded in Firing in the stuck gauge [✔]
+Keiro.Outbox.Kafka
+  converts an outbox row to a Kafka producer record [✔]
+  drops the partition key when the envelope has no key [✔]
+Keiro.Outbox producer-identity
+  pins the version-1 SHA-256/UUIDv8 vector [✔]
+  pins canonical content digest independently of storage lifecycle [✔]
+  separates source, name, event, index, tuple boundaries and UTF-8 [✔]
+  rejects an empty namespace before subscription startup [✔]
+  replays after closing and reopening the store with one unchanged row [✔]
+  returns inserted, identical retry, and defaults recorded provenance [✔]
+  rolls back enqueue with a failed checkpoint and reuses both IDs on redelivery [✔]
+  concurrent identical attempts converge to one inserted and one duplicate [✔]
+  concurrent changed content selects one winner and reports one conflict [✔]
+  detects drift in every envelope field class without changing the original row [✔]
+  normalizes sub-microsecond time and JSON object order across storage [✔]
+  distinguishes absent attributes from JSON null and preserves raw MIME text [✔]
+  keeps wire identity after successful-row retention expires [✔]
+  different producer names and source events insert distinct identities [✔]
+  preserves a rejected publication and its audit data on replay [✔]
+  reports both unique-identity collision routes and keeps explicit envelopes usable [✔]
+  treats namespace drift as an identity conflict on the outbox primary key [✔]
+  records a distinct conflict metric after a checkpoint rollback [✔]
+Keiro.Outbox
+  validates terminal publication rejection data at its public boundary [✔]
+  validates publisher options before startup [✔]
+  enqueues and looks up an outbox row [✔]
+  claims a pending row, transitions it to publishing, and increments attempt count [✔]
+  claims contiguous per-key runs in one pass [✔]
+  does not let a backoff head starve other keys [✔]
+  claims contiguous per-source runs in one pass [✔]
+  claims null-keyed rows freely alongside keyed runs [✔]
+  does not claim a tail while the previous run is still publishing [✔]
+  marks a claimed row as sent with published_at set [✔]
+  finalizes rejection exactly once with durable typed audit data [✔]
+  reclaims a row stranded in publishing by a crashed worker through maintenance [✔]
+  head-of-line traffic unwedges after reclaim [✔]
+  does not reclaim a recently claimed row [✔]
+  a throwing batch publish callback fails every row in that publish call [✔]
+  a row that exhausts attempts while crash-looping is dead-lettered by maintenance [✔]
+  markOutboxSent does not resurrect a dead row [✔]
+  publishClaimedOutbox marks success and records failures with last_error [✔]
+  publishClaimedOutbox hands a same-key run to one batch publish call [✔]
+  finalizes a mid-run rejection and continues the same-key suffix [✔]
+  redelivers callbacks after a pre-commit finalization failure [✔]
+  treats rejection as terminal for per-source ordering [✔]
+  counts only a rejection finalization that wins the publishing-state race [✔]
+  excludes rejected rows from claims, maintenance, backlog, and sent garbage collection [✔]
+  publishClaimedOutbox skips the same-key suffix after a mid-run failure [✔]
+  PerSourceStream keeps one source's failure from skipping another source's rows [✔]
+  a late failure mark does not clobber a row that already reached a terminal state [✔]
+  claims nothing while another transaction holds an uncommitted claim on a key's head [✔]
+  StopTheLine publishes singleton batches and skips the unattempted suffix [✔]
+  StopTheLine continues after rejection and halts only on transient failure [✔]
+  publishClaimedOutbox treats a missing batch outcome as a failed row [✔]
+  auto-dead-letters a row after maxAttempts consecutive failures [✔]
+  garbageCollectSent deletes only old sent rows [✔]
+  enforces per-key head-of-line blocking and unblocks once the predecessor reaches a terminal state [✔]
+  allows null-keyed rows to publish independently [✔]
+  mints message ids with the configured TypeID prefix [✔]
+  validates integration producer message id prefixes before startup [✔]
+  draftToEvent stamps source and messageId without minting [✔]
+  freshOutboxId returns distinct UUIDv7 ids [✔]
+  publishClaimedOutbox emits a Producer span with messaging semconv attributes [✔]
+  does not mark a terminal rejection span as an error [✔]
+  publishClaimedOutbox records counters and sampleOutboxBacklog records the gauge [✔]
+Keiro.Inbox delegated contracts
+  computes the existing dedupe key and runs without a Store interpreter [✔]
+  rejects an invalid policy before invoking the delegated handler [✔]
+  validates retry contexts and stops after the caller-owned ceiling [✔]
+  reports the current retry attempt when a synchronous handler exception occurs [✔]
+  applies attempts 1 through 4 exactly at a ceiling of 3 [✔]
+  records failed and poisoned metrics on a failing ceiling attempt [✔]
+  retries a batch identity after failure and suppresses it only after success [✔]
+  scopes in-batch suppression by integration source [✔]
+  keeps invalid and poison deliveries isolated from later batch items [✔]
+  propagates async cancellation from a synchronized delegated batch handler [✔]
+Keiro.Inbox.Delegated pure adapters
+  pins ASCII, Unicode, empty-field, and delimiter identity vectors [✔]
+  maps every process-manager command result without acknowledging failures or no-ops [✔]
+Keiro.Inbox delegated
+  bypasses the inbox and preflights a one-shot command before invalid dispatch [✔]
+  recovers a lost acknowledgement for an atomic multi-event command [✔]
+  rejects zero-event commands and unconfirmed duplicate errors [✔]
+  converges a concurrent delivery race to one event batch and SQL effect [✔]
+  does not acknowledge a globally colliding marker from another stream [✔]
+Keiro.Inbox delegated access control
+  runs with downstream privileges while the inbox table is denied [✔]
+Keiro.Inbox
+  runs the handler once and records the row as completed [✔]
+  treats a redelivery with the same messageId as a duplicate [✔]
+  records inbox counters and samples backlog separately under the in-memory exporter [✔]
+  deduplicates via PreferSourceEventIdentity even when messageId differs [✔]
+  uses KafkaDeliveryIdentity when supplied [✔]
+  reports DedupePolicyUnsatisfied when the envelope lacks the required field [✔]
+  leaves no inbox row when the handler condemns the transaction [✔]
+  leaves no inbox row when the plain handler throws [✔]
+  exports markFailedTx from the public inbox module and preserves explicit failure marks [✔]
+  a throwing handler records a failed attempt instead of looping [✔]
+  a transient poison message succeeds on retry [✔]
+  an unrecoverable message dead-letters at the ceiling [✔]
+  processes a batch of distinct messages in one transaction [✔]
+  deduplicates repeated messages within one batch [✔]
+  falls back per message when one batch handler throws [✔]
+  reports duplicates across batch calls [✔]
+  falls back per message when one batch handler condemns the transaction [✔]
+  classifies a legacy processing row as InboxInProgress without running the handler [✔]
+  runs the handler once when two workers race the same dedupe key [✔]
+  can persist only dedupe columns for successful rows [✔]
+  keeps full failed rows even when successful rows are dedupe-only [✔]
+  garbage-collects completed rows older than the retention window [✔]
+Keiro.Inbox.Kafka
+  reconstructs an integration event from headers and payload [✔]
+  falls back to receivedAt when the occurredAt header is absent [✔]
+  rejects malformed occurredAt headers [✔]
+  reports MissingHeader for an essential header [✔]
+  withConsumerSpan parents the consumer span under an upstream producer span via W3C headers [✔]
+Keiro cross-context Kafka integration
+  publishes an Ordering integration event and runs the Billing handler exactly once across duplicate deliveries [✔]
+  preserves per-partition ordering for two events sharing a Kafka key [✔]
+  head-of-line blocks a same-key successor when the first send fails repeatedly until the first row reaches dead status [✔]
+Keiro.Integration.Event
+  round-trips a JSON envelope through encode and decode [✔]
+  preserves identity and routing through encode [✔]
+  emits the canonical wire headers [✔]
+  preserves a different content type without claiming JSON [✔]
+  reports malformed JSON payloads as decode errors instead of throwing [✔]
+  reports a JSON value that does not satisfy the target type as DecodeFailed [✔]
+  parses content-type headers back to the canonical type [✔]
+  preserves the payload bytes through integrationPayload [✔]
+Keiro.Telemetry
+  is a pass-through under a noop (Nothing) tracer [✔]
+  re-exports AttributeKeys whose textual payload matches the spec name [✔]
+  extracts a TraceContext from a W3C traceparent header pair [✔]
+  returns Nothing when the traceparent header is missing [✔]
+  injectTraceContext is a no-op when no span is active on the thread [✔]
+  traceContextFromCurrentSpan returns Nothing outside any span [✔]
+Keiro.Workflow
+  journals each step once, returns Completed, and runs each side effect once [✔]
+  replays recorded steps without re-running their side effects [✔]
+  reuses the recorded result for a repeated step name in one run [✔]
+  suspends on an unresolved awaitStep, journaling no completion [✔]
+  resumes and completes once an awaited step is externally completed [✔]
+  treats a duplicate external journal append as idempotent [✔]
+  returns the journaled value when another writer records the same step mid-flight [✔]
+  returns the JSON round-trip of a fresh step result [✔]
+  throws WorkflowStepDecodeError on the first run when the recorded result cannot decode [✔]
+  discovers a parked workflow only once its awaited step is journaled [✔]
+Keiro.Workflow instance table
+  lists workflow instances with filters and stable keyset pages [✔]
+  cancels active workflows idempotently without minting unknown state [✔]
+  cancels suspended and linked-child workflows through supported paths [✔]
+  serializes cancellation against completion so exactly one marker wins [✔]
+  force-releases leases and makes the old owner stop at its next boundary [✔]
+  creates and completes a workflow instance row transactionally with the journal [✔]
+  records suspended status for workflows that park before journaling [✔]
+  creates child instance rows at spawn time and flips them to cancelled [✔]
+  bumps the instance generation when continueAsNew rotates [✔]
+  does not let a late append resurrect a terminal instance row [✔]
+  discovers unfinished workflows from the instance table [✔]
+Keiro.Workflow discovery index
+  plans the discovery predicate through keiro_workflows_active_idx [✔]
+  returns exactly the runnable and wake-due instances [✔]
+Keiro.Workflow snapshots
+  does not fail committed workflow steps when snapshot writes fail [✔]
+  writes a snapshot of the accumulated step map after Every 2 fires [✔]
+  writes a terminal snapshot under OnTerminal at the completion version [✔]
+  reads only the tail after the snapshot version on re-hydration [✔]
+  produces identical results and journals under Never and Every 2 [✔]
+  hydrates via full replay when the snapshot discriminant mismatches [✔]
+  hydrates via full replay when the snapshot JSON is corrupt [✔]
+Keiro.Workflow snapshot wake-safety
+  keeps a genuinely unresolved awakeable pending under Every 1 [✔]
+  delivers an awakeable signalled mid-run despite the stale in-memory map [✔]
+  delivers an awakeable shadowed by a snapshot on a later run [✔]
+  delivers a child completion shadowed by a snapshot on a later run [✔]
+Keiro.Workflow.Resume
+  resumes a crashed mid-run workflow, running only the un-journaled tail [✔]
+  resumes a suspended workflow once its awaited step is journaled [✔]
+keiro resume worker: no registry entry for workflow orphan (id or-1); skipping
+  skips and counts a workflow whose name is absent from the registry [✔]
+  isolates a poison workflow so a healthy workflow still completes [✔]
+  advances candidates concurrently only when the option allows it [✔]
+  reports a mixed pass the same way when advancing sequentially [✔]
+  reports a mixed pass the same way when advancing concurrently [✔]
+  records no crash attempt against a workflow that already went terminal [✔]
+  survives a crash recorded against a just-cancelled workflow [✔]
+  marks a crashing workflow failed and short-circuits later direct runs [✔]
+  resurrects a failed workflow and completes without rerunning its journaled prefix [✔]
+  can fail again in the same generation after resurrection [✔]
+  guards resurrection and revives a failed child link transactionally [✔]
+  classifies thrown store errors as transient without consuming attempts [✔]
+  keeps the fixed-poll loop alive when one pass contains a poison workflow [✔]
+  claims one workflow instance for a single live owner and releases it [✔]
+  lets an expired workflow lease be taken and resets attempts on progressed release [✔]
+  skips a resume candidate held by another live lease owner [✔]
+  discovers nothing for an already-completed workflow and is stable [✔]
+Keiro.Workflow lease renewal
+  renews before a slow fresh step so the original lease cannot be stolen [✔]
+  stops at a lost lease boundary and the resume worker records no crash [✔]
+Keiro.Workflow continue-as-new
+  rotates a long workflow, bounds each generation, and returns the correct total [✔]
+  rediscovers and resumes a rotated workflow on its current generation [✔]
+Keiro.Workflow patch API
+  an in-flight instance observes the OLD branch; a fresh instance the NEW branch; the decision is journaled once and stable [✔]
+  a fresh instance suspended before its patch call still takes the NEW branch [✔]
+  an in-flight instance with only wake-source completions stays on the OLD branch [✔]
+  records the active patch set again for a fresh rotated generation [✔]
+Keiro.Workflow patch recording at rotation
+  keeps the active patch after a wake append lands before the first rotated run [✔]
+Keiro.Wake
+  returns WokenByTimeout when idle (no append) [✔]
+  returns WokenByNotify promptly after a real append [✔]
+  neverWake always returns WokenByTimeout [✔]
+Keiro.Workflow push latency (EP-50)
+  resumes a gated workflow sub-second after the gate append (10s fallback) [✔]
+  logs a failed push pass and keeps draining after the store recovers [✔]
+Keiro.Workflow push fallback (EP-50)
+  still drains on the fallback timeout when no notification is delivered [✔]
+Shard lease
+  observes ownership failover and lease ages without changing workers [✔]
+  validates sharded worker options before startup [✔]
+  ensureShardRows populates N rows once (idempotent on re-run) [✔]
+  worker A claims all N when free; B claims 0 while A holds valid leases [✔]
+  B claims A's buckets after A's lease expires; A then renews nothing [✔]
+  renewLease returns only still-held buckets [✔]
+  releaseShards: relinquished buckets are immediately claimable [✔]
+  fairShareTarget divides buckets evenly (ceil) [✔]
+  acquireOutcome keeps previous ownership on acquire failure [✔]
+  ensureShards rejects a shardCount mismatch [✔]
+Shard count resize
+  refuses recorded owners, including expired leases, without changing either table [✔]
+  shrinks and grows stopped groups at the old minimum without obsolete members [✔]
+  equalizes same-size assignments and is idempotent on repeat [✔]
+  rolls back checkpoint and lease changes when surrounding SQL fails [✔]
+  delivers every seeded event after a changed hash assignment [✔]
+Sharded subscription single worker
+  one worker with N=4 buckets drains a seeded category exactly once [✔]
+Sharded subscription drain and failover
+  three workers drain disjointly, then re-home a killed worker's buckets [✔]
+  a killed worker relinquishes its leases immediately [✔]
+  a handler exception is retried in place and drains [✔]
+Sharded subscription ack coupling
+  redelivers a batch-tail event whose handler was killed mid-flight [✔]
+  loses no events when a bucket is shed mid-drain during rebalance [✔]

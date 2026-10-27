@@ -1,0 +1,1696 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+python3 scripts/release_workflow.py prepare
++ nix fmt
+warning: Git tree '/Users/shinzui/Keikaku/bokuno/keiro' has uncommitted changes
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+traversed 6291 files
+emitted 396 files for processing
+formatted 0 files (0 changed) in 109ms
++ cabal run -v0 keiro-dsl-corpus-regen -- regenerate
+Up to date
+keiro-dsl/test/fixtures/reservation.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+keiro-dsl/test/fixtures/reservation.keiro:35: warning[RmProjectionWithoutNode]: projection 'transfer_decisions' has no readmodel node; registration, schema identity, consistency, and rebuild helpers are unavailable
+scaffold: keiro-dsl/test/fixtures/reservation.keiro -> keiro-dsl/test/conformance (module-root=(none), layout=prefixed)
+  generated  Generated.HospitalCapacity.BehaviorSourceMap             (unchanged)
+  generated  Generated.HospitalCapacity.Nominals                      (unchanged)
+  generated  Generated.HospitalCapacity.Nominals.Internal             (unchanged)
+  generated  Generated.HospitalCapacity.ReplayAudit                   (unchanged)
+  generated  Generated.HospitalCapacity.Reservation.Domain            (unchanged)
+  generated  Generated.HospitalCapacity.Reservation.Codec             (unchanged)
+  generated  Generated.HospitalCapacity.Reservation.Transducer        (unchanged)
+  generated  Generated.HospitalCapacity.Reservation.BehaviorContract  (unchanged)
+  hole       HospitalCapacity.Reservation.BehaviorHoles               (skipped: already present)
+  generated  Generated.HospitalCapacity.Reservation.EventStream       (unchanged)
+  generated  Generated.HospitalCapacity.Reservation.Projection        (unchanged)
+  hole       HospitalCapacity.Reservation.Holes                       (skipped: already present)
+  generated  Generated.HospitalCapacity.Reservation.Harness           (unchanged)
+firewall: OK (11 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.HospitalCapacity.Reservation.Harness
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance/keiro-dsl-cabal-fragment.context.hospital-capacity.txt
+ledger:   keiro-dsl/test/conformance/keiro-dsl-ledger.context.hospital-capacity.txt
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  Reservation.Holes.transition1UnrequestedRequestTransferReservationOutput1TransferReservationCreated
+keiro-dsl/test/fixtures/aggregate-scalars.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+scaffold: keiro-dsl/test/fixtures/aggregate-scalars.keiro -> keiro-dsl/test/conformance-aggregate-scalars (module-root=(none), layout=prefixed)
+  generated  Generated.AggregateScalars.BehaviorSourceMap              (unchanged)
+  generated  Generated.AggregateScalars.ReplayAudit                    (unchanged)
+  generated  Generated.AggregateScalars.ScalarLedger.Domain            (unchanged)
+  generated  Generated.AggregateScalars.ScalarLedger.Codec             (unchanged)
+  generated  Generated.AggregateScalars.ScalarLedger.Transducer        (unchanged)
+  generated  Generated.AggregateScalars.ScalarLedger.BehaviorContract  (unchanged)
+  hole       AggregateScalars.ScalarLedger.BehaviorHoles               (skipped: already present)
+  generated  Generated.AggregateScalars.ScalarLedger.EventStream       (unchanged)
+  generated  Generated.AggregateScalars.ScalarLedger.Projection        (unchanged)
+  hole       AggregateScalars.ScalarLedger.Holes                       (skipped: already present)
+  generated  Generated.AggregateScalars.ScalarLedger.Harness           (unchanged)
+firewall: OK (9 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.AggregateScalars.ScalarLedger.Harness
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-aggregate-scalars/keiro-dsl-cabal-fragment.context.aggregate-scalars.txt
+ledger:   keiro-dsl/test/conformance-aggregate-scalars/keiro-dsl-ledger.context.aggregate-scalars.txt
+scaffold: keiro-dsl/test/fixtures/bare-containers.keiro -> keiro-dsl/test/conformance-bare-containers (module-root=(none), layout=prefixed)
+  generated  Generated.BareContainers.StructuralConformance           (unchanged)
+  generated  Generated.BareContainers.BehaviorSourceMap               (unchanged)
+  generated  Generated.BareContainers.Structural.Shape.BareEnvelope   (unchanged)
+  generated  Generated.BareContainers.Structural.Shape.MaybeText      (unchanged)
+  generated  Generated.BareContainers.Structural.Shape.NestedIds      (unchanged)
+  generated  Generated.BareContainers.Structural.Shape.TextList       (unchanged)
+  generated  Generated.BareContainers.Structural.Shape.TextMap        (unchanged)
+  generated  Generated.BareContainers.Nominals                        (unchanged)
+  generated  Generated.BareContainers.Nominals.Internal               (unchanged)
+  generated  Generated.BareContainers.Structural.NominalLeaves        (unchanged)
+  hole       Conformance.BareContainers.Bindings                      (skipped: already present)
+  generated  Generated.BareContainers.ReplayAudit                     (unchanged)
+  generated  Generated.BareContainers.ProjectionCatalog               (unchanged)
+  hole       BareContainers.ProjectionCatalog.ProjectionCatalogHoles  (skipped: already present)
+  generated  Generated.BareContainers.BareStore.Domain                (unchanged)
+  generated  Generated.BareContainers.BareStore.Codec                 (unchanged)
+  generated  Generated.BareContainers.BareStore.Transducer            (unchanged)
+  generated  Generated.BareContainers.BareStore.BehaviorContract      (unchanged)
+  hole       BareContainers.BareStore.BehaviorHoles                   (skipped: already present)
+  generated  Generated.BareContainers.BareStore.EventStream           (unchanged)
+  generated  Generated.BareContainers.BareStore.Projection            (unchanged)
+  generated  Generated.BareContainers.BareStore.Harness               (unchanged)
+  generated  Generated.BareContainers.BareJobs.Queue                  (unchanged)
+  generated  Generated.BareContainers.BareJobs.QueuePolicy            (unchanged)
+  generated  Generated.BareContainers.BareJobs.QueueCodec             (unchanged)
+  generated  Generated.BareContainers.BareLookup.ReadModelTable       (unchanged)
+  generated  Generated.BareContainers.BareLookup.QueryContract        (unchanged)
+  generated  Generated.BareContainers.BareLookup.ReadModel            (unchanged)
+  hole       BareContainers.BareLookup.ReadModelHoles                 (skipped: already present)
+  generated  Generated.BareContainers.BareLookup.ReadModelHarness     (unchanged)
+firewall: OK (26 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.BareContainers.BareStore.Harness
+dependency plan: consumer packages [keiro-dsl], consumer modules [Conformance.BareContainers.Bindings, Conformance.BareContainers.Domain]
+fragment: keiro-dsl/test/conformance-bare-containers/keiro-dsl-cabal-fragment.context.bare-containers.txt
+ledger:   keiro-dsl/test/conformance-bare-containers/keiro-dsl-ledger.context.bare-containers.txt
+constraint plan:
+  BareEnvelope: Eq, Show, CanonicalTypeName, StructuralBinding
+  MaybeText: Eq, Show, CanonicalTypeName, StructuralBinding, register initial, snapshot ToJSON, snapshot FromJSON
+  NestedIds: Eq, Show, CanonicalTypeName, StructuralBinding
+  TextList: Eq, Show, CanonicalTypeName, StructuralBinding
+  TextMap: Eq, Show, CanonicalTypeName, StructuralBinding
+projection mapped impact:
+  unsupported typed sources:
+    catalog-all:bare_writer
+      operation: group=bare_rebuild; targets=bare_table; read-models=bare_lookup; replayable=yes; mapped-key=(unsupported heterogeneous source)
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  BareStore.Holes.transition1EmptyStoreOutput1StoredValue
+comparison generated keiro-dsl/test/conformance-bare-containers/Generated/BareContainers/Structural/CodecCompare/MaybeText.hs (migration evidence only)
+keiro-dsl/test/fixtures/behavior-complete.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+keiro-dsl/test/fixtures/behavior-complete.keiro:62: warning[ReplayOnlyCommandStillLive]: replay-only transition 'Empty -- LegacyStart' has no live sibling; command 'LegacyStart' is fully retired at state 'Empty' — if the intent is to retire its events too, follow the event-retirement procedure (docs/plans/139)
+scaffold: keiro-dsl/test/fixtures/behavior-complete.keiro -> keiro-dsl/test/conformance-behavior-complete (module-root=(none), layout=prefixed)
+  generated  Generated.BehaviorComplete.StructuralConformance          (unchanged)
+  generated  Generated.BehaviorComplete.BehaviorSourceMap              (unchanged)
+  generated  Generated.BehaviorComplete.Structural.Shape.StartPayload  (unchanged)
+  generated  Generated.BehaviorComplete.StructuralProjections          (unchanged)
+  generated  Generated.BehaviorComplete.Nominals                       (unchanged)
+  generated  Generated.BehaviorComplete.Nominals.Internal              (unchanged)
+  hole       BehaviorComplete.Bindings                                 (skipped: already present)
+  generated  Generated.BehaviorComplete.ReplayAudit                    (unchanged)
+  generated  Generated.BehaviorComplete.Journey.Domain                 (unchanged)
+  generated  Generated.BehaviorComplete.Journey.Codec                  (unchanged)
+  generated  Generated.BehaviorComplete.Journey.Transducer             (unchanged)
+  generated  Generated.BehaviorComplete.Journey.BehaviorContract       (unchanged)
+  hole       BehaviorComplete.Journey.BehaviorHoles                    (skipped: already present)
+  generated  Generated.BehaviorComplete.Journey.EventStream            (unchanged)
+  generated  Generated.BehaviorComplete.Journey.Projection             (unchanged)
+  generated  Generated.BehaviorComplete.Journey.Harness                (unchanged)
+firewall: OK (14 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.BehaviorComplete.Journey.Harness
+dependency plan: consumer packages [keiro-dsl], consumer modules [BehaviorComplete.Bindings, BehaviorComplete.Domain]
+fragment: keiro-dsl/test/conformance-behavior-complete/keiro-dsl-cabal-fragment.context.behavior-complete.txt
+ledger:   keiro-dsl/test/conformance-behavior-complete/keiro-dsl-ledger.context.behavior-complete.txt
+constraint plan:
+  StartPayload: Eq, Show, CanonicalTypeName, StructuralBinding
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  Journey.Holes.transition1EmptyStartOutput1Started
+  Journey.Holes.transition2ActiveDecideOutput1DecisionRecorded
+  Journey.Holes.transition3EmptyStartOutput1Started
+  Journey.Holes.transition4ActiveDecideOutput1DecisionRecorded
+  Journey.Holes.transition5EmptyLegacyStartOutput1LegacyStarted
+  Journey.Holes.transition7ActiveRetireOutput1Retired
+  Journey.Holes.transition7ActiveRetireOutput2RetirementAudited
+  Journey.Holes.transition8ActiveRetireOutput1Retired
+  Journey.Holes.transition8ActiveRetireOutput2RetirementAudited
+scaffold: keiro-dsl/test/fixtures/calendar-days.keiro -> keiro-dsl/test/conformance-calendar-days (module-root=(none), layout=prefixed)
+  generated  Generated.CalendarDays.StructuralConformance              (unchanged)
+  generated  Generated.CalendarDays.BehaviorSourceMap                  (unchanged)
+  generated  Generated.CalendarDays.Structural.Shape.CalendarEnvelope  (unchanged)
+  generated  Generated.CalendarDays.Structural.Shape.LocalDay          (unchanged)
+  generated  Generated.CalendarDays.Structural.Shape.MaybeLocalDay     (unchanged)
+  hole       Conformance.CalendarDays.Bindings                         (skipped: already present)
+  generated  Generated.CalendarDays.ReplayAudit                        (unchanged)
+  generated  Generated.CalendarDays.ProjectionCatalog                  (unchanged)
+  hole       CalendarDays.ProjectionCatalog.ProjectionCatalogHoles     (skipped: already present)
+  generated  Generated.CalendarDays.CalendarStore.Domain               (unchanged)
+  generated  Generated.CalendarDays.CalendarStore.Codec                (unchanged)
+  generated  Generated.CalendarDays.CalendarStore.Transducer           (unchanged)
+  generated  Generated.CalendarDays.CalendarStore.BehaviorContract     (unchanged)
+  hole       CalendarDays.CalendarStore.BehaviorHoles                  (skipped: already present)
+  generated  Generated.CalendarDays.CalendarStore.EventStream          (unchanged)
+  generated  Generated.CalendarDays.CalendarStore.Projection           (unchanged)
+  generated  Generated.CalendarDays.CalendarStore.Harness              (unchanged)
+  generated  Generated.CalendarDays.CalendarJobs.Queue                 (unchanged)
+  generated  Generated.CalendarDays.CalendarJobs.QueuePolicy           (unchanged)
+  generated  Generated.CalendarDays.CalendarJobs.QueueCodec            (unchanged)
+  generated  Generated.CalendarDays.CalendarLookup.ReadModelTable      (unchanged)
+  generated  Generated.CalendarDays.CalendarLookup.QueryContract       (unchanged)
+  generated  Generated.CalendarDays.CalendarLookup.ReadModel           (unchanged)
+  hole       CalendarDays.CalendarLookup.ReadModelHoles                (skipped: already present)
+  generated  Generated.CalendarDays.CalendarLookup.ReadModelHarness    (unchanged)
+firewall: OK (21 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.CalendarDays.CalendarStore.Harness
+dependency plan: consumer packages [keiro-dsl], consumer modules [Conformance.CalendarDays.Bindings, Conformance.CalendarDays.Domain]
+fragment: keiro-dsl/test/conformance-calendar-days/keiro-dsl-cabal-fragment.context.calendar-days.txt
+ledger:   keiro-dsl/test/conformance-calendar-days/keiro-dsl-ledger.context.calendar-days.txt
+constraint plan:
+  CalendarEnvelope: Eq, Show, CanonicalTypeName, StructuralBinding
+  LocalDay: Eq, Show, CanonicalTypeName, StructuralBinding, register initial, snapshot ToJSON, snapshot FromJSON
+  MaybeLocalDay: Eq, Show, CanonicalTypeName, StructuralBinding
+projection mapped impact:
+  unsupported typed sources:
+    catalog-all:calendar_writer
+      operation: group=calendar_rebuild; targets=calendar_table; read-models=calendar_lookup; replayable=yes; mapped-key=(unsupported heterogeneous source)
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  CalendarStore.Holes.transition1EmptyStoreDateOutput1DateStored
+  CalendarStore.Holes.transition1EmptyStoreDateOutput2DateAudited
+comparison generated keiro-dsl/test/conformance-calendar-days/Generated/CalendarDays/Structural/CodecCompare/MaybeLocalDay.hs (migration evidence only)
+keiro-dsl/test/fixtures/checked-mapping-replay-workspace/domain/service.keiro:23: warning[ReplayOnlyCommandStillLive]: replay-only transition 'Empty -- ImportLegacy' has no live sibling; command 'ImportLegacy' is fully retired at state 'Empty' — if the intent is to retire its events too, follow the event-retirement procedure (docs/plans/139)
+workspace: checked-mapping-replay (keiro-dsl/test/fixtures/checked-mapping-replay-workspace/service.keiro-workspace) -> keiro-dsl/test/conformance-checked-mapping-replay (module-root=(none), layout=prefixed)
+members:  domain/service.keiro, domain/values.keiro
+  generated  Generated.CheckedMappingReplay.StructuralConformance              (unchanged)  (context-level)
+  generated  Generated.CheckedMappingReplay.BehaviorSourceMap                  (unchanged)  (context-level)
+  generated  Generated.CheckedMappingReplay.Structural.Shape.ContentHash       (unchanged)  domain/values.keiro
+  generated  Generated.CheckedMappingReplay.Structural.Shape.ImportantDays     (unchanged)  domain/values.keiro
+  generated  Generated.CheckedMappingReplay.Structural.Shape.MaybeContentHash  (unchanged)  domain/values.keiro
+  generated  Generated.CheckedMappingReplay.Structural.Shape.MaybeLabel        (unchanged)  domain/values.keiro
+  generated  Generated.CheckedMappingReplay.Structural.Shape.ReplayEnvelope    (unchanged)  domain/values.keiro
+  generated  Generated.CheckedMappingReplay.Structural.Shape.TextLabels        (unchanged)  domain/values.keiro
+  generated  Generated.CheckedMappingReplay.StructuralProjections              (unchanged)  (context-level)
+  generated  Generated.CheckedMappingReplay.Nominals                           (unchanged)  (context-level)
+  generated  Generated.CheckedMappingReplay.Nominals.Internal                  (unchanged)  (context-level)
+  generated  Generated.CheckedMappingReplay.Structural.NominalLeaves           (unchanged)  (context-level)
+  hole       Conformance.CheckedMappingReplay.Bindings                         (skipped: already present)  domain/values.keiro
+  generated  Generated.CheckedMappingReplay.ReplayAudit                        (unchanged)  (context-level)
+  generated  Generated.CheckedMappingReplay.ProjectionCatalog                  (unchanged)  (context-level)
+  hole       CheckedMappingReplay.ProjectionCatalog.ProjectionCatalogHoles     (skipped: already present)  (context-level)
+  generated  Generated.CheckedMappingReplay.ReplayLedger.Domain                (unchanged)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayLedger.Codec                 (unchanged)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayLedger.Transducer            (unchanged)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayLedger.BehaviorContract      (unchanged)  domain/service.keiro
+  hole       CheckedMappingReplay.ReplayLedger.BehaviorHoles                   (skipped: already present)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayLedger.EventStream           (unchanged)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayLedger.Projection            (unchanged)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayLedger.Harness               (unchanged)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayTarget.Domain                (unchanged)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayTarget.Codec                 (unchanged)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayTarget.Transducer            (unchanged)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayTarget.BehaviorContract      (unchanged)  domain/service.keiro
+  hole       CheckedMappingReplay.ReplayTarget.BehaviorHoles                   (skipped: already present)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayTarget.EventStream           (unchanged)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayTarget.Projection            (unchanged)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayTarget.Harness               (unchanged)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayReaction.Input               (unchanged)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayReaction.Process             (unchanged)  domain/service.keiro
+  hole       CheckedMappingReplay.ReplayReaction.ProcessHoles                  (skipped: already present)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayReaction.ProcessHarness      (unchanged)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayJobs.Queue                   (unchanged)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayJobs.QueuePolicy             (unchanged)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayJobs.QueueCodec              (unchanged)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayLookup.ReadModelTable        (unchanged)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayLookup.QueryContract         (unchanged)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayLookup.ReadModel             (unchanged)  domain/service.keiro
+  hole       CheckedMappingReplay.ReplayLookup.ReadModelHoles                  (skipped: already present)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayLookup.ReadModelHarness      (unchanged)  domain/service.keiro
+  generated  Generated.CheckedMappingReplay.ReplayEvents.Contract              (unchanged)  domain/service.keiro
+firewall: OK (39 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.CheckedMappingReplay.ReplayLedger.Harness Generated.CheckedMappingReplay.ReplayReaction.ProcessHarness Generated.CheckedMappingReplay.ReplayTarget.Harness
+dependency plan: consumer packages [keiro-dsl], consumer modules [Conformance.CheckedMappingReplay.Bindings, Conformance.CheckedMappingReplay.Domain]
+fragment: keiro-dsl/test/conformance-checked-mapping-replay/keiro-dsl-cabal-fragment.workspace.checked-mapping-replay.txt
+ledger:   keiro-dsl/test/conformance-checked-mapping-replay/keiro-dsl-ledger.workspace.checked-mapping-replay.txt
+constraint plan:
+  ContentHash: Eq, Show, CanonicalTypeName, StructuralBinding
+  ImportantDays: Eq, Show, CanonicalTypeName, StructuralBinding
+  MaybeContentHash: Eq, Show, CanonicalTypeName, StructuralBinding
+  MaybeLabel: Eq, Show, CanonicalTypeName, StructuralBinding
+  ReplayEnvelope: Eq, Show, CanonicalTypeName, StructuralBinding, register initial, snapshot ToJSON, snapshot FromJSON
+  TextLabels: Eq, Show, CanonicalTypeName, StructuralBinding
+projection mapped impact:
+  unsupported typed sources:
+    catalog-all:replay_writer
+      operation: group=replay_rebuild; targets=replay_table; read-models=replay_lookup; replayable=yes; mapped-key=(unsupported heterogeneous source)
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  ReplayLedger.Holes.transition1EmptyRecordOutput1MappingRecorded
+  ReplayLedger.Holes.transition1EmptyRecordOutput2MappingAudited
+  ReplayLedger.Holes.transition2EmptyImportLegacyOutput1LegacyMappingImported
+  ReplayTarget.Holes.transition1ReadyStoreOutput1Stored
+keiro-dsl/test/fixtures/subscription.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+keiro-dsl/test/fixtures/subscription.keiro:27: warning[RmProjectionWithoutNode]: projection 'subscriptions' has no readmodel node; registration, schema identity, consistency, and rebuild helpers are unavailable
+scaffold: keiro-dsl/test/fixtures/subscription.keiro -> keiro-dsl/test/conformance-coldstart (module-root=(none), layout=prefixed)
+  generated  Generated.Billing.BehaviorSourceMap              (unchanged)
+  generated  Generated.Billing.Nominals                       (unchanged)
+  generated  Generated.Billing.Nominals.Internal              (unchanged)
+  generated  Generated.Billing.ReplayAudit                    (unchanged)
+  generated  Generated.Billing.Subscription.Domain            (unchanged)
+  generated  Generated.Billing.Subscription.Codec             (unchanged)
+  generated  Generated.Billing.Subscription.Transducer        (unchanged)
+  generated  Generated.Billing.Subscription.BehaviorContract  (unchanged)
+  hole       Billing.Subscription.BehaviorHoles               (skipped: already present)
+  generated  Generated.Billing.Subscription.EventStream       (unchanged)
+  generated  Generated.Billing.Subscription.Projection        (unchanged)
+  hole       Billing.Subscription.Holes                       (skipped: already present)
+  generated  Generated.Billing.Subscription.Harness           (unchanged)
+firewall: OK (11 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.Billing.Subscription.Harness
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-coldstart/keiro-dsl-cabal-fragment.context.billing.txt
+ledger:   keiro-dsl/test/conformance-coldstart/keiro-dsl-ledger.context.billing.txt
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  Subscription.Holes.transition1InactiveActivateSubscriptionOutput1SubscriptionActivated
+keiro-dsl/test/fixtures/contract.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+scaffold: keiro-dsl/test/fixtures/contract.keiro -> keiro-dsl/test/conformance-contract (module-root=(none), layout=prefixed)
+  generated  Generated.HospitalCapacity.Emergency.Contract  (unchanged)
+firewall: OK (1 generated modules scanned, 0 forbidden operators)
+harness:  (none emitted)
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-contract/keiro-dsl-cabal-fragment.context.hospital-capacity.txt
+ledger:   keiro-dsl/test/conformance-contract/keiro-dsl-ledger.context.hospital-capacity.txt
+scaffold: keiro-dsl/test/fixtures/contract-declared-id.keiro -> keiro-dsl/test/conformance-contract-declared-id (module-root=(none), layout=prefixed)
+  generated  Generated.ContractDeclaredId.StructuralConformance     (unchanged)
+  generated  Generated.ContractDeclaredId.Nominals                  (unchanged)
+  generated  Generated.ContractDeclaredId.Nominals.Internal         (unchanged)
+  generated  Generated.ContractDeclaredId.Structural.NominalLeaves  (unchanged)
+  hole       Conformance.ContractDeclaredId.Bindings                (skipped: already present)
+  generated  Generated.ContractDeclaredId.Templates.Contract        (unchanged)
+firewall: OK (5 generated modules scanned, 0 forbidden operators)
+harness:  (none emitted)
+dependency plan: consumer packages [keiro-dsl], consumer modules [Conformance.ContractDeclaredId.Bindings, Conformance.ContractDeclaredId.Domain]
+fragment: keiro-dsl/test/conformance-contract-declared-id/keiro-dsl-cabal-fragment.context.contract-declared-id.txt
+ledger:   keiro-dsl/test/conformance-contract-declared-id/keiro-dsl-ledger.context.contract-declared-id.txt
+constraint plan:
+  ClaimId: Eq, Show, NominalBinding
+scaffold: keiro-dsl/test/fixtures/contract-list-fields.keiro -> keiro-dsl/test/conformance-contract-list-fields (module-root=(none), layout=prefixed)
+  generated  Generated.ContractListFields.StructuralConformance     (unchanged)
+  generated  Generated.ContractListFields.Nominals                  (unchanged)
+  generated  Generated.ContractListFields.Nominals.Internal         (unchanged)
+  generated  Generated.ContractListFields.Structural.NominalLeaves  (unchanged)
+  hole       Conformance.ContractListFields.Bindings                (skipped: already present)
+  generated  Generated.ContractListFields.Templates.Contract        (unchanged)
+firewall: OK (5 generated modules scanned, 0 forbidden operators)
+harness:  (none emitted)
+dependency plan: consumer packages [keiro-dsl], consumer modules [Conformance.ContractListFields.Bindings, Conformance.ContractListFields.Domain]
+fragment: keiro-dsl/test/conformance-contract-list-fields/keiro-dsl-cabal-fragment.context.contract-list-fields.txt
+ledger:   keiro-dsl/test/conformance-contract-list-fields/keiro-dsl-ledger.context.contract-list-fields.txt
+constraint plan:
+  ClaimId: Eq, Show, NominalBinding
+keiro-dsl/test/fixtures/contract-v1-compat.keiro: language contract: effective keiro-dsl 1 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/1); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+scaffold: keiro-dsl/test/fixtures/contract-v1-compat.keiro -> keiro-dsl/test/conformance-contract-v1-compat (module-root=(none), layout=prefixed)
+  generated  Generated.HospitalCapacity.Emergency.Contract  (unchanged)
+firewall: OK (1 generated modules scanned, 0 forbidden operators)
+harness:  (none emitted)
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-contract-v1-compat/keiro-dsl-cabal-fragment.context.hospital-capacity.txt
+ledger:   keiro-dsl/test/conformance-contract-v1-compat/keiro-dsl-ledger.context.hospital-capacity.txt
+keiro-dsl/test/fixtures/declarative-router/valid.keiro:75: warning[PolicyDeadLetterUnused]: node 'HospitalTransferRouter' declares rejected => deadLetter but no dispatch on-failed arm says DeadLetter; the runtime policy is live, but the per-dispatch notation does not acknowledge it
+keiro-dsl/test/fixtures/declarative-router/valid.keiro:75: warning[AmbiguousFollowsRejectedPolicy]: node 'HospitalTransferRouter' acknowledges rejection-class failures; CommandAmbiguous follows the same rejected policy, and a dead-letter errorClass is the durable witness of that definition bug
+keiro-dsl/test/fixtures/declarative-router/valid.keiro:95: warning[RouterBenignInversion]: router dispatch 'RouteAcceptedTransferNeed' maps on-duplicate => AckOk; Keiro.Router confirms the event id against the target stream before treating the duplicate as benign
+scaffold: keiro-dsl/test/fixtures/declarative-router/valid.keiro -> keiro-dsl/test/conformance-declarative-router (module-root=(none), layout=prefixed)
+  generated  Generated.TransferRouting.StructuralConformance                 (unchanged)
+  generated  Generated.TransferRouting.BehaviorSourceMap                     (unchanged)
+  generated  Generated.TransferRouting.Structural.Shape.HospitalLoadRow      (unchanged)
+  generated  Generated.TransferRouting.Structural.Shape.TransferRouteInput   (unchanged)
+  generated  Generated.TransferRouting.StructuralProjections                 (unchanged)
+  hole       Conformance.DeclarativeRouter.Bindings                          (skipped: already present)
+  generated  Generated.TransferRouting.ReplayAudit                           (unchanged)
+  generated  Generated.TransferRouting.ProjectionCatalog                     (unchanged)
+  hole       TransferRouting.ProjectionCatalog.ProjectionCatalogHoles        (skipped: already present)
+  generated  Generated.TransferRouting.HospitalLoad.ReadModelTable           (unchanged)
+  generated  Generated.TransferRouting.HospitalLoad.QueryContract            (unchanged)
+  generated  Generated.TransferRouting.HospitalLoad.ReadModel                (unchanged)
+  hole       TransferRouting.HospitalLoad.ReadModelHoles                     (skipped: already present)
+  generated  Generated.TransferRouting.HospitalLoad.ReadModelHarness         (unchanged)
+  generated  Generated.TransferRouting.Hospital.Domain                       (unchanged)
+  generated  Generated.TransferRouting.Hospital.Codec                        (unchanged)
+  generated  Generated.TransferRouting.Hospital.Transducer                   (unchanged)
+  generated  Generated.TransferRouting.Hospital.BehaviorContract             (unchanged)
+  hole       TransferRouting.Hospital.BehaviorHoles                          (skipped: already present)
+  generated  Generated.TransferRouting.Hospital.EventStream                  (unchanged)
+  generated  Generated.TransferRouting.Hospital.Projection                   (unchanged)
+  generated  Generated.TransferRouting.Hospital.Harness                      (unchanged)
+  generated  Generated.TransferRouting.HospitalTransferRouter.Router         (unchanged)
+  generated  Generated.TransferRouting.HospitalTransferRouter.RouterHarness  (unchanged)
+firewall: OK (20 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.TransferRouting.Hospital.Harness
+dependency plan: consumer packages [keiro-dsl], consumer modules [Conformance.DeclarativeRouter.Bindings, Conformance.DeclarativeRouter.Domain]
+fragment: keiro-dsl/test/conformance-declarative-router/keiro-dsl-cabal-fragment.context.transfer-routing.txt
+ledger:   keiro-dsl/test/conformance-declarative-router/keiro-dsl-ledger.context.transfer-routing.txt
+constraint plan:
+  HospitalLoadRow: Eq, Show, CanonicalTypeName, StructuralBinding
+  TransferRouteInput: Eq, Show, CanonicalTypeName, StructuralBinding
+projection mapped impact:
+  unsupported typed sources:
+    catalog-category:hospital_load_writer:hospitalLoad
+      operation: group=reporting; targets=hospital_load_table; read-models=hospital_load; replayable=yes; mapped-key=(unsupported heterogeneous source)
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  Hospital.Holes.transition1OpenRouteAcceptedTransferNeedOutput1TransferNeedRouted
+keiro-dsl/test/fixtures/reservation-work.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+scaffold: keiro-dsl/test/fixtures/reservation-work.keiro -> keiro-dsl/test/conformance-dispatch-full (module-root=(none), layout=prefixed)
+  generated  Generated.HospitalCapacity.AcceptedTransferNeeds.ReadModelTable    (unchanged)
+  generated  Generated.HospitalCapacity.AcceptedTransferNeeds.ReadModel         (unchanged)
+  hole       HospitalCapacity.AcceptedTransferNeeds.ReadModelHoles              (skipped: already present)
+  generated  Generated.HospitalCapacity.AcceptedTransferNeeds.ReadModelHarness  (unchanged)
+  generated  Generated.HospitalCapacity.TransferDecisions.ReadModelTable        (unchanged)
+  generated  Generated.HospitalCapacity.TransferDecisions.ReadModel             (unchanged)
+  hole       HospitalCapacity.TransferDecisions.ReadModelHoles                  (skipped: already present)
+  generated  Generated.HospitalCapacity.TransferDecisions.ReadModelHarness      (unchanged)
+  generated  Generated.HospitalCapacity.ReservationWork.Queue                   (unchanged)
+  generated  Generated.HospitalCapacity.ReservationWork.QueuePolicy             (unchanged)
+  generated  Generated.HospitalCapacity.ReservationWork.QueueCodec              (unchanged)
+no-modules: dispatch reservation_work_dispatch (validated and diff-classified; no generated modules)
+firewall: OK (9 generated modules scanned, 0 forbidden operators)
+harness:  (none emitted)
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-dispatch-full/keiro-dsl-cabal-fragment.context.hospital-capacity.txt
+ledger:   keiro-dsl/test/conformance-dispatch-full/keiro-dsl-ledger.context.hospital-capacity.txt
+scaffold: keiro-dsl/test/fixtures/domain-command-outcomes.keiro -> keiro-dsl/test/conformance-domain-outcomes (module-root=(none), layout=prefixed)
+  generated  Generated.DomainOutcomes.BehaviorSourceMap             (unchanged)
+  generated  Generated.DomainOutcomes.Nominals                      (unchanged)
+  generated  Generated.DomainOutcomes.ReplayAudit                   (unchanged)
+  generated  Generated.DomainOutcomes.Reservation.Domain            (unchanged)
+  generated  Generated.DomainOutcomes.Reservation.Codec             (unchanged)
+  generated  Generated.DomainOutcomes.Reservation.Transducer        (unchanged)
+  generated  Generated.DomainOutcomes.Reservation.BehaviorContract  (unchanged)
+  hole       DomainOutcomes.Reservation.BehaviorHoles               (skipped: already present)
+  generated  Generated.DomainOutcomes.Reservation.EventStream       (unchanged)
+  generated  Generated.DomainOutcomes.Reservation.Projection        (unchanged)
+  generated  Generated.DomainOutcomes.Reservation.Harness           (unchanged)
+firewall: OK (10 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.DomainOutcomes.Reservation.Harness
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-domain-outcomes/keiro-dsl-cabal-fragment.context.domain-outcomes.txt
+ledger:   keiro-dsl/test/conformance-domain-outcomes/keiro-dsl-ledger.context.domain-outcomes.txt
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  Reservation.Holes.transition1EligibleCancelOutput1Cancelled
+scaffold: keiro-dsl/test/fixtures/history-dependent-holes.keiro -> keiro-dsl/test/conformance-history-dependent-holes (module-root=(none), layout=prefixed)
+  generated  Generated.HistoryDependentHoles.StructuralConformance        (unchanged)
+  generated  Generated.HistoryDependentHoles.BehaviorSourceMap            (unchanged)
+  generated  Generated.HistoryDependentHoles.ReplayAudit                  (unchanged)
+  generated  Generated.HistoryDependentHoles.Assignment.Domain            (unchanged)
+  generated  Generated.HistoryDependentHoles.Assignment.Codec             (unchanged)
+  generated  Generated.HistoryDependentHoles.Assignment.Transducer        (unchanged)
+  generated  Generated.HistoryDependentHoles.Assignment.BehaviorContract  (unchanged)
+  hole       HistoryDependentHoles.Assignment.BehaviorHoles               (skipped: already present)
+  generated  Generated.HistoryDependentHoles.Assignment.EventStream       (unchanged)
+  generated  Generated.HistoryDependentHoles.Assignment.Projection        (unchanged)
+  hole       HistoryDependentHoles.Assignment.Holes                       (skipped: already present)
+  generated  Generated.HistoryDependentHoles.Assignment.Harness           (unchanged)
+firewall: OK (10 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.HistoryDependentHoles.Assignment.Harness
+dependency plan: consumer packages [keiro-dsl], consumer modules [Conformance.HistoryDependentHoles.Bindings, Conformance.HistoryDependentHoles.Domain]
+fragment: keiro-dsl/test/conformance-history-dependent-holes/keiro-dsl-cabal-fragment.context.history-dependent-holes.txt
+ledger:   keiro-dsl/test/conformance-history-dependent-holes/keiro-dsl-ledger.context.history-dependent-holes.txt
+constraint plan:
+  PropertyValues: Eq, Show, ToJSON, FromJSON, register initial, snapshot ToJSON, snapshot FromJSON
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  Assignment.Holes.transition1ActiveSetPropertyOutput1PropertySet
+  Assignment.Holes.transition2ActiveClearPropertyOutput1PropertyCleared
+  Assignment.Holes.transition3ActiveTouchOutput1Touched
+  Assignment.Holes.transition4ActiveClearPropertyOutput1PropertyCleared
+keiro-dsl/test/fixtures/id-admission-domains.keiro:33: warning[ReplayOnlyCommandStillLive]: replay-only transition 'Open -- ImportLegacyIdentity' has no live sibling; command 'ImportLegacyIdentity' is fully retired at state 'Open' — if the intent is to retire its events too, follow the event-retirement procedure (docs/plans/139)
+scaffold: keiro-dsl/test/fixtures/id-admission-domains.keiro -> keiro-dsl/test/conformance-id-admission-domains (module-root=(none), layout=prefixed)
+  generated  Generated.IdAdmissionDomains.StructuralConformance              (unchanged)
+  generated  Generated.IdAdmissionDomains.BehaviorSourceMap                  (unchanged)
+  generated  Generated.IdAdmissionDomains.Structural.Shape.IdentityEnvelope  (unchanged)
+  generated  Generated.IdAdmissionDomains.StructuralProjections              (unchanged)
+  generated  Generated.IdAdmissionDomains.Nominals                           (unchanged)
+  generated  Generated.IdAdmissionDomains.Nominals.Internal                  (unchanged)
+  generated  Generated.IdAdmissionDomains.Structural.NominalLeaves           (unchanged)
+  hole       Conformance.IdAdmissionDomains.Bindings                         (skipped: already present)
+  generated  Generated.IdAdmissionDomains.ReplayAudit                        (unchanged)
+  generated  Generated.IdAdmissionDomains.IdentityLedger.Domain              (unchanged)
+  generated  Generated.IdAdmissionDomains.IdentityLedger.Codec               (unchanged)
+  generated  Generated.IdAdmissionDomains.IdentityLedger.Transducer          (unchanged)
+  generated  Generated.IdAdmissionDomains.IdentityLedger.BehaviorContract    (unchanged)
+  hole       IdAdmissionDomains.IdentityLedger.BehaviorHoles                 (skipped: already present)
+  generated  Generated.IdAdmissionDomains.IdentityLedger.EventStream         (unchanged)
+  generated  Generated.IdAdmissionDomains.IdentityLedger.Projection          (unchanged)
+  generated  Generated.IdAdmissionDomains.IdentityLedger.Harness             (unchanged)
+  generated  Generated.IdAdmissionDomains.IdentityWork.Queue                 (unchanged)
+  generated  Generated.IdAdmissionDomains.IdentityWork.QueuePolicy           (unchanged)
+  generated  Generated.IdAdmissionDomains.IdentityWork.QueueCodec            (unchanged)
+  generated  Generated.IdAdmissionDomains.Identities.Contract                (unchanged)
+firewall: OK (19 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.IdAdmissionDomains.IdentityLedger.Harness
+dependency plan: consumer packages [keiro-dsl], consumer modules [Conformance.IdAdmissionDomains.Bindings, Conformance.IdAdmissionDomains.Domain]
+fragment: keiro-dsl/test/conformance-id-admission-domains/keiro-dsl-cabal-fragment.context.id-admission-domains.txt
+ledger:   keiro-dsl/test/conformance-id-admission-domains/keiro-dsl-ledger.context.id-admission-domains.txt
+constraint plan:
+  IdentityEnvelope: Eq, Show, CanonicalTypeName, StructuralBinding
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  IdentityLedger.Holes.transition1OpenRecordIdentityOutput1IdentityRecorded
+  IdentityLedger.Holes.transition1OpenRecordIdentityOutput2IdentityAudited
+  IdentityLedger.Holes.transition2OpenImportLegacyIdentityOutput1LegacyIdentityImported
+keiro-dsl/test/fixtures/id-domain-migration-v3.keiro: language contract: effective keiro-dsl 3 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/2); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+scaffold: keiro-dsl/test/fixtures/id-domain-migration-v3.keiro -> keiro-dsl/test/conformance-id-domain-migration (module-root=(none), layout=prefixed)
+  generated  Generated.IdDomainMigration.BehaviorSourceMap           (unchanged)
+  generated  Generated.IdDomainMigration.Nominals                    (unchanged)
+  generated  Generated.IdDomainMigration.Nominals.Internal           (unchanged)
+  generated  Generated.IdDomainMigration.ReplayAudit                 (unchanged)
+  generated  Generated.IdDomainMigration.OrderBook.Domain            (unchanged)
+  generated  Generated.IdDomainMigration.OrderBook.Codec             (unchanged)
+  generated  Generated.IdDomainMigration.OrderBook.Transducer        (unchanged)
+  generated  Generated.IdDomainMigration.OrderBook.BehaviorContract  (unchanged)
+  hole       IdDomainMigration.OrderBook.BehaviorHoles               (skipped: already present)
+  generated  Generated.IdDomainMigration.OrderBook.EventStream       (unchanged)
+  generated  Generated.IdDomainMigration.OrderBook.Projection        (unchanged)
+  generated  Generated.IdDomainMigration.OrderBook.Harness           (unchanged)
+firewall: OK (11 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.IdDomainMigration.OrderBook.Harness
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-id-domain-migration/keiro-dsl-cabal-fragment.context.id-domain-migration.txt
+ledger:   keiro-dsl/test/conformance-id-domain-migration/keiro-dsl-ledger.context.id-domain-migration.txt
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  OrderBook.Holes.transition1EmptyRecordOutput1OrderRecorded
+keiro-dsl/test/fixtures/import-planning-collisions.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+scaffold: keiro-dsl/test/fixtures/import-planning-collisions.keiro -> keiro-dsl/test/conformance-import-planning (module-root=(none), layout=prefixed)
+  generated  Generated.ImportPlanningCollisions.StructuralConformance             (unchanged)
+  generated  Generated.ImportPlanningCollisions.BehaviorSourceMap                 (unchanged)
+  generated  Generated.ImportPlanningCollisions.Structural.Shape.Details          (unchanged)
+  generated  Generated.ImportPlanningCollisions.StructuralProjections             (unchanged)
+  generated  Generated.ImportPlanningCollisions.NominalProjections                (unchanged)
+  hole       ImportPlanning.Bindings                                              (skipped: already present)
+  generated  Generated.ImportPlanningCollisions.ReplayAudit                       (unchanged)
+  generated  Generated.ImportPlanningCollisions.CollisionLedger.Domain            (unchanged)
+  generated  Generated.ImportPlanningCollisions.CollisionLedger.Codec             (unchanged)
+  generated  Generated.ImportPlanningCollisions.CollisionLedger.Transducer        (unchanged)
+  generated  Generated.ImportPlanningCollisions.CollisionLedger.BehaviorContract  (unchanged)
+  hole       ImportPlanningCollisions.CollisionLedger.BehaviorHoles               (skipped: already present)
+  generated  Generated.ImportPlanningCollisions.CollisionLedger.EventStream       (unchanged)
+  generated  Generated.ImportPlanningCollisions.CollisionLedger.Projection        (unchanged)
+  generated  Generated.ImportPlanningCollisions.CollisionLedger.Harness           (unchanged)
+firewall: OK (13 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.ImportPlanningCollisions.CollisionLedger.Harness
+dependency plan: consumer packages [keiro-dsl], consumer modules [ImportPlanning.Bindings, ImportPlanning.Consumer.Domain, ImportPlanning.Consumer.Invoice.Types, ImportPlanning.Consumer.Order.Types, ImportPlanning.Consumer.Shared.Types]
+fragment: keiro-dsl/test/conformance-import-planning/keiro-dsl-cabal-fragment.context.import-planning-collisions.txt
+ledger:   keiro-dsl/test/conformance-import-planning/keiro-dsl-ledger.context.import-planning-collisions.txt
+constraint plan:
+  Details: Eq, Show, CanonicalTypeName, StructuralBinding
+  InvoiceStatus: Eq, Show, NominalBinding
+  LocalCollision: Eq, Show, NominalBinding
+  OrderStatus: Eq, Show, NominalBinding
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  CollisionLedger.Holes.transition1EmptyRecordOutput1RecordedValues
+keiro-dsl/test/fixtures/intake-delegated.keiro:14: warning[IntakeBindFlagUnenforced]: intake 'incidentInbox' bind for 'source' declares a 'required' flag, but generated code does not consume envelope bindings
+keiro-dsl/test/fixtures/intake-delegated.keiro:14: warning[IntakeBindFlagUnenforced]: intake 'incidentInbox' bind for 'schemaVersion' declares 'required' and 'cross-check body' flags, but generated code does not consume envelope bindings
+keiro-dsl/test/fixtures/intake-delegated.keiro:14: warning[IntakeBindFlagUnenforced]: intake 'incidentInbox' bind for 'messageId' declares 'required' and 'cross-check body' flags, but generated code does not consume envelope bindings
+scaffold: keiro-dsl/test/fixtures/intake-delegated.keiro -> keiro-dsl/test/conformance-intake-delegated (module-root=(none), layout=prefixed)
+  generated  Generated.HospitalCapacity.Emergency.Contract   (unchanged)
+  generated  Generated.HospitalCapacity.IncidentInbox.Inbox  (unchanged)
+firewall: OK (2 generated modules scanned, 0 forbidden operators)
+harness:  (none emitted)
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-intake-delegated/keiro-dsl-cabal-fragment.context.hospital-capacity.txt
+ledger:   keiro-dsl/test/conformance-intake-delegated/keiro-dsl-ledger.context.hospital-capacity.txt
+keiro-dsl/test/fixtures/intake.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+keiro-dsl/test/fixtures/intake.keiro:14: warning[IntakeBindFlagUnenforced]: intake 'incidentInbox' bind for 'source' declares a 'required' flag, but generated code does not consume envelope bindings
+keiro-dsl/test/fixtures/intake.keiro:14: warning[IntakeBindFlagUnenforced]: intake 'incidentInbox' bind for 'schemaVersion' declares 'required' and 'cross-check body' flags, but generated code does not consume envelope bindings
+keiro-dsl/test/fixtures/intake.keiro:14: warning[IntakeBindFlagUnenforced]: intake 'incidentInbox' bind for 'messageId' declares 'required' and 'cross-check body' flags, but generated code does not consume envelope bindings
+scaffold: keiro-dsl/test/fixtures/intake.keiro -> keiro-dsl/test/conformance-intake-full (module-root=(none), layout=prefixed)
+  generated  Generated.HospitalCapacity.Emergency.Contract   (unchanged)
+  generated  Generated.HospitalCapacity.IncidentInbox.Inbox  (unchanged)
+firewall: OK (2 generated modules scanned, 0 forbidden operators)
+harness:  (none emitted)
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-intake-full/keiro-dsl-cabal-fragment.context.hospital-capacity.txt
+ledger:   keiro-dsl/test/conformance-intake-full/keiro-dsl-ledger.context.hospital-capacity.txt
+keiro-dsl/test/fixtures/intake.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+keiro-dsl/test/fixtures/intake.keiro:14: warning[IntakeBindFlagUnenforced]: intake 'incidentInbox' bind for 'source' declares a 'required' flag, but generated code does not consume envelope bindings
+keiro-dsl/test/fixtures/intake.keiro:14: warning[IntakeBindFlagUnenforced]: intake 'incidentInbox' bind for 'schemaVersion' declares 'required' and 'cross-check body' flags, but generated code does not consume envelope bindings
+keiro-dsl/test/fixtures/intake.keiro:14: warning[IntakeBindFlagUnenforced]: intake 'incidentInbox' bind for 'messageId' declares 'required' and 'cross-check body' flags, but generated code does not consume envelope bindings
+scaffold: keiro-dsl/test/fixtures/intake.keiro -> keiro-dsl/test/conformance-intake-runtime (module-root=(none), layout=prefixed)
+  generated  Generated.HospitalCapacity.Emergency.Contract   (unchanged)
+  generated  Generated.HospitalCapacity.IncidentInbox.Inbox  (unchanged)
+firewall: OK (2 generated modules scanned, 0 forbidden operators)
+harness:  (none emitted)
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-intake-runtime/keiro-dsl-cabal-fragment.context.hospital-capacity.txt
+ledger:   keiro-dsl/test/conformance-intake-runtime/keiro-dsl-ledger.context.hospital-capacity.txt
+scaffold: keiro-dsl/test/fixtures/keyword-segments.keiro -> keiro-dsl/test/conformance-keyword-segments (module-root=(none), layout=prefixed)
+  generated  Generated.KeywordSegments.StructuralConformance                (unchanged)
+  generated  Generated.KeywordSegments.Nominals                             (unchanged)
+  generated  Generated.KeywordSegments.Nominals.Internal                    (unchanged)
+  generated  Generated.KeywordSegments.Structural.NominalLeaves             (unchanged)
+  generated  Generated.KeywordSegments.ProjectionCatalog                    (unchanged)
+  hole       KeywordSegments.ProjectionCatalog.ProjectionCatalogHoles       (skipped: already present)
+  generated  Generated.KeywordSegments.ValidateCustomType.ReadModelTable    (unchanged)
+  generated  Generated.KeywordSegments.ValidateCustomType.QueryContract     (unchanged)
+  generated  Generated.KeywordSegments.ValidateCustomType.ReadModel         (unchanged)
+  hole       KeywordSegments.ValidateCustomType.ReadModelHoles              (skipped: already present)
+  generated  Generated.KeywordSegments.ValidateCustomType.ReadModelHarness  (unchanged)
+  generated  Generated.KeywordSegments.JobType.Queue                        (unchanged)
+  generated  Generated.KeywordSegments.JobType.QueuePolicy                  (unchanged)
+  generated  Generated.KeywordSegments.JobType.QueueCodec                   (unchanged)
+firewall: OK (12 generated modules scanned, 0 forbidden operators)
+harness:  (none emitted)
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-keyword-segments/keiro-dsl-cabal-fragment.context.keyword-segments.txt
+ledger:   keiro-dsl/test/conformance-keyword-segments/keiro-dsl-ledger.context.keyword-segments.txt
+projection mapped impact:
+  unsupported typed sources:
+    catalog-all:validate_custom_type_writer
+      operation: group=validate_custom_type_rebuild; targets=validate_custom_type_table; read-models=validate_custom_type; replayable=yes; mapped-key=(unsupported heterogeneous source)
+scaffold: keiro-dsl/test/fixtures/mapped-workqueue.keiro -> keiro-dsl/test/conformance-mapped-queue (module-root=(none), layout=prefixed)
+  generated  Generated.MappedQueue.StructuralConformance         (unchanged)
+  generated  Generated.MappedQueue.Structural.Shape.JobMetadata  (unchanged)
+  generated  Generated.MappedQueue.Structural.Shape.JobPayload   (unchanged)
+  generated  Generated.MappedQueue.StructuralProjections         (unchanged)
+  hole       Conformance.MappedQueue.Bindings                    (skipped: already present)
+  generated  Generated.MappedQueue.MappedJobs.Queue              (unchanged)
+  generated  Generated.MappedQueue.MappedJobs.QueuePolicy        (unchanged)
+  generated  Generated.MappedQueue.MappedJobs.QueueCodec         (unchanged)
+firewall: OK (7 generated modules scanned, 0 forbidden operators)
+harness:  (none emitted)
+dependency plan: consumer packages [keiro-dsl], consumer modules [Conformance.MappedQueue.Bindings, Conformance.MappedQueue.Domain]
+fragment: keiro-dsl/test/conformance-mapped-queue/keiro-dsl-cabal-fragment.context.mapped-queue.txt
+ledger:   keiro-dsl/test/conformance-mapped-queue/keiro-dsl-ledger.context.mapped-queue.txt
+constraint plan:
+  JobMetadata: Eq, Show, CanonicalTypeName, StructuralBinding
+  JobPayload: Eq, Show, CanonicalTypeName, StructuralBinding
+  VendorGeometry: Eq, Show, ToJSON, FromJSON
+scaffold: keiro-dsl/test/fixtures/mapped-readmodel.keiro -> keiro-dsl/test/conformance-mapped-readmodel (module-root=(none), layout=prefixed)
+  generated  Generated.MappedReadmodel.StructuralConformance            (unchanged)
+  generated  Generated.MappedReadmodel.Structural.Shape.AccountLookup   (unchanged)
+  generated  Generated.MappedReadmodel.Structural.Shape.AccountProfile  (unchanged)
+  generated  Generated.MappedReadmodel.Structural.Shape.AccountSummary  (unchanged)
+  generated  Generated.MappedReadmodel.Structural.Shape.TenantKey       (unchanged)
+  generated  Generated.MappedReadmodel.Structural.Shape.UnusedFilter    (unchanged)
+  generated  Generated.MappedReadmodel.StructuralProjections            (unchanged)
+  hole       Conformance.MappedReadModel.Bindings                       (skipped: already present)
+  generated  Generated.MappedReadmodel.ProjectionCatalog                (unchanged)
+  hole       MappedReadmodel.ProjectionCatalog.ProjectionCatalogHoles   (skipped: already present)
+  generated  Generated.MappedReadmodel.AccountSummary.ReadModelTable    (unchanged)
+  generated  Generated.MappedReadmodel.AccountSummary.QueryContract     (unchanged)
+  generated  Generated.MappedReadmodel.AccountSummary.ReadModel         (unchanged)
+  hole       MappedReadmodel.AccountSummary.ReadModelHoles              (skipped: already present)
+  generated  Generated.MappedReadmodel.AccountSummary.ReadModelHarness  (unchanged)
+firewall: OK (12 generated modules scanned, 0 forbidden operators)
+harness:  (none emitted)
+dependency plan: consumer packages [keiro-dsl], consumer modules [Conformance.MappedReadModel.Bindings, Conformance.MappedReadModel.Domain]
+fragment: keiro-dsl/test/conformance-mapped-readmodel/keiro-dsl-cabal-fragment.context.mapped-readmodel.txt
+ledger:   keiro-dsl/test/conformance-mapped-readmodel/keiro-dsl-ledger.context.mapped-readmodel.txt
+constraint plan:
+  AccountLookup: Eq, Show, CanonicalTypeName, StructuralBinding
+  AccountProfile: Eq, Show, CanonicalTypeName, StructuralBinding
+  AccountSummary: Eq, Show, CanonicalTypeName, StructuralBinding
+  TenantKey: Eq, Show, CanonicalTypeName, StructuralBinding
+  UnusedFilter: Eq, Show, CanonicalTypeName, StructuralBinding
+projection mapped impact:
+  unsupported typed sources:
+    catalog-all:account_summary_writer
+      operation: group=reporting; targets=account_summary_table; read-models=account_summary; replayable=yes; mapped-key=(unsupported heterogeneous source)
+scaffold: keiro-dsl/test/fixtures/mapped-register-construction.keiro -> keiro-dsl/test/conformance-mapped-register-construction (module-root=(none), layout=prefixed)
+  generated  Generated.MappedRegisterConstruction.StructuralConformance       (unchanged)
+  generated  Generated.MappedRegisterConstruction.BehaviorSourceMap           (unchanged)
+  hole       Conformance.MappedRegisterConstruction.Lift                      (skipped: already present)
+  generated  Generated.MappedRegisterConstruction.ReplayAudit                 (unchanged)
+  generated  Generated.MappedRegisterConstruction.Lifecycle.Domain            (unchanged)
+  generated  Generated.MappedRegisterConstruction.Lifecycle.Codec             (unchanged)
+  generated  Generated.MappedRegisterConstruction.Lifecycle.Transducer        (unchanged)
+  generated  Generated.MappedRegisterConstruction.Lifecycle.BehaviorContract  (unchanged)
+  hole       MappedRegisterConstruction.Lifecycle.BehaviorHoles               (skipped: already present)
+  generated  Generated.MappedRegisterConstruction.Lifecycle.EventStream       (unchanged)
+  generated  Generated.MappedRegisterConstruction.Lifecycle.Projection        (unchanged)
+  generated  Generated.MappedRegisterConstruction.Lifecycle.Harness           (unchanged)
+firewall: OK (10 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.MappedRegisterConstruction.Lifecycle.Harness
+dependency plan: consumer packages [keiro-dsl], consumer modules [Conformance.MappedRegisterConstruction.Bindings, Conformance.MappedRegisterConstruction.Domain, Conformance.MappedRegisterConstruction.Lift]
+fragment: keiro-dsl/test/conformance-mapped-register-construction/keiro-dsl-cabal-fragment.context.mapped-register-construction.txt
+ledger:   keiro-dsl/test/conformance-mapped-register-construction/keiro-dsl-ledger.context.mapped-register-construction.txt
+constraint plan:
+  MaybeTime: Eq, Show, ToJSON, FromJSON, register initial, snapshot ToJSON, snapshot FromJSON
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  Lifecycle.Holes.transition1EmptyCreateOutput1Created
+  Lifecycle.Holes.transition2AwakeMarkOutput1Marked
+  Lifecycle.Holes.transition3DormantPingOutput1Pinged
+  Lifecycle.Holes.transition4DormantPingOutput1Pinged
+  Lifecycle.Holes.transition5DormantAwakenOutput1Awakened
+  Lifecycle.Holes.transition6AwakeCloseOutput1ClosedEvent
+  Lifecycle.Holes.transition7ClosedReopenOutput1Reopened
+scaffold: keiro-dsl/test/fixtures/mapped-structural-enum-equality.keiro -> keiro-dsl/test/conformance-mapped-structural-enum-equality (module-root=(none), layout=prefixed)
+  generated  Generated.MappedStructuralEnumEquality.StructuralConformance           (unchanged)
+  generated  Generated.MappedStructuralEnumEquality.BehaviorSourceMap               (unchanged)
+  generated  Generated.MappedStructuralEnumEquality.Structural.Shape.Request        (unchanged)
+  generated  Generated.MappedStructuralEnumEquality.Structural.Shape.RequiredScope  (unchanged)
+  generated  Generated.MappedStructuralEnumEquality.StructuralProjections           (unchanged)
+  hole       Conformance.MappedStructuralEnumEquality.Bindings                      (skipped: already present)
+  generated  Generated.MappedStructuralEnumEquality.ReplayAudit                     (unchanged)
+  generated  Generated.MappedStructuralEnumEquality.ScopeGate.Domain                (unchanged)
+  generated  Generated.MappedStructuralEnumEquality.ScopeGate.Codec                 (unchanged)
+  generated  Generated.MappedStructuralEnumEquality.ScopeGate.Transducer            (unchanged)
+  generated  Generated.MappedStructuralEnumEquality.ScopeGate.BehaviorContract      (unchanged)
+  hole       MappedStructuralEnumEquality.ScopeGate.BehaviorHoles                   (skipped: already present)
+  generated  Generated.MappedStructuralEnumEquality.ScopeGate.EventStream           (unchanged)
+  generated  Generated.MappedStructuralEnumEquality.ScopeGate.Projection            (unchanged)
+  generated  Generated.MappedStructuralEnumEquality.ScopeGate.Harness               (unchanged)
+firewall: OK (13 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.MappedStructuralEnumEquality.ScopeGate.Harness
+dependency plan: consumer packages [keiro-dsl], consumer modules [Conformance.MappedStructuralEnumEquality.Bindings, Conformance.MappedStructuralEnumEquality.Domain]
+fragment: keiro-dsl/test/conformance-mapped-structural-enum-equality/keiro-dsl-cabal-fragment.context.mapped-structural-enum-equality.txt
+ledger:   keiro-dsl/test/conformance-mapped-structural-enum-equality/keiro-dsl-ledger.context.mapped-structural-enum-equality.txt
+constraint plan:
+  Request: Eq, Show, CanonicalTypeName, StructuralBinding
+  RequiredScope: Eq, Show, CanonicalTypeName, StructuralBinding, register initial, snapshot ToJSON, snapshot FromJSON
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  ScopeGate.Holes.transition1ReadyMatchOutput1Matched
+  ScopeGate.Holes.transition2ReadyDifferOutput1Differed
+  ScopeGate.Holes.transition3ReadyEqRightOutput1EqRightAccepted
+  ScopeGate.Holes.transition4ReadyEqLeftOutput1EqLeftAccepted
+  ScopeGate.Holes.transition5ReadyNeRightOutput1NeRightAccepted
+  ScopeGate.Holes.transition6ReadyNeLeftOutput1NeLeftAccepted
+  ScopeGate.Holes.transition7ReadySelfOutput1SelfAccepted
+keiro-dsl/test/fixtures/transfer-routing.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+keiro-dsl/test/fixtures/transfer-routing.keiro:19: warning[PolicyDeadLetterUnused]: node 'HospitalTransferRouter' declares rejected => deadLetter but no dispatch on-failed arm says DeadLetter; the runtime policy is live, but the per-dispatch notation does not acknowledge it
+keiro-dsl/test/fixtures/transfer-routing.keiro:19: warning[AmbiguousFollowsRejectedPolicy]: node 'HospitalTransferRouter' acknowledges rejection-class failures; CommandAmbiguous follows the same rejected policy, and a dead-letter errorClass is the durable witness of that definition bug
+keiro-dsl/test/fixtures/transfer-routing.keiro:26: warning[RouterBenignInversion]: router dispatch 'RouteAcceptedTransferNeed' maps on-duplicate => AckOk; Keiro.Router confirms the event id against the target stream before treating the duplicate as benign
+scaffold: keiro-dsl/test/fixtures/transfer-routing.keiro -> keiro-dsl/test/conformance-newsurface (module-root=(none), layout=prefixed)
+  generated  Generated.TransferRouting.BehaviorSourceMap                     (unchanged)
+  generated  Generated.TransferRouting.ReplayAudit                           (unchanged)
+  generated  Generated.TransferRouting.HospitalLoad.ReadModelTable           (unchanged)
+  generated  Generated.TransferRouting.HospitalLoad.ReadModel                (unchanged)
+  hole       TransferRouting.HospitalLoad.ReadModelHoles                     (skipped: already present)
+  generated  Generated.TransferRouting.HospitalLoad.ReadModelHarness         (unchanged)
+  generated  Generated.TransferRouting.HospitalTransferRouter.Router         (unchanged)
+  hole       TransferRouting.HospitalTransferRouter.RouterHoles              (skipped: already present)
+  generated  Generated.TransferRouting.HospitalTransferRouter.RouterHarness  (unchanged)
+  generated  Generated.TransferRouting.Hospital.Domain                       (unchanged)
+  generated  Generated.TransferRouting.Hospital.Codec                        (unchanged)
+  generated  Generated.TransferRouting.Hospital.Transducer                   (unchanged)
+  generated  Generated.TransferRouting.Hospital.BehaviorContract             (unchanged)
+  hole       TransferRouting.Hospital.BehaviorHoles                          (skipped: already present)
+  generated  Generated.TransferRouting.Hospital.EventStream                  (unchanged)
+  generated  Generated.TransferRouting.Hospital.Projection                   (unchanged)
+  generated  Generated.TransferRouting.Hospital.Harness                      (unchanged)
+firewall: OK (14 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.TransferRouting.Hospital.Harness
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-newsurface/keiro-dsl-cabal-fragment.context.transfer-routing.txt
+ledger:   keiro-dsl/test/conformance-newsurface/keiro-dsl-ledger.context.transfer-routing.txt
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  Hospital.Holes.transition1AcceptingRouteAcceptedTransferNeedOutput1AcceptedTransferNeedRouted
+scaffold: keiro-dsl/test/fixtures/mapped-nominal-query-only.keiro -> keiro-dsl/test/conformance-nominal-query-only (module-root=(none), layout=prefixed)
+  generated  Generated.MappedNominalQueryOnly.StructuralConformance            (unchanged)
+  generated  Generated.MappedNominalQueryOnly.Nominals                         (unchanged)
+  generated  Generated.MappedNominalQueryOnly.Nominals.Internal                (unchanged)
+  generated  Generated.MappedNominalQueryOnly.ProjectionCatalog                (unchanged)
+  hole       MappedNominalQueryOnly.ProjectionCatalog.ProjectionCatalogHoles   (skipped: already present)
+  generated  Generated.MappedNominalQueryOnly.TemplateLookup.ReadModelTable    (unchanged)
+  generated  Generated.MappedNominalQueryOnly.TemplateLookup.QueryContract     (unchanged)
+  generated  Generated.MappedNominalQueryOnly.TemplateLookup.ReadModel         (unchanged)
+  hole       MappedNominalQueryOnly.TemplateLookup.ReadModelHoles              (skipped: already present)
+  generated  Generated.MappedNominalQueryOnly.TemplateLookup.ReadModelHarness  (unchanged)
+firewall: OK (8 generated modules scanned, 0 forbidden operators)
+harness:  (none emitted)
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-nominal-query-only/keiro-dsl-cabal-fragment.context.mapped-nominal-query-only.txt
+ledger:   keiro-dsl/test/conformance-nominal-query-only/keiro-dsl-ledger.context.mapped-nominal-query-only.txt
+projection mapped impact:
+  unsupported typed sources:
+    catalog-all:template_writer
+      operation: group=template_rebuild; targets=template_table; read-models=template_lookup; replayable=yes; mapped-key=(unsupported heterogeneous source)
+scaffold: keiro-dsl/test/fixtures/mapped-nominal-queue-only.keiro -> keiro-dsl/test/conformance-nominal-queue-only (module-root=(none), layout=prefixed)
+  generated  Generated.MappedNominalQueueOnly.StructuralConformance     (unchanged)
+  generated  Generated.MappedNominalQueueOnly.Nominals                  (unchanged)
+  generated  Generated.MappedNominalQueueOnly.Nominals.Internal         (unchanged)
+  generated  Generated.MappedNominalQueueOnly.Structural.NominalLeaves  (unchanged)
+  generated  Generated.MappedNominalQueueOnly.TemplateWork.Queue        (unchanged)
+  generated  Generated.MappedNominalQueueOnly.TemplateWork.QueuePolicy  (unchanged)
+  generated  Generated.MappedNominalQueueOnly.TemplateWork.QueueCodec   (unchanged)
+firewall: OK (7 generated modules scanned, 0 forbidden operators)
+harness:  (none emitted)
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-nominal-queue-only/keiro-dsl-cabal-fragment.context.mapped-nominal-queue-only.txt
+ledger:   keiro-dsl/test/conformance-nominal-queue-only/keiro-dsl-ledger.context.mapped-nominal-queue-only.txt
+keiro-dsl/test/fixtures/nominal-scalars.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+scaffold: keiro-dsl/test/fixtures/nominal-scalars.keiro -> keiro-dsl/test/conformance-nominal-scalars (module-root=(none), layout=prefixed)
+  generated  Generated.NominalScalars.BehaviorSourceMap               (unchanged)
+  generated  Generated.NominalScalars.Nominal.Shape.OrderStatus       (unchanged)
+  generated  Generated.NominalScalars.NominalProjections              (unchanged)
+  hole       NominalConformance.Bindings                              (skipped: already present)
+  generated  Generated.NominalScalars.ReplayAudit                     (unchanged)
+  generated  Generated.NominalScalars.NominalLedger.Domain            (unchanged)
+  generated  Generated.NominalScalars.NominalLedger.Codec             (unchanged)
+  generated  Generated.NominalScalars.NominalLedger.Transducer        (unchanged)
+  generated  Generated.NominalScalars.NominalLedger.BehaviorContract  (unchanged)
+  hole       NominalScalars.NominalLedger.BehaviorHoles               (skipped: already present)
+  generated  Generated.NominalScalars.NominalLedger.EventStream       (unchanged)
+  generated  Generated.NominalScalars.NominalLedger.Projection        (unchanged)
+  generated  Generated.NominalScalars.NominalLedger.Harness           (unchanged)
+firewall: OK (11 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.NominalScalars.NominalLedger.Harness
+dependency plan: consumer packages [nominal-conformance], consumer modules [NominalConformance.Bindings, NominalConformance.Domain]
+fragment: keiro-dsl/test/conformance-nominal-scalars/keiro-dsl-cabal-fragment.context.nominal-scalars.txt
+ledger:   keiro-dsl/test/conformance-nominal-scalars/keiro-dsl-ledger.context.nominal-scalars.txt
+constraint plan:
+  AccountNumber: Eq, Show, NominalBinding
+  FeatureFlag: Eq, Show, NominalBinding
+  ObservedAt: Eq, Show, NominalBinding
+  OrderId: Eq, Show, NominalBinding
+  OrderStatus: Eq, Show, NominalBinding
+  RiskScore: Eq, Show, NominalBinding
+  SequenceNumber: Eq, Show, NominalBinding
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  NominalLedger.Holes.transition1EmptyRecordNominalsOutput1NominalsRecorded
+keiro-dsl/test/fixtures/hospital-surge.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+keiro-dsl/test/fixtures/hospital-surge.keiro:17: warning[ProcessBenignInversion]: dispatch to 'Hospital' maps on-duplicate => AckOk (a duplicate is treated as benign success)
+keiro-dsl/test/fixtures/hospital-surge.keiro:25: warning[ProcessBenignInversion]: timer 'surgeFollowUp' maps on-reject => Fired (a CommandRejected is treated as benign success)
+scaffold: keiro-dsl/test/fixtures/hospital-surge.keiro -> keiro-dsl/test/conformance-process (module-root=(none), layout=prefixed)
+  generated  Generated.HospitalCapacity.BehaviorSourceMap             (unchanged)
+  generated  Generated.HospitalCapacity.Nominals                      (unchanged)
+  generated  Generated.HospitalCapacity.Nominals.Internal             (unchanged)
+  generated  Generated.HospitalCapacity.ReplayAudit                   (unchanged)
+  generated  Generated.HospitalCapacity.HospitalSurge.Process         (unchanged)
+  hole       HospitalCapacity.HospitalSurge.ProcessHoles              (skipped: already present)
+  generated  Generated.HospitalCapacity.HospitalSurge.ProcessHarness  (unchanged)
+  generated  Generated.HospitalCapacity.Surge.Domain                  (unchanged)
+  generated  Generated.HospitalCapacity.Surge.Codec                   (unchanged)
+  generated  Generated.HospitalCapacity.Surge.Transducer              (unchanged)
+  generated  Generated.HospitalCapacity.Surge.BehaviorContract        (unchanged)
+  hole       HospitalCapacity.Surge.BehaviorHoles                     (skipped: already present)
+  generated  Generated.HospitalCapacity.Surge.EventStream             (unchanged)
+  generated  Generated.HospitalCapacity.Surge.Projection              (unchanged)
+  generated  Generated.HospitalCapacity.Surge.Harness                 (unchanged)
+  generated  Generated.HospitalCapacity.Hospital.Domain               (unchanged)
+  generated  Generated.HospitalCapacity.Hospital.Codec                (unchanged)
+  generated  Generated.HospitalCapacity.Hospital.Transducer           (unchanged)
+  generated  Generated.HospitalCapacity.Hospital.BehaviorContract     (unchanged)
+  hole       HospitalCapacity.Hospital.BehaviorHoles                  (skipped: already present)
+  generated  Generated.HospitalCapacity.Hospital.EventStream          (unchanged)
+  generated  Generated.HospitalCapacity.Hospital.Projection           (unchanged)
+  generated  Generated.HospitalCapacity.Hospital.Harness              (unchanged)
+firewall: OK (20 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.HospitalCapacity.Hospital.Harness Generated.HospitalCapacity.HospitalSurge.ProcessHarness Generated.HospitalCapacity.Surge.Harness
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-process/keiro-dsl-cabal-fragment.context.hospital-capacity.txt
+ledger:   keiro-dsl/test/conformance-process/keiro-dsl-ledger.context.hospital-capacity.txt
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  Surge.Holes.transition1IdleNoteSurgeThresholdOutput1SurgeThresholdNoted
+  Surge.Holes.transition2IdleMarkSurgeTimerFiredOutput1SurgeTimerMarked
+  Hospital.Holes.transition1OperationalActivateSurgeOutput1SurgeActivated
+keiro-dsl/test/fixtures/surge-service.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+keiro-dsl/test/fixtures/surge-service.keiro:16: warning[ProcessBenignInversion]: dispatch to 'Hospital' maps on-duplicate => AckOk (a duplicate is treated as benign success)
+keiro-dsl/test/fixtures/surge-service.keiro:24: warning[ProcessBenignInversion]: timer 'surgeFollowUp' maps on-reject => Fired (a CommandRejected is treated as benign success)
+keiro-dsl/test/fixtures/surge-service.keiro:47: warning[RmProjectionWithoutNode]: projection 'surge' has no readmodel node; registration, schema identity, consistency, and rebuild helpers are unavailable
+keiro-dsl/test/fixtures/surge-service.keiro:60: warning[RmProjectionWithoutNode]: projection 'hospital' has no readmodel node; registration, schema identity, consistency, and rebuild helpers are unavailable
+scaffold: keiro-dsl/test/fixtures/surge-service.keiro -> keiro-dsl/test/conformance-process-full (module-root=(none), layout=prefixed)
+  generated  Generated.SurgeDemo.BehaviorSourceMap          (unchanged)
+  generated  Generated.SurgeDemo.Nominals                   (unchanged)
+  generated  Generated.SurgeDemo.Nominals.Internal          (unchanged)
+  generated  Generated.SurgeDemo.ReplayAudit                (unchanged)
+  generated  Generated.SurgeDemo.SurgeFlow.Process          (unchanged)
+  hole       SurgeDemo.SurgeFlow.ProcessHoles               (skipped: already present)
+  generated  Generated.SurgeDemo.SurgeFlow.ProcessHarness   (unchanged)
+  generated  Generated.SurgeDemo.Surge.Domain               (unchanged)
+  generated  Generated.SurgeDemo.Surge.Codec                (unchanged)
+  generated  Generated.SurgeDemo.Surge.Transducer           (unchanged)
+  generated  Generated.SurgeDemo.Surge.BehaviorContract     (unchanged)
+  hole       SurgeDemo.Surge.BehaviorHoles                  (skipped: already present)
+  generated  Generated.SurgeDemo.Surge.EventStream          (unchanged)
+  generated  Generated.SurgeDemo.Surge.Projection           (unchanged)
+  hole       SurgeDemo.Surge.Holes                          (skipped: already present)
+  generated  Generated.SurgeDemo.Surge.Harness              (unchanged)
+  generated  Generated.SurgeDemo.Hospital.Domain            (unchanged)
+  generated  Generated.SurgeDemo.Hospital.Codec             (unchanged)
+  generated  Generated.SurgeDemo.Hospital.Transducer        (unchanged)
+  generated  Generated.SurgeDemo.Hospital.BehaviorContract  (unchanged)
+  hole       SurgeDemo.Hospital.BehaviorHoles               (skipped: already present)
+  generated  Generated.SurgeDemo.Hospital.EventStream       (unchanged)
+  generated  Generated.SurgeDemo.Hospital.Projection        (unchanged)
+  hole       SurgeDemo.Hospital.Holes                       (skipped: already present)
+  generated  Generated.SurgeDemo.Hospital.Harness           (unchanged)
+firewall: OK (20 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.SurgeDemo.Hospital.Harness Generated.SurgeDemo.Surge.Harness Generated.SurgeDemo.SurgeFlow.ProcessHarness
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-process-full/keiro-dsl-cabal-fragment.context.surge-demo.txt
+ledger:   keiro-dsl/test/conformance-process-full/keiro-dsl-ledger.context.surge-demo.txt
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  Surge.Holes.transition1WatchingNoteSurgeThresholdOutput1SurgeThresholdNoted
+  Surge.Holes.transition2NotedMarkSurgeTimerFiredOutput1SurgeTimerFired
+  Hospital.Holes.transition1IdleActivateSurgeOutput1SurgeActivated
+scaffold: keiro-dsl/test/fixtures/process-reactions.keiro -> keiro-dsl/test/conformance-process-reactions (module-root=(none), layout=prefixed)
+  generated  Generated.ProcessReactions.BehaviorSourceMap                (unchanged)
+  generated  Generated.ProcessReactions.Nominals                         (unchanged)
+  generated  Generated.ProcessReactions.Nominals.Internal                (unchanged)
+  generated  Generated.ProcessReactions.ReplayAudit                      (unchanged)
+  generated  Generated.ProcessReactions.IncidentReaction.Input           (unchanged)
+  generated  Generated.ProcessReactions.IncidentReaction.Process         (unchanged)
+  hole       ProcessReactions.IncidentReaction.ProcessHoles              (skipped: already present)
+  generated  Generated.ProcessReactions.IncidentReaction.ProcessHarness  (unchanged)
+  generated  Generated.ProcessReactions.AuditOnly.Input                  (unchanged)
+  generated  Generated.ProcessReactions.AuditOnly.Process                (unchanged)
+  hole       ProcessReactions.AuditOnly.ProcessHoles                     (skipped: already present)
+  generated  Generated.ProcessReactions.AuditOnly.ProcessHarness         (unchanged)
+  generated  Generated.ProcessReactions.ScalingReaction.Input            (unchanged)
+  generated  Generated.ProcessReactions.ScalingReaction.Process          (unchanged)
+  hole       ProcessReactions.ScalingReaction.ProcessHoles               (skipped: already present)
+  generated  Generated.ProcessReactions.ScalingReaction.ProcessHarness   (unchanged)
+  generated  Generated.ProcessReactions.IncidentSaga.Domain              (unchanged)
+  generated  Generated.ProcessReactions.IncidentSaga.Codec               (unchanged)
+  generated  Generated.ProcessReactions.IncidentSaga.Transducer          (unchanged)
+  generated  Generated.ProcessReactions.IncidentSaga.BehaviorContract    (unchanged)
+  hole       ProcessReactions.IncidentSaga.BehaviorHoles                 (skipped: already present)
+  generated  Generated.ProcessReactions.IncidentSaga.EventStream         (unchanged)
+  generated  Generated.ProcessReactions.IncidentSaga.Projection          (unchanged)
+  generated  Generated.ProcessReactions.IncidentSaga.Harness             (unchanged)
+  generated  Generated.ProcessReactions.Incident.Domain                  (unchanged)
+  generated  Generated.ProcessReactions.Incident.Codec                   (unchanged)
+  generated  Generated.ProcessReactions.Incident.Transducer              (unchanged)
+  generated  Generated.ProcessReactions.Incident.BehaviorContract        (unchanged)
+  hole       ProcessReactions.Incident.BehaviorHoles                     (skipped: already present)
+  generated  Generated.ProcessReactions.Incident.EventStream             (unchanged)
+  generated  Generated.ProcessReactions.Incident.Projection              (unchanged)
+  generated  Generated.ProcessReactions.Incident.Harness                 (unchanged)
+firewall: OK (27 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.ProcessReactions.AuditOnly.ProcessHarness Generated.ProcessReactions.Incident.Harness Generated.ProcessReactions.IncidentReaction.ProcessHarness Generated.ProcessReactions.IncidentSaga.Harness Generated.ProcessReactions.ScalingReaction.ProcessHarness
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-process-reactions/keiro-dsl-cabal-fragment.context.process-reactions.txt
+ledger:   keiro-dsl/test/conformance-process-reactions/keiro-dsl-ledger.context.process-reactions.txt
+process reaction holes: incident-reaction
+  decodeIncidentReactionInput :: RecordedEvent -> Maybe IncidentReactionInput
+process reaction holes: audit-only
+  decodeAuditOnlyInput :: RecordedEvent -> Maybe AuditOnlyInput
+process reaction holes: scaling-reaction
+  decodeScalingReactionInput :: RecordedEvent -> Maybe ScalingReactionInput
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  IncidentSaga.Holes.transition1OpenRecordCriticalOutput1CriticalRecorded
+  IncidentSaga.Holes.transition2OpenRecordRoutineOutput1RoutineRecorded
+  Incident.Holes.transition1OpenEscalateIncidentOutput1IncidentEscalated
+keiro-dsl/test/fixtures/hospital-surge.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+keiro-dsl/test/fixtures/hospital-surge.keiro:17: warning[ProcessBenignInversion]: dispatch to 'Hospital' maps on-duplicate => AckOk (a duplicate is treated as benign success)
+keiro-dsl/test/fixtures/hospital-surge.keiro:25: warning[ProcessBenignInversion]: timer 'surgeFollowUp' maps on-reject => Fired (a CommandRejected is treated as benign success)
+scaffold: keiro-dsl/test/fixtures/hospital-surge.keiro -> keiro-dsl/test/conformance-process-runtime (module-root=(none), layout=prefixed)
+  generated  Generated.HospitalCapacity.BehaviorSourceMap             (unchanged)
+  generated  Generated.HospitalCapacity.Nominals                      (unchanged)
+  generated  Generated.HospitalCapacity.Nominals.Internal             (unchanged)
+  generated  Generated.HospitalCapacity.ReplayAudit                   (unchanged)
+  generated  Generated.HospitalCapacity.HospitalSurge.Process         (unchanged)
+  hole       HospitalCapacity.HospitalSurge.ProcessHoles              (skipped: already present)
+  generated  Generated.HospitalCapacity.HospitalSurge.ProcessHarness  (unchanged)
+  generated  Generated.HospitalCapacity.Surge.Domain                  (unchanged)
+  generated  Generated.HospitalCapacity.Surge.Codec                   (unchanged)
+  generated  Generated.HospitalCapacity.Surge.Transducer              (unchanged)
+  generated  Generated.HospitalCapacity.Surge.BehaviorContract        (unchanged)
+  hole       HospitalCapacity.Surge.BehaviorHoles                     (skipped: already present)
+  generated  Generated.HospitalCapacity.Surge.EventStream             (unchanged)
+  generated  Generated.HospitalCapacity.Surge.Projection              (unchanged)
+  generated  Generated.HospitalCapacity.Surge.Harness                 (unchanged)
+  generated  Generated.HospitalCapacity.Hospital.Domain               (unchanged)
+  generated  Generated.HospitalCapacity.Hospital.Codec                (unchanged)
+  generated  Generated.HospitalCapacity.Hospital.Transducer           (unchanged)
+  generated  Generated.HospitalCapacity.Hospital.BehaviorContract     (unchanged)
+  hole       HospitalCapacity.Hospital.BehaviorHoles                  (skipped: already present)
+  generated  Generated.HospitalCapacity.Hospital.EventStream          (unchanged)
+  generated  Generated.HospitalCapacity.Hospital.Projection           (unchanged)
+  generated  Generated.HospitalCapacity.Hospital.Harness              (unchanged)
+firewall: OK (20 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.HospitalCapacity.Hospital.Harness Generated.HospitalCapacity.HospitalSurge.ProcessHarness Generated.HospitalCapacity.Surge.Harness
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-process-runtime/keiro-dsl-cabal-fragment.context.hospital-capacity.txt
+ledger:   keiro-dsl/test/conformance-process-runtime/keiro-dsl-ledger.context.hospital-capacity.txt
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  Surge.Holes.transition1IdleNoteSurgeThresholdOutput1SurgeThresholdNoted
+  Surge.Holes.transition2IdleMarkSurgeTimerFiredOutput1SurgeTimerMarked
+  Hospital.Holes.transition1OperationalActivateSurgeOutput1SurgeActivated
+scaffold: keiro-dsl/test/fixtures/process-state-authority.keiro -> keiro-dsl/test/conformance-process-state-authority (module-root=(none), layout=prefixed)
+  generated  Generated.IncidentResponse.BehaviorSourceMap                  (unchanged)
+  generated  Generated.IncidentResponse.Nominals                           (unchanged)
+  generated  Generated.IncidentResponse.Nominals.Internal                  (unchanged)
+  generated  Generated.IncidentResponse.ReplayAudit                        (unchanged)
+  generated  Generated.IncidentResponse.IncidentEscalation.Input           (unchanged)
+  generated  Generated.IncidentResponse.IncidentEscalation.Process         (unchanged)
+  hole       IncidentResponse.IncidentEscalation.ProcessHoles              (skipped: already present)
+  generated  Generated.IncidentResponse.IncidentEscalation.ProcessHarness  (unchanged)
+  generated  Generated.IncidentResponse.Escalation.Domain                  (unchanged)
+  generated  Generated.IncidentResponse.Escalation.Codec                   (unchanged)
+  generated  Generated.IncidentResponse.Escalation.Transducer              (unchanged)
+  generated  Generated.IncidentResponse.Escalation.BehaviorContract        (unchanged)
+  hole       IncidentResponse.Escalation.BehaviorHoles                     (skipped: already present)
+  generated  Generated.IncidentResponse.Escalation.EventStream             (unchanged)
+  generated  Generated.IncidentResponse.Escalation.Projection              (unchanged)
+  generated  Generated.IncidentResponse.Escalation.Harness                 (unchanged)
+  generated  Generated.IncidentResponse.Incident.Domain                    (unchanged)
+  generated  Generated.IncidentResponse.Incident.Codec                     (unchanged)
+  generated  Generated.IncidentResponse.Incident.Transducer                (unchanged)
+  generated  Generated.IncidentResponse.Incident.BehaviorContract          (unchanged)
+  hole       IncidentResponse.Incident.BehaviorHoles                       (skipped: already present)
+  generated  Generated.IncidentResponse.Incident.EventStream               (unchanged)
+  generated  Generated.IncidentResponse.Incident.Projection                (unchanged)
+  generated  Generated.IncidentResponse.Incident.Harness                   (unchanged)
+firewall: OK (21 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.IncidentResponse.Escalation.Harness Generated.IncidentResponse.Incident.Harness Generated.IncidentResponse.IncidentEscalation.ProcessHarness
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-process-state-authority/keiro-dsl-cabal-fragment.context.incident-response.txt
+ledger:   keiro-dsl/test/conformance-process-state-authority/keiro-dsl-ledger.context.incident-response.txt
+process reaction holes: incident-escalation
+  decodeIncidentEscalationInput :: RecordedEvent -> Maybe IncidentEscalationInput
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  Escalation.Holes.transition1OpenNoteRaisedOutput1RaisedNoted
+  Escalation.Holes.transition2OpenNoteAcknowledgedOutput1Acknowledged
+  Escalation.Holes.transition4OpenActivateDormantOutput1DormantActivated
+  Incident.Holes.transition1OpenAcknowledgeIncidentOutput1IncidentAcknowledged
+  Incident.Holes.transition2OpenEscalateIncidentOutput1IncidentEscalated
+scaffold: keiro-dsl/test/fixtures/process-timers.keiro -> keiro-dsl/test/conformance-process-timers (module-root=(none), layout=prefixed)
+  generated  Generated.ProcessTimers.BehaviorSourceMap              (unchanged)
+  generated  Generated.ProcessTimers.Nominals                       (unchanged)
+  generated  Generated.ProcessTimers.Nominals.Internal              (unchanged)
+  generated  Generated.ProcessTimers.ReplayAudit                    (unchanged)
+  generated  Generated.ProcessTimers.IncidentTimers.Input           (unchanged)
+  generated  Generated.ProcessTimers.IncidentTimers.Process         (unchanged)
+  hole       ProcessTimers.IncidentTimers.ProcessHoles              (skipped: already present)
+  generated  Generated.ProcessTimers.IncidentTimers.ProcessHarness  (unchanged)
+  generated  Generated.ProcessTimers.IncidentSaga.Domain            (unchanged)
+  generated  Generated.ProcessTimers.IncidentSaga.Codec             (unchanged)
+  generated  Generated.ProcessTimers.IncidentSaga.Transducer        (unchanged)
+  generated  Generated.ProcessTimers.IncidentSaga.BehaviorContract  (unchanged)
+  hole       ProcessTimers.IncidentSaga.BehaviorHoles               (skipped: already present)
+  generated  Generated.ProcessTimers.IncidentSaga.EventStream       (unchanged)
+  generated  Generated.ProcessTimers.IncidentSaga.Projection        (unchanged)
+  generated  Generated.ProcessTimers.IncidentSaga.Harness           (unchanged)
+  generated  Generated.ProcessTimers.Incident.Domain                (unchanged)
+  generated  Generated.ProcessTimers.Incident.Codec                 (unchanged)
+  generated  Generated.ProcessTimers.Incident.Transducer            (unchanged)
+  generated  Generated.ProcessTimers.Incident.BehaviorContract      (unchanged)
+  hole       ProcessTimers.Incident.BehaviorHoles                   (skipped: already present)
+  generated  Generated.ProcessTimers.Incident.EventStream           (unchanged)
+  generated  Generated.ProcessTimers.Incident.Projection            (unchanged)
+  generated  Generated.ProcessTimers.Incident.Harness               (unchanged)
+firewall: OK (21 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.ProcessTimers.Incident.Harness Generated.ProcessTimers.IncidentSaga.Harness Generated.ProcessTimers.IncidentTimers.ProcessHarness
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-process-timers/keiro-dsl-cabal-fragment.context.process-timers.txt
+ledger:   keiro-dsl/test/conformance-process-timers/keiro-dsl-ledger.context.process-timers.txt
+process reaction holes: incident-timers
+  decodeIncidentTimersInput :: RecordedEvent -> Maybe IncidentTimersInput
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  IncidentSaga.Holes.transition1OpenRecordIncidentOutput1IncidentRecorded
+  Incident.Holes.transition1OpenEscalateIncidentOutput1IncidentEscalated
+  Incident.Holes.transition2OpenRemindIncidentOutput1IncidentReminded
+scaffold: keiro-dsl/test/fixtures/projection-catalog.keiro -> keiro-dsl/test/conformance-projection-catalog (module-root=(none), layout=prefixed)
+  generated  Generated.CatalogDemo.StructuralConformance                  (unchanged)
+  generated  Generated.CatalogDemo.BehaviorSourceMap                      (unchanged)
+  generated  Generated.CatalogDemo.Structural.Shape.QualificationPayload  (unchanged)
+  generated  Generated.CatalogDemo.StructuralProjections                  (unchanged)
+  hole       CatalogDemo.MappedBindings                                   (skipped: already present)
+  generated  Generated.CatalogDemo.ReplayAudit                            (unchanged)
+  generated  Generated.CatalogDemo.ProjectionCatalog                      (unchanged)
+  hole       CatalogDemo.ProjectionCatalog.ProjectionCatalogHoles         (skipped: already present)
+  generated  Generated.CatalogDemo.OrderInline.ReadModelTable             (unchanged)
+  generated  Generated.CatalogDemo.OrderInline.QueryContract              (unchanged)
+  generated  Generated.CatalogDemo.OrderInline.ReadModel                  (unchanged)
+  hole       CatalogDemo.OrderInline.ReadModelHoles                       (skipped: already present)
+  generated  Generated.CatalogDemo.OrderInline.ReadModelHarness           (unchanged)
+  generated  Generated.CatalogDemo.OrderTotalsLookup.ReadModelTable       (unchanged)
+  generated  Generated.CatalogDemo.OrderTotalsLookup.ReadModel            (unchanged)
+  hole       CatalogDemo.OrderTotalsLookup.ReadModelHoles                 (skipped: already present)
+  generated  Generated.CatalogDemo.OrderTotalsLookup.ReadModelHarness     (unchanged)
+  generated  Generated.CatalogDemo.QualificationJobs.Queue                (unchanged)
+  generated  Generated.CatalogDemo.QualificationJobs.QueuePolicy          (unchanged)
+  generated  Generated.CatalogDemo.QualificationJobs.QueueCodec           (unchanged)
+  generated  Generated.CatalogDemo.ShipmentLookup.ReadModelTable          (unchanged)
+  generated  Generated.CatalogDemo.ShipmentLookup.ReadModel               (unchanged)
+  hole       CatalogDemo.ShipmentLookup.ReadModelHoles                    (skipped: already present)
+  generated  Generated.CatalogDemo.ShipmentLookup.ReadModelHarness        (unchanged)
+  generated  Generated.CatalogDemo.CatalogAudit.ReadModelTable            (unchanged)
+  generated  Generated.CatalogDemo.CatalogAudit.ReadModel                 (unchanged)
+  hole       CatalogDemo.CatalogAudit.ReadModelHoles                      (skipped: already present)
+  generated  Generated.CatalogDemo.CatalogAudit.ReadModelHarness          (unchanged)
+  generated  Generated.CatalogDemo.Orders.Domain                          (unchanged)
+  generated  Generated.CatalogDemo.Orders.Codec                           (unchanged)
+  generated  Generated.CatalogDemo.Orders.Transducer                      (unchanged)
+  generated  Generated.CatalogDemo.Orders.BehaviorContract                (unchanged)
+  hole       CatalogDemo.Orders.BehaviorHoles                             (skipped: already present)
+  generated  Generated.CatalogDemo.Orders.EventStream                     (unchanged)
+  generated  Generated.CatalogDemo.Orders.Projection                      (unchanged)
+  generated  Generated.CatalogDemo.Orders.Harness                         (unchanged)
+  generated  Generated.CatalogDemo.Shipments.Domain                       (unchanged)
+  generated  Generated.CatalogDemo.Shipments.Codec                        (unchanged)
+  generated  Generated.CatalogDemo.Shipments.Transducer                   (unchanged)
+  generated  Generated.CatalogDemo.Shipments.BehaviorContract             (unchanged)
+  hole       CatalogDemo.Shipments.BehaviorHoles                          (skipped: already present)
+  generated  Generated.CatalogDemo.Shipments.EventStream                  (unchanged)
+  generated  Generated.CatalogDemo.Shipments.Projection                   (unchanged)
+  generated  Generated.CatalogDemo.Shipments.Harness                      (unchanged)
+firewall: OK (36 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.CatalogDemo.Orders.Harness Generated.CatalogDemo.Shipments.Harness
+dependency plan: consumer packages [keiro-dsl], consumer modules [CatalogDemo.MappedBindings, CatalogDemo.MappedDomain]
+fragment: keiro-dsl/test/conformance-projection-catalog/keiro-dsl-cabal-fragment.context.catalog-demo.txt
+ledger:   keiro-dsl/test/conformance-projection-catalog/keiro-dsl-ledger.context.catalog-demo.txt
+constraint plan:
+  OrderPayload: Eq, Show, ToJSON, FromJSON
+  QualificationPayload: Eq, Show, CanonicalTypeName, StructuralBinding
+  QualificationResult: Eq, Show, ToJSON, FromJSON
+  QueryCriteria: Eq, Show, ToJSON, FromJSON
+  QueueMetadata: Eq, Show, ToJSON, FromJSON
+  RegisterState: Eq, Show, ToJSON, FromJSON, register initial, snapshot ToJSON, snapshot FromJSON
+  SharedReference: Eq, Show, ToJSON, FromJSON
+  UnusedQualification: Eq, Show, ToJSON, FromJSON
+projection mapped impact:
+  OrderPayload
+    catalog-projection:order_summary_writer:Orders
+      inherited event roots: Orders event OrderRecorded .orderPayload : OrderPayload
+      operation: group=reporting; targets=order_summary, order_totals; read-models=order_inline, order_totals_lookup; replayable=yes; source-fingerprint=aggregate:Orders/generated-codec/v1/mapped-132056a8f2ee095d
+  SharedReference
+    catalog-projection:order_summary_writer:Orders
+      inherited event roots: Orders event OrderRecorded .sharedReference : SharedReference
+      operation: group=reporting; targets=order_summary, order_totals; read-models=order_inline, order_totals_lookup; replayable=yes; source-fingerprint=aggregate:Orders/generated-codec/v1/mapped-132056a8f2ee095d
+    catalog-projection:shipment_writer:Shipments
+      inherited event roots: Shipments event ShipmentRecorded .sharedReference : SharedReference
+      operation: group=shipping; targets=shipment_summary; read-models=shipmentLookup; replayable=no; source-fingerprint=aggregate:Shipments/generated-codec/v1/mapped-9456a95e380c74b5
+  unsupported typed sources:
+    catalog-category:audit_writer:audit
+      operation: group=reporting; targets=audit_log; read-models=catalogAudit; replayable=yes; mapped-key=(unsupported heterogeneous source)
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  Orders.Holes.transition1EmptyRecordOrderOutput1OrderRecorded
+  Shipments.Holes.transition1EmptyRecordShipmentOutput1ShipmentRecorded
+keiro-dsl/test/fixtures/emit.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+scaffold: keiro-dsl/test/fixtures/emit.keiro -> keiro-dsl/test/conformance-publisher-runtime (module-root=(none), layout=prefixed)
+  generated  Generated.HospitalCapacity.Emergency.Contract           (unchanged)
+  generated  Generated.HospitalCapacity.HospitalPublisher.Publisher  (unchanged)
+no-modules: emit reservationResponse (validated and diff-classified; no generated modules)
+firewall: OK (2 generated modules scanned, 0 forbidden operators)
+harness:  (none emitted)
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-publisher-runtime/keiro-dsl-cabal-fragment.context.hospital-capacity.txt
+ledger:   keiro-dsl/test/conformance-publisher-runtime/keiro-dsl-ledger.context.hospital-capacity.txt
+keiro-dsl/test/fixtures/reservation-work.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+scaffold: keiro-dsl/test/fixtures/reservation-work.keiro -> keiro-dsl/test/conformance-queue (module-root=(none), layout=prefixed)
+  generated  Generated.HospitalCapacity.AcceptedTransferNeeds.ReadModelTable    (unchanged)
+  generated  Generated.HospitalCapacity.AcceptedTransferNeeds.ReadModel         (unchanged)
+  hole       HospitalCapacity.AcceptedTransferNeeds.ReadModelHoles              (skipped: already present)
+  generated  Generated.HospitalCapacity.AcceptedTransferNeeds.ReadModelHarness  (unchanged)
+  generated  Generated.HospitalCapacity.TransferDecisions.ReadModelTable        (unchanged)
+  generated  Generated.HospitalCapacity.TransferDecisions.ReadModel             (unchanged)
+  hole       HospitalCapacity.TransferDecisions.ReadModelHoles                  (skipped: already present)
+  generated  Generated.HospitalCapacity.TransferDecisions.ReadModelHarness      (unchanged)
+  generated  Generated.HospitalCapacity.ReservationWork.Queue                   (unchanged)
+  generated  Generated.HospitalCapacity.ReservationWork.QueuePolicy             (unchanged)
+  generated  Generated.HospitalCapacity.ReservationWork.QueueCodec              (unchanged)
+no-modules: dispatch reservation_work_dispatch (validated and diff-classified; no generated modules)
+firewall: OK (9 generated modules scanned, 0 forbidden operators)
+harness:  (none emitted)
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-queue/keiro-dsl-cabal-fragment.context.hospital-capacity.txt
+ledger:   keiro-dsl/test/conformance-queue/keiro-dsl-ledger.context.hospital-capacity.txt
+keiro-dsl/test/fixtures/reservation-work.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+scaffold: keiro-dsl/test/fixtures/reservation-work.keiro -> keiro-dsl/test/conformance-queue-runtime (module-root=(none), layout=prefixed)
+  generated  Generated.HospitalCapacity.AcceptedTransferNeeds.ReadModelTable    (unchanged)
+  generated  Generated.HospitalCapacity.AcceptedTransferNeeds.ReadModel         (unchanged)
+  hole       HospitalCapacity.AcceptedTransferNeeds.ReadModelHoles              (skipped: already present)
+  generated  Generated.HospitalCapacity.AcceptedTransferNeeds.ReadModelHarness  (unchanged)
+  generated  Generated.HospitalCapacity.TransferDecisions.ReadModelTable        (unchanged)
+  generated  Generated.HospitalCapacity.TransferDecisions.ReadModel             (unchanged)
+  hole       HospitalCapacity.TransferDecisions.ReadModelHoles                  (skipped: already present)
+  generated  Generated.HospitalCapacity.TransferDecisions.ReadModelHarness      (unchanged)
+  generated  Generated.HospitalCapacity.ReservationWork.Queue                   (unchanged)
+  generated  Generated.HospitalCapacity.ReservationWork.QueuePolicy             (unchanged)
+  generated  Generated.HospitalCapacity.ReservationWork.QueueCodec              (unchanged)
+no-modules: dispatch reservation_work_dispatch (validated and diff-classified; no generated modules)
+firewall: OK (9 generated modules scanned, 0 forbidden operators)
+harness:  (none emitted)
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-queue-runtime/keiro-dsl-cabal-fragment.context.hospital-capacity.txt
+ledger:   keiro-dsl/test/conformance-queue-runtime/keiro-dsl-ledger.context.hospital-capacity.txt
+keiro-dsl/test/fixtures/readmodel-runtime.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+scaffold: keiro-dsl/test/fixtures/readmodel-runtime.keiro -> keiro-dsl/test/conformance-readmodel-runtime (module-root=(none), layout=prefixed)
+  generated  Generated.HospitalCapacity.TransferDecisions.ReadModelTable    (unchanged)
+  generated  Generated.HospitalCapacity.TransferDecisions.ReadModel         (unchanged)
+  hole       HospitalCapacity.TransferDecisions.ReadModelHoles              (skipped: already present)
+  generated  Generated.HospitalCapacity.TransferDecisions.ReadModelHarness  (unchanged)
+firewall: OK (3 generated modules scanned, 0 forbidden operators)
+harness:  (none emitted)
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-readmodel-runtime/keiro-dsl-cabal-fragment.context.hospital-capacity.txt
+ledger:   keiro-dsl/test/conformance-readmodel-runtime/keiro-dsl-ledger.context.hospital-capacity.txt
+keiro-dsl/test/fixtures/refined-base16.keiro:55: warning[ReplayOnlyCommandStillLive]: replay-only transition 'Empty -- ImportLegacyHash' has no live sibling; command 'ImportLegacyHash' is fully retired at state 'Empty' — if the intent is to retire its events too, follow the event-retirement procedure (docs/plans/139)
+scaffold: keiro-dsl/test/fixtures/refined-base16.keiro -> keiro-dsl/test/conformance-refined-base16 (module-root=(none), layout=prefixed)
+  generated  Generated.RefinedBase16.StructuralConformance              (unchanged)
+  generated  Generated.RefinedBase16.BehaviorSourceMap                  (unchanged)
+  generated  Generated.RefinedBase16.Structural.Shape.ContentHash       (unchanged)
+  generated  Generated.RefinedBase16.Structural.Shape.HashEnvelope      (unchanged)
+  generated  Generated.RefinedBase16.Structural.Shape.MaybeContentHash  (unchanged)
+  hole       Conformance.RefinedBase16.Bindings                         (skipped: already present)
+  generated  Generated.RefinedBase16.ReplayAudit                        (unchanged)
+  generated  Generated.RefinedBase16.ProjectionCatalog                  (unchanged)
+  hole       RefinedBase16.ProjectionCatalog.ProjectionCatalogHoles     (skipped: already present)
+  generated  Generated.RefinedBase16.HashStore.Domain                   (unchanged)
+  generated  Generated.RefinedBase16.HashStore.Codec                    (unchanged)
+  generated  Generated.RefinedBase16.HashStore.Transducer               (unchanged)
+  generated  Generated.RefinedBase16.HashStore.BehaviorContract         (unchanged)
+  hole       RefinedBase16.HashStore.BehaviorHoles                      (skipped: already present)
+  generated  Generated.RefinedBase16.HashStore.EventStream              (unchanged)
+  generated  Generated.RefinedBase16.HashStore.Projection               (unchanged)
+  generated  Generated.RefinedBase16.HashStore.Harness                  (unchanged)
+  generated  Generated.RefinedBase16.HashJobs.Queue                     (unchanged)
+  generated  Generated.RefinedBase16.HashJobs.QueuePolicy               (unchanged)
+  generated  Generated.RefinedBase16.HashJobs.QueueCodec                (unchanged)
+  generated  Generated.RefinedBase16.HashLookup.ReadModelTable          (unchanged)
+  generated  Generated.RefinedBase16.HashLookup.QueryContract           (unchanged)
+  generated  Generated.RefinedBase16.HashLookup.ReadModel               (unchanged)
+  hole       RefinedBase16.HashLookup.ReadModelHoles                    (skipped: already present)
+  generated  Generated.RefinedBase16.HashLookup.ReadModelHarness        (unchanged)
+firewall: OK (21 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.RefinedBase16.HashStore.Harness
+dependency plan: consumer packages [keiro-dsl], consumer modules [Conformance.RefinedBase16.Bindings, Conformance.RefinedBase16.Domain]
+fragment: keiro-dsl/test/conformance-refined-base16/keiro-dsl-cabal-fragment.context.refined-base16.txt
+ledger:   keiro-dsl/test/conformance-refined-base16/keiro-dsl-ledger.context.refined-base16.txt
+constraint plan:
+  ContentHash: Eq, Show, CanonicalTypeName, StructuralBinding, register initial, snapshot ToJSON, snapshot FromJSON
+  HashEnvelope: Eq, Show, CanonicalTypeName, StructuralBinding
+  MaybeContentHash: Eq, Show, CanonicalTypeName, StructuralBinding
+projection mapped impact:
+  unsupported typed sources:
+    catalog-all:hash_writer
+      operation: group=hash_rebuild; targets=hash_table; read-models=hash_lookup; replayable=yes; mapped-key=(unsupported heterogeneous source)
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  HashStore.Holes.transition1EmptyStoreHashOutput1HashStored
+  HashStore.Holes.transition1EmptyStoreHashOutput2HashAudited
+  HashStore.Holes.transition2EmptyImportLegacyHashOutput1LegacyHashImported
+comparison generated keiro-dsl/test/conformance-refined-base16/Generated/RefinedBase16/Structural/CodecCompare/ContentHash.hs (migration evidence only)
+keiro-dsl/test/fixtures/replay-divergence.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+scaffold: keiro-dsl/test/fixtures/replay-divergence.keiro -> keiro-dsl/test/conformance-replay (module-root=(none), layout=prefixed)
+  generated  Generated.ReplayDivergence.BehaviorSourceMap      (unchanged)
+  generated  Generated.ReplayDivergence.ReplayAudit            (unchanged)
+  generated  Generated.ReplayDivergence.Note.Domain            (unchanged)
+  generated  Generated.ReplayDivergence.Note.Codec             (unchanged)
+  generated  Generated.ReplayDivergence.Note.Transducer        (unchanged)
+  generated  Generated.ReplayDivergence.Note.BehaviorContract  (unchanged)
+  hole       ReplayDivergence.Note.BehaviorHoles               (skipped: already present)
+  generated  Generated.ReplayDivergence.Note.EventStream       (unchanged)
+  generated  Generated.ReplayDivergence.Note.Projection        (unchanged)
+  generated  Generated.ReplayDivergence.Note.Harness           (unchanged)
+firewall: OK (9 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.ReplayDivergence.Note.Harness
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-replay/keiro-dsl-cabal-fragment.context.replay-divergence.txt
+ledger:   keiro-dsl/test/conformance-replay/keiro-dsl-ledger.context.replay-divergence.txt
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  Note.Holes.transition1EmptyWriteNoteOutput1NoteWritten
+keiro-dsl/test/fixtures/incident-paging/incident-paging.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+keiro-dsl/test/fixtures/incident-paging/incident-paging.keiro:18: warning[PolicyDeadLetterUnused]: node 'PagingRouter' declares rejected => deadLetter but no dispatch on-failed arm says DeadLetter; the runtime policy is live, but the per-dispatch notation does not acknowledge it
+keiro-dsl/test/fixtures/incident-paging/incident-paging.keiro:18: warning[AmbiguousFollowsRejectedPolicy]: node 'PagingRouter' acknowledges rejection-class failures; CommandAmbiguous follows the same rejected policy, and a dead-letter errorClass is the durable witness of that definition bug
+keiro-dsl/test/fixtures/incident-paging/incident-paging.keiro:25: warning[RouterBenignInversion]: router dispatch 'SendPage' maps on-duplicate => AckOk; Keiro.Router confirms the event id against the target stream before treating the duplicate as benign
+scaffold: keiro-dsl/test/fixtures/incident-paging/incident-paging.keiro -> keiro-dsl/test/conformance-router (module-root=(none), layout=prefixed)
+  generated  Generated.IncidentPaging.BehaviorSourceMap               (unchanged)
+  generated  Generated.IncidentPaging.ReplayAudit                     (unchanged)
+  generated  Generated.IncidentPaging.ServiceOncall.ReadModelTable    (unchanged)
+  generated  Generated.IncidentPaging.ServiceOncall.ReadModel         (unchanged)
+  hole       IncidentPaging.ServiceOncall.ReadModelHoles              (skipped: already present)
+  generated  Generated.IncidentPaging.ServiceOncall.ReadModelHarness  (unchanged)
+  generated  Generated.IncidentPaging.PagingRouter.Router             (unchanged)
+  hole       IncidentPaging.PagingRouter.RouterHoles                  (skipped: already present)
+  generated  Generated.IncidentPaging.PagingRouter.RouterHarness      (unchanged)
+  generated  Generated.IncidentPaging.Page.Domain                     (unchanged)
+  generated  Generated.IncidentPaging.Page.Codec                      (unchanged)
+  generated  Generated.IncidentPaging.Page.Transducer                 (unchanged)
+  generated  Generated.IncidentPaging.Page.BehaviorContract           (unchanged)
+  hole       IncidentPaging.Page.BehaviorHoles                        (skipped: already present)
+  generated  Generated.IncidentPaging.Page.EventStream                (unchanged)
+  generated  Generated.IncidentPaging.Page.Projection                 (unchanged)
+  generated  Generated.IncidentPaging.Page.Harness                    (unchanged)
+firewall: OK (14 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.IncidentPaging.Page.Harness
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-router/keiro-dsl-cabal-fragment.context.incident-paging.txt
+ledger:   keiro-dsl/test/conformance-router/keiro-dsl-ledger.context.incident-paging.txt
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  Page.Holes.transition1PendingSendPageOutput1PageSent
+keiro-dsl/test/fixtures/incident-paging/incident-paging.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+keiro-dsl/test/fixtures/incident-paging/incident-paging.keiro:18: warning[PolicyDeadLetterUnused]: node 'PagingRouter' declares rejected => deadLetter but no dispatch on-failed arm says DeadLetter; the runtime policy is live, but the per-dispatch notation does not acknowledge it
+keiro-dsl/test/fixtures/incident-paging/incident-paging.keiro:18: warning[AmbiguousFollowsRejectedPolicy]: node 'PagingRouter' acknowledges rejection-class failures; CommandAmbiguous follows the same rejected policy, and a dead-letter errorClass is the durable witness of that definition bug
+keiro-dsl/test/fixtures/incident-paging/incident-paging.keiro:25: warning[RouterBenignInversion]: router dispatch 'SendPage' maps on-duplicate => AckOk; Keiro.Router confirms the event id against the target stream before treating the duplicate as benign
+scaffold: keiro-dsl/test/fixtures/incident-paging/incident-paging.keiro -> keiro-dsl/test/conformance-router-full (module-root=(none), layout=prefixed)
+  generated  Generated.IncidentPaging.BehaviorSourceMap               (unchanged)
+  generated  Generated.IncidentPaging.ReplayAudit                     (unchanged)
+  generated  Generated.IncidentPaging.ServiceOncall.ReadModelTable    (unchanged)
+  generated  Generated.IncidentPaging.ServiceOncall.ReadModel         (unchanged)
+  hole       IncidentPaging.ServiceOncall.ReadModelHoles              (skipped: already present)
+  generated  Generated.IncidentPaging.ServiceOncall.ReadModelHarness  (unchanged)
+  generated  Generated.IncidentPaging.PagingRouter.Router             (unchanged)
+  hole       IncidentPaging.PagingRouter.RouterHoles                  (skipped: already present)
+  generated  Generated.IncidentPaging.PagingRouter.RouterHarness      (unchanged)
+  generated  Generated.IncidentPaging.Page.Domain                     (unchanged)
+  generated  Generated.IncidentPaging.Page.Codec                      (unchanged)
+  generated  Generated.IncidentPaging.Page.Transducer                 (unchanged)
+  generated  Generated.IncidentPaging.Page.BehaviorContract           (unchanged)
+  hole       IncidentPaging.Page.BehaviorHoles                        (skipped: already present)
+  generated  Generated.IncidentPaging.Page.EventStream                (unchanged)
+  generated  Generated.IncidentPaging.Page.Projection                 (unchanged)
+  generated  Generated.IncidentPaging.Page.Harness                    (unchanged)
+firewall: OK (14 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.IncidentPaging.Page.Harness
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-router-full/keiro-dsl-cabal-fragment.context.incident-paging.txt
+ledger:   keiro-dsl/test/conformance-router-full/keiro-dsl-ledger.context.incident-paging.txt
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  Page.Holes.transition1PendingSendPageOutput1PageSent
+keiro-dsl/test/fixtures/incident-paging/incident-paging.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+keiro-dsl/test/fixtures/incident-paging/incident-paging.keiro:18: warning[PolicyDeadLetterUnused]: node 'PagingRouter' declares rejected => deadLetter but no dispatch on-failed arm says DeadLetter; the runtime policy is live, but the per-dispatch notation does not acknowledge it
+keiro-dsl/test/fixtures/incident-paging/incident-paging.keiro:18: warning[AmbiguousFollowsRejectedPolicy]: node 'PagingRouter' acknowledges rejection-class failures; CommandAmbiguous follows the same rejected policy, and a dead-letter errorClass is the durable witness of that definition bug
+keiro-dsl/test/fixtures/incident-paging/incident-paging.keiro:25: warning[RouterBenignInversion]: router dispatch 'SendPage' maps on-duplicate => AckOk; Keiro.Router confirms the event id against the target stream before treating the duplicate as benign
+scaffold: keiro-dsl/test/fixtures/incident-paging/incident-paging.keiro -> keiro-dsl/test/conformance-router-runtime (module-root=(none), layout=prefixed)
+  generated  Generated.IncidentPaging.BehaviorSourceMap               (unchanged)
+  generated  Generated.IncidentPaging.ReplayAudit                     (unchanged)
+  generated  Generated.IncidentPaging.ServiceOncall.ReadModelTable    (unchanged)
+  generated  Generated.IncidentPaging.ServiceOncall.ReadModel         (unchanged)
+  hole       IncidentPaging.ServiceOncall.ReadModelHoles              (skipped: already present)
+  generated  Generated.IncidentPaging.ServiceOncall.ReadModelHarness  (unchanged)
+  generated  Generated.IncidentPaging.PagingRouter.Router             (unchanged)
+  hole       IncidentPaging.PagingRouter.RouterHoles                  (skipped: already present)
+  generated  Generated.IncidentPaging.PagingRouter.RouterHarness      (unchanged)
+  generated  Generated.IncidentPaging.Page.Domain                     (unchanged)
+  generated  Generated.IncidentPaging.Page.Codec                      (unchanged)
+  generated  Generated.IncidentPaging.Page.Transducer                 (unchanged)
+  generated  Generated.IncidentPaging.Page.BehaviorContract           (unchanged)
+  hole       IncidentPaging.Page.BehaviorHoles                        (skipped: already present)
+  generated  Generated.IncidentPaging.Page.EventStream                (unchanged)
+  generated  Generated.IncidentPaging.Page.Projection                 (unchanged)
+  generated  Generated.IncidentPaging.Page.Harness                    (unchanged)
+firewall: OK (14 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.IncidentPaging.Page.Harness
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-router-runtime/keiro-dsl-cabal-fragment.context.incident-paging.txt
+ledger:   keiro-dsl/test/conformance-router-runtime/keiro-dsl-ledger.context.incident-paging.txt
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  Page.Holes.transition1PendingSendPageOutput1PageSent
+keiro-dsl/test/fixtures/aggregate-scalar-expressions-v2.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+scaffold: keiro-dsl/test/fixtures/aggregate-scalar-expressions-v2.keiro -> keiro-dsl/test/conformance-scalar-expressions (module-root=(none), layout=prefixed)
+  generated  Generated.AggregateScalarExpressions.StructuralConformance           (unchanged)
+  generated  Generated.AggregateScalarExpressions.BehaviorSourceMap               (unchanged)
+  generated  Generated.AggregateScalarExpressions.Structural.Shape.Limits         (unchanged)
+  generated  Generated.AggregateScalarExpressions.StructuralProjections           (unchanged)
+  generated  Generated.AggregateScalarExpressions.Nominals                        (unchanged)
+  generated  Generated.AggregateScalarExpressions.Nominals.Internal               (unchanged)
+  hole       ScalarExpressions.Bindings                                           (skipped: already present)
+  generated  Generated.AggregateScalarExpressions.ReplayAudit                     (unchanged)
+  generated  Generated.AggregateScalarExpressions.ScalarAccount.Domain            (unchanged)
+  generated  Generated.AggregateScalarExpressions.ScalarAccount.Codec             (unchanged)
+  generated  Generated.AggregateScalarExpressions.ScalarAccount.Transducer        (unchanged)
+  generated  Generated.AggregateScalarExpressions.ScalarAccount.BehaviorContract  (unchanged)
+  hole       AggregateScalarExpressions.ScalarAccount.BehaviorHoles               (skipped: already present)
+  generated  Generated.AggregateScalarExpressions.ScalarAccount.EventStream       (unchanged)
+  generated  Generated.AggregateScalarExpressions.ScalarAccount.Projection        (unchanged)
+  hole       AggregateScalarExpressions.ScalarAccount.Holes                       (skipped: already present)
+  generated  Generated.AggregateScalarExpressions.ScalarAccount.Harness           (unchanged)
+firewall: OK (14 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.AggregateScalarExpressions.ScalarAccount.Harness
+dependency plan: consumer packages [keiro-dsl], consumer modules [ScalarExpressions.Bindings, ScalarExpressions.Domain]
+fragment: keiro-dsl/test/conformance-scalar-expressions/keiro-dsl-cabal-fragment.context.aggregate-scalar-expressions.txt
+ledger:   keiro-dsl/test/conformance-scalar-expressions/keiro-dsl-ledger.context.aggregate-scalar-expressions.txt
+constraint plan:
+  Limits: Eq, Show, CanonicalTypeName, StructuralBinding, register initial, snapshot ToJSON, snapshot FromJSON
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  ScalarAccount.Holes.transition1OpenAdjustOutput1Adjusted
+  ScalarAccount.Holes.transition2ReviewedCloseOutput1ClosedEvent
+keiro-dsl/test/conformance-service-package/service.keiro-workspace: language contract: effective keiro-dsl 4 (workspace, 0 legacy-unversioned member(s), compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+keiro-dsl/test/conformance-service-package/domain/alpha.keiro:15: warning[ReplayOnlyCommandStillLive]: replay-only transition 'Active -- LegacyPingAlpha' has no live sibling; command 'LegacyPingAlpha' is fully retired at state 'Active' — if the intent is to retire its events too, follow the event-retirement procedure (docs/plans/139)
+workspace: workspace-proof (keiro-dsl/test/conformance-service-package/service.keiro-workspace) -> keiro-dsl/test/conformance-service-package/runtime/src (module-root=Proof, layout=collocated)
+members:  domain/alpha.keiro, domain/assignment.keiro, domain/beta.keiro, domain/evidence.keiro, domain/shared.keiro
+  generated  Proof.WorkspaceProof.Generated.StructuralConformance                   (unchanged)  (context-level)
+  generated  Proof.WorkspaceProof.Generated.BehaviorSourceMap                       (unchanged)  (context-level)
+  generated  Proof.WorkspaceProof.Generated.Nominals                                (unchanged)  (context-level)
+  generated  Proof.WorkspaceProof.Generated.Nominals.Internal                       (unchanged)  (context-level)
+  generated  Proof.WorkspaceProof.Generated.ReplayAudit                             (unchanged)  (context-level)
+  generated  Proof.WorkspaceProof.Alpha.Generated.Domain                            (unchanged)  domain/alpha.keiro
+  generated  Proof.WorkspaceProof.Alpha.Generated.Codec                             (unchanged)  domain/alpha.keiro
+  generated  Proof.WorkspaceProof.Alpha.Generated.Transducer                        (unchanged)  domain/alpha.keiro
+  generated  Proof.WorkspaceProof.Alpha.Generated.BehaviorContract                  (unchanged)  domain/alpha.keiro
+  hole       Proof.WorkspaceProof.Alpha.BehaviorHoles                               (skipped: already present)  domain/alpha.keiro
+  generated  Proof.WorkspaceProof.Alpha.Generated.EventStream                       (unchanged)  domain/alpha.keiro
+  generated  Proof.WorkspaceProof.Alpha.Generated.Projection                        (unchanged)  domain/alpha.keiro
+  generated  Proof.WorkspaceProof.Alpha.Generated.Harness                           (unchanged)  domain/alpha.keiro
+  generated  Proof.WorkspaceProof.Assignment.Generated.Domain                       (unchanged)  domain/assignment.keiro
+  generated  Proof.WorkspaceProof.Assignment.Generated.Codec                        (unchanged)  domain/assignment.keiro
+  generated  Proof.WorkspaceProof.Assignment.Generated.Transducer                   (unchanged)  domain/assignment.keiro
+  generated  Proof.WorkspaceProof.Assignment.Generated.BehaviorContract             (unchanged)  domain/assignment.keiro
+  hole       Proof.WorkspaceProof.Assignment.BehaviorHoles                          (skipped: already present)  domain/assignment.keiro
+  generated  Proof.WorkspaceProof.Assignment.Generated.EventStream                  (unchanged)  domain/assignment.keiro
+  generated  Proof.WorkspaceProof.Assignment.Generated.Projection                   (unchanged)  domain/assignment.keiro
+  hole       Proof.WorkspaceProof.Assignment.Holes                                  (skipped: already present)  domain/assignment.keiro
+  generated  Proof.WorkspaceProof.Assignment.Generated.Harness                      (unchanged)  domain/assignment.keiro
+  generated  Proof.WorkspaceProof.Beta.Generated.Domain                             (unchanged)  domain/beta.keiro
+  generated  Proof.WorkspaceProof.Beta.Generated.Codec                              (unchanged)  domain/beta.keiro
+  generated  Proof.WorkspaceProof.Beta.Generated.Transducer                         (unchanged)  domain/beta.keiro
+  generated  Proof.WorkspaceProof.Beta.Generated.BehaviorContract                   (unchanged)  domain/beta.keiro
+  hole       Proof.WorkspaceProof.Beta.BehaviorHoles                                (skipped: already present)  domain/beta.keiro
+  generated  Proof.WorkspaceProof.Beta.Generated.EventStream                        (unchanged)  domain/beta.keiro
+  generated  Proof.WorkspaceProof.Beta.Generated.Projection                         (unchanged)  domain/beta.keiro
+  generated  Proof.WorkspaceProof.Beta.Generated.Harness                            (unchanged)  domain/beta.keiro
+  generated  Proof.WorkspaceProof.AlphaView.Generated.ReadModelTable                (unchanged)  domain/evidence.keiro
+  generated  Proof.WorkspaceProof.AlphaView.Generated.ReadModel                     (unchanged)  domain/evidence.keiro
+  hole       Proof.WorkspaceProof.AlphaView.ReadModelHoles                          (skipped: already present)  domain/evidence.keiro
+  generated  Proof.WorkspaceProof.AlphaView.Generated.ReadModelHarness              (unchanged)  domain/evidence.keiro
+  generated  Proof.WorkspaceProof.BetaView.Generated.ReadModelTable                 (unchanged)  domain/evidence.keiro
+  generated  Proof.WorkspaceProof.BetaView.Generated.ReadModel                      (unchanged)  domain/evidence.keiro
+  hole       Proof.WorkspaceProof.BetaView.ReadModelHoles                           (skipped: already present)  domain/evidence.keiro
+  generated  Proof.WorkspaceProof.BetaView.Generated.ReadModelHarness               (unchanged)  domain/evidence.keiro
+  generated  Proof.WorkspaceProof.WorkspaceProofWorkflow.Generated.WorkflowFacts    (unchanged)  domain/evidence.keiro
+  generated  Proof.WorkspaceProof.WorkspaceProofWorkflow.Generated.WorkflowRuntime  (unchanged)  domain/evidence.keiro
+  generated  Proof.WorkspaceProof.Generated.Conformance                             (unchanged)  (context-level)
+firewall: OK (35 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Proof.WorkspaceProof.Alpha.Generated.Harness Proof.WorkspaceProof.Assignment.Generated.Harness Proof.WorkspaceProof.Beta.Generated.Harness Proof.WorkspaceProof.WorkspaceProofWorkflow.Generated.WorkflowFacts
+dependency plan: consumer packages [keiro-dsl-conformance-service-runtime], consumer modules [Proof.WorkspaceProof.AssignmentDomain, Proof.WorkspaceProof.AssignmentSupport]
+fragment: keiro-dsl/test/conformance-service-package/runtime/src/keiro-dsl-cabal-fragment.workspace.workspace-proof.txt
+ledger:   keiro-dsl/test/conformance-service-package/runtime/src/keiro-dsl-ledger.workspace.workspace-proof.txt
+constraint plan:
+  PropertyValues: Eq, Show, ToJSON, FromJSON, register initial, snapshot ToJSON, snapshot FromJSON
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  Alpha.Holes.transition1ActivePingAlphaOutput1AlphaPinged
+  Alpha.Holes.transition2ActivePingAlphaOutput1AlphaPinged
+  Alpha.Holes.transition3ActiveLegacyPingAlphaOutput1LegacyAlphaPinged
+  Assignment.Holes.transition1ActiveSetPropertyOutput1PropertySet
+  Assignment.Holes.transition2ActiveClearPropertyOutput1PropertyCleared
+  Assignment.Holes.transition3ActiveTouchOutput1Touched
+  Assignment.Holes.transition4ActiveClearPropertyOutput1PropertyCleared
+  Beta.Holes.transition1ActivePingBetaOutput1BetaPinged
+conformance-package: keiro-dsl/test/conformance-service-package/runtime/src/keiro-dsl-conformance.workspace.workspace-proof/keiro-workspace-proof-conformance.cabal
+conformance-target: cabal test keiro-workspace-proof-conformance
+conformance-file: keiro-dsl/test/conformance-service-package/runtime/src/keiro-dsl-conformance.workspace.workspace-proof/keiro-workspace-proof-conformance.cabal (unchanged)
+conformance-file: keiro-dsl/test/conformance-service-package/runtime/src/keiro-dsl-conformance.workspace.workspace-proof/src/Main.hs (unchanged)
+expectations: keiro-dsl/test/conformance-service-package/runtime/src/keiro-dsl-conformance.workspace.workspace-proof/src/KeiroConformance/Expectations.hs (skipped: already present)
+conformance-record: keiro-dsl/test/conformance-service-package/runtime/src/keiro-dsl-conformance.workspace.workspace-proof/keiro-dsl-conformance-ledger.txt (unchanged)
+keiro-dsl/test/fixtures/reservation-snapshot.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+keiro-dsl/test/fixtures/reservation-snapshot.keiro:35: warning[RmProjectionWithoutNode]: projection 'transfer_decisions' has no readmodel node; registration, schema identity, consistency, and rebuild helpers are unavailable
+scaffold: keiro-dsl/test/fixtures/reservation-snapshot.keiro -> keiro-dsl/test/conformance-snapshot (module-root=(none), layout=prefixed)
+  generated  Generated.HospitalCapacity.BehaviorSourceMap             (unchanged)
+  generated  Generated.HospitalCapacity.Nominals                      (unchanged)
+  generated  Generated.HospitalCapacity.Nominals.Internal             (unchanged)
+  generated  Generated.HospitalCapacity.ReplayAudit                   (unchanged)
+  generated  Generated.HospitalCapacity.Reservation.Domain            (unchanged)
+  generated  Generated.HospitalCapacity.Reservation.Codec             (unchanged)
+  generated  Generated.HospitalCapacity.Reservation.Transducer        (unchanged)
+  generated  Generated.HospitalCapacity.Reservation.BehaviorContract  (unchanged)
+  hole       HospitalCapacity.Reservation.BehaviorHoles               (skipped: already present)
+  generated  Generated.HospitalCapacity.Reservation.EventStream       (unchanged)
+  generated  Generated.HospitalCapacity.Reservation.Projection        (unchanged)
+  hole       HospitalCapacity.Reservation.Holes                       (skipped: already present)
+  generated  Generated.HospitalCapacity.Reservation.Harness           (unchanged)
+firewall: OK (11 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.HospitalCapacity.Reservation.Harness
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-snapshot/keiro-dsl-cabal-fragment.context.hospital-capacity.txt
+ledger:   keiro-dsl/test/conformance-snapshot/keiro-dsl-ledger.context.hospital-capacity.txt
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  Reservation.Holes.transition1UnrequestedRequestTransferReservationOutput1TransferReservationCreated
+keiro-dsl/test/fixtures/structural-conformance.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+scaffold: keiro-dsl/test/fixtures/structural-conformance.keiro -> keiro-dsl/test/conformance-structural (module-root=(none), layout=prefixed)
+  generated  Generated.StructuralConformance.StructuralConformance              (unchanged)
+  generated  Generated.StructuralConformance.BehaviorSourceMap                  (unchanged)
+  generated  Generated.StructuralConformance.Structural.Shape.ArtifactInfo      (unchanged)
+  generated  Generated.StructuralConformance.Structural.Shape.ArtifactKind      (unchanged)
+  generated  Generated.StructuralConformance.Structural.Shape.ArtifactLocation  (unchanged)
+  generated  Generated.StructuralConformance.Structural.Shape.ArtifactMetadata  (unchanged)
+  generated  Generated.StructuralConformance.StructuralProjections              (unchanged)
+  hole       Conformance.Structural.Bindings                                    (skipped: already present)
+  generated  Generated.StructuralConformance.ReplayAudit                        (unchanged)
+  generated  Generated.StructuralConformance.ArtifactCatalog.Domain             (unchanged)
+  generated  Generated.StructuralConformance.ArtifactCatalog.Codec              (unchanged)
+  generated  Generated.StructuralConformance.ArtifactCatalog.Transducer         (unchanged)
+  generated  Generated.StructuralConformance.ArtifactCatalog.BehaviorContract   (unchanged)
+  hole       StructuralConformance.ArtifactCatalog.BehaviorHoles                (skipped: already present)
+  generated  Generated.StructuralConformance.ArtifactCatalog.EventStream        (unchanged)
+  generated  Generated.StructuralConformance.ArtifactCatalog.Projection         (unchanged)
+  hole       StructuralConformance.ArtifactCatalog.Holes                        (skipped: already present)
+  generated  Generated.StructuralConformance.ArtifactCatalog.Harness            (unchanged)
+firewall: OK (15 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.StructuralConformance.ArtifactCatalog.Harness
+dependency plan: consumer packages [keiro-dsl], consumer modules [Conformance.Structural.Bindings, Conformance.Structural.Domain]
+fragment: keiro-dsl/test/conformance-structural/keiro-dsl-cabal-fragment.context.structural-conformance.txt
+ledger:   keiro-dsl/test/conformance-structural/keiro-dsl-ledger.context.structural-conformance.txt
+constraint plan:
+  ArtifactInfo: Eq, Show, CanonicalTypeName, StructuralBinding, register initial, snapshot ToJSON, snapshot FromJSON
+  ArtifactKind: Eq, Show, CanonicalTypeName, StructuralBinding
+  ArtifactLocation: Eq, Show, CanonicalTypeName, StructuralBinding
+  ArtifactMetadata: Eq, Show, CanonicalTypeName, StructuralBinding
+  VendorGeometry: Eq, Show, ToJSON, FromJSON, register initial, snapshot ToJSON, snapshot FromJSON
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  ArtifactCatalog.Holes.transition1EmptyObserveArtifactOutput1ArtifactRecorded
+comparison generated keiro-dsl/test/conformance-structural/Generated/StructuralConformance/Structural/CodecCompare/ArtifactInfo.hs (migration evidence only)
+keiro-dsl/test/fixtures/structural-nominal-leaves.keiro:178: warning[PolicyDeadLetterUnused]: node 'TemplateDeliveryRouter' declares rejected => deadLetter but no dispatch on-failed arm says DeadLetter; the runtime policy is live, but the per-dispatch notation does not acknowledge it
+keiro-dsl/test/fixtures/structural-nominal-leaves.keiro:178: warning[AmbiguousFollowsRejectedPolicy]: node 'TemplateDeliveryRouter' acknowledges rejection-class failures; CommandAmbiguous follows the same rejected policy, and a dead-letter errorClass is the durable witness of that definition bug
+keiro-dsl/test/fixtures/structural-nominal-leaves.keiro:198: warning[RouterBenignInversion]: router dispatch 'RouteTemplate' maps on-duplicate => AckOk; Keiro.Router confirms the event id against the target stream before treating the duplicate as benign
+scaffold: keiro-dsl/test/fixtures/structural-nominal-leaves.keiro -> keiro-dsl/test/conformance-structural-nominals (module-root=(none), layout=prefixed)
+  generated  Generated.StructuralNominalLeaves.StructuralConformance                 (unchanged)
+  generated  Generated.StructuralNominalLeaves.BehaviorSourceMap                     (unchanged)
+  generated  Generated.StructuralNominalLeaves.Structural.Shape.TemplateBook         (unchanged)
+  generated  Generated.StructuralNominalLeaves.Structural.Shape.TemplateLookupInput  (unchanged)
+  generated  Generated.StructuralNominalLeaves.Structural.Shape.TemplateLookupRow    (unchanged)
+  generated  Generated.StructuralNominalLeaves.Structural.Shape.TemplateRef          (unchanged)
+  generated  Generated.StructuralNominalLeaves.Structural.Shape.TemplateState        (unchanged)
+  generated  Generated.StructuralNominalLeaves.StructuralProjections                 (unchanged)
+  generated  Generated.StructuralNominalLeaves.Nominals                              (unchanged)
+  generated  Generated.StructuralNominalLeaves.Nominals.Internal                     (unchanged)
+  generated  Generated.StructuralNominalLeaves.Structural.NominalLeaves              (unchanged)
+  generated  Generated.StructuralNominalLeaves.Nominal.Shape.Channel                 (unchanged)
+  generated  Generated.StructuralNominalLeaves.NominalProjections                    (unchanged)
+  hole       Conformance.StructuralNominals.Bindings                                 (skipped: already present)
+  generated  Generated.StructuralNominalLeaves.ReplayAudit                           (unchanged)
+  generated  Generated.StructuralNominalLeaves.ProjectionCatalog                     (unchanged)
+  hole       StructuralNominalLeaves.ProjectionCatalog.ProjectionCatalogHoles        (skipped: already present)
+  generated  Generated.StructuralNominalLeaves.TemplateCatalog.Domain                (unchanged)
+  generated  Generated.StructuralNominalLeaves.TemplateCatalog.Codec                 (unchanged)
+  generated  Generated.StructuralNominalLeaves.TemplateCatalog.Transducer            (unchanged)
+  generated  Generated.StructuralNominalLeaves.TemplateCatalog.BehaviorContract      (unchanged)
+  hole       StructuralNominalLeaves.TemplateCatalog.BehaviorHoles                   (skipped: already present)
+  generated  Generated.StructuralNominalLeaves.TemplateCatalog.EventStream           (unchanged)
+  generated  Generated.StructuralNominalLeaves.TemplateCatalog.Projection            (unchanged)
+  generated  Generated.StructuralNominalLeaves.TemplateCatalog.Harness               (unchanged)
+  generated  Generated.StructuralNominalLeaves.TemplateWork.Queue                    (unchanged)
+  generated  Generated.StructuralNominalLeaves.TemplateWork.QueuePolicy              (unchanged)
+  generated  Generated.StructuralNominalLeaves.TemplateWork.QueueCodec               (unchanged)
+  generated  Generated.StructuralNominalLeaves.TemplateLookup.ReadModelTable         (unchanged)
+  generated  Generated.StructuralNominalLeaves.TemplateLookup.QueryContract          (unchanged)
+  generated  Generated.StructuralNominalLeaves.TemplateLookup.ReadModel              (unchanged)
+  hole       StructuralNominalLeaves.TemplateLookup.ReadModelHoles                   (skipped: already present)
+  generated  Generated.StructuralNominalLeaves.TemplateLookup.ReadModelHarness       (unchanged)
+  generated  Generated.StructuralNominalLeaves.TemplateDeliveryRouter.Router         (unchanged)
+  generated  Generated.StructuralNominalLeaves.TemplateDeliveryRouter.RouterHarness  (unchanged)
+firewall: OK (31 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.StructuralNominalLeaves.TemplateCatalog.Harness
+dependency plan: consumer packages [keiro-dsl], consumer modules [Conformance.StructuralNominals.Bindings, Conformance.StructuralNominals.Domain]
+fragment: keiro-dsl/test/conformance-structural-nominals/keiro-dsl-cabal-fragment.context.structural-nominal-leaves.txt
+ledger:   keiro-dsl/test/conformance-structural-nominals/keiro-dsl-ledger.context.structural-nominal-leaves.txt
+constraint plan:
+  AccountNumber: Eq, Show, NominalBinding
+  Channel: Eq, Show, NominalBinding
+  ClaimId: Eq, Show, NominalBinding
+  TemplateBook: Eq, Show, CanonicalTypeName, StructuralBinding, register initial, snapshot ToJSON, snapshot FromJSON
+  TemplateLookupInput: Eq, Show, CanonicalTypeName, StructuralBinding
+  TemplateLookupRow: Eq, Show, CanonicalTypeName, StructuralBinding
+  TemplateRef: Eq, Show, CanonicalTypeName, StructuralBinding
+  TemplateState: Eq, Show, CanonicalTypeName, StructuralBinding
+projection mapped impact:
+  unsupported typed sources:
+    catalog-all:template_writer
+      operation: group=template_rebuild; targets=template_table; read-models=template_lookup; replayable=yes; mapped-key=(unsupported heterogeneous source)
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  TemplateCatalog.Holes.transition1EmptyRecordTemplateOutput1TemplateRecorded
+  TemplateCatalog.Holes.transition2RecordedRouteTemplateOutput1TemplateRouted
+comparison generated keiro-dsl/test/conformance-structural-nominals/Generated/StructuralNominalLeaves/Structural/CodecCompare/TemplateState.hs (migration evidence only)
+keiro-dsl/test/fixtures/structural-text-sets.keiro:55: warning[ReplayOnlyCommandStillLive]: replay-only transition 'Empty -- ImportLegacyLabels' has no live sibling; command 'ImportLegacyLabels' is fully retired at state 'Empty' — if the intent is to retire its events too, follow the event-retirement procedure (docs/plans/139)
+scaffold: keiro-dsl/test/fixtures/structural-text-sets.keiro -> keiro-dsl/test/conformance-structural-text-sets (module-root=(none), layout=prefixed)
+  generated  Generated.StructuralTextSets.StructuralConformance             (unchanged)
+  generated  Generated.StructuralTextSets.BehaviorSourceMap                 (unchanged)
+  generated  Generated.StructuralTextSets.Structural.Shape.LabelEnvelope    (unchanged)
+  generated  Generated.StructuralTextSets.Structural.Shape.MaybeTextLabels  (unchanged)
+  generated  Generated.StructuralTextSets.Structural.Shape.TextLabels       (unchanged)
+  hole       Conformance.StructuralTextSets.Bindings                        (skipped: already present)
+  generated  Generated.StructuralTextSets.ReplayAudit                       (unchanged)
+  generated  Generated.StructuralTextSets.ProjectionCatalog                 (unchanged)
+  hole       StructuralTextSets.ProjectionCatalog.ProjectionCatalogHoles    (skipped: already present)
+  generated  Generated.StructuralTextSets.LabelStore.Domain                 (unchanged)
+  generated  Generated.StructuralTextSets.LabelStore.Codec                  (unchanged)
+  generated  Generated.StructuralTextSets.LabelStore.Transducer             (unchanged)
+  generated  Generated.StructuralTextSets.LabelStore.BehaviorContract       (unchanged)
+  hole       StructuralTextSets.LabelStore.BehaviorHoles                    (skipped: already present)
+  generated  Generated.StructuralTextSets.LabelStore.EventStream            (unchanged)
+  generated  Generated.StructuralTextSets.LabelStore.Projection             (unchanged)
+  generated  Generated.StructuralTextSets.LabelStore.Harness                (unchanged)
+  generated  Generated.StructuralTextSets.LabelJobs.Queue                   (unchanged)
+  generated  Generated.StructuralTextSets.LabelJobs.QueuePolicy             (unchanged)
+  generated  Generated.StructuralTextSets.LabelJobs.QueueCodec              (unchanged)
+  generated  Generated.StructuralTextSets.LabelLookup.ReadModelTable        (unchanged)
+  generated  Generated.StructuralTextSets.LabelLookup.QueryContract         (unchanged)
+  generated  Generated.StructuralTextSets.LabelLookup.ReadModel             (unchanged)
+  hole       StructuralTextSets.LabelLookup.ReadModelHoles                  (skipped: already present)
+  generated  Generated.StructuralTextSets.LabelLookup.ReadModelHarness      (unchanged)
+firewall: OK (21 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.StructuralTextSets.LabelStore.Harness
+dependency plan: consumer packages [keiro-dsl], consumer modules [Conformance.StructuralTextSets.Bindings, Conformance.StructuralTextSets.Domain]
+fragment: keiro-dsl/test/conformance-structural-text-sets/keiro-dsl-cabal-fragment.context.structural-text-sets.txt
+ledger:   keiro-dsl/test/conformance-structural-text-sets/keiro-dsl-ledger.context.structural-text-sets.txt
+constraint plan:
+  LabelEnvelope: Eq, Show, CanonicalTypeName, StructuralBinding
+  MaybeTextLabels: Eq, Show, CanonicalTypeName, StructuralBinding
+  TextLabels: Eq, Show, CanonicalTypeName, StructuralBinding, register initial, snapshot ToJSON, snapshot FromJSON
+projection mapped impact:
+  unsupported typed sources:
+    catalog-all:label_writer
+      operation: group=label_rebuild; targets=label_table; read-models=label_lookup; replayable=yes; mapped-key=(unsupported heterogeneous source)
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  LabelStore.Holes.transition1EmptyStoreLabelsOutput1LabelsStored
+  LabelStore.Holes.transition1EmptyStoreLabelsOutput2LabelsAudited
+  LabelStore.Holes.transition2EmptyImportLegacyLabelsOutput1LegacyLabelsImported
+keiro-dsl/test/fixtures/reservation-v2.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+keiro-dsl/test/fixtures/reservation-v2.keiro:36: warning[RmProjectionWithoutNode]: projection 'transfer_decisions' has no readmodel node; registration, schema identity, consistency, and rebuild helpers are unavailable
+scaffold: keiro-dsl/test/fixtures/reservation-v2.keiro -> keiro-dsl/test/conformance-v2 (module-root=(none), layout=prefixed)
+  generated  Generated.HospitalCapacity.BehaviorSourceMap             (unchanged)
+  generated  Generated.HospitalCapacity.Nominals                      (unchanged)
+  generated  Generated.HospitalCapacity.Nominals.Internal             (unchanged)
+  generated  Generated.HospitalCapacity.ReplayAudit                   (unchanged)
+  generated  Generated.HospitalCapacity.Reservation.Domain            (unchanged)
+  generated  Generated.HospitalCapacity.Reservation.Codec             (unchanged)
+  generated  Generated.HospitalCapacity.Reservation.Transducer        (unchanged)
+  generated  Generated.HospitalCapacity.Reservation.BehaviorContract  (unchanged)
+  hole       HospitalCapacity.Reservation.BehaviorHoles               (skipped: already present)
+  generated  Generated.HospitalCapacity.Reservation.EventStream       (unchanged)
+  generated  Generated.HospitalCapacity.Reservation.Projection        (unchanged)
+  hole       HospitalCapacity.Reservation.Holes                       (skipped: already present)
+  generated  Generated.HospitalCapacity.Reservation.Harness           (unchanged)
+firewall: OK (11 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.HospitalCapacity.Reservation.Harness
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-v2/keiro-dsl-cabal-fragment.context.hospital-capacity.txt
+ledger:   keiro-dsl/test/conformance-v2/keiro-dsl-ledger.context.hospital-capacity.txt
+scaffold: keiro-dsl/test/fixtures/workflow-evolution.keiro -> keiro-dsl/test/conformance-workflow (module-root=(none), layout=prefixed)
+  generated  Generated.HospitalCapacity.HospitalTransferReservation.WorkflowFacts    (unchanged)
+  generated  Generated.HospitalCapacity.HospitalTransferReservation.WorkflowRuntime  (unchanged)
+firewall: OK (2 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.HospitalCapacity.HospitalTransferReservation.WorkflowFacts
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-workflow/keiro-dsl-cabal-fragment.context.hospital-capacity.txt
+ledger:   keiro-dsl/test/conformance-workflow/keiro-dsl-ledger.context.hospital-capacity.txt
+scaffold: keiro-dsl/test/fixtures/workflow-evolution.keiro -> keiro-dsl/test/conformance-workflow-full (module-root=(none), layout=prefixed)
+  generated  Generated.HospitalCapacity.HospitalTransferReservation.WorkflowFacts    (unchanged)
+  generated  Generated.HospitalCapacity.HospitalTransferReservation.WorkflowRuntime  (unchanged)
+firewall: OK (2 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.HospitalCapacity.HospitalTransferReservation.WorkflowFacts
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-workflow-full/keiro-dsl-cabal-fragment.context.hospital-capacity.txt
+ledger:   keiro-dsl/test/conformance-workflow-full/keiro-dsl-ledger.context.hospital-capacity.txt
+scaffold: keiro-dsl/test/fixtures/workflow-evolution.keiro -> keiro-dsl/test/conformance-workflow-runtime (module-root=(none), layout=prefixed)
+  generated  Generated.HospitalCapacity.HospitalTransferReservation.WorkflowFacts    (unchanged)
+  generated  Generated.HospitalCapacity.HospitalTransferReservation.WorkflowRuntime  (unchanged)
+firewall: OK (2 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.HospitalCapacity.HospitalTransferReservation.WorkflowFacts
+dependency plan: consumer packages [], consumer modules []
+fragment: keiro-dsl/test/conformance-workflow-runtime/keiro-dsl-cabal-fragment.context.hospital-capacity.txt
+ledger:   keiro-dsl/test/conformance-workflow-runtime/keiro-dsl-ledger.context.hospital-capacity.txt
+workspace: workspace-nominal-proof (keiro-dsl/test/fixtures/workspace-nominals/service.keiro-workspace) -> keiro-dsl/test/conformance-workspace-nominals (module-root=(none), layout=prefixed)
+members:  domain/project-artifact.keiro, domain/project.keiro, domain/shared.keiro
+  generated  Generated.WorkspaceNominalProof.StructuralConformance             (unchanged)  (context-level)
+  generated  Generated.WorkspaceNominalProof.BehaviorSourceMap                 (unchanged)  (context-level)
+  generated  Generated.WorkspaceNominalProof.Structural.Shape.ArtifactClaim    (unchanged)  domain/project-artifact.keiro
+  generated  Generated.WorkspaceNominalProof.Structural.Shape.ProjectClaim     (unchanged)  domain/project.keiro
+  generated  Generated.WorkspaceNominalProof.StructuralProjections             (unchanged)  (context-level)
+  generated  Generated.WorkspaceNominalProof.Nominals                          (unchanged)  (context-level)
+  generated  Generated.WorkspaceNominalProof.Nominals.Internal                 (unchanged)  (context-level)
+  generated  Generated.WorkspaceNominalProof.Structural.NominalLeaves          (unchanged)  (context-level)
+  hole       WorkspaceNominalProof.Bindings                                    (skipped: already present)  (context-level)
+  generated  Generated.WorkspaceNominalProof.ReplayAudit                       (unchanged)  (context-level)
+  generated  Generated.WorkspaceNominalProof.ProjectArtifact.Domain            (unchanged)  domain/project-artifact.keiro
+  generated  Generated.WorkspaceNominalProof.ProjectArtifact.Codec             (unchanged)  domain/project-artifact.keiro
+  generated  Generated.WorkspaceNominalProof.ProjectArtifact.Transducer        (unchanged)  domain/project-artifact.keiro
+  generated  Generated.WorkspaceNominalProof.ProjectArtifact.BehaviorContract  (unchanged)  domain/project-artifact.keiro
+  hole       WorkspaceNominalProof.ProjectArtifact.BehaviorHoles               (skipped: already present)  domain/project-artifact.keiro
+  generated  Generated.WorkspaceNominalProof.ProjectArtifact.EventStream       (unchanged)  domain/project-artifact.keiro
+  generated  Generated.WorkspaceNominalProof.ProjectArtifact.Projection        (unchanged)  domain/project-artifact.keiro
+  generated  Generated.WorkspaceNominalProof.ProjectArtifact.Harness           (unchanged)  domain/project-artifact.keiro
+  generated  Generated.WorkspaceNominalProof.Project.Domain                    (unchanged)  domain/project.keiro
+  generated  Generated.WorkspaceNominalProof.Project.Codec                     (unchanged)  domain/project.keiro
+  generated  Generated.WorkspaceNominalProof.Project.Transducer                (unchanged)  domain/project.keiro
+  generated  Generated.WorkspaceNominalProof.Project.BehaviorContract          (unchanged)  domain/project.keiro
+  hole       WorkspaceNominalProof.Project.BehaviorHoles                       (skipped: already present)  domain/project.keiro
+  generated  Generated.WorkspaceNominalProof.Project.EventStream               (unchanged)  domain/project.keiro
+  generated  Generated.WorkspaceNominalProof.Project.Projection                (unchanged)  domain/project.keiro
+  generated  Generated.WorkspaceNominalProof.Project.Harness                   (unchanged)  domain/project.keiro
+firewall: OK (23 generated modules scanned, 0 forbidden operators)
+harness:  run `cabal test <your-component>` over Generated.WorkspaceNominalProof.Project.Harness Generated.WorkspaceNominalProof.ProjectArtifact.Harness
+dependency plan: consumer packages [keiro-dsl], consumer modules [WorkspaceNominalProof.Bindings, WorkspaceNominalProof.Domain]
+fragment: keiro-dsl/test/conformance-workspace-nominals/keiro-dsl-cabal-fragment.workspace.workspace-nominal-proof.txt
+ledger:   keiro-dsl/test/conformance-workspace-nominals/keiro-dsl-ledger.workspace.workspace-nominal-proof.txt
+constraint plan:
+  ArtifactClaim: Eq, Show, CanonicalTypeName, StructuralBinding
+  ClaimId: Eq, Show, NominalBinding
+  ProjectClaim: Eq, Show, CanonicalTypeName, StructuralBinding
+obsolete identity-copy output hooks (if still present, they are unused and may be removed):
+  ProjectArtifact.Holes.transition1EmptyRecordArtifactOutput1ArtifactRecorded
+  Project.Holes.transition1EmptyRegisterProjectOutput1ProjectRegistered
+  Project.Holes.transition2LiveArchiveProjectOutput1ArchivalRecorded
+corpus: 58 of 58 invocations selected
+scaffold keiro-dsl/test/conformance
+scaffold keiro-dsl/test/conformance-aggregate-scalars
+scaffold keiro-dsl/test/conformance-bare-containers
+scaffold keiro-dsl/test/conformance-behavior-complete
+scaffold keiro-dsl/test/conformance-calendar-days
+scaffold keiro-dsl/test/conformance-checked-mapping-replay
+scaffold keiro-dsl/test/conformance-coldstart
+scaffold keiro-dsl/test/conformance-contract
+scaffold keiro-dsl/test/conformance-contract-declared-id
+scaffold keiro-dsl/test/conformance-contract-list-fields
+scaffold keiro-dsl/test/conformance-contract-v1-compat
+scaffold keiro-dsl/test/conformance-declarative-router
+scaffold keiro-dsl/test/conformance-dispatch-full
+scaffold keiro-dsl/test/conformance-domain-outcomes
+scaffold keiro-dsl/test/conformance-history-dependent-holes
+scaffold keiro-dsl/test/conformance-id-admission-domains
+scaffold keiro-dsl/test/conformance-id-domain-migration
+scaffold keiro-dsl/test/conformance-import-planning
+scaffold keiro-dsl/test/conformance-intake-delegated
+scaffold keiro-dsl/test/conformance-intake-full
+scaffold keiro-dsl/test/conformance-intake-runtime
+scaffold keiro-dsl/test/conformance-keyword-segments
+scaffold keiro-dsl/test/conformance-mapped-queue
+scaffold keiro-dsl/test/conformance-mapped-readmodel
+scaffold keiro-dsl/test/conformance-mapped-register-construction
+scaffold keiro-dsl/test/conformance-mapped-structural-enum-equality
+scaffold keiro-dsl/test/conformance-newsurface
+scaffold keiro-dsl/test/conformance-nominal-query-only
+scaffold keiro-dsl/test/conformance-nominal-queue-only
+scaffold keiro-dsl/test/conformance-nominal-scalars
+scaffold keiro-dsl/test/conformance-process
+scaffold keiro-dsl/test/conformance-process-full
+scaffold keiro-dsl/test/conformance-process-reactions
+scaffold keiro-dsl/test/conformance-process-runtime
+scaffold keiro-dsl/test/conformance-process-state-authority
+scaffold keiro-dsl/test/conformance-process-timers
+scaffold keiro-dsl/test/conformance-projection-catalog
+scaffold keiro-dsl/test/conformance-publisher-runtime
+scaffold keiro-dsl/test/conformance-queue
+scaffold keiro-dsl/test/conformance-queue-runtime
+scaffold keiro-dsl/test/conformance-readmodel-runtime
+scaffold keiro-dsl/test/conformance-refined-base16
+scaffold keiro-dsl/test/conformance-replay
+scaffold keiro-dsl/test/conformance-router
+scaffold keiro-dsl/test/conformance-router-full
+scaffold keiro-dsl/test/conformance-router-runtime
+scaffold keiro-dsl/test/conformance-scalar-expressions
+scaffold keiro-dsl/test/conformance-service-package/runtime/src
+scaffold keiro-dsl/test/conformance-snapshot
+scaffold keiro-dsl/test/conformance-structural
+scaffold keiro-dsl/test/conformance-structural-nominals
+scaffold keiro-dsl/test/conformance-structural-text-sets
+scaffold keiro-dsl/test/conformance-v2
+scaffold keiro-dsl/test/conformance-workflow
+scaffold keiro-dsl/test/conformance-workflow-full
+scaffold keiro-dsl/test/conformance-workflow-runtime
+scaffold keiro-dsl/test/conformance-workspace-nominals
+frozen keiro-dsl/test/conformance-skeletons (historical authored corpus; verification only)
+suite coverage: ok (58 plan entries)
+record/disk consistency: ok
+cabal inventory consistency: ok (135 exempted module(s))
+corpus regeneration complete; git reports no changes
++ python3 scripts/generate-record-migration-manifests.py
+Prepared final-version corpus and inventories. Review their diff, then commit before release-gate.

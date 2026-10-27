@@ -1,0 +1,24 @@
+{"identity": "1967b062611c7f64f350ada07183c35535d95baa5e21ddf18eba584dfc5b09d1", "command": ["scripts/bench-regression.sh", "outbox"]}
+##### guard outbox 2026-10-27T20:41:36Z
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.22.0.0 (bench:keiro-bench) (first run)
+Preprocessing benchmark 'keiro-bench' for keiro-0.22.0.0...
+Building benchmark 'keiro-bench' for keiro-0.22.0.0...
+Running 1 benchmarks...
+Benchmark keiro-bench: RUNNING...
+All
+  outbox
+    hot-key:           OK
+      490  ms ±  37 ms,       same as baseline
+    hot-key-nolatency: OK
+      269  ms ±  16 ms,       same as baseline
+    multi-key:         OK
+      381  ms ±  37 ms,       same as baseline
+
+All 3 tests passed (9.05s)
+Benchmark keiro-bench: FINISH
+##### guard summary 2026-10-27T20:41:49Z
+GUARD(outbox)=0
+BENCH_REGRESSION=PASSED
+STAGE_EXIT=0

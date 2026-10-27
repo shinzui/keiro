@@ -1,0 +1,19 @@
+cabal-version: 3.4
+name: release-consumer
+version: 0.1.0.0
+build-type: Simple
+
+executable release-consumer
+  main-is: Main.hs
+  default-language: GHC2024
+  default-extensions: OverloadedStrings OverloadedRecordDot
+  ghc-options: -threaded
+  build-depends: base >=4.21 && <5, async, text, kiroku-store,
+    keiro-core ==0.22.0.0,
+    keiro ==0.22.0.0,
+    keiro-pgmq ==0.22.0.0,
+    keiro-migrations ==0.22.0.0,
+    keiro-test-support ==0.22.0.0,
+    keiro-dsl ==0.22.0.0,
+    keiro-ops ==0.22.0.0,
+    keiro-ops-http ==0.22.0.0

@@ -1,0 +1,22 @@
+{
+  "sha256": {
+    "keiro-0.22.0.0-docs.tar.gz": "c7e32cb2ae8701e070068c2da2bd0172a8086d2bd53d1ed166b2efbd1208e702",
+    "keiro-0.22.0.0.tar.gz": "fac8d9cdcb881756261058b9ecbfb290de72d137a31302c95a8550c3f050653b",
+    "keiro-core-0.22.0.0-docs.tar.gz": "836273b225a8b1f8d5cd72c65e459a5953bfe2c63fc0538a6f3c0601583e2cb6",
+    "keiro-core-0.22.0.0.tar.gz": "773e54c42b3cf5d71f5e6ae780779f9dd9d241e7473577b756bdef1434700df0",
+    "keiro-dsl-0.22.0.0-docs.tar.gz": "73ea9017f0d24d1928ed076b123c3073060f50f82512af3ef47ae9f08182569e",
+    "keiro-dsl-0.22.0.0.tar.gz": "96313ad2e13bb174f1a181bc85448299b85e3095bc518403468346ce103b11a0",
+    "keiro-migrations-0.22.0.0-docs.tar.gz": "d21497f7b26b44c60e389c02bfebb5735b18e38d5c5917c0d1dbcea3be3657fc",
+    "keiro-migrations-0.22.0.0.tar.gz": "f0221db7fdc6206597776f062b5d7b89d0b1f6734d8858de06b0695dd6ce9fb9",
+    "keiro-ops-0.22.0.0-docs.tar.gz": "a84414300d34ed26c0ced50bbcf80e790b20efb785706f93e2583f880ff60e71",
+    "keiro-ops-0.22.0.0.tar.gz": "fbb3f8697ac264a4344988881424ba1fde002bb08ce0dfa73dcba4c22c4a82aa",
+    "keiro-ops-http-0.22.0.0-docs.tar.gz": "f7afbe6ff0f0883125860b151ce3eb1528faea816c7dd3e2185d65206fd7784d",
+    "keiro-ops-http-0.22.0.0.tar.gz": "3e72e3e8da2b787a43e97defe31f65919e84cb012b363e19e87ac2fe0ee0ffed",
+    "keiro-pgmq-0.22.0.0-docs.tar.gz": "c23625c3dc56e8aa89ed1b305662d68b5ae632c74c541e92da166fbb7ea48439",
+    "keiro-pgmq-0.22.0.0.tar.gz": "c6fa9c956424afe8478d14c292be56bcea19cede084b441c1f97b45a7971c6a8",
+    "keiro-test-support-0.22.0.0-docs.tar.gz": "af96e924573cef26c36df205dbf7a142e194ae71b100a3fc1faf2f56b3b805b1",
+    "keiro-test-support-0.22.0.0.tar.gz": "b3dc02fa2ee957b0b14f3fdce973acca59c3593fc7b51640893e24c5c6569aa1"
+  },
+  "source": "b10342ee87ec0c598ca6c43dc65e1265b8bd0607ae8e4e0a92234905b33c3868",
+  "version": "0.22.0.0"
+}

@@ -1,0 +1,6 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+error (ignored): SQLite database '/Users/shinzui/.cache/nix/eval-cache-v6/381ae81481c5393fcec93cecf793e0ecbc16814a9bc76dc1b1a198a51b42a1f8.sqlite' is busy
+python3 scripts/release_workflow.py preflight
+release: Another release/build writer holds the workspace lock; retry when it finishes.
+error: recipe `release-preflight` failed on line 35 with exit code 1

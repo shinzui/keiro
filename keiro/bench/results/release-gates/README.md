@@ -27,6 +27,32 @@ only prepare/verify local files; they do not upload or create tags. See the
 The historical evidence below remains valid under its original policy and is
 not automatically imported into the new receipt format.
 
+### Plan 326 acceptance
+
+The workflow is accepted at tested source `522fd54c`. The
+[summary and timings](workflow-326/summary.json) bind the exact source identity and
+stage references. [Full correctness and five guards](20261027T202041Z-905fb443-manifest.json)
+passed in the 27-minute attempt, while three inbox cases failed at 63–66 percent over
+baseline. That attempt is retained as **refused**, never as acceptance.
+The [accepted resumed manifest](20261027T204838Z-dbae5693-manifest.json) reuses six stages
+and reruns the full inbox guard, which passes with the affected cases at 385–397 ms.
+It completes in 184.432 seconds without any source or baseline change.
+The [fully cached manifest](20261027T205643Z-f7d2d374-manifest.json) then reuses all seven
+stages across a new Nix shell in 67.552 seconds. Both manifests reference the original
+receipt/log files rather than a synthetic combined transcript.
+
+[Twenty-seven controls](workflow-326/unit-controls.log),
+[native Nix checks](workflow-326/native-nix.log),
+[archive checksums](workflow-326/artifacts.json),
+[staged](workflow-326/staged/result.json) and
+[published](workflow-326/published/result.json) consumer results, and
+[readiness](workflow-326/ready.log) all pass. Both consumers check all eight exact-version
+packages and healthy HTTP responses against disposable migrated databases.
+The package version 0.22.0.0 is a fixture for this workflow acceptance; no new release
+was cut. Earlier interrupted development work, command guard failures and metadata
+transport refusals remain diagnostic evidence in `workflow-326/` and the stage logs.
+The metadata retry fix recovered a real truncated response without accepting partial JSON.
+
 ## Keiro 0.22.0.0
 
 The final candidate at `b2be482b` passes the complete

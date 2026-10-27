@@ -1,0 +1,158 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+....RETRY(metadata example)=1/3: IncompleteRead
+RETRY(metadata example)=2/3: IncompleteRead
+..Waiting for the published cohort in the Hackage index (1/5).
+Waiting for the published cohort in the Hackage index (2/5).
+Waiting for the published cohort in the Hackage index (3/5).
+Waiting for the published cohort in the Hackage index (4/5).
+..RETRY(metadata example)=1/3: IncompleteRead
+.+ git fetch -q origin
++ git fetch -q origin
+.RUNNING(correctness)=keiro/bench/results/release-gates/20261027T201509Z-ece2606b-correctness.log
+RUNNING(producer-identity)=keiro/bench/results/release-gates/20261027T201509Z-ece2606b-producer-identity.log
+RUNNING(outbox)=keiro/bench/results/release-gates/20261027T201509Z-ece2606b-outbox.log
+RUNNING(inbox)=keiro/bench/results/release-gates/20261027T201509Z-ece2606b-inbox.log
+RUNNING(command)=keiro/bench/results/release-gates/20261027T201509Z-ece2606b-command.log
+RUNNING(projection)=keiro/bench/results/release-gates/20261027T201509Z-ece2606b-projection.log
+RUNNING(read-model)=keiro/bench/results/release-gates/20261027T201509Z-ece2606b-read-model.log
+RELEASE_GATE=PASSED manifest=keiro/bench/results/release-gates/20261027T201509Z-ece2606b-manifest.json
+RUNNING(correctness)=keiro/bench/results/release-gates/20261027T201509Z-3a384304-correctness.log
+RUNNING(producer-identity)=keiro/bench/results/release-gates/20261027T201509Z-3a384304-producer-identity.log
+RUNNING(outbox)=keiro/bench/results/release-gates/20261027T201509Z-3a384304-outbox.log
+RUNNING(inbox)=keiro/bench/results/release-gates/20261027T201509Z-3a384304-inbox.log
+RUNNING(command)=keiro/bench/results/release-gates/20261027T201509Z-3a384304-command.log
+RUNNING(projection)=keiro/bench/results/release-gates/20261027T201509Z-3a384304-projection.log
+RUNNING(read-model)=keiro/bench/results/release-gates/20261027T201509Z-3a384304-read-model.log
+RELEASE_GATE=PASSED manifest=keiro/bench/results/release-gates/20261027T201509Z-3a384304-manifest.json
+RUNNING(correctness)=keiro/bench/results/release-gates/20261027T201509Z-923b0387-correctness.log
+RUNNING(producer-identity)=keiro/bench/results/release-gates/20261027T201509Z-923b0387-producer-identity.log
+RUNNING(outbox)=keiro/bench/results/release-gates/20261027T201509Z-923b0387-outbox.log
+RUNNING(inbox)=keiro/bench/results/release-gates/20261027T201509Z-923b0387-inbox.log
+RUNNING(command)=keiro/bench/results/release-gates/20261027T201509Z-923b0387-command.log
+RUNNING(projection)=keiro/bench/results/release-gates/20261027T201509Z-923b0387-projection.log
+RUNNING(read-model)=keiro/bench/results/release-gates/20261027T201509Z-923b0387-read-model.log
+RELEASE_GATE=PASSED manifest=keiro/bench/results/release-gates/20261027T201509Z-923b0387-manifest.json
+RUNNING(correctness)=keiro/bench/results/release-gates/20261027T201509Z-cde1ae46-correctness.log
+RUNNING(producer-identity)=keiro/bench/results/release-gates/20261027T201509Z-cde1ae46-producer-identity.log
+RUNNING(outbox)=keiro/bench/results/release-gates/20261027T201509Z-cde1ae46-outbox.log
+RUNNING(inbox)=keiro/bench/results/release-gates/20261027T201509Z-cde1ae46-inbox.log
+RUNNING(command)=keiro/bench/results/release-gates/20261027T201509Z-cde1ae46-command.log
+RUNNING(projection)=keiro/bench/results/release-gates/20261027T201509Z-cde1ae46-projection.log
+RUNNING(read-model)=keiro/bench/results/release-gates/20261027T201509Z-cde1ae46-read-model.log
+RELEASE_GATE=PASSED manifest=keiro/bench/results/release-gates/20261027T201509Z-cde1ae46-manifest.json
+RUNNING(correctness)=keiro/bench/results/release-gates/20261027T201510Z-14a525a6-correctness.log
+RUNNING(producer-identity)=keiro/bench/results/release-gates/20261027T201510Z-14a525a6-producer-identity.log
+RUNNING(outbox)=keiro/bench/results/release-gates/20261027T201510Z-14a525a6-outbox.log
+RUNNING(inbox)=keiro/bench/results/release-gates/20261027T201510Z-14a525a6-inbox.log
+RUNNING(command)=keiro/bench/results/release-gates/20261027T201510Z-14a525a6-command.log
+RUNNING(projection)=keiro/bench/results/release-gates/20261027T201510Z-14a525a6-projection.log
+RUNNING(read-model)=keiro/bench/results/release-gates/20261027T201510Z-14a525a6-read-model.log
+RELEASE_GATE=PASSED manifest=keiro/bench/results/release-gates/20261027T201510Z-14a525a6-manifest.json
+....RUNNING(correctness)=keiro/bench/results/release-gates/20261027T201510Z-2bfa4183-correctness.log
+RUNNING(producer-identity)=keiro/bench/results/release-gates/20261027T201510Z-2bfa4183-producer-identity.log
+RUNNING(outbox)=keiro/bench/results/release-gates/20261027T201510Z-2bfa4183-outbox.log
+RUNNING(inbox)=keiro/bench/results/release-gates/20261027T201510Z-2bfa4183-inbox.log
+RUNNING(command)=keiro/bench/results/release-gates/20261027T201510Z-2bfa4183-command.log
+RUNNING(projection)=keiro/bench/results/release-gates/20261027T201510Z-2bfa4183-projection.log
+RUNNING(read-model)=keiro/bench/results/release-gates/20261027T201510Z-2bfa4183-read-model.log
+RELEASE_GATE=PASSED manifest=keiro/bench/results/release-gates/20261027T201510Z-2bfa4183-manifest.json
+.RUNNING(correctness)=keiro/bench/results/release-gates/20261027T201510Z-d7bbdd6c-correctness.log
+error: recipe `_verify` failed on line 3 with exit code 1
+RELEASE_GATE=FAILED manifest=keiro/bench/results/release-gates/20261027T201510Z-d7bbdd6c-manifest.json
+.RUNNING(correctness)=keiro/bench/results/release-gates/20261027T201510Z-c257ae35-correctness.log
+RUNNING(producer-identity)=keiro/bench/results/release-gates/20261027T201510Z-c257ae35-producer-identity.log
+RUNNING(outbox)=keiro/bench/results/release-gates/20261027T201510Z-c257ae35-outbox.log
+RUNNING(inbox)=keiro/bench/results/release-gates/20261027T201510Z-c257ae35-inbox.log
+RUNNING(command)=keiro/bench/results/release-gates/20261027T201510Z-c257ae35-command.log
+RUNNING(projection)=keiro/bench/results/release-gates/20261027T201510Z-c257ae35-projection.log
+RUNNING(read-model)=keiro/bench/results/release-gates/20261027T201510Z-c257ae35-read-model.log
+RELEASE_GATE=PASSED manifest=keiro/bench/results/release-gates/20261027T201510Z-c257ae35-manifest.json
+RUNNING(correctness)=keiro/bench/results/release-gates/20261027T201511Z-008cca04-correctness.log
+RUNNING(producer-identity)=keiro/bench/results/release-gates/20261027T201511Z-008cca04-producer-identity.log
+RUNNING(outbox)=keiro/bench/results/release-gates/20261027T201511Z-008cca04-outbox.log
+RUNNING(inbox)=keiro/bench/results/release-gates/20261027T201511Z-008cca04-inbox.log
+RUNNING(command)=keiro/bench/results/release-gates/20261027T201511Z-008cca04-command.log
+RUNNING(projection)=keiro/bench/results/release-gates/20261027T201511Z-008cca04-projection.log
+RUNNING(read-model)=keiro/bench/results/release-gates/20261027T201511Z-008cca04-read-model.log
+RELEASE_GATE=PASSED manifest=keiro/bench/results/release-gates/20261027T201511Z-008cca04-manifest.json
+..RUNNING(correctness)=keiro/bench/results/release-gates/20261027T201511Z-0625a6bd-correctness.log
+RUNNING(producer-identity)=keiro/bench/results/release-gates/20261027T201511Z-0625a6bd-producer-identity.log
+RUNNING(outbox)=keiro/bench/results/release-gates/20261027T201511Z-0625a6bd-outbox.log
+RUNNING(inbox)=keiro/bench/results/release-gates/20261027T201511Z-0625a6bd-inbox.log
+RUNNING(command)=keiro/bench/results/release-gates/20261027T201511Z-0625a6bd-command.log
+RUNNING(projection)=keiro/bench/results/release-gates/20261027T201511Z-0625a6bd-projection.log
+RUNNING(read-model)=keiro/bench/results/release-gates/20261027T201511Z-0625a6bd-read-model.log
+RELEASE_GATE=PASSED manifest=keiro/bench/results/release-gates/20261027T201511Z-0625a6bd-manifest.json
+RUNNING(correctness)=keiro/bench/results/release-gates/20261027T201511Z-ae479aff-correctness.log
+REUSED(producer-identity)=keiro/bench/results/release-gates/20261027T201511Z-0625a6bd-producer-identity.json
+REUSED(outbox)=keiro/bench/results/release-gates/20261027T201511Z-0625a6bd-outbox.json
+REUSED(inbox)=keiro/bench/results/release-gates/20261027T201511Z-0625a6bd-inbox.json
+REUSED(command)=keiro/bench/results/release-gates/20261027T201511Z-0625a6bd-command.json
+REUSED(projection)=keiro/bench/results/release-gates/20261027T201511Z-0625a6bd-projection.json
+REUSED(read-model)=keiro/bench/results/release-gates/20261027T201511Z-0625a6bd-read-model.json
+RELEASE_GATE=PASSED manifest=keiro/bench/results/release-gates/20261027T201511Z-ae479aff-manifest.json
+.RUNNING(correctness)=keiro/bench/results/release-gates/20261027T201511Z-50e12b9c-correctness.log
+RUNNING(producer-identity)=keiro/bench/results/release-gates/20261027T201511Z-50e12b9c-producer-identity.log
+RUNNING(outbox)=keiro/bench/results/release-gates/20261027T201511Z-50e12b9c-outbox.log
+RUNNING(inbox)=keiro/bench/results/release-gates/20261027T201511Z-50e12b9c-inbox.log
+RUNNING(command)=keiro/bench/results/release-gates/20261027T201511Z-50e12b9c-command.log
+RUNNING(projection)=keiro/bench/results/release-gates/20261027T201511Z-50e12b9c-projection.log
+RUNNING(read-model)=keiro/bench/results/release-gates/20261027T201511Z-50e12b9c-read-model.log
+RELEASE_GATE=PASSED manifest=keiro/bench/results/release-gates/20261027T201511Z-50e12b9c-manifest.json
+RUNNING(correctness)=keiro/bench/results/release-gates/20261027T201511Z-81639cb5-correctness.log
+error: recipe `_verify` failed on line 3 with exit code 1
+RELEASE_GATE=FAILED manifest=keiro/bench/results/release-gates/20261027T201511Z-81639cb5-manifest.json
+.RUNNING(correctness)=keiro/bench/results/release-gates/20261027T201511Z-1d528780-correctness.log
+RELEASE_GATE=FAILED manifest=keiro/bench/results/release-gates/20261027T201511Z-1d528780-manifest.json
+.RUNNING(correctness)=keiro/bench/results/release-gates/20261027T201511Z-75f7e883-correctness.log
+RUNNING(producer-identity)=keiro/bench/results/release-gates/20261027T201511Z-75f7e883-producer-identity.log
+RUNNING(outbox)=keiro/bench/results/release-gates/20261027T201511Z-75f7e883-outbox.log
+RUNNING(inbox)=keiro/bench/results/release-gates/20261027T201511Z-75f7e883-inbox.log
+RUNNING(command)=keiro/bench/results/release-gates/20261027T201511Z-75f7e883-command.log
+RUNNING(projection)=keiro/bench/results/release-gates/20261027T201511Z-75f7e883-projection.log
+RUNNING(read-model)=keiro/bench/results/release-gates/20261027T201511Z-75f7e883-read-model.log
+RELEASE_GATE=PASSED manifest=keiro/bench/results/release-gates/20261027T201511Z-75f7e883-manifest.json
+RUNNING(correctness)=keiro/bench/results/release-gates/20261027T201512Z-30acffdd-correctness.log
+error: recipe `_verify` failed on line 3 with exit code 1
+RELEASE_GATE=FAILED manifest=keiro/bench/results/release-gates/20261027T201512Z-30acffdd-manifest.json
+RUNNING(correctness)=keiro/bench/results/release-gates/20261027T201512Z-2dd3be47-correctness.log
+error: recipe `_verify` failed on line 3 with exit code 1
+RELEASE_GATE=FAILED manifest=keiro/bench/results/release-gates/20261027T201512Z-2dd3be47-manifest.json
+..RUNNING(correctness)=keiro/bench/results/release-gates/20261027T201512Z-451e7f3a-correctness.log
+RUNNING(producer-identity)=keiro/bench/results/release-gates/20261027T201512Z-451e7f3a-producer-identity.log
+RUNNING(outbox)=keiro/bench/results/release-gates/20261027T201512Z-451e7f3a-outbox.log
+RUNNING(inbox)=keiro/bench/results/release-gates/20261027T201512Z-451e7f3a-inbox.log
+RUNNING(command)=keiro/bench/results/release-gates/20261027T201512Z-451e7f3a-command.log
+RUNNING(projection)=keiro/bench/results/release-gates/20261027T201512Z-451e7f3a-projection.log
+RUNNING(read-model)=keiro/bench/results/release-gates/20261027T201512Z-451e7f3a-read-model.log
+RELEASE_GATE=FAILED manifest=keiro/bench/results/release-gates/20261027T201512Z-451e7f3a-manifest.json
+REUSED(correctness)=keiro/bench/results/release-gates/20261027T201512Z-451e7f3a-correctness.json
+REUSED(producer-identity)=keiro/bench/results/release-gates/20261027T201512Z-451e7f3a-producer-identity.json
+REUSED(outbox)=keiro/bench/results/release-gates/20261027T201512Z-451e7f3a-outbox.json
+RUNNING(inbox)=keiro/bench/results/release-gates/20261027T201512Z-b2bce193-inbox.log
+REUSED(command)=keiro/bench/results/release-gates/20261027T201512Z-451e7f3a-command.json
+REUSED(projection)=keiro/bench/results/release-gates/20261027T201512Z-451e7f3a-projection.json
+REUSED(read-model)=keiro/bench/results/release-gates/20261027T201512Z-451e7f3a-read-model.json
+RELEASE_GATE=PASSED manifest=keiro/bench/results/release-gates/20261027T201512Z-b2bce193-manifest.json
+..RUNNING(correctness)=keiro/bench/results/release-gates/20261027T201512Z-2af73d5a-correctness.log
+RUNNING(producer-identity)=keiro/bench/results/release-gates/20261027T201512Z-2af73d5a-producer-identity.log
+RUNNING(outbox)=keiro/bench/results/release-gates/20261027T201512Z-2af73d5a-outbox.log
+RUNNING(inbox)=keiro/bench/results/release-gates/20261027T201512Z-2af73d5a-inbox.log
+RUNNING(command)=keiro/bench/results/release-gates/20261027T201512Z-2af73d5a-command.log
+RUNNING(projection)=keiro/bench/results/release-gates/20261027T201512Z-2af73d5a-projection.log
+RUNNING(read-model)=keiro/bench/results/release-gates/20261027T201512Z-2af73d5a-read-model.log
+RELEASE_GATE=PASSED manifest=keiro/bench/results/release-gates/20261027T201512Z-2af73d5a-manifest.json
+RUNNING(correctness)=keiro/bench/results/release-gates/20261027T201512Z-1bb03cec-correctness.log
+REUSED(producer-identity)=keiro/bench/results/release-gates/20261027T201512Z-2af73d5a-producer-identity.json
+REUSED(outbox)=keiro/bench/results/release-gates/20261027T201512Z-2af73d5a-outbox.json
+REUSED(inbox)=keiro/bench/results/release-gates/20261027T201512Z-2af73d5a-inbox.json
+REUSED(command)=keiro/bench/results/release-gates/20261027T201512Z-2af73d5a-command.json
+REUSED(projection)=keiro/bench/results/release-gates/20261027T201512Z-2af73d5a-projection.json
+REUSED(read-model)=keiro/bench/results/release-gates/20261027T201512Z-2af73d5a-read-model.json
+RELEASE_GATE=PASSED manifest=keiro/bench/results/release-gates/20261027T201512Z-1bb03cec-manifest.json
+..
+----------------------------------------------------------------------
+Ran 27 tests in 4.051s
+
+OK

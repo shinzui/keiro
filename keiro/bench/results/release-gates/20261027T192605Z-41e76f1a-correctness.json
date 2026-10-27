@@ -1,0 +1,16 @@
+{
+  "command": [
+    "just",
+    "_verify"
+  ],
+  "identity": "9c01474b809959dfe47718f8c481ef4572dde920131720d86ffab1e38b90b4d3",
+  "load_average": [
+    4.267578125,
+    11.26171875,
+    15.3330078125
+  ],
+  "log": "keiro/bench/results/release-gates/20261027T192605Z-41e76f1a-correctness.log",
+  "schema": 1,
+  "started": 1793129165.066205,
+  "status": null
+}

@@ -27,8 +27,8 @@ A maintainer can prepare one final version, discover missing infrastructure and 
 ## Progress
 
 - [x] (2026-10-27) Preparation regenerated the 0.22 corpus and inventories with no drift; live preflight passed terminology connectivity, upgrade-chain publication, eight package checks and 216 released external dependencies before the long gate.
-- [ ] Locked, fail-fast release stages retain auditable receipts and reuse only matching successful evidence, with refusal and invalidation controls.
-- [ ] Prebuilt archives and an isolated staged/published consumer work end to end; release instructions and durable policy describe the new workflow.
+- [x] (2026-10-27) Locked/fail-fast stages passed 27 controls, full correctness and all six guards through the accepted 20:48 manifest. The resumed run reused six stages and reran inbox in 184.432 seconds, versus 1621.761 seconds for the full refused attempt; ceilings and baselines are unchanged.
+- [x] (2026-10-27) All sixteen archives and exact-version staged/published consumers pass; both health responses have no schema drift. Readiness passes for the accepted evidence and archive checksums. A separate Nix-shell gate reused all seven stages in 67.552 seconds. The release skill and ADR-58 describe the implemented policy.
 
 ## Surprises & Discoveries
 
@@ -39,7 +39,7 @@ any expensive work resumed. Metadata reads now re-fetch complete responses with 
 per-dependency retries; missing/unpreferred releases still refuse immediately. A full
 82ad8439 attempt passed correctness and five guards but refused two command no-op cases
 at roughly 25–26 percent over baseline. Those failures remain diagnostic evidence;
-baselines and thresholds have not moved. The revised helper recovered a real truncated pgmq-config response during a successful 216-dependency preflight. A focused command guard passed all 15 cases (54.23 seconds); both no-op cases were about 14 percent above baseline. The revised helper needs fresh candidate evidence.
+baselines and thresholds have not moved. The revised helper recovered a real truncated pgmq-config response during a successful 216-dependency preflight. A focused command guard passed all 15 cases (54.23 seconds); both no-op cases were about 14 percent above baseline. The final 522fd54c candidate passed full correctness and five guards, refused three inbox fresh cases, then passed inbox on a matching-input resumed run. Those cases returned to 385–397 ms without source or baseline changes. The accepted manifest references all original stage records explicitly.
 
 ## Decision Log
 
@@ -49,7 +49,30 @@ Successful stages may be reused only for a clean candidate with identical tested
 
 ## Outcomes & Retrospective
 
-Preparation, static/environmental preflight and 27 focused refusal/reuse/isolation controls pass. Native Nix checks pass. The first development gate was intentionally interrupted when review found an exclusion tied to this plan number; all Markdown ExecPlan/MasterPlan documents now have the same execution-note treatment, while code in those directories and ADR/guide policy remain inputs. Interrupted stage records cannot authorize reuse; the driver now writes an unaccepted manifest before starting its first stage. All sixteen archives built and staged/published consumers both returned healthy HTTP responses with no schema drift. Final gate, receipt-reuse and readiness acceptance remain in progress; no new release is being published.
+All five improvements are implemented and accepted at source commit `522fd54c`.
+The [retained summary](../../keiro/bench/results/release-gates/workflow-326/summary.json)
+links the full refused attempt, accepted resumed run and fully cached run. The full
+attempt took 1621.761 seconds; its three inbox failures remained red. A matching-input
+retry reused six stages and reran inbox in 184.432 seconds, accepting all seven stages.
+A separate Nix-shell invocation reused every stage in 67.552 seconds, including mandatory
+preflight. This demonstrates a retry saving of almost 24 minutes without changing a
+baseline, ceiling, test assertion or benchmark workload.
+
+All 27 focused controls, native Nix checks, strict ADR validation, sixteen archive
+checksums, both isolated consumer builds and HTTP health proofs, and the final
+`release-ready` check pass. The PGMQ suite retains its two previously optional pending
+checks. The existing 0.22.0.0 cohort was the workflow fixture; no new tags or uploads
+were performed. There is no remaining required work in this plan.
+
+Review caught an exclusion tied to this plan number, prompting one intentional development
+gate interruption. Markdown ExecPlan/MasterPlan documents now share that execution-note
+rule, while source files in those directories and ADR/guide policy remain inputs.
+Interrupted records cannot authorize reuse and a manifest is written before work starts.
+Live Hackage response truncations prompted bounded per-dependency re-fetching; partial
+JSON is never accepted. Both findings and rejected benchmark runs remain in the evidence.
+[ADR-58](../adr/0058-benchmark-release-gates-require-isolated-fixed-workloads-and-attributed-baselines.md)
+holds the durable input, receipt, isolation and publication rules; implementation detail
+and measured acceptance remain here and in the evidence bundle.
 
 ## Context and Orientation
 
@@ -89,7 +112,7 @@ Stage and commit the implementation before a real gate because the corpus check 
 
 ## Validation and Acceptance
 
-Focused controls must prove that failed correctness invokes no guard, a guard-only retry reuses matching correctness and passing guards, and any source/plan/toolchain/environment/baseline change invalidates reuse. Missing or changed logs, stale receipts, interrupted stages and the most recent failed attempt must not authorize acceptance. A concurrent workflow command must refuse while a writer holds the lock. Generated-file and connectivity checks must execute before expensive tests.
+Focused controls must prove that failed correctness invokes no guard, a guard-only retry reuses matching correctness and passing guards, and any tested-source/resolved-dependency-plan/toolchain/environment/baseline change invalidates reuse. Missing or changed logs, stale receipts, interrupted stages and the most recent failed attempt must not authorize acceptance. A concurrent workflow command must refuse while a writer holds the lock. Generated-file and connectivity checks must execute before expensive tests.
 
 A real preflight and gate exercise the live command wiring. Staged and published consumer modes must solve, build and serve `/keiro/health` as `{"status":"ok","schema_drift":[],"mutations_enabled":false}` with disposable database cleanup. Tests must establish bounded index retries and refusal of unexpected sources/versions. Neither consumer nor artifacts command uploads anything. Preserve all six benchmark workloads, baselines and thresholds. Native Nix checks and strict ADR validation must pass.
 

@@ -1,0 +1,18 @@
+{
+  "command": [
+    "scripts/bench-regression.sh",
+    "inbox"
+  ],
+  "finished": 1793131566.633533,
+  "identity": "ffb1465f42adf9f5048b1e28b86e03cd4226875e3f4bce13dc79285c12bc5091",
+  "load_average": [
+    3.45556640625,
+    3.4765625,
+    5.3134765625
+  ],
+  "log": "keiro/bench/results/release-gates/20261027T193838Z-4f7c11b7-inbox.log",
+  "log_sha256": "44e84ff474189ec4b4202fa9ad96335469a40f05fe116db7657e9f186b09dfc6",
+  "schema": 1,
+  "started": 1793131382.388138,
+  "status": 0
+}

@@ -1,0 +1,34 @@
+{"identity": "07e55719a430618e980a70fdef123b1f84b6873c0c2914329a9b9cf313214300", "command": ["scripts/bench-regression.sh", "producer-identity"]}
+##### guard producer-identity 2026-10-27T19:57:12Z
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.22.0.0 (bench:keiro-bench) (configuration changed)
+Configuring benchmark 'keiro-bench' for keiro-0.22.0.0...
+Preprocessing benchmark 'keiro-bench' for keiro-0.22.0.0...
+Building benchmark 'keiro-bench' for keiro-0.22.0.0...
+[11 of 11] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.22.0.0/b/keiro-bench/build/keiro-bench/keiro-bench [Library changed]
+Running 1 benchmarks...
+Benchmark keiro-bench: RUNNING...
+All
+  producer-identity
+    derive-v1:                              OK
+      615  ns ± 7.8 ns
+    legacy-fresh-1000:                      OK
+      45.6 ms ± 1.6 ms
+    deterministic-fresh-1000:               {"batch":true,"ceiling":1.1,"median_ratio":1.0661637735163136,"pairs_ns_legacy_deterministic":[[43929000,46352000],[43326000,46982000],[44397000,46304000],[42402000,47114000],[44096000,46038000],[43858000,46863000],[43946000,46170000],[44012000,46924000],[43635000,47187000],[44317000,51023000],[44169000,45929000],[43853000,47148000],[43655000,45658000],[43514000,46426000],[44085000,45496000]],"phase":"producer-fresh-ratio"}
+OK
+      47.1 ms ± 782 μs
+    deterministic-fresh-and-replay-1000:    OK
+      267  ms ± 5.3 ms
+    legacy-single-tx-per-event-1000:        OK
+      84.2 ms ± 1.3 ms
+    deterministic-single-tx-per-event-1000: {"batch":false,"ceiling":1.1,"median_ratio":0.9721562292122018,"pairs_ns_legacy_deterministic":[[83379000,81208000],[84367000,87017000],[84144000,80704000],[84184000,81840000],[82878000,81372000],[82724000,80514000],[83735000,80732000],[84464000,80085000],[83219000,80140000],[83628000,81359000],[82688000,83918000],[83861000,81506000],[83278000,80606000],[83328000,80729000],[85821000,89507000]],"phase":"producer-fresh-ratio"}
+OK
+      81.4 ms ± 532 μs
+
+All 6 tests passed (326.87s)
+Benchmark keiro-bench: FINISH
+##### guard summary 2026-10-27T20:02:47Z
+GUARD(producer-identity)=0
+BENCH_REGRESSION=PASSED
+STAGE_EXIT=0

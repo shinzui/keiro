@@ -1,0 +1,71 @@
+{
+  "accepted_attempt": {
+    "elapsed_seconds": 184.432,
+    "status": 0
+  },
+  "accepted_from_full_attempt": false,
+  "accepted_manifest": "keiro/bench/results/release-gates/20261027T204838Z-dbae5693-manifest.json",
+  "accepted_stages": {
+    "command": {
+      "receipt": "keiro/bench/results/release-gates/20261027T202041Z-905fb443-command.json",
+      "reused": true,
+      "sha256": "587d2febd43e5a82c7ce8f7da3d95bfd26a937aa8cfc7cd3a327ec1c90b2faf5",
+      "status": 0
+    },
+    "correctness": {
+      "receipt": "keiro/bench/results/release-gates/20261027T202041Z-905fb443-correctness.json",
+      "reused": true,
+      "sha256": "b08d146447eda043081376718da2ac63e29ab8277751581d4046bbcf4fabf879",
+      "status": 0
+    },
+    "inbox": {
+      "receipt": "keiro/bench/results/release-gates/20261027T204838Z-dbae5693-inbox.json",
+      "reused": false,
+      "sha256": "26d2ba0e862632daba39ffa7ac4d3c21987f1599e33810e351cfd11a924da1bb",
+      "status": 0
+    },
+    "outbox": {
+      "receipt": "keiro/bench/results/release-gates/20261027T202041Z-905fb443-outbox.json",
+      "reused": true,
+      "sha256": "ce694bf43d86a7aa7090dcb2018e0198c3795d14e47a814618d026bcb761a774",
+      "status": 0
+    },
+    "producer-identity": {
+      "receipt": "keiro/bench/results/release-gates/20261027T202041Z-905fb443-producer-identity.json",
+      "reused": true,
+      "sha256": "edbdfe73c34fbb8bed3ca9d36cede283d7734631120bfc87155cf587bda191cf",
+      "status": 0
+    },
+    "projection": {
+      "receipt": "keiro/bench/results/release-gates/20261027T202041Z-905fb443-projection.json",
+      "reused": true,
+      "sha256": "30449654e4601e541b3c9368512e03fc9e696a857464050b10b20a162608bcd4",
+      "status": 0
+    },
+    "read-model": {
+      "receipt": "keiro/bench/results/release-gates/20261027T202041Z-905fb443-read-model.json",
+      "reused": true,
+      "sha256": "93190b134847328b7b20d4fee5496c57a0cfd90eef27ba798ec847b1830f8089",
+      "status": 0
+    }
+  },
+  "all_seven_stages_reused": true,
+  "cached_attempt": {
+    "elapsed_seconds": 67.552,
+    "status": 0
+  },
+  "consumer_modes": [
+    "staged",
+    "published"
+  ],
+  "focused_controls": 27,
+  "full_attempt": {
+    "elapsed_seconds": 1621.761,
+    "status": 1
+  },
+  "full_attempt_manifest": "keiro/bench/results/release-gates/20261027T202041Z-905fb443-manifest.json",
+  "release_version_fixture": "0.22.0.0",
+  "reused_manifest": "keiro/bench/results/release-gates/20261027T205643Z-f7d2d374-manifest.json",
+  "source_identity": "b10342ee87ec0c598ca6c43dc65e1265b8bd0607ae8e4e0a92234905b33c3868",
+  "tested_commit": "522fd54c86727c5e770bbf4e070c31e9e56aae02"
+}
