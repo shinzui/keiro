@@ -6,7 +6,20 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
-### Added
+## 0.22.0.0 — 2026-10-27
+
+### Breaking Changes
+
+- Direct DSL API clients must handle `AggregateStructuralEnum` and
+  `StructuralEnumEqualityGuards`, supply `StructuralProjection.rootEnum`
+  (`Nothing` for prior projections), and supply `structuralEnumEqualities`
+  (`[]` for prior records) when constructing `ScaffoldRecord` or `WorkspaceRecord`.
+  `AggregateMapped` is a bundled bidirectional pattern matching both mapped
+  representations. Structural enum equality adds declaration-specific fold
+  evidence; preserve replay qualification when adopting it. Language 6 remains
+  a candidate; this release does not promote its language contract.
+
+### New Features
 
 - Candidate Language 6 structural enums support declaration-safe `==` and `!=`
   guards and qualified constructor literals through the existing total binding.
@@ -31,7 +44,7 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   `AggregateMapped` is a bundled bidirectional pattern covering both mapped-value
   representations, preserving their structural codec/initial/write paths.
 
-### Fixed
+### Bug Fixes
 
 - A consumer-bound nominal enum or ID literal used only as a comparison operand
   in a guard or outcome reason no longer plans unused binding, representation,

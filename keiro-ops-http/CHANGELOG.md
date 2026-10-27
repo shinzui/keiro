@@ -2,7 +2,15 @@
 
 ## [Unreleased]
 
+## 0.22.0.0 — 2026-10-27
+
 ### Breaking Changes
+
+- Require the Kiroku Store 0.12 cohort from
+  mori://shinzui/kiroku/packages/kiroku-store; apply migration 0016 from
+  mori://shinzui/kiroku/packages/kiroku-store-migrations with affected workers
+  stopped, then restart new binaries before using namespace targets. Update
+  exhaustive subscription target/event matches and low-level record constructors.
 
 - Direct `InspectionLimits` records must supply `deliveryDeadlineSeconds`; the default is 30 seconds. Nonempty confirmation bodies must be application/json, with media-type parameters permitted.
 

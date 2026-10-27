@@ -105,6 +105,5 @@ preserving existing keys. The example fulfillment test compares manager command
 JSON with its library view and intended packing-command witness.
 
 The HTTP sister package adds shared observational socket feeds using the bounded
-poll reads and encoders. They are locally validated and unreleased until cohort
-release. Subscriber count does not multiply view reads; idle mounting adds no
+poll reads and encoders. They are introduced in the 0.22.0.0 cohort. Subscriber count does not multiply view reads; idle mounting adds no
 wake cursor or recurring work. Queue overflow requires snapshot/poll recovery.

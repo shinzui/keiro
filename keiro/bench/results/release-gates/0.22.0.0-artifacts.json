@@ -1,0 +1,82 @@
+[
+  {
+    "path": "dist-newstyle/sdist/keiro-core-0.22.0.0.tar.gz",
+    "sha256": "773e54c42b3cf5d71f5e6ae780779f9dd9d241e7473577b756bdef1434700df0",
+    "bytes": 31076
+  },
+  {
+    "path": "dist-newstyle/keiro-core-0.22.0.0-docs.tar.gz",
+    "sha256": "05bd084d05097327dc7ab9e70e63b2a206072e903ad20d7a772845b4fa197431",
+    "bytes": 549114
+  },
+  {
+    "path": "dist-newstyle/sdist/keiro-0.22.0.0.tar.gz",
+    "sha256": "fac8d9cdcb881756261058b9ecbfb290de72d137a31302c95a8550c3f050653b",
+    "bytes": 671881
+  },
+  {
+    "path": "dist-newstyle/keiro-0.22.0.0-docs.tar.gz",
+    "sha256": "5c6708762dbc40029185910dbc0c3533556d7f726c01344471fb855bd3555daa",
+    "bytes": 2650798
+  },
+  {
+    "path": "dist-newstyle/sdist/keiro-pgmq-0.22.0.0.tar.gz",
+    "sha256": "c6fa9c956424afe8478d14c292be56bcea19cede084b441c1f97b45a7971c6a8",
+    "bytes": 42727
+  },
+  {
+    "path": "dist-newstyle/keiro-pgmq-0.22.0.0-docs.tar.gz",
+    "sha256": "3888255e69a3031040fdc617fa6a8da4278fb3d208db2d53b1b1072d8b1faf2d",
+    "bytes": 192422
+  },
+  {
+    "path": "dist-newstyle/sdist/keiro-migrations-0.22.0.0.tar.gz",
+    "sha256": "f0221db7fdc6206597776f062b5d7b89d0b1f6734d8858de06b0695dd6ce9fb9",
+    "bytes": 91014
+  },
+  {
+    "path": "dist-newstyle/keiro-migrations-0.22.0.0-docs.tar.gz",
+    "sha256": "ba00471afef91d596bdd8dc89c9b97c8aea7c301094270008435d03d0da29d7b",
+    "bytes": 96803
+  },
+  {
+    "path": "dist-newstyle/sdist/keiro-test-support-0.22.0.0.tar.gz",
+    "sha256": "b3dc02fa2ee957b0b14f3fdce973acca59c3593fc7b51640893e24c5c6569aa1",
+    "bytes": 15717
+  },
+  {
+    "path": "dist-newstyle/keiro-test-support-0.22.0.0-docs.tar.gz",
+    "sha256": "1b88fd064a57c9fe6da90e051ddfa938859d7526acd35a5632f78a8410cc8796",
+    "bytes": 118567
+  },
+  {
+    "path": "dist-newstyle/sdist/keiro-dsl-0.22.0.0.tar.gz",
+    "sha256": "96313ad2e13bb174f1a181bc85448299b85e3095bc518403468346ce103b11a0",
+    "bytes": 1977995
+  },
+  {
+    "path": "dist-newstyle/keiro-dsl-0.22.0.0-docs.tar.gz",
+    "sha256": "9321400e5532e03dfb28a51ff8e4b4f44c9ab77c706782a6844799cfa424ede2",
+    "bytes": 3318935
+  },
+  {
+    "path": "dist-newstyle/sdist/keiro-ops-0.22.0.0.tar.gz",
+    "sha256": "fbb3f8697ac264a4344988881424ba1fde002bb08ce0dfa73dcba4c22c4a82aa",
+    "bytes": 73414
+  },
+  {
+    "path": "dist-newstyle/keiro-ops-0.22.0.0-docs.tar.gz",
+    "sha256": "9271a6ab68272886db206551cc218d8f72ee03fff5797d8427b1abbec2f85d40",
+    "bytes": 333878
+  },
+  {
+    "path": "dist-newstyle/sdist/keiro-ops-http-0.22.0.0.tar.gz",
+    "sha256": "3e72e3e8da2b787a43e97defe31f65919e84cb012b363e19e87ac2fe0ee0ffed",
+    "bytes": 58038
+  },
+  {
+    "path": "dist-newstyle/keiro-ops-http-0.22.0.0-docs.tar.gz",
+    "sha256": "24a2024e502338b908c1341929abf1a878d0ea04231a0116fcad2e32aa37b372",
+    "bytes": 196926
+  }
+]

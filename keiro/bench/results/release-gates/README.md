@@ -1,5 +1,32 @@
 # Release-gate evidence
 
+## Keiro 0.22.0.0
+
+The final candidate at `b2be482b` passes the complete
+[release gate](20261027T174942Z-b2be482b.log): `VERIFY_EXIT=0`, all six `GUARD(name)=0`
+statuses, `BENCH_REGRESSION=PASSED`, and `BENCH_EXIT=0`.
+The release commit adds retained evidence after testing; implementation, package
+versions, corpus provenance, and generated inventories are unchanged from that
+tested candidate. Native Nix checks and all eight package checks also pass.
+The PGMQ suite retains two pre-existing optional pending checks.
+
+The user explicitly authorized concurrent adapter performance work. Numerical
+ceilings and committed baselines are unchanged. The three earlier logs are failed
+preparation attempts, not acceptance: `20261027T162850Z-d106a92c.log` stopped at
+an unavailable registry and was interrupted during overlapping documentation
+builds; `20261027T165947Z-d106a92c.log` stopped at stale generated inventory and
+was interrupted before completing benchmarks. The inventories were regenerated
+and the full remaining policy set passed. `20261027T172118Z-b2be482b.log` passed
+all correctness checks and five guards, with one inbox case at 2.48 ms (27% over
+baseline, against a 25% ceiling). The separate
+[inbox rerun](0.22.0.0-inbox-retry.log) passed all 49 cases; that case measured
+1.97 ms, effectively matching baseline. This final combined run is the accepted
+gate; earlier failures and the retry remain visible.
+
+[Additional checks](0.22.0.0-checks.txt),
+[dependency publication audit](0.22.0.0-dependencies.txt), and
+[archive checksums](0.22.0.0-artifacts.json) retain the release preparation evidence.
+
 Plan 316 is accepted by two uninterrupted `nix develop -c just release-gate` runs at
 `a4332cfe` on 2026-10-25. Both start from the same committed implementation, after
 plan 315 completion, with Z3 4.16.0 verified in the Nix shell. Correctness runs first;

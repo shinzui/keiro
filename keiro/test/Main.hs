@@ -436,7 +436,7 @@ import ReplayCompatibilitySpec qualified
 import Shibuya.Adapter (Adapter (..))
 import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), HaltReason (..), RetryDelay (..), deadLetterCodeText, deadLetterReasonCode, deadLetterReasonDetail, renderDeadLetterReason)
 import Shibuya.Core.AckHandle (AckHandle (..))
-import Shibuya.Core.Ingested (Ingested (..))
+import Shibuya.Core.Ingested (DeliveryStatus (..), Ingested (..))
 import Shibuya.Core.Types (Envelope (..))
 import Streamly.Data.Stream qualified as Streamly
 import System.Exit (ExitCode (..))
@@ -18860,7 +18860,8 @@ inMemoryAdapter decisionsRef messages =
       Ingested
         { envelope = routerTestEnvelope message,
           ack = AckHandle (\decision -> liftIO (modifyIORef' decisionsRef (<> [decision]))),
-          lease = Nothing
+          lease = Nothing,
+          deliveryStatus = pure DeliveryCurrent
         }
 
 routerTestEnvelope :: msg -> Envelope msg

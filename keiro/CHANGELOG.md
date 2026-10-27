@@ -6,7 +6,19 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+## 0.22.0.0 — 2026-10-27
+
 ### Breaking Changes
+
+- Require the Kiroku Store 0.12 cohort from
+  mori://shinzui/kiroku/packages/kiroku-store; apply migration 0016 from
+  mori://shinzui/kiroku/packages/kiroku-store-migrations with affected workers
+  stopped, then restart new binaries before using namespace targets. Update
+  exhaustive subscription target/event matches and low-level record constructors.
+- Require Shibuya Core `^>=0.12.0.0` from
+  mori://shinzui/shibuya/packages/shibuya-core; direct `Ingested` records supply
+  `deliveryStatus` (`pure DeliveryCurrent` preserves prior behavior), and
+  `AppConfig` should be constructed from `defaultAppConfig`.
 
 - Direct `RunCommandOptions` records must supply `inspectionProvenance`; updates of defaults remain disabled. Direct `ProcessManagerInspector` records must supply `provenanceMode` (`ReadLegacyProvenance` or `NoReactionProvenance`).
 

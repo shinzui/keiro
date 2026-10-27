@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name: keiro-core
-version: 0.21.0.0
+version: 0.22.0.0
 synopsis: Core contracts for Keiro packages
 description:
   Stable stream, codec, event-stream, and integration-event contracts
@@ -73,7 +73,7 @@ library
     deepseq >=1.5 && <1.6,
     generic-lens >=2.2 && <2.4,
     keiki >=0.9 && <0.10,
-    kiroku-store ^>=0.11.0.0,
+    kiroku-store ^>=0.12.0.0,
     lens >=5.2 && <5.4,
     mmzk-typeid >=0.7 && <0.8,
     scientific >=0.3 && <0.4,

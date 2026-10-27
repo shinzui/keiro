@@ -1,0 +1,20 @@
+Accepted source: b2be482b4d43ed06c1dce26ac224ed8b61a81ee6
+Complete release-gate log: 20261027T174942Z-b2be482b.log
+VERIFY_EXIT=0
+GUARD(producer-identity)=0
+GUARD(outbox)=0
+GUARD(inbox)=0
+GUARD(command)=0
+GUARD(projection)=0
+GUARD(read-model)=0
+BENCH_EXIT=0
+Native nix flake check: PASS
+All eight cabal check invocations: PASS
+All eight source archives and all eight Haddock archives: prepared
+Corpus regeneration: 765 files; provenance-only changes
+Published-default library/executable dependency closure: 213 normal Hackage versions; no reachable Git dependency
+Blueprint validation: both valid; installed preview copies restored to their original absent state
+===== [1/2] kiroku-upgrade 0.11.0.1 -> 0.12.0.0 (entailed by keiro-upgrade 0.21.0.0 -> 0.22.0.0) =====
+===== [2/2] keiro-upgrade 0.21.0.0 -> 0.22.0.0 =====
+Upstream prerequisite: mori://shinzui/kiroku (blueprints/kiroku-upgrade/migrations/0.11.0.1-to-0.12.0.0.md; artifact-level URI pending), committed and verified on origin/master
+Concurrent adapter performance execution explicitly authorized by the user; numerical guard limits and baselines unchanged.

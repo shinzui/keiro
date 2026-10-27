@@ -6,7 +6,15 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.22.0.0 — 2026-10-27
+
 ### Breaking Changes
+
+- Require the Kiroku Store 0.12 cohort from
+  mori://shinzui/kiroku/packages/kiroku-store; apply migration 0016 from
+  mori://shinzui/kiroku/packages/kiroku-store-migrations with affected workers
+  stopped, then restart new binaries before using namespace targets. Update
+  exhaustive subscription target/event matches and low-level record constructors.
 
 - Direct `AppHooks` records must supply `aggregates` and `processManagers`; `emptyAppHooks` leaves them disabled. `OpsOutcome` adds `InspectionFailed`, requiring exhaustive consumers to handle structured codes.
 - `wf show/steps/journal` return `InspectionFailed` for typed inspection errors. `pgmq dlq read` requires `--force` to reserve rows; an unforced invocation previews and exits 1.

@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-27
+* **Update**: Set CAP-20/CAP-21 introduction to 0.22.0.0, reconcile CAP-16 socket availability and the eight-package catalog, and replace superseded pending-interference wording with retained cohort acceptance.
+
 ## 2026-10-21
 * **Update**: Extend CAP-20 and CAP-16 with shared bounded socket feeds, active-only wake ownership, focused lifecycle evidence and unreleased cohort status.
 * **Update**: Extend CAP-7 and CAP-16 with bounded process-manager, pending-timer and shard observations through supported library APIs.

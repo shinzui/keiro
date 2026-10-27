@@ -1,6 +1,6 @@
 # Keiro release cohort map
 
-Which upstream releases each Keiro version pairs with. Keiro's seven published
+Which upstream releases each Keiro version pairs with. Keiro's eight published
 packages share one version and are released together, so a row describes the
 whole set.
 
@@ -9,6 +9,7 @@ edit. What to edit is in the edge prompt.
 
 | Keiro | `kiroku-store` | `kiroku-store-migrations` | `keiki` | `shibuya-core` |
 |---|---|---|---|---|
+| 0.22.0.0 | `^>=0.12.0.0` | `^>=0.7.2.0` | `>=0.9 && <0.10` | `^>=0.12.0.0` |
 | 0.21.0.0 | `^>=0.11.0.0` | `^>=0.7.1.0` | `>=0.9 && <0.10` | `^>=0.10.0.1` |
 | 0.20.0.0 | `^>=0.11.0.0` | `^>=0.7.1.0` | `>=0.9 && <0.10` | `^>=0.10.0.1` |
 | 0.19.0.1 | `>=0.9.0.1 && <0.10` | `^>=0.6.0.0` | `>=0.9 && <0.10` | `^>=0.10.0.0` |
@@ -42,6 +43,14 @@ migrations 0013–0015. Keiro's composed plan contains 47 migrations.
 Keiro 0.21.0.0 retains the 0.20.0.0 upstream cohort and composed migration plan.
 Its edge covers DSL source API adaptations and generated-code regeneration;
 Language 6 remains a candidate and no database ledger fixup is required.
+
+Keiro 0.22.0.0 requires adapter `^>=0.18.0.0` from
+mori://shinzui/shibuya-pgmq-adapter/packages/shibuya-pgmq-adapter and the PGMQ
+family `>=0.7.0.0 && <0.8` from mori://shinzui/pgmq-hs. Where used, Kiroku's
+Shibuya adapter is `^>=0.7.0.0` and metrics is `^>=0.4.0.0`. The entailed
+Kiroku 0.11.0.1 → 0.12.0.0 edge covers stopped-worker migration 0016 and
+namespace bindings. The framework plan contains 48 migrations; separately
+composed PGMQ adds its own migration 0007. Language 6 remains candidate.
 
 From 0.18.0.0, `keiro-test-support` requires `ephemeral-pg >=0.3.1 && <0.4`. That is a test-only
 dependency, but `pg-migrate-test-support 1.1.0.0` still caps it below 0.3, so a build plan holding
