@@ -304,44 +304,19 @@ To add one:
    `seihou-registry.dhall`, and update the edge table in
    `blueprints/keiro-upgrade/README.md` and the cohort map in
    `blueprints/keiro-upgrade/files/keiro-cohort-versions.md`.
-5. Validate and preview a real chain — validation alone cannot check an
-   entailment, because whether the named blueprint declares the named edge is a
-   filesystem question:
+5. Validate the working-tree blueprint:
 
    ```bash
    seihou validate-blueprint blueprints/keiro-upgrade
-   seihou agent --debug migrate keiro-upgrade --from <prev> --to <next>
    ```
 
-   The preview must show every expected step, in order, each labelled with the
-   blueprint that owns it. Contacting no provider and writing nothing, it is
-   safe to run as often as you like.
-
-   **The preview does not read your working tree.** `seihou` resolves
-   `keiro-upgrade` from the *installed* copy at
-   `~/.config/seihou/installed/keiro-upgrade`, which was installed from git and
-   is usually stale — it lags this repository by at least the edge you are
-   adding. Previewing an edge you just authored therefore reports
-
-   ```
-   No blueprint migrations are declared inside the requested version window.
-   ```
-
-   which is a **false negative**, not a defect in your edge. Do not "fix" a
-   correct edge because of it. Sync the installed copy from the working tree
-   first, preview, then put it back:
-
-   ```bash
-   cp -R ~/.config/seihou/installed/keiro-upgrade "$S/keiro-upgrade.bak"
-   rsync -a --delete blueprints/keiro-upgrade/ ~/.config/seihou/installed/keiro-upgrade/
-   seihou agent --debug migrate keiro-upgrade --from <prev> --to <next>
-   rsync -a --delete "$S/keiro-upgrade.bak/" ~/.config/seihou/installed/keiro-upgrade/
-   ```
-
-   Confirm the restore (`grep version blueprint.dhall` and `ls migrations/`) —
-   leaving a synced copy behind would make the *next* release's preview lie in
-   the opposite direction. Use `seihou list --blueprints` to see which source a
-   blueprint currently resolves from.
+   The mandatory `release-preflight` in step 4 evaluates the current version
+   window, verifies every upstream entailment is published, and previews the real
+   chain using disposable project-local blueprint copies. It reads the current
+   checkout rather than a stale installed Keiro blueprint. Do not copy over the
+   user's installed artifacts or repeat the preview manually. A missing upstream
+   edge must be authored and pushed in its owning repository before preflight
+   passes. Source/fixture regeneration happens in preparation before that gate.
 
 This step exists because the alternative has already failed once:
 `migrate-keiro-stack` in `agent-seihou` describes "the current cohort" rather
@@ -444,8 +419,8 @@ nix develop -c just release-consumer staged
 nix develop -c just release-ready keiro/bench/results/release-gates/<run>-manifest.json
 ```
 
-Artifacts and SHA-256 checksums land in `dist-release/<version>/`. Haddock runs
-serially with verification, avoiding concurrent Cabal reconfiguration. The staged
+Artifacts and SHA-256 checksums land in `dist-release/<version>/`. One Haddock invocation targets all eight release packages and is serialized
+with verification, avoiding repeated target plans and concurrent Cabal reconfiguration. The staged
 consumer depends on all eight packages at the exact shared version, consumes
 those tarballs, solves external dependencies only from secure HTTPS Hackage,
 builds and serves `/keiro/health` against a freshly migrated disposable database.

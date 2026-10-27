@@ -21,7 +21,8 @@
     #        daemon's own PATH does not carry ~/.nix-profile/bin. Without git in
     #        the shell, scripts/record-release.sh dies on `git for-each-ref`.
     #   z3:  SMT solver used by the keiro-syntax / property test tooling.
-    haskellProject.extraDevPackages = [ pkgs.git pkgs.z3 ];
+    #   python3: release orchestration and repository policy checks.
+    haskellProject.extraDevPackages = [ pkgs.git pkgs.z3 pkgs.python3 ];
 
     treefmt = {
       # Take fourmolu from the ghc9124 package set so it matches the project

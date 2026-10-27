@@ -26,7 +26,7 @@ A maintainer can prepare one final version, discover missing infrastructure and 
 
 ## Progress
 
-- [ ] Preparation and early preflight detect environmental, packaging, blueprint and generated-file failures before expensive verification.
+- [x] (2026-10-27) Preparation regenerated the 0.22 corpus and inventories with no drift; live preflight passed terminology connectivity, upgrade-chain publication, eight package checks and 216 released external dependencies before the long gate.
 - [ ] Locked, fail-fast release stages retain auditable receipts and reuse only matching successful evidence, with refusal and invalidation controls.
 - [ ] Prebuilt archives and an isolated staged/published consumer work end to end; release instructions and durable policy describe the new workflow.
 
@@ -42,7 +42,7 @@ Successful stages may be reused only for a clean candidate with identical tested
 
 ## Outcomes & Retrospective
 
-Implementation and acceptance are in progress.
+Preparation, static/environmental preflight and 21 focused refusal/reuse/isolation controls pass. Native Nix checks pass. All sixteen archives built and staged/published consumers both returned healthy HTTP responses with no schema drift. Final gate, receipt-reuse and readiness acceptance remain in progress; no new release is being published.
 
 ## Context and Orientation
 
@@ -87,4 +87,4 @@ All writes are local and reversible. Preparation never commits automatically. In
 
 ## Interfaces and Dependencies
 
-Use Python's standard library, existing Cabal/GHC/Nix/PostgreSQL/Z3 tooling, Mori, Seihou and OKF. No new application dependency or package API is introduced. The release driver owns identity and receipts; the existing `scripts/bench-regression.sh` owns guard selection and thresholds. JSON receipts are versioned and rejected when their schema or required fields differ. The consumer uses the existing public HTTP application fixture from the completed 0.22 release proof.
+Use Python's standard library (Python 3 is explicitly included in `flake.module.nix`), existing Cabal/GHC/Nix/PostgreSQL/Z3 tooling, Mori, Seihou and OKF. No new application dependency or package API is introduced. The release driver owns identity and receipts; the existing `scripts/bench-regression.sh` owns guard selection and thresholds. JSON receipts are versioned and rejected when their schema or required fields differ. The consumer uses the existing public HTTP application fixture from the completed 0.22 release proof.
