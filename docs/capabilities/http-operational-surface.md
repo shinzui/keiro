@@ -2,7 +2,7 @@
 title: HTTP operational surface
 type: Capability
 description: Mount the supported operational command tree over bounded HTTP reads and explicitly confirmed mutations.
-timestamp: 2026-10-21T03:23:25Z
+timestamp: 2026-10-27T16:27:49Z
 generated:
   by: openai/codex
   at: 2026-10-20T17:05:00Z
@@ -10,7 +10,7 @@ capabilityId: CAP-20
 provider: mori://shinzui/keiro
 status: shipped
 stability: experimental
-since: unreleased
+since: "0.22.0.0"
 packages: [keiro-ops-http]
 interface: [Keiro.Ops.Http, Keiro.Ops.Http.Feed, Keiro.Ops.Http.WebSocket, Keiro.Ops.Http.Protocol, Keiro.Ops.Http.Views, Keiro.Ops.Http.Compose]
 requires: [CAP-16]
@@ -30,8 +30,7 @@ evidence:
 
 This extends the [schema-aware operational console](operational-console.md)
 (CAP-16) with an optional browser-reachable transport. It is available from the
-default branch; publication and integrated interference measurements remain
-pending under [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md).
+0.22.0.0 cohort; integrated interference acceptance is recorded under [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md).
 
 `opsApplication` allocates one admission budget and returns a bare WAI
 application. Reads return the supported command's JSON value. Mutations are
@@ -47,7 +46,7 @@ or trace backend.
 
 ## Shared observational feeds
 
-The unreleased local surface includes `/ws` for workflow, timer and projection
+The 0.22.0.0 surface includes `/ws` for workflow, timer and projection
 status first pages. Drivers share canonical views across clients, use the HTTP
 inspection budget, keep last-known state on read failure and bound queues by
 encoded bytes and frame count including in-flight delivery. The last view
@@ -60,7 +59,8 @@ resource retirement. `keiro-ops-http/test/Test/WebSocketSpec.hs` checks real sha
 notify/fallback delivery, common poll encoders, replacement refusal, repeated
 in-flight release, upgrade policies and active close. See
 [Stream Keiro Inspection Views](../guides/stream-keiro-inspection-views.md).
-Composed writer-interference and release-cohort acceptance remain open.
+Retained composed writer-interference evidence and the final candidate release
+gate establish the cohort acceptance.
 
 `Keiro.Ops.Http.Compose` mounts allocated owner applications with exact raw-path
 stripping and one duplicate-safe CORS policy. The example mounts released

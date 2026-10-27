@@ -6,13 +6,49 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+## 0.22.0.0 — 2026-10-27
+
 ### Breaking Changes
+
+- Direct DSL API clients must handle `AggregateStructuralEnum` and
+  `StructuralEnumEqualityGuards`, supply `StructuralProjection.rootEnum` and
+  `ScaffoldRecord`/`WorkspaceRecord.structuralEnumEqualities`, and preserve the
+  new declaration-specific fold evidence when adopting structural enum equality.
+  `AggregateMapped` remains a bundled bidirectional compatibility pattern.
+
+- Require [Shibuya Core](mori://shinzui/shibuya/packages/shibuya-core)
+  `^>=0.12.0.0` and the [Kiroku Store](mori://shinzui/kiroku/packages/kiroku-store)
+  `^>=0.12.0.0` cohort, including
+  [kiroku-store-migrations](mori://shinzui/kiroku/packages/kiroku-store-migrations) `^>=0.7.2.0`,
+  [shibuya-kiroku-adapter](mori://shinzui/kiroku/packages/shibuya-kiroku-adapter) `^>=0.7.0.0`, and
+  [kiroku-metrics](mori://shinzui/kiroku/packages/kiroku-metrics) `^>=0.4.0.0`
+  where used. Direct Shibuya `Ingested` constructors must supply
+  `deliveryStatus`; `pure DeliveryCurrent` preserves existing delivery behavior.
+  Construct `AppConfig` from `defaultAppConfig` to retain basic metrics.
+- Require [the PGMQ adapter](mori://shinzui/shibuya-pgmq-adapter/packages/shibuya-pgmq-adapter)
+  `^>=0.18.0.0` and the [PGMQ family](mori://shinzui/pgmq-hs)
+  `>=0.7.0.0 && <0.8`. Apply PGMQ migration 0007 before queue traffic;
+  partitioned queues no longer emit insert notifications, so retain polling.
+  Custom PGMQ interpreters and exhaustive reconciliation-action matches must
+  handle the new inspection operations and refusal constructors; remove
+  conflicting orphan JSON instances. Adapter-produced DLQ envelopes add
+  `original_queue`; existing Keiro DLQ browsing and redrive remain compatible.
+- Stop affected subscription workers before applying Kiroku migration 0016.
+  Restart with Store 0.12 before using namespace targets; older binaries must
+  not manage namespace bindings. The composed migration plan now has 48 entries.
 
 - Direct `RunCommandOptions` records must supply `inspectionProvenance`; updates of `defaultRunCommandOptions` retain the disabled policy. Direct `AppHooks` records must supply `aggregates` and `processManagers`; `emptyAppHooks` leaves both unmounted.
 - `OpsOutcome` adds `InspectionFailed`, requiring exhaustive matches in embedders to handle structured inspection failures. `wf show`, `wf steps` and `wf journal` now use it for typed inspection errors.
 - Direct `InspectionLimits` records must supply `deliveryDeadlineSeconds` (default 30). Direct `ProcessManagerInspector` records must supply `provenanceMode`.
 
 ### New Features
+
+- Candidate Language 6 supports exact mapped structural enum equality and
+  qualified constructor literals, with generated finite-domain projections,
+  owner/key conformance laws, and declaration-specific fold evidence. Structural
+  and nominal enum harnesses sample literal guards by canonical key.
+- Add pure mounted process-manager discovery through `pm types` and
+  `GET /pm/types`, with bounded on-demand HTTP encoding and no store reads.
 
 - Compose allocated inspection applications under stable `/keiro`, `/kiroku`,
   `/shibuya` and `/pgmq` prefixes with preserved raw paths, shared CORS policy

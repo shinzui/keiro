@@ -169,6 +169,7 @@ import "shibuya-core" Shibuya.App
     ProcessorId (..),
     QueueProcessor,
     SupervisionStrategy,
+    defaultAppConfig,
     mkProcessor,
     runApp,
   )
@@ -896,7 +897,7 @@ runJobWorkers ::
   Eff es (Either AppError (AppHandle es))
 runJobWorkers strategy inboxSize procs = do
   ps <- sequence procs
-  runApp AppConfig {strategy = strategy, inboxSize = max 1 inboxSize} ps
+  runApp defaultAppConfig {strategy = strategy, inboxSize = max 1 inboxSize} ps
 
 -- | Open the one-shot equivalent of shibuya's per-message processing span.
 --

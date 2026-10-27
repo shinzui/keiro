@@ -68,7 +68,7 @@ import OpenTelemetry.Metric.Core (getMeter, shutdownMeterProvider)
 import OpenTelemetry.Resource (emptyMaterializedResources)
 import Shibuya.Adapter (Adapter (..))
 import Shibuya.Core.AckHandle (AckHandle (..))
-import Shibuya.Core.Ingested (Ingested (..))
+import Shibuya.Core.Ingested (DeliveryStatus (..), Ingested (..))
 import Shibuya.Core.Types (Envelope (..), MessageId (..))
 import Streamly.Data.Stream qualified as Streamly
 import System.Environment (getArgs, lookupEnv, withArgs, withProgName)
@@ -741,7 +741,8 @@ processManagerAdapter recorded event =
                       payload = (recorded, event)
                     },
                 ack = AckHandle (\_ -> pure ()),
-                lease = Nothing
+                lease = Nothing,
+                deliveryStatus = pure DeliveryCurrent
               }
           ],
       shutdown = pure ()

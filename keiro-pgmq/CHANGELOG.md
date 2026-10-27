@@ -6,6 +6,25 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.22.0.0 — 2026-10-27
+
+### Breaking Changes
+
+- Require [Shibuya Core](mori://shinzui/shibuya/packages/shibuya-core)
+  `^>=0.12.0.0`, [the PGMQ adapter](mori://shinzui/shibuya-pgmq-adapter/packages/shibuya-pgmq-adapter)
+  `^>=0.18.0.0`, and the [PGMQ family](mori://shinzui/pgmq-hs)
+  `>=0.7.0.0 && <0.8`. Custom PGMQ interpreters and exhaustive
+  reconciliation-action matches must handle the new inspection operations and
+  refusal constructors; remove conflicting orphan JSON instances. Apply PGMQ
+  migration 0007 before queue traffic; partitioned queues require polling.
+
+### Other Changes
+
+- Construct worker configuration from `defaultAppConfig` so the new
+  metrics-detail field receives its default. Adapter-produced DLQ envelopes
+  now include `original_queue`; existing Keiro DLQ operations accept the
+  additional metadata.
+
 ## 0.21.0.0 — 2026-10-14
 
 ### Other Changes

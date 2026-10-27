@@ -6,6 +6,16 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.22.0.0 — 2026-10-27
+
+### Breaking Changes
+
+- Require [Kiroku Store migrations](mori://shinzui/kiroku/packages/kiroku-store-migrations)
+  `^>=0.7.2.0`, adding migration 0016 and raising the composed plan to 48 entries.
+  Stop affected subscription workers for cutover and restart with
+  [Kiroku Store](mori://shinzui/kiroku/packages/kiroku-store) 0.12 before using
+  namespace targets; older binaries must not manage namespace bindings.
+
 ### New Features
 
 - Export verifyExpectedSchemaSession for fail-closed verification on an existing pool, preserving managed-object handling.

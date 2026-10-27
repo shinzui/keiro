@@ -79,7 +79,7 @@ main = hspec $ do
           ] -> do
             componentNameText kirokuName `shouldBe` "kiroku"
             kirokuDependencies `shouldBe` mempty
-            length kirokuEntries `shouldBe` 15
+            length kirokuEntries `shouldBe` 16
             componentNameText keiroName `shouldBe` "keiro"
             dependencyName <- requireRight (componentName "kiroku")
             keiroDependencies `shouldBe` Set.singleton dependencyName
@@ -186,7 +186,7 @@ main = hspec $ do
             plan
             >>= requireRight
         Keiro.pendingMigrations handshake `shouldBe` planMigrationIds plan
-        length (Keiro.pendingMigrations handshake) `shouldBe` 47
+        length (Keiro.pendingMigrations handshake) `shouldBe` 48
         Keiro.ledgerIssues handshake `shouldBe` []
         handshakePassed handshake `shouldBe` False
 
@@ -211,7 +211,7 @@ main = hspec $ do
         _ <- runMigrationPlan defaultRunOptions settings kirokuOnly >>= requireRight
         handshake <-
           missingMigrations defaultRunOptions provider plan >>= requireRight
-        Keiro.pendingMigrations handshake `shouldBe` drop 15 (planMigrationIds plan)
+        Keiro.pendingMigrations handshake `shouldBe` drop 16 (planMigrationIds plan)
         length (Keiro.pendingMigrations handshake) `shouldBe` 32
         Keiro.ledgerIssues handshake `shouldBe` []
         handshakePassed handshake `shouldBe` False
@@ -448,12 +448,12 @@ main = hspec $ do
         assertSchema connection
         let provider = providerFor connection
         rerun <- runMigrationPlanWith defaultRunOptions provider plan >>= requireRight
-        reportOutcomes rerun `shouldBe` replicate 47 AlreadyApplied
+        reportOutcomes rerun `shouldBe` replicate 48 AlreadyApplied
         verified <- verifyMigrationPlanWith defaultRunOptions provider plan >>= requireRight
         case verified of
           VerificationReport verificationIssues applied pending unknown -> do
             verificationIssues `shouldBe` []
-            length applied `shouldBe` 47
+            length applied `shouldBe` 48
             pending `shouldBe` []
             unknown `shouldBe` []
       either (expectationFailure . show) pure result
@@ -502,7 +502,7 @@ main = hspec $ do
             (runMigrationPlan defaultRunOptions settings plan >>= requireRight)
             (runMigrationPlan defaultRunOptions settings plan >>= requireRight)
         sort [reportOutcomes first, reportOutcomes second]
-          `shouldBe` sort [replicate 47 AppliedNow, replicate 47 AlreadyApplied]
+          `shouldBe` sort [replicate 48 AppliedNow, replicate 48 AlreadyApplied]
 
     it "upgrades singleton read-model rows into deterministic rebuild groups" $ do
       fullPlan <- requirePlan
@@ -836,7 +836,7 @@ main = hspec $ do
         up <- runMigrationPlan defaultRunOptions settings plan >>= requireRight
         reportOutcomes up
           `shouldBe` replicate 7 AlreadyApplied
-            <> replicate 8 AppliedNow
+            <> replicate 9 AppliedNow
             <> replicate 16 AlreadyApplied
             <> replicate 16 AppliedNow
 
@@ -1273,14 +1273,14 @@ importFixture sourceSchema = do
     up <- runMigrationPlan defaultRunOptions settings plan >>= requireRight
     reportOutcomes up
       `shouldBe` replicate 7 AlreadyApplied
-        <> replicate 8 AppliedNow
+        <> replicate 9 AppliedNow
         <> replicate 16 AlreadyApplied
         <> replicate 16 AppliedNow
     verifiedAfterCanaries <- verifyMigrationPlan defaultRunOptions settings plan >>= requireRight
     case verifiedAfterCanaries of
       VerificationReport verificationIssues _ _ _ -> verificationIssues `shouldBe` []
     rerun <- runMigrationPlan defaultRunOptions settings plan >>= requireRight
-    reportOutcomes rerun `shouldBe` replicate 47 AlreadyApplied
+    reportOutcomes rerun `shouldBe` replicate 48 AlreadyApplied
     second <-
       importCoddHistory defaultImportOptions config provider plan frameworkCoddHistoryMappings
         >>= requireRight
@@ -1290,7 +1290,7 @@ importFixture sourceSchema = do
       sourceRows <- useSession connection (Session.statement () (sourceRowCountStatement sourceSchema))
       sourceRows `shouldBe` 23
       facts <- useSession connection (Session.statement () importFactsStatement)
-      facts `shouldBe` (47, 23, True)
+      facts `shouldBe` (48, 23, True)
 
 postCoddImportPendingIssues :: IO [VerificationIssue]
 postCoddImportPendingIssues =
@@ -1308,6 +1308,7 @@ postCoddImportPendingIssues =
         ("kiroku", "0013"),
         ("kiroku", "0014"),
         ("kiroku", "0015"),
+        ("kiroku", "0016"),
         ("keiro", "0017-schema-management-comment"),
         ("keiro", "0018"),
         ("keiro", "0019-keiro-snapshots-state-shape-hash"),
@@ -1575,7 +1576,7 @@ schemaFactsStatement =
       (to_regclass('keiro_read.projection_group_status_v1') IS NOT NULL),
       (obj_description(to_regnamespace('keiro_read'), 'pg_namespace') =
         'Versioned, owner-rights read contracts for out-of-process Keiro consumers.'),
-      (obj_description(to_regnamespace('kiroku'), 'pg_namespace') = 'Managed by pg-migrate component kiroku through 0015'),
+      (obj_description(to_regnamespace('kiroku'), 'pg_namespace') = 'Managed by pg-migrate component kiroku through 0016'),
       (to_regclass('kiroku.ix_streams_browse_name') IS NOT NULL),
       (obj_description(to_regnamespace('keiro'), 'pg_namespace') = 'Managed by pg-migrate component keiro through 0017-schema-management-comment')
     ) AS checks(ok)

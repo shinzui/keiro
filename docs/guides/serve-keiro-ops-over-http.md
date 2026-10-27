@@ -2,7 +2,7 @@
 type: Runbook
 title: Serve Keiro Ops Over HTTP
 description: Mount bounded HTTP inspection and explicitly confirmed operator actions using the supported Keiro command tree.
-timestamp: 2026-10-26T21:13:27Z
+timestamp: 2026-10-27T16:27:49Z
 docId: DOC-30
 tags: [keiro, operations, http, inspection]
 generated:
@@ -14,8 +14,8 @@ generated:
 
 `keiro-ops-http` serves the supported operator command tree as JSON. It assumes
 a trusted network or an authenticating reverse proxy: it adds no authentication,
-authorization, or TLS. It binds loopback by default. The package is currently
-unreleased; build it from this checkout in `nix develop`.
+authorization, or TLS. It binds loopback by default. The package is published with the
+0.22.0.0 cohort; use `nix develop` for the commands in this checkout.
 
 ```bash
 nix develop -c cabal run exe:keiro-ops-http -- --database-url "$DATABASE_URL" --port 9092

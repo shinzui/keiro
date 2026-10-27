@@ -85,7 +85,7 @@ import Shibuya.Adapter (Adapter (..))
 import Shibuya.Core.Ack (AckDecision (..))
 import Shibuya.Core.Ack qualified as Ack
 import Shibuya.Core.AckHandle (AckHandle (..))
-import Shibuya.Core.Ingested (Ingested (..))
+import Shibuya.Core.Ingested (DeliveryStatus (..), Ingested (..))
 import Shibuya.Core.Types (Attempt (..), Cursor (..), Envelope (..), MessageId (..))
 import Streamly.Data.Stream qualified as Streamly
 
@@ -420,7 +420,8 @@ toIngested cancel (AckItem event attempt reply) =
       ack = AckHandle \case
         AckHalt _ -> liftIO cancel
         decision -> liftIO $ atomically $ void $ tryPutTMVar reply (toSubscriptionResult attempt decision),
-      lease = Nothing
+      lease = Nothing,
+      deliveryStatus = pure DeliveryCurrent
     }
 
 toSubscriptionResult :: Word -> AckDecision -> Sub.SubscriptionResult

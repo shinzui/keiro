@@ -29,7 +29,7 @@ import Kiroku.Store.Types (EventId (..), EventType (..), GlobalPosition (..), Re
 import Shibuya.Adapter (Adapter (..))
 import Shibuya.Core.Ack (AckDecision (..))
 import Shibuya.Core.AckHandle (AckHandle (..))
-import Shibuya.Core.Ingested (Ingested (..))
+import Shibuya.Core.Ingested (DeliveryStatus (..), Ingested (..))
 import Shibuya.Core.Types (Envelope (..))
 import Streamly.Data.Stream qualified as Streamly
 import System.Environment (getArgs)
@@ -208,7 +208,8 @@ inMemoryAdapter name decisions messages =
       Ingested
         { envelope = Envelope "message" Nothing Nothing Nothing Nothing Nothing Nothing mempty message,
           ack = AckHandle (\decision -> liftIO (modifyIORef' decisions (<> [decision]))),
-          lease = Nothing
+          lease = Nothing,
+          deliveryStatus = pure DeliveryCurrent
         }
 
 expectRight :: (Show problem) => Either problem value -> IO value

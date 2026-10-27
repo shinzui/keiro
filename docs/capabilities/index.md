@@ -41,21 +41,25 @@ distinction.
 | [Typed domain command outcomes](typed-domain-command-outcomes.md) | CAP-18 | 0.12.0.0 | Accepted event batches plus typed business rejection and no-op decisions |
 | [Canonical integration-event envelope](canonical-integration-events.md) | CAP-19 | 0.1.0.0 | Transport-neutral public event identity, metadata, payload, and trace contract |
 
-| [HTTP operational surface](http-operational-surface.md) | CAP-20 | unreleased | Bounded HTTP reads and explicitly confirmed operator actions |
+| [HTTP operational surface](http-operational-surface.md) | CAP-20 | 0.22.0.0 | Bounded HTTP reads and explicitly confirmed operator actions |
+
+| [Aggregate inspection reads](aggregate-inspection-reads.md) | CAP-21 | 0.22.0.0 | Application-described aggregate state and snapshot health |
 
 ## Published-package coverage
 
-The 0.12.0.0 release publishes six packages. Every one maps to at least one
-record, while internal-only support packages are called out below:
+The 0.22.0.0 release publishes eight packages. Runtime packages map to the
+records below; published test infrastructure is listed explicitly:
 
 | Published package | Capability records |
 |---|---|
 | `keiro-core` | CAP-1, CAP-2, CAP-4, CAP-19 |
-| `keiro` | CAP-2 through CAP-11, CAP-15, CAP-17, CAP-18 |
+| `keiro` | CAP-2 through CAP-11, CAP-15, CAP-17, CAP-18, CAP-21 |
 | `keiro-pgmq` | CAP-12, CAP-15 |
 | `keiro-migrations` | CAP-13, CAP-17 |
 | `keiro-dsl` | CAP-6, CAP-14, CAP-17, CAP-18 |
-| `keiro-ops` | CAP-16 |
+| `keiro-ops` | CAP-16, CAP-21 |
+| `keiro-ops-http` | CAP-20 |
+| `keiro-test-support` | Published test infrastructure; deliberately excluded below |
 
 The `interface` field names the principal public adoption entry points, not
 every exposed implementation facet. Public `*.Schema`, `*.Types`, rendering,
