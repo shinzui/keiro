@@ -60,6 +60,7 @@ import Keiro.Dsl.CanonicalEncoding (foldFingerprint128)
 import Keiro.Dsl.CodecCompare
 import Keiro.Dsl.ConformanceBaseline (conformanceBaselineSpec)
 import Keiro.Dsl.ConformancePackage
+import Keiro.Dsl.ConsumerEnumLiterals (consumerEnumLiteralsSpec)
 import Keiro.Dsl.ConsumerTypePlan
 import Keiro.Dsl.CoordinationImpact
 import Keiro.Dsl.Coverage qualified as Coverage
@@ -246,6 +247,7 @@ main = hspec $ do
   frontendSurfaceSpec
   mappedRegisterConstructionSpec
   mappedStructuralEnumEqualitySpec
+  consumerEnumLiteralsSpec
   frontendProfilesSpec
 
   describe "calendar-day codec policy v1" $ do

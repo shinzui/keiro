@@ -932,7 +932,7 @@ emitHarness goldens a =
           ++ generatedNominalTypeImportsForService (aggregateCheckedService a) ((.context) a) (generatedNominalHarnessTypes a)
           ++ mappedHarnessImports a
           ++ nominalHarnessImports a
-          ++ ["import " <> structuralProjectionModule ((.context) a) <> " qualified as StructuralProjections" | harnessSamplesByProjectedKey a]
+          ++ ["import " <> structuralProjectionModule ((.context) a) <> " qualified as StructuralProjections" | harnessSamplesStructuralByKey a]
           ++ aggregateHarnessImports a
           ++ T.lines (renderPlannedImports (harnessImportPlan a))
           ++ goldenImports
@@ -1215,10 +1215,13 @@ commandSampleValue aggregate transition name valueType = case valueType of
     | Just declaration <- structuralEnumDeclaration aggregate evidence,
       filters@(_ : _) <- structuralEnumSampleFilters aggregate transition name evidence ->
         "(case [value | (_, value) <- NonEmpty.toList (fixtureCases " <> renderHarnessReference aggregate (harnessQualifiedValueReference declaration.fixtures) <> "), " <> T.intercalate ", " filters <> "] of value : _ -> value; [] -> error \"enum guard requires a matching supplied fixture\")"
-  AggregateNominal _
+  AggregateNominal nominal
     | guardEquatesCommandAndRegister transition name -> case find matchesRegister ((.regs) aggregate) of
         Just register -> registerInitialSample aggregate register
         Nothing -> fallback
+    | ConsumerNominal binding <- (.ownership) nominal,
+      filters@(_ : _) <- consumerEnumSampleFilters aggregate transition name nominal ->
+        "(case [value | fixture <- NonEmpty.toList (nominalFixtureCases " <> renderHarnessReference aggregate (harnessQualifiedValueReference ((.fixtures) binding)) <> "), let value = nominalFixtureDomain fixture, " <> T.intercalate ", " filters <> "] of value : _ -> value; [] -> error \"enum guard requires a matching supplied fixture\")"
   _ -> fallback
   where
     fallback = sampleValue aggregate name valueType
@@ -1275,6 +1278,27 @@ structuralEnumLiteralFilters aggregate transition name evidence =
     Just wire <- [lookup constructor (NE.toList evidence.constructors)]
   ]
 
+-- | Fixture filters for a consumer-bound nominal enum command field that is
+-- not forced to the register initial. They mirror the structural enum path: a
+-- register inequality excludes the initial, and each qualified literal
+-- constrains the canonical key through the nominal equality witness.
+consumerEnumSampleFilters :: Agg -> Transition -> Text -> ResolvedNominalType -> [Text]
+consumerEnumSampleFilters aggregate transition name nominal =
+  [ "value /= " <> registerInitialSample aggregate register
+  | EnumRepresentation {} <- [(.representation) nominal],
+    Just register <- [find (\register -> (.name) register == name && (.valueType) register == AggregateNominal nominal) aggregate.regs],
+    guardComparesCommandAndRegister OpNeq transition name
+  ]
+    <> consumerEnumLiteralFilters transition name nominal
+
+consumerEnumLiteralFilters :: Transition -> Text -> ResolvedNominalType -> [Text]
+consumerEnumLiteralFilters transition name nominal =
+  [ "fieldWitnessGet NominalProjections." <> nominalEqualityWitnessName nominal <> " value " <> (if operator == OpEq then "==" else "/=") <> " " <> tshow wire
+  | EnumRepresentation constructors <- [(.representation) nominal],
+    (operator, constructor) <- commandLiteralComparisons transition name ((.name) nominal),
+    Just wire <- [lookup constructor (NE.toList constructors)]
+  ]
+
 -- | Qualified literals of one declaration compared with a command field by
 -- @==@ or @!=@. Conjunctions contribute every comparison; a disjunction
 -- contributes only its first alternative, since satisfying it satisfies the
@@ -1293,20 +1317,40 @@ commandLiteralComparisons transition name typeName = maybe [] collect transition
       | field == name && literalType == typeName = Just constructor
     literalOperand _ _ = Nothing
 
--- | Whether a synthetic probe samples a command field by projected wire key,
+-- | Every command field sampled by a synthetic probe.
+probeCommandFields :: Agg -> [(Transition, Text, ResolvedAggregateType)]
+probeCommandFields aggregate =
+  [ (transition, (.dslName) identity, valueType)
+  | entry <- initialSyntheticProbeEntries aggregate,
+    let transition = (.transition) entry,
+    command <- (.commands) aggregate,
+    (.name) command == (.command) transition,
+    (identity, valueType) <- (.fields) command
+  ]
+
+-- | Whether a probe samples a structural enum field by projected wire key,
 -- which requires the generated structural projection witnesses.
-harnessSamplesByProjectedKey :: Agg -> Bool
-harnessSamplesByProjectedKey aggregate =
+harnessSamplesStructuralByKey :: Agg -> Bool
+harnessSamplesStructuralByKey aggregate =
   or
     [ not (null (structuralEnumLiteralFilters aggregate transition name evidence))
-    | entry <- initialSyntheticProbeEntries aggregate,
-      let transition = (.transition) entry,
-      command <- (.commands) aggregate,
-      (.name) command == (.command) transition,
-      (identity, AggregateStructuralEnum evidence) <- (.fields) command,
-      let name = (.dslName) identity,
+    | (transition, name, AggregateStructuralEnum evidence) <- probeCommandFields aggregate,
       Nothing <- [structuralEnumRegisterEquality aggregate transition name evidence]
     ]
+
+-- | Whether a probe samples a consumer nominal enum field by canonical key,
+-- which requires the generated nominal projection witnesses.
+harnessSamplesNominalByKey :: Agg -> Bool
+harnessSamplesNominalByKey aggregate =
+  or
+    [ not (null (consumerEnumLiteralFilters transition name nominal))
+    | (transition, name, AggregateNominal nominal) <- probeCommandFields aggregate,
+      ConsumerNominal {} <- [(.ownership) nominal],
+      not (guardEquatesCommandAndRegister transition name)
+    ]
+
+harnessSamplesByProjectedKey :: Agg -> Bool
+harnessSamplesByProjectedKey aggregate = harnessSamplesStructuralByKey aggregate || harnessSamplesNominalByKey aggregate
 
 guardEquatesCommandAndRegister :: Transition -> Text -> Bool
 guardEquatesCommandAndRegister = guardComparesCommandAndRegister OpEq
@@ -1384,7 +1428,7 @@ nominalHarnessImports aggregate
                    "import Keiro.Codec.IdDomain (" <> T.intercalate ", " (idDomainConstructors <> ["validateIdDomainText"]) <> ")"
                  ]
            )
-        <> ["import " <> nominalProjectionModule ((.context) aggregate) <> " qualified as NominalProjections" | not (null (nominalScalarHarnessTypes aggregate)) || not (null enforcedIds)]
+        <> ["import " <> nominalProjectionModule ((.context) aggregate) <> " qualified as NominalProjections" | not (null (nominalScalarHarnessTypes aggregate)) || not (null enforcedIds) || harnessSamplesNominalByKey aggregate]
   where
     nominals = consumerNominalHarnessTypes aggregate
     enforcedIds = enforcedConsumerNominalIdHarnessTypes aggregate

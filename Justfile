@@ -12,7 +12,7 @@ default:
     just --list
 
 [group('meta')]
-verify: mapped-structural-enum-equality-proof mapped-register-construction-proof process-compose-check jitsurei-verify haskell-verify adr-validate research-validate capabilities-validate reviews-validate bug-reports-validate user-documentation-validate terminology-validate extension-policy dsl-api-boundaries keiro-reexports record-migration-policy generated-name-policy conformance-corpus-policy process-reaction-proof initial-hole-proof replay-compatibility checked-mapping-adoption
+verify: mapped-structural-enum-equality-proof consumer-enum-literal-proof mapped-register-construction-proof process-compose-check jitsurei-verify haskell-verify adr-validate research-validate capabilities-validate reviews-validate bug-reports-validate user-documentation-validate terminology-validate extension-policy dsl-api-boundaries keiro-reexports record-migration-policy generated-name-policy conformance-corpus-policy process-reaction-proof initial-hole-proof replay-compatibility checked-mapping-adoption
     cabal test keiro-migrations-test
 
 # Strict OKF enforcement for the architecture-decision bundle (docs/adr,
@@ -269,3 +269,8 @@ mapped-register-construction-proof:
 [group('meta')]
 mapped-structural-enum-equality-proof:
     bash keiro-dsl/test/mapped-structural-enum-equality-mutation-test.sh
+
+# Consumer enum literal guards must compile and sample by canonical key.
+[group('meta')]
+consumer-enum-literal-proof:
+    bash keiro-dsl/test/consumer-enum-literal-sampling-test.sh

@@ -89,6 +89,7 @@ module Keiro.Dsl.Scaffold
     resolveAggForService,
     resolveAgg,
     nominalEqualityUsedInGeneratedExpressions,
+    nominalEqualityWitnessName,
     projectionSpecs,
     projectionWitnessName,
     structuralProjectionModule,
@@ -8731,9 +8732,21 @@ structuralEnumLiteral expression = case (expression.valueType, expression.node) 
   (AggregateStructuralEnum {}, TypedLiteral ScalarEnumValue {}) -> True
   _ -> False
 
+-- | Consumer nominal literals rendered through 'renderKeikiLiteral', which
+-- needs the binding, the representation constructors and, for IDs, KindID. A
+-- literal that is a direct comparison operand lowers to its canonical key text
+-- instead; planning those names for it leaves them unused, which the
+-- generated-output @-Werror@ rejects.
 typedConsumerLiteralNominals :: TypedScalarExpr -> [ResolvedNominalType]
-typedConsumerLiteralNominals expression = own <> concatMap typedConsumerLiteralNominals (typedExpressionChildren expression)
+typedConsumerLiteralNominals expression = case (.node) expression of
+  TypedEqual left right -> concatMap operand [left, right]
+  TypedNotEqual left right -> concatMap operand [left, right]
+  TypedCompare _ left right -> concatMap operand [left, right]
+  _ -> own <> concatMap typedConsumerLiteralNominals (typedExpressionChildren expression)
   where
+    operand child = case (.node) child of
+      TypedLiteral {} -> []
+      _ -> typedConsumerLiteralNominals child
     own = case ((.valueType) expression, (.node) expression) of
       (AggregateNominal nominal, TypedLiteral ScalarEnumValue {})
         | ConsumerNominal {} <- (.ownership) nominal -> [nominal]

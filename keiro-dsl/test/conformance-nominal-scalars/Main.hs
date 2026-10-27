@@ -10,6 +10,7 @@ module Main (main) where
 import Control.Monad (forM_, unless)
 import Data.Aeson (Value (..), object, toJSON, (.=))
 import Data.Aeson.Key (Key)
+import Data.List (sortOn)
 import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.KindID as KindID
 import qualified Data.List.NonEmpty as NE
@@ -227,10 +228,11 @@ expectedWireParity =
             (\fixture -> encodeRepresentation (nominalFixtureDomain fixture) == nominalFixtureWire fixture)
             (NE.toList (nominalFixtureCases fixtures))
 
+-- Coverage is a set property: supplied fixture order is not a contract.
 enumCoverage :: Bool
 enumCoverage =
-    representations == [Representation.Draft, Representation.Submitted]
-        && wires == [String "draft", String "submitted"]
+    sortOn fst (zip representations wires)
+        == [(Representation.Draft, String "draft"), (Representation.Submitted, String "submitted")]
   where
     fixtures = NE.toList (nominalFixtureCases Bindings.orderStatusFixtures)
     representations = map (nominalToRepresentation Bindings.orderStatusBinding . nominalFixtureDomain) fixtures

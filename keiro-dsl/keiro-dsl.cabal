@@ -222,6 +222,7 @@ test-suite keiro-dsl-test
   autogen-modules: Paths_keiro_dsl
   other-modules:
     Keiro.Dsl.ConformanceBaseline
+    Keiro.Dsl.ConsumerEnumLiterals
     Keiro.Dsl.FrontendCompatibility
     Keiro.Dsl.FrontendProfiles
     Keiro.Dsl.FrontendPublicApiProbe

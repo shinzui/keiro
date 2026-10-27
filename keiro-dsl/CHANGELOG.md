@@ -31,6 +31,17 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   `AggregateMapped` is a bundled bidirectional pattern covering both mapped-value
   representations, preserving their structural codec/initial/write paths.
 
+### Fixed
+
+- A consumer-bound nominal enum or ID literal used only as a comparison operand
+  in a guard or outcome reason no longer plans unused binding, representation,
+  or KindID imports, so the generated transducer and event stream compile under
+  the generated-output `-Werror`. Literals in write position keep those imports.
+- Generated harnesses sample a consumer-bound nominal enum command field whose
+  guard compares qualified literals by canonical key through the nominal
+  equality witness, with the same register-inequality exclusion as structural
+  enums. `nominalEqualityWitnessName` is exported from `Keiro.Dsl.Scaffold`.
+
 ### Other Changes
 
 - 0.21.0.0 erratum: regeneration rewrites every generated aggregate
