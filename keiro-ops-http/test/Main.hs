@@ -586,7 +586,10 @@ spec fixture = do
               Nothing -> expectationFailure "expired Warp connection remained open"
       it "joins idle accepted connections across repeated start/stop churn" $ \store -> do
         app <- opsApplication defaultOpsHttpConfig Ops.emptyAppHooks store
-        forM_ [1 .. (20 :: Int)] $ \_ ->
+        -- Connect returning does not mean the worker has started. Stop
+        -- immediately to exercise both queued and accepted connections,
+        -- including workers whose Warp body is skipped during shutdown.
+        forM_ [1 .. (100 :: Int)] $ \iteration ->
           withOpsHttpServer defaultOpsHttpServerConfig {port = 0} app $ \server ->
             bracket (Socket.socket Socket.AF_INET Socket.Stream Socket.defaultProtocol) Socket.close $ \client -> do
               Socket.connect client (Socket.SockAddrInet (fromIntegral server.serverPort) (Socket.tupleToHostAddress (127, 0, 0, 1)))
@@ -595,7 +598,7 @@ spec fixture = do
               case result of
                 Just (Left (_ :: IOException)) -> pure ()
                 Just (Right bytes) | Char8.null bytes -> pure ()
-                _ -> expectationFailure "stopped runner retained an idle connection"
+                _ -> expectationFailure ("stopped runner retained an idle connection on iteration " <> show iteration)
   around (withFreshDatabase fixture) $ do
     describe "process-manager discovery database boundary" $ do
       it "performs only aggregate-types verifier work and rejects parsing before borrowing" $ \url ->

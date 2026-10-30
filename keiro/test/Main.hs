@@ -364,6 +364,7 @@ import Keiro.Workflow.Snapshot
     workflowStateCodec,
   )
 import Kiroku.Store qualified as Store
+import Kiroku.Store.Compaction.Types (mkCompactionDigest)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.SQL qualified as KirokuSQL
 import Kiroku.Store.Subscription.Stream (AckItem (..), subscriptionAckStream)
@@ -5987,6 +5988,11 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       ackForCommandError
         (RetryDelay 5)
         (StoreFailed (Store.TransientTransactionFailure "40P01" "deadlock detected"))
+        `shouldBe` AckRetry (RetryDelay 5)
+      digest <- maybe (fail "invalid test compaction digest") pure (mkCompactionDigest (ByteString.replicate 32 0))
+      ackForCommandError
+        (RetryDelay 5)
+        (StoreFailed (Store.CompactionConcurrentMutation digest "concurrent reference"))
         `shouldBe` AckRetry (RetryDelay 5)
       ackForCommandError (RetryDelay 5) (StoreFailed (Store.EventDecodeFailed (Store.DecodeFailure (EventId sampleUuid) "bad payload")))
         `shouldSatisfy` \case

@@ -42,7 +42,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=0.12.0.0"
+              , versionConstraint = Some "^>=0.13.0.1"
               }
           ]
         }
@@ -113,7 +113,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=0.12.0.0"
+              , versionConstraint = Some "^>=0.13.0.1"
               }
           , Schema.Dependency.WithAugmentation
               { name = "shinzui/shibuya:shibuya-core"
@@ -166,7 +166,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=0.12.0.0"
+              , versionConstraint = Some "^>=0.13.0.1"
               }
           , Schema.Dependency.WithAugmentation
               { name = "shinzui/kiroku:kiroku-store-migrations"
@@ -175,7 +175,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=0.7.2.0"
+              , versionConstraint = Some "^>=0.7.3.0"
               }
           ]
         }
@@ -309,7 +309,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Test
-              , versionConstraint = Some "^>=0.12.0.0"
+              , versionConstraint = Some "^>=0.13.0.1"
               }
           , Schema.Dependency.WithAugmentation
               { name = "shinzui/kiroku:kiroku-store-migrations"
@@ -318,7 +318,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=0.7.2.0"
+              , versionConstraint = Some "^>=0.7.3.0"
               }
           ]
         }
@@ -372,7 +372,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Test
-              , versionConstraint = Some "^>=0.12.0.0"
+              , versionConstraint = Some "^>=0.13.0.1"
               }
           , Schema.Dependency.WithAugmentation
               { name = "shinzui/shibuya:shibuya-core"
@@ -444,7 +444,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=0.12.0.0"
+              , versionConstraint = Some "^>=0.13.0.1"
               }
           ]
         }
@@ -461,7 +461,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Test
-              , versionConstraint = Some "^>=0.4.0.0"
+              , versionConstraint = Some "^>=0.4.0.1"
               }
           , Schema.Dependency.WithAugmentation
               { name = "yesodweb/wai:wai"

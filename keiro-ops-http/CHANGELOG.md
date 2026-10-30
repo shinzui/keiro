@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Close accepted sockets even when shutdown prevents their Warp connection
+  workers from starting, avoiding idle connections surviving server shutdown.
+
 ## 0.22.0.0 — 2026-10-27
 
 ### Breaking Changes

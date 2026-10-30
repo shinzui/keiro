@@ -361,6 +361,7 @@ isTransientStoreError = \case
   EmptyAppendBatch {} -> False
   StreamNotFound {} -> False
   HistoryRetentionActive {} -> True
+  CompactionConcurrentMutation {} -> True
   ReservedStreamName {} -> False
   StreamNameTooLong {} -> False
   DuplicateEvent {} -> False

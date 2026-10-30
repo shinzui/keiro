@@ -6,6 +6,14 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+### Changed
+
+- Upgrade [Kiroku Store](mori://shinzui/kiroku/packages/kiroku-store) to
+  `^>=0.13.0.1`, with migrations `^>=0.7.3.0`, metrics `^>=0.4.0.1`,
+  and the Shibuya adapter `^>=0.7.0.1`. The composed migration plan now
+  includes Kiroku migration 0017 (store identity and compaction ledger).
+- Treat concurrent compaction mutations as retryable process-manager failures.
+
 ### Other Changes
 
 - Prepare release versions and generated inventories before verification, preflight
