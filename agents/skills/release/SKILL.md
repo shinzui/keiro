@@ -150,7 +150,11 @@ release"), commit count since then, and which package directories changed.
   - **major**: increment `B`, reset `C` and `D` to `0` (`0.1.0.0` → `0.2.0.0`)
   - **minor**: increment `C`, reset `D` to `0` (`0.1.0.0` → `0.1.1.0`)
   - **patch**: increment `D` (`0.1.0.0` → `0.1.0.1`)
-- **Present the proposed bump to the user and get confirmation before making any edits.**
+- **Present the proposed bump and get one initial confirmation before making any edits.**
+  That confirmation authorizes release preparation, commits, tags, pushes, Hackage
+  publication, and the GitHub release under this workflow, provided all required
+  checks pass. Reuse approval already given in the session; do not ask for a
+  second confirmation of the prepared changes or changelogs.
 
 ### 3. Update versions, internal bounds, and changelogs
 
@@ -324,9 +328,10 @@ than a sequence of edges, nothing forced it forward at release time, and it
 still pins `kiroku-store 0.3.1.0`. An append-only edge list cannot rot that way
 — but only if every release adds its edge.
 
-**Show the user every change — version bumps, bound updates, changelog edits,
-and the blueprint edge (or the reasoning for not adding one) — for review before
-committing.**
+**Show the prepared changes — version bumps, bound updates, changelog edits,
+and the blueprint edge (or the reasoning for not adding one) — with a concise
+summary and links or a diff. Continue under the initial version approval without
+pausing for another confirmation before committing.**
 
 ### 4. Prepare once and verify the final candidate
 
@@ -413,9 +418,10 @@ of the candidate; do not use broad staging to sweep it into a release.
 ### 5. Commit the candidate and prebuild publication artifacts
 
 Use a Conventional Commit such as `chore(release): <version>` for the prepared
-candidate, explaining the PVP bump. Commit only after the step 3 approval already
-obtained from the user. Preparation and verification do not require another
-approval. Keep the current branch unless the user asks otherwise.
+candidate, explaining the PVP bump. The initial version confirmation in step 2
+authorizes this commit; publication still requires all release checks to pass.
+Do not request another approval for changelogs, prepared changes, verification,
+tags, pushes, or publication. Keep the current branch unless the user asks otherwise.
 
 After the gate and native Nix checks pass, build **all sixteen** source/docs
 archives before any upload, then test the source archives as an external consumer:
@@ -445,8 +451,8 @@ commit; it must preserve all tested source inputs. Recheck readiness if inputs
 change. Do not rerun package tests during publication: the accepted stage receipts
 already cover them.
 
-Only after readiness, native Nix checks and the existing user approval, create
-all eight annotated tags at the final evidence commit:
+Only after readiness and native Nix checks pass, use the initial version approval
+to create all eight annotated tags at the final evidence commit:
 
 ```bash
 for pkg in keiro-core keiro keiro-pgmq keiro-migrations keiro-test-support keiro-dsl keiro-ops keiro-ops-http; do
@@ -514,8 +520,9 @@ gh release create keiro-<version> --title "keiro <version>" --notes-file "$S/rel
 
 ## Important
 
-- Always ask the user to **confirm the version bump and changelogs before
-  committing**.
+- Obtain **one initial confirmation of the proposed version bump** before edits.
+  Reuse it throughout the release; do not request another approval of changelogs
+  or the prepared candidate. If every required check passes, finish the release.
 - Always publish in dependency order: **keiro-core → keiro → keiro-pgmq →
   keiro-migrations → keiro-test-support → keiro-dsl → keiro-ops → keiro-ops-http**.
 - Never skip the gates: `nix fmt`, `just verify`, `cabal check`, `nix flake
@@ -528,8 +535,9 @@ gh release create keiro-<version> --title "keiro <version>" --notes-file "$S/rel
   published — it goes stale between releases.
 - Re-derive the internal dependency graph and the `reexported-modules` list from
   the cabal files each release rather than trusting the summaries here.
-- The commit, tags, and uploads happen **only after** the user approves the
-  staged changes. Publishing to Hackage is irreversible.
+- The initial version confirmation authorizes commits, tags, pushes, and uploads
+  through the required GitHub release, conditional on passing all required checks.
+  Publishing to Hackage is irreversible; failures still stop publication.
 - When a step reveals a genuine defect in the release as staged (an unbounded
   internal dep, a public module generated code imports but `keiro` does not
   re-export), surface it to the user with the evidence and let them decide —
