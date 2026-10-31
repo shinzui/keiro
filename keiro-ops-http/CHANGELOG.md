@@ -2,7 +2,16 @@
 
 ## [Unreleased]
 
-### Fixed
+## 0.23.0.0 — 2026-10-30
+
+### Breaking Changes
+
+- Require `kiroku-store ^>=0.13.0.1` from
+  mori://shinzui/kiroku/packages/kiroku-store and align internal dependencies with
+  the shared release. The optional composition example uses
+  `kiroku-metrics ^>=0.4.0.1` from mori://shinzui/kiroku/packages/kiroku-metrics.
+
+### Bug Fixes
 
 - Close accepted sockets even when shutdown prevents their Warp connection
   workers from starting, avoiding idle connections surviving server shutdown.

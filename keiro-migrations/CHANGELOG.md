@@ -6,6 +6,16 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.23.0.0 — 2026-10-30
+
+### Breaking Changes
+
+- Require `kiroku-store-migrations ^>=0.7.3.0` from
+  mori://shinzui/kiroku/packages/kiroku-store-migrations. The composed plan grows
+  from 48 to 49 migrations with Kiroku `0017` (store identity and compaction
+  ledger); apply it through the existing runner and update migration-count and
+  schema-comment fixtures. Existing migration payloads and checksums are unchanged.
+
 ## 0.22.0.0 — 2026-10-27
 
 ### Breaking Changes

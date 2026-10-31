@@ -6,6 +6,16 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.23.0.0 — 2026-10-30
+
+### Other Changes
+
+- Align the core dependency and runtime conformance suites with the shared
+  0.23.0.0 release and Kiroku Store `^>=0.13.0.1` from
+  mori://shinzui/kiroku/packages/kiroku-store. DSL source and language contracts
+  retain their existing behavior; Language 5 stays stable and Language 6 candidate.
+- Refresh DSL adoption guides and user documentation.
+
 ## 0.22.0.0 — 2026-10-27
 
 ### Breaking Changes

@@ -6,6 +6,13 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.23.0.0 — 2026-10-30
+
+### Other Changes
+
+- No user-facing changes this release. Version and internal dependency bounds
+  advance with the shared 0.23.0.0 release.
+
 ## 0.22.0.0 — 2026-10-27
 
 ### Breaking Changes

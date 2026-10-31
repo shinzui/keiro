@@ -6,6 +6,15 @@ All notable changes to `keiro-core` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.23.0.0 — 2026-10-30
+
+### Breaking Changes
+
+- Require `kiroku-store ^>=0.13.0.1` from
+  mori://shinzui/kiroku/packages/kiroku-store. Consumers with exhaustive Store,
+  StoreError, or KirokuEvent matches must follow the entailed upstream compaction
+  upgrade edge; see the root changelog and Keiro upgrade blueprint.
+
 ## 0.22.0.0 — 2026-10-27
 
 ### Breaking Changes

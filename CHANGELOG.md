@@ -6,16 +6,31 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
-### Changed
+## 0.23.0.0 — 2026-10-30
 
-- Upgrade [Kiroku Store](mori://shinzui/kiroku/packages/kiroku-store) to
-  `^>=0.13.0.1`, with migrations `^>=0.7.3.0`, metrics `^>=0.4.0.1`,
-  and the Shibuya adapter `^>=0.7.0.1`. The composed migration plan now
-  includes Kiroku migration 0017 (store identity and compaction ledger).
-- Treat concurrent compaction mutations as retryable process-manager failures.
+### Breaking Changes
+
+- Require [Kiroku Store](mori://shinzui/kiroku/packages/kiroku-store)
+  `^>=0.13.0.1`, migrations `^>=0.7.3.0`, metrics `^>=0.4.0.1`, and the
+  Shibuya adapter `^>=0.7.0.1` where used. Exhaustive custom Store interpreters,
+  StoreError matches, and KirokuEvent observers must handle the new compaction
+  constructors; follow the entailed Kiroku 0.12.0.0 → 0.13.0.0 upgrade edge.
+- The composed migration plan now contains 49 migrations, including Kiroku
+  migration `0017` (store identity and compaction ledger). Apply it through the
+  existing migration runner and update migration-count/schema-comment fixtures.
+  Compaction adoption is optional. The new Keiro 0.22.0.0 → 0.23.0.0 upgrade
+  edge records this cutover and entails the upstream guidance.
+
+### Bug Fixes
+
+- Close accepted HTTP sockets even when shutdown prevents their Warp connection
+  workers from starting, avoiding idle connections surviving server shutdown.
 
 ### Other Changes
 
+- Treat concurrent compaction mutations as retryable process-manager failures.
+- Refresh guides and user documentation for the released runtime, DSL,
+  inspection, migration, snapshot, and workflow replay contracts.
 - Prepare release versions and generated inventories before verification, preflight
   registry/blueprint/package prerequisites, and serialize workspace build writers.
   Release gates stop after failed correctness and retain resumable stage receipts;

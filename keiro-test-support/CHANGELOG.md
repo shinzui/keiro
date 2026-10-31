@@ -6,6 +6,14 @@ All notable changes to `keiro-test-support` are recorded here. The format follow
 
 ## [Unreleased]
 
+## 0.23.0.0 — 2026-10-30
+
+### Breaking Changes
+
+- Align fixtures with `kiroku-store ^>=0.13.0.1` and
+  `kiroku-store-migrations ^>=0.7.3.0` from mori://shinzui/kiroku. Suite databases
+  include Kiroku migration `0017`; composed-plan counts advance to 49.
+
 ## 0.22.0.0 — 2026-10-27
 
 ### Breaking Changes

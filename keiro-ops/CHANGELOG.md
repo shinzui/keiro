@@ -6,6 +6,16 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.23.0.0 — 2026-10-30
+
+### Breaking Changes
+
+- Require `kiroku-store ^>=0.13.0.1` from
+  mori://shinzui/kiroku/packages/kiroku-store and align internal dependencies with
+  the shared release. Follow the Keiro upgrade blueprint for upstream exhaustive
+  matches and composed migration `0017`; existing operational commands retain
+  their behavior.
+
 ## 0.22.0.0 — 2026-10-27
 
 ### Breaking Changes

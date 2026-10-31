@@ -6,6 +6,22 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+## 0.23.0.0 — 2026-10-30
+
+### Breaking Changes
+
+- Require `kiroku-store ^>=0.13.0.1` from
+  mori://shinzui/kiroku/packages/kiroku-store. Update exhaustive custom Store
+  interpreters, StoreError matches, and KirokuEvent observers for compaction;
+  follow the Keiro upgrade blueprint and its entailed upstream edge.
+
+### Other Changes
+
+- Treat `CompactionConcurrentMutation` as a transient store error so process
+  managers retry commands affected by a concurrent compaction mutation.
+- Refresh runtime guides and user documentation, including workflow replay,
+  snapshots, migration ownership, and operational inspection contracts.
+
 ## 0.22.0.0 — 2026-10-27
 
 ### Breaking Changes

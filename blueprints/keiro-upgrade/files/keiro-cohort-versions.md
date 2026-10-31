@@ -9,6 +9,7 @@ edit. What to edit is in the edge prompt.
 
 | Keiro | `kiroku-store` | `kiroku-store-migrations` | `keiki` | `shibuya-core` |
 |---|---|---|---|---|
+| 0.23.0.0 | `^>=0.13.0.1` | `^>=0.7.3.0` | `>=0.9 && <0.10` | `^>=0.12.0.0` |
 | 0.22.0.0 | `^>=0.12.0.0` | `^>=0.7.2.0` | `>=0.9 && <0.10` | `^>=0.12.0.0` |
 | 0.21.0.0 | `^>=0.11.0.0` | `^>=0.7.1.0` | `>=0.9 && <0.10` | `^>=0.10.0.1` |
 | 0.20.0.0 | `^>=0.11.0.0` | `^>=0.7.1.0` | `>=0.9 && <0.10` | `^>=0.10.0.1` |
@@ -51,6 +52,14 @@ Shibuya adapter is `^>=0.7.0.0` and metrics is `^>=0.4.0.0`. The entailed
 Kiroku 0.11.0.1 → 0.12.0.0 edge covers stopped-worker migration 0016 and
 namespace bindings. The framework plan contains 48 migrations; separately
 composed PGMQ adds its own migration 0007. Language 6 remains candidate.
+
+Keiro 0.23.0.0 requires Store `^>=0.13.0.1`, migrations `^>=0.7.3.0`,
+metrics `^>=0.4.0.1` and the Shibuya adapter `^>=0.7.0.1` where used, from
+mori://shinzui/kiroku. Its edge entails Kiroku 0.12.0.0 → 0.13.0.0 for
+exhaustive custom interpreters/observers and migration `0017` (store identity
+and compaction ledger). The composed framework plan contains 49 migrations.
+Existing migration payloads and checksums are unchanged. Compaction adoption is
+optional; the Shibuya/PGMQ cohort and DSL language policy remain as in 0.22.0.0.
 
 From 0.18.0.0, `keiro-test-support` requires `ephemeral-pg >=0.3.1 && <0.4`. That is a test-only
 dependency, but `pg-migrate-test-support 1.1.0.0` still caps it below 0.3, so a build plan holding
