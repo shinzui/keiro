@@ -1,0 +1,70 @@
+Downloading the latest package list from hackage.haskell.org
+Package list of hackage.haskell.org has been updated.
+The index-state is set to 2026-10-31T12:32:43Z.
+To revert to previous state run:
+    cabal v2-update 'hackage.haskell.org,2026-10-31T12:32:33Z'
+Resolving dependencies...
+Build profile: -w ghc-9.12.4 -O1
+In order, the following would be built (use -v for more details):
+ - release-consumer-0.1.0.0 (exe:release-consumer) (first run)
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - release-consumer-0.1.0.0 (exe:release-consumer) (first run)
+Configuring executable 'release-consumer' for release-consumer-0.1.0.0...
+Preprocessing executable 'release-consumer' for release-consumer-0.1.0.0...
+Building executable 'release-consumer' for release-consumer-0.1.0.0...
+[1 of 1] Compiling Main             ( Main.hs, dist-newstyle/build/aarch64-osx/ghc-9.12.4/release-consumer-0.1.0.0/x/release-consumer/build/release-consumer/release-consumer-tmp/Main.o )
+[2 of 2] Linking dist-newstyle/build/aarch64-osx/ghc-9.12.4/release-consumer-0.1.0.0/x/release-consumer/build/release-consumer/release-consumer
+started=2026-10-31 12:38:44.67437 UTC
+finished=2026-10-31 12:38:44.733907 UTC
+kiroku/0001-kiroku-bootstrap outcome=applied_now duration_ms=6
+kiroku/0002-add-subscription-dead-letters outcome=applied_now duration_ms=2
+kiroku/0003-notify-trigger-append-guard outcome=applied_now duration_ms=1
+kiroku/0004-dead-letters-event-id-index outcome=applied_now duration_ms=0
+kiroku/0005-index-hygiene-and-streams-fillfactor outcome=applied_now duration_ms=1
+kiroku/0006-stream-name-length-check outcome=applied_now duration_ms=0
+kiroku/0007-stream-truncate-before outcome=applied_now duration_ms=0
+kiroku/0008-schema-management-comment outcome=applied_now duration_ms=0
+kiroku/0009 outcome=applied_now duration_ms=2
+kiroku/0010 outcome=applied_now duration_ms=2
+kiroku/0011 outcome=applied_now duration_ms=0
+kiroku/0012 outcome=applied_now duration_ms=3
+kiroku/0013 outcome=applied_now duration_ms=0
+kiroku/0014 outcome=applied_now duration_ms=0
+kiroku/0015 outcome=applied_now duration_ms=0
+kiroku/0016 outcome=applied_now duration_ms=0
+kiroku/0017 outcome=applied_now duration_ms=3
+keiro/0001-keiro-bootstrap outcome=applied_now duration_ms=2
+keiro/0002-keiro-outbox outcome=applied_now duration_ms=2
+keiro/0003-keiro-inbox outcome=applied_now duration_ms=1
+keiro/0004-keiro-timer-recovery outcome=applied_now duration_ms=1
+keiro/0005-keiro-workflow-steps outcome=applied_now duration_ms=1
+keiro/0006-keiro-awakeables outcome=applied_now duration_ms=1
+keiro/0007-keiro-workflow-children outcome=applied_now duration_ms=1
+keiro/0008-keiro-workflow-generation outcome=applied_now duration_ms=1
+keiro/0009-keiro-subscription-shards outcome=applied_now duration_ms=1
+keiro/0010-keiro-messaging-crash-recovery outcome=applied_now duration_ms=1
+keiro/0011-keiro-workflows-instances outcome=applied_now duration_ms=2
+keiro/0012-keiro-workflow-gc-index outcome=applied_now duration_ms=1
+keiro/0013-keiro-workflows-wake-after outcome=applied_now duration_ms=0
+keiro/0014-keiro-projection-dedup outcome=applied_now duration_ms=1
+keiro/0015-keiro-outbox-claim-order-index outcome=applied_now duration_ms=0
+keiro/0016-keiro-inbox-drop-received-idx outcome=applied_now duration_ms=0
+keiro/0017-schema-management-comment outcome=applied_now duration_ms=0
+keiro/0018 outcome=applied_now duration_ms=1
+keiro/0019-keiro-snapshots-state-shape-hash outcome=applied_now duration_ms=0
+keiro/0020-keiro-workflow-children-failure-reason outcome=applied_now duration_ms=0
+keiro/0021-keiro-workflows-exact-discovery outcome=applied_now duration_ms=1
+keiro/0022 outcome=applied_now duration_ms=1
+keiro/0023 outcome=applied_now duration_ms=4
+keiro/0024 outcome=applied_now duration_ms=0
+keiro/0025 outcome=applied_now duration_ms=6
+keiro/0026 outcome=applied_now duration_ms=3
+keiro/0027 outcome=applied_now duration_ms=3
+keiro/0028 outcome=applied_now duration_ms=0
+keiro/0029 outcome=applied_now duration_ms=2
+keiro/0030 outcome=applied_now duration_ms=0
+keiro/0031 outcome=applied_now duration_ms=1
+keiro/0032 outcome=applied_now duration_ms=0
+
+{"mutations_enabled": false, "schema_drift": [], "status": "ok"}

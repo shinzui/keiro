@@ -1,0 +1,65 @@
+Downloading the latest package list from hackage.haskell.org
+Package list of hackage.haskell.org has been updated.
+The index-state is set to 2026-10-31T11:03:47Z.
+Resolving dependencies...
+Error: [Cabal-7107]
+Could not resolve dependencies:
+[__0] trying: release-consumer-0.1.0.0 (user goal)
+[__1] next goal: keiro-test-support (dependency of release-consumer)
+[__1] rejecting: keiro-test-support-0.22.0.0 (conflict: release-consumer => keiro-test-support==0.23.0.0)
+[__1] skipping: keiro-test-support; 0.21.0.0, 0.20.0.0, 0.19.0.1, 0.19.0.0, 0.18.0.0, 0.17.0.0, 0.16.0.0, 0.15.0.0, 0.14.0.0 (has the same characteristics that caused the previous version to fail: excluded by constraint '==0.23.0.0' from 'release-consumer')
+[__1] fail (backjumping, conflict set: keiro-test-support, release-consumer)
+After searching the rest of the dependency tree exhaustively, these were the goals I've had most trouble fulfilling: release-consumer, keiro-test-support
+
+Downloading the latest package list from hackage.haskell.org
+Package list of hackage.haskell.org is up to date.
+The index-state is set to 2026-10-31T11:03:47Z.
+Resolving dependencies...
+Error: [Cabal-7107]
+Could not resolve dependencies:
+[__0] trying: release-consumer-0.1.0.0 (user goal)
+[__1] next goal: keiro-test-support (dependency of release-consumer)
+[__1] rejecting: keiro-test-support-0.22.0.0 (conflict: release-consumer => keiro-test-support==0.23.0.0)
+[__1] skipping: keiro-test-support; 0.21.0.0, 0.20.0.0, 0.19.0.1, 0.19.0.0, 0.18.0.0, 0.17.0.0, 0.16.0.0, 0.15.0.0, 0.14.0.0 (has the same characteristics that caused the previous version to fail: excluded by constraint '==0.23.0.0' from 'release-consumer')
+[__1] fail (backjumping, conflict set: keiro-test-support, release-consumer)
+After searching the rest of the dependency tree exhaustively, these were the goals I've had most trouble fulfilling: release-consumer, keiro-test-support
+
+Downloading the latest package list from hackage.haskell.org
+Package list of hackage.haskell.org is up to date.
+The index-state is set to 2026-10-31T11:03:47Z.
+Resolving dependencies...
+Error: [Cabal-7107]
+Could not resolve dependencies:
+[__0] trying: release-consumer-0.1.0.0 (user goal)
+[__1] next goal: keiro-test-support (dependency of release-consumer)
+[__1] rejecting: keiro-test-support-0.22.0.0 (conflict: release-consumer => keiro-test-support==0.23.0.0)
+[__1] skipping: keiro-test-support; 0.21.0.0, 0.20.0.0, 0.19.0.1, 0.19.0.0, 0.18.0.0, 0.17.0.0, 0.16.0.0, 0.15.0.0, 0.14.0.0 (has the same characteristics that caused the previous version to fail: excluded by constraint '==0.23.0.0' from 'release-consumer')
+[__1] fail (backjumping, conflict set: keiro-test-support, release-consumer)
+After searching the rest of the dependency tree exhaustively, these were the goals I've had most trouble fulfilling: release-consumer, keiro-test-support
+
+Downloading the latest package list from hackage.haskell.org
+Package list of hackage.haskell.org is up to date.
+The index-state is set to 2026-10-31T11:03:47Z.
+Resolving dependencies...
+Error: [Cabal-7107]
+Could not resolve dependencies:
+[__0] trying: release-consumer-0.1.0.0 (user goal)
+[__1] next goal: keiro-test-support (dependency of release-consumer)
+[__1] rejecting: keiro-test-support-0.22.0.0 (conflict: release-consumer => keiro-test-support==0.23.0.0)
+[__1] skipping: keiro-test-support; 0.21.0.0, 0.20.0.0, 0.19.0.1, 0.19.0.0, 0.18.0.0, 0.17.0.0, 0.16.0.0, 0.15.0.0, 0.14.0.0 (has the same characteristics that caused the previous version to fail: excluded by constraint '==0.23.0.0' from 'release-consumer')
+[__1] fail (backjumping, conflict set: keiro-test-support, release-consumer)
+After searching the rest of the dependency tree exhaustively, these were the goals I've had most trouble fulfilling: release-consumer, keiro-test-support
+
+Downloading the latest package list from hackage.haskell.org
+Package list of hackage.haskell.org is up to date.
+The index-state is set to 2026-10-31T11:03:47Z.
+Resolving dependencies...
+Error: [Cabal-7107]
+Could not resolve dependencies:
+[__0] trying: release-consumer-0.1.0.0 (user goal)
+[__1] next goal: keiro-test-support (dependency of release-consumer)
+[__1] rejecting: keiro-test-support-0.22.0.0 (conflict: release-consumer => keiro-test-support==0.23.0.0)
+[__1] skipping: keiro-test-support; 0.21.0.0, 0.20.0.0, 0.19.0.1, 0.19.0.0, 0.18.0.0, 0.17.0.0, 0.16.0.0, 0.15.0.0, 0.14.0.0 (has the same characteristics that caused the previous version to fail: excluded by constraint '==0.23.0.0' from 'release-consumer')
+[__1] fail (backjumping, conflict set: keiro-test-support, release-consumer)
+After searching the rest of the dependency tree exhaustively, these were the goals I've had most trouble fulfilling: release-consumer, keiro-test-support
+

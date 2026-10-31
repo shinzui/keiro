@@ -1,0 +1,20 @@
+[
+  {
+    "checked_at": "2026-10-31T12:35:25.267791+00:00",
+    "cached_version": 111839,
+    "remote_version": 111840,
+    "advanced": true
+  },
+  {
+    "checked_at": "2026-10-31T12:37:28.168530+00:00",
+    "cached_version": 111840,
+    "remote_version": 111840,
+    "advanced": false
+  },
+  {
+    "checked_at": "2026-10-31T12:38:19.104862+00:00",
+    "cached_version": 111840,
+    "remote_version": 111841,
+    "advanced": true
+  }
+]

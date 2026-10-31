@@ -1,0 +1,16 @@
+{
+  "archives": {},
+  "finished": 1793450325.801536,
+  "health": {
+    "mutations_enabled": false,
+    "schema_drift": [],
+    "status": "ok"
+  },
+  "log_sha256": "5e2f45ecd5a57f0302b40b70782cf0881343ceab989bf48907e0a0bf29ade20a",
+  "migrator": "/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.23.0.0/x/keiro-migrate/build/keiro-migrate/keiro-migrate",
+  "mode": "published",
+  "plan_sha256": "5ea8df6026f603406a8a6f4bcc86d0ce8581f9150843788aa242eee609e9d1c9",
+  "source": "5eef0b5b0147cb4a6198f66c6da4a4f62210c61d08116b53fb276f8026f69abe",
+  "status": "passed",
+  "version": "0.23.0.0"
+}

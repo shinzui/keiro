@@ -6,5 +6,9 @@
   "native_nix": "passed",
   "staged_consumer": "passed",
   "readiness": "passed",
-  "recorded_at": "2026-10-31T12:32:04.059285+00:00"
+  "recorded_at": "2026-10-31T12:32:04.059285+00:00",
+  "published_consumer": "passed",
+  "hackage": "eight packages and documentation published; all sixteen endpoints HTTP 200",
+  "github_release": "https://github.com/shinzui/keiro/releases/tag/keiro-0.23.0.0",
+  "publication_recorded_at": "2026-10-31T12:39:29.037560+00:00"
 }

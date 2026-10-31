@@ -1,0 +1,5 @@
+{
+  "exit_code": 1,
+  "reason": "The published cohort was absent from the signed Hackage index after the five bounded solver attempts.",
+  "cached_timestamp_version": 111839
+}

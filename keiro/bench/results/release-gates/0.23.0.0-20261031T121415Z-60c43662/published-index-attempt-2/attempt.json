@@ -1,0 +1,5 @@
+{
+  "exit_code": 1,
+  "reason": "Signed index 111840 ends at 2026-10-31T12:32:33Z, before the remaining cohort uploads completed at 12:32:43Z. Five bounded solver attempts exhausted.",
+  "cached_timestamp_version": 111840
+}
