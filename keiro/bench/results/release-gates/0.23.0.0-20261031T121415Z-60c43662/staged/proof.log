@@ -1,0 +1,964 @@
+Downloading the latest package list from hackage.haskell.org
+Package list of hackage.haskell.org has been updated.
+The index-state is set to 2026-10-31T11:03:47Z.
+Resolving dependencies...
+Build profile: -w ghc-9.12.4 -O1
+In order, the following would be built (use -v for more details):
+ - keiro-core-0.23.0.0 (lib) (requires build)
+ - keiro-dsl-0.23.0.0 (lib:generated-haskell-language-internal) (requires build)
+ - keiro-migrations-0.23.0.0 (lib) (requires build)
+ - keiro-pgmq-0.23.0.0 (lib) (requires build)
+ - keiro-0.23.0.0 (lib) (requires build)
+ - keiro-dsl-0.23.0.0 (lib) (requires build)
+ - keiro-test-support-0.23.0.0 (lib) (requires build)
+ - keiro-ops-0.23.0.0 (lib) (requires build)
+ - keiro-ops-http-0.23.0.0 (lib) (requires build)
+ - release-consumer-0.1.0.0 (exe:release-consumer) (first run)
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-core-0.23.0.0 (lib) (requires build)
+ - keiro-dsl-0.23.0.0 (lib:generated-haskell-language-internal) (requires build)
+ - keiro-migrations-0.23.0.0 (lib) (requires build)
+ - keiro-pgmq-0.23.0.0 (lib) (requires build)
+ - keiro-0.23.0.0 (lib) (requires build)
+ - keiro-dsl-0.23.0.0 (lib) (requires build)
+ - keiro-test-support-0.23.0.0 (lib) (requires build)
+ - keiro-ops-0.23.0.0 (lib) (requires build)
+ - keiro-ops-http-0.23.0.0 (lib) (requires build)
+ - release-consumer-0.1.0.0 (exe:release-consumer) (first run)
+Configuring library for keiro-core-0.23.0.0...
+Preprocessing library for keiro-core-0.23.0.0...
+Building library for keiro-core-0.23.0.0...
+[ 1 of 16] Compiling Keiro.Codec.Base16Bytes ( src/Keiro/Codec/Base16Bytes.hs, dist/build/Keiro/Codec/Base16Bytes.o, dist/build/Keiro/Codec/Base16Bytes.dyn_o )
+[ 2 of 16] Compiling Keiro.Codec.CalendarDay ( src/Keiro/Codec/CalendarDay.hs, dist/build/Keiro/Codec/CalendarDay.o, dist/build/Keiro/Codec/CalendarDay.dyn_o )
+[ 3 of 16] Compiling Keiro.Codec.IdDomain ( src/Keiro/Codec/IdDomain.hs, dist/build/Keiro/Codec/IdDomain.o, dist/build/Keiro/Codec/IdDomain.dyn_o )
+[ 4 of 16] Compiling Keiro.Codec.Nominal ( src/Keiro/Codec/Nominal.hs, dist/build/Keiro/Codec/Nominal.o, dist/build/Keiro/Codec/Nominal.dyn_o )
+[ 5 of 16] Compiling Keiro.Codec.Refined ( src/Keiro/Codec/Refined.hs, dist/build/Keiro/Codec/Refined.o, dist/build/Keiro/Codec/Refined.dyn_o )
+[ 6 of 16] Compiling Keiro.Codec.Structural ( src/Keiro/Codec/Structural.hs, dist/build/Keiro/Codec/Structural.o, dist/build/Keiro/Codec/Structural.dyn_o )
+[ 7 of 16] Compiling Keiro.Codec.Structural.Generic ( src/Keiro/Codec/Structural/Generic.hs, dist/build/Keiro/Codec/Structural/Generic.o, dist/build/Keiro/Codec/Structural/Generic.dyn_o )
+[ 8 of 16] Compiling Keiro.Codec.TextSet ( src/Keiro/Codec/TextSet.hs, dist/build/Keiro/Codec/TextSet.o, dist/build/Keiro/Codec/TextSet.dyn_o )
+[ 9 of 16] Compiling Keiro.Prelude    ( src/Keiro/Prelude.hs, dist/build/Keiro/Prelude.o, dist/build/Keiro/Prelude.dyn_o )
+[10 of 16] Compiling Keiro.Integration.Event ( src/Keiro/Integration/Event.hs, dist/build/Keiro/Integration/Event.o, dist/build/Keiro/Integration/Event.dyn_o )
+[11 of 16] Compiling Keiro.Codec      ( src/Keiro/Codec.hs, dist/build/Keiro/Codec.o, dist/build/Keiro/Codec.dyn_o )
+[12 of 16] Compiling Keiro.Schema     ( src/Keiro/Schema.hs, dist/build/Keiro/Schema.o, dist/build/Keiro/Schema.dyn_o )
+[13 of 16] Compiling Keiro.Stream     ( src/Keiro/Stream.hs, dist/build/Keiro/Stream.o, dist/build/Keiro/Stream.dyn_o )
+[14 of 16] Compiling Keiro.EventStream ( src/Keiro/EventStream.hs, dist/build/Keiro/EventStream.o, dist/build/Keiro/EventStream.dyn_o )
+[15 of 16] Compiling Keiro.Snapshot.Policy ( src/Keiro/Snapshot/Policy.hs, dist/build/Keiro/Snapshot/Policy.o, dist/build/Keiro/Snapshot/Policy.dyn_o )
+[16 of 16] Compiling Keiro.EventStream.Validate ( src/Keiro/EventStream/Validate.hs, dist/build/Keiro/EventStream/Validate.o, dist/build/Keiro/EventStream/Validate.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-21199/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/kr-cr-0.23.0.0-f535c8fc/lib
+Configuring library 'generated-haskell-language-internal' for keiro-dsl-0.23.0.0...
+Preprocessing library 'generated-haskell-language-internal' for keiro-dsl-0.23.0.0...
+Building library 'generated-haskell-language-internal' for keiro-dsl-0.23.0.0...
+[1 of 1] Compiling Keiro.Dsl.GeneratedHaskellLanguage ( internal/Keiro/Dsl/GeneratedHaskellLanguage.hs, dist/build/generated-haskell-language-internal/Keiro/Dsl/GeneratedHaskellLanguage.o, dist/build/generated-haskell-language-internal/Keiro/Dsl/GeneratedHaskellLanguage.dyn_o )
+Installing internal library generated-haskell-language-internal in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-21199/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/kr-dsl-0.23.0.0-914d07c3/lib
+Configuring library for keiro-migrations-0.23.0.0...
+Preprocessing library for keiro-migrations-0.23.0.0...
+Building library for keiro-migrations-0.23.0.0...
+[1 of 5] Compiling Keiro.Migrations.Internal.Definition ( src/Keiro/Migrations/Internal/Definition.hs, dist/build/Keiro/Migrations/Internal/Definition.o, dist/build/Keiro/Migrations/Internal/Definition.dyn_o )
+[2 of 5] Compiling Keiro.Migrations ( src/Keiro/Migrations.hs, dist/build/Keiro/Migrations.o, dist/build/Keiro/Migrations.dyn_o )
+[3 of 5] Compiling Keiro.Migrations.Internal.EmbedFile ( src/Keiro/Migrations/Internal/EmbedFile.hs, dist/build/Keiro/Migrations/Internal/EmbedFile.o, dist/build/Keiro/Migrations/Internal/EmbedFile.dyn_o )
+[4 of 5] Compiling Keiro.Migrations.History.Codd ( src/Keiro/Migrations/History/Codd.hs, dist/build/Keiro/Migrations/History/Codd.o, dist/build/Keiro/Migrations/History/Codd.dyn_o )
+[5 of 5] Compiling Keiro.Migrations.SchemaCheck ( src/Keiro/Migrations/SchemaCheck.hs, dist/build/Keiro/Migrations/SchemaCheck.o, dist/build/Keiro/Migrations/SchemaCheck.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-21199/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/kr-mgrtns-0.23.0.0-88c5ae4d/lib
+Configuring library for keiro-pgmq-0.23.0.0...
+Preprocessing library for keiro-pgmq-0.23.0.0...
+Building library for keiro-pgmq-0.23.0.0...
+[1 of 6] Compiling Keiro.PGMQ.Codec ( src/Keiro/PGMQ/Codec.hs, dist/build/Keiro/PGMQ/Codec.o, dist/build/Keiro/PGMQ/Codec.dyn_o )
+[2 of 6] Compiling Keiro.PGMQ.Runtime ( src/Keiro/PGMQ/Runtime.hs, dist/build/Keiro/PGMQ/Runtime.o, dist/build/Keiro/PGMQ/Runtime.dyn_o )
+[3 of 6] Compiling Keiro.PGMQ.Job   ( src/Keiro/PGMQ/Job.hs, dist/build/Keiro/PGMQ/Job.o, dist/build/Keiro/PGMQ/Job.dyn_o )
+[4 of 6] Compiling Keiro.PGMQ.Metrics ( src/Keiro/PGMQ/Metrics.hs, dist/build/Keiro/PGMQ/Metrics.o, dist/build/Keiro/PGMQ/Metrics.dyn_o )
+[5 of 6] Compiling Keiro.PGMQ.Dlq   ( src/Keiro/PGMQ/Dlq.hs, dist/build/Keiro/PGMQ/Dlq.o, dist/build/Keiro/PGMQ/Dlq.dyn_o )
+[6 of 6] Compiling Keiro.PGMQ       ( src/Keiro/PGMQ.hs, dist/build/Keiro/PGMQ.o, dist/build/Keiro/PGMQ.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-21199/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/kr-pgmq-0.23.0.0-44cef42e/lib
+Configuring library for keiro-0.23.0.0...
+Preprocessing library for keiro-0.23.0.0...
+Building library for keiro-0.23.0.0...
+[ 1 of 74] Compiling Keiro.Command.Domain ( src/Keiro/Command/Domain.hs, dist/build/Keiro/Command/Domain.o, dist/build/Keiro/Command/Domain.dyn_o )
+[ 2 of 74] Compiling Keiro.Connection ( src/Keiro/Connection.hs, dist/build/Keiro/Connection.o, dist/build/Keiro/Connection.dyn_o )
+[ 3 of 74] Compiling Keiro.DeadLetter.Replay ( src/Keiro/DeadLetter/Replay.hs, dist/build/Keiro/DeadLetter/Replay.o, dist/build/Keiro/DeadLetter/Replay.dyn_o )
+[ 4 of 74] Compiling Keiro.DeadLetter.Schema ( src/Keiro/DeadLetter/Schema.hs, dist/build/Keiro/DeadLetter/Schema.o, dist/build/Keiro/DeadLetter/Schema.dyn_o )
+[ 5 of 74] Compiling Keiro.DeadLetter ( src/Keiro/DeadLetter.hs, dist/build/Keiro/DeadLetter.o, dist/build/Keiro/DeadLetter.dyn_o )
+[ 6 of 74] Compiling Keiro.DeterministicId ( src/Keiro/DeterministicId.hs, dist/build/Keiro/DeterministicId.o, dist/build/Keiro/DeterministicId.dyn_o )
+[ 7 of 74] Compiling Keiro.Inbox.Types ( src/Keiro/Inbox/Types.hs, dist/build/Keiro/Inbox/Types.o, dist/build/Keiro/Inbox/Types.dyn_o )
+[ 8 of 74] Compiling Keiro.Inbox.Schema ( src/Keiro/Inbox/Schema.hs, dist/build/Keiro/Inbox/Schema.o, dist/build/Keiro/Inbox/Schema.dyn_o )
+[ 9 of 74] Compiling Keiro.Inbox.Kafka ( src/Keiro/Inbox/Kafka.hs, dist/build/Keiro/Inbox/Kafka.o, dist/build/Keiro/Inbox/Kafka.dyn_o )
+[10 of 74] Compiling Keiro.Inspection.Cursor ( src/Keiro/Inspection/Cursor.hs, dist/build/Keiro/Inspection/Cursor.o, dist/build/Keiro/Inspection/Cursor.dyn_o )
+[11 of 74] Compiling Keiro.Outbox.Rejection ( src/Keiro/Outbox/Rejection.hs, dist/build/Keiro/Outbox/Rejection.o, dist/build/Keiro/Outbox/Rejection.dyn_o )
+[12 of 74] Compiling Keiro.Outbox.Types ( src/Keiro/Outbox/Types.hs, dist/build/Keiro/Outbox/Types.o, dist/build/Keiro/Outbox/Types.dyn_o )
+[13 of 74] Compiling Keiro.Outbox.Kafka ( src/Keiro/Outbox/Kafka.hs, dist/build/Keiro/Outbox/Kafka.o, dist/build/Keiro/Outbox/Kafka.dyn_o )
+[14 of 74] Compiling Keiro.Projection.Catalog.Preimage ( src/Keiro/Projection/Catalog/Preimage.hs, dist/build/Keiro/Projection/Catalog/Preimage.o, dist/build/Keiro/Projection/Catalog/Preimage.dyn_o )
+[15 of 74] Compiling Keiro.Projection.Types ( src/Keiro/Projection/Types.hs, dist/build/Keiro/Projection/Types.o, dist/build/Keiro/Projection/Types.dyn_o )
+[16 of 74] Compiling Keiro.ReadModel.Schema ( src/Keiro/ReadModel/Schema.hs, dist/build/Keiro/ReadModel/Schema.o, dist/build/Keiro/ReadModel/Schema.dyn_o )
+[17 of 74] Compiling Keiro.ReplayDigest ( src/Keiro/ReplayDigest.hs, dist/build/Keiro/ReplayDigest.o, dist/build/Keiro/ReplayDigest.dyn_o )
+[18 of 74] Compiling Keiro.Outbox.Identity ( src/Keiro/Outbox/Identity.hs, dist/build/Keiro/Outbox/Identity.o, dist/build/Keiro/Outbox/Identity.dyn_o )
+[19 of 74] Compiling Keiro.Outbox.Schema ( src/Keiro/Outbox/Schema.hs, dist/build/Keiro/Outbox/Schema.o, dist/build/Keiro/Outbox/Schema.dyn_o )
+[20 of 74] Compiling Keiro.Snapshot.Codec ( src/Keiro/Snapshot/Codec.hs, dist/build/Keiro/Snapshot/Codec.o, dist/build/Keiro/Snapshot/Codec.dyn_o )
+[21 of 74] Compiling Keiro.Snapshot.Schema ( src/Keiro/Snapshot/Schema.hs, dist/build/Keiro/Snapshot/Schema.o, dist/build/Keiro/Snapshot/Schema.dyn_o )
+[22 of 74] Compiling Keiro.Snapshot   ( src/Keiro/Snapshot.hs, dist/build/Keiro/Snapshot.o, dist/build/Keiro/Snapshot.dyn_o )
+[23 of 74] Compiling Keiro.Subscription.Shard.Schema ( src/Keiro/Subscription/Shard/Schema.hs, dist/build/Keiro/Subscription/Shard/Schema.o, dist/build/Keiro/Subscription/Shard/Schema.dyn_o )
+[24 of 74] Compiling Keiro.Subscription.Shard ( src/Keiro/Subscription/Shard.hs, dist/build/Keiro/Subscription/Shard.o, dist/build/Keiro/Subscription/Shard.dyn_o )
+[25 of 74] Compiling Keiro.Subscription.Shard.Worker ( src/Keiro/Subscription/Shard/Worker.hs, dist/build/Keiro/Subscription/Shard/Worker.o, dist/build/Keiro/Subscription/Shard/Worker.dyn_o )
+[26 of 74] Compiling Keiro.Timer.Types ( src/Keiro/Timer/Types.hs, dist/build/Keiro/Timer/Types.o, dist/build/Keiro/Timer/Types.dyn_o )
+[27 of 74] Compiling Keiro.Timer.Schema ( src/Keiro/Timer/Schema.hs, dist/build/Keiro/Timer/Schema.o, dist/build/Keiro/Timer/Schema.dyn_o )
+src/Keiro/Timer/Schema.hs:82:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Data.List.NonEmpty’ is redundant
+      except perhaps to import instances from ‘Data.List.NonEmpty’
+    To import instances alone, use: import Data.List.NonEmpty()
+   |
+82 | import Data.List.NonEmpty (NonEmpty (..))
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[28 of 74] Compiling Keiro.Wake       ( src/Keiro/Wake.hs, dist/build/Keiro/Wake.o, dist/build/Keiro/Wake.dyn_o )
+[29 of 74] Compiling Keiro.Workflow.Awakeable.Schema ( src/Keiro/Workflow/Awakeable/Schema.hs, dist/build/Keiro/Workflow/Awakeable/Schema.o, dist/build/Keiro/Workflow/Awakeable/Schema.dyn_o )
+[30 of 74] Compiling Keiro.Workflow.Child.Schema ( src/Keiro/Workflow/Child/Schema.hs, dist/build/Keiro/Workflow/Child/Schema.o, dist/build/Keiro/Workflow/Child/Schema.dyn_o )
+[31 of 74] Compiling Keiro.Workflow.Instance.Schema ( src/Keiro/Workflow/Instance/Schema.hs, dist/build/Keiro/Workflow/Instance/Schema.o, dist/build/Keiro/Workflow/Instance/Schema.dyn_o )
+[32 of 74] Compiling Keiro.Workflow.Inspection.Query ( src/Keiro/Workflow/Inspection/Query.hs, dist/build/Keiro/Workflow/Inspection/Query.o, dist/build/Keiro/Workflow/Inspection/Query.dyn_o )
+[33 of 74] Compiling Keiro.Workflow.Types ( src/Keiro/Workflow/Types.hs, dist/build/Keiro/Workflow/Types.o, dist/build/Keiro/Workflow/Types.dyn_o )
+[34 of 74] Compiling Keiro.Workflow.Snapshot ( src/Keiro/Workflow/Snapshot.hs, dist/build/Keiro/Workflow/Snapshot.o, dist/build/Keiro/Workflow/Snapshot.dyn_o )
+[35 of 74] Compiling Keiro.Workflow.Schema ( src/Keiro/Workflow/Schema.hs, dist/build/Keiro/Workflow/Schema.o, dist/build/Keiro/Workflow/Schema.dyn_o )
+[36 of 74] Compiling Keiro.Workflow.Journal ( src/Keiro/Workflow/Journal.hs, dist/build/Keiro/Workflow/Journal.o, dist/build/Keiro/Workflow/Journal.dyn_o )
+[37 of 74] Compiling Keiro.Workflow.Gc ( src/Keiro/Workflow/Gc.hs, dist/build/Keiro/Workflow/Gc.o, dist/build/Keiro/Workflow/Gc.dyn_o )
+[38 of 74] Compiling Keiro.Workflow.Child.Cancel ( src/Keiro/Workflow/Child/Cancel.hs, dist/build/Keiro/Workflow/Child/Cancel.o, dist/build/Keiro/Workflow/Child/Cancel.dyn_o )
+[39 of 74] Compiling Keiro.Workflow.Instance ( src/Keiro/Workflow/Instance.hs, dist/build/Keiro/Workflow/Instance.o, dist/build/Keiro/Workflow/Instance.dyn_o )
+src/Keiro/Workflow/Instance.hs:867:30: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘argument’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Workflow/Instance.hs:65:1-20
+      (and originally defined in ‘Control.Lens.Setter’)
+    |
+867 |     parameter template value argument = (\n -> Text.replace "?" ("$" <> number n) template, 1, const argument >$< E.param (E.nonNullable value))
+    |                              ^^^^^^^^
+
+src/Keiro/Workflow/Instance.hs:894:50: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Workflow/Instance.hs:65:1-20
+      (and originally defined in ‘Control.Lens.Indexed’)
+    |
+894 |     (next, predicates, filterParams) = foldl' (\(index, clauses, encoders) (render, width, encoder) -> (index + width, clauses <> [render index], encoders <> encoder)) (1, [], mempty) filters
+    |                                                  ^^^^^
+
+[40 of 74] Compiling Keiro.Workflow.Inspection ( src/Keiro/Workflow/Inspection.hs, dist/build/Keiro/Workflow/Inspection.o, dist/build/Keiro/Workflow/Inspection.dyn_o )
+src/Keiro/Workflow/Inspection.hs:110:30: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         listWorkflowInstancesPage :: forall (es :: [Effectful.Internal.Effect.Effect]).
+                                      (IOE :> es, Store :> es) =>
+                                      WorkflowListQuery
+                                      -> Eff es (Either InspectionError WorkflowListPage)
+    |
+110 | listWorkflowInstancesPage :: (IOE :> es, Store :> es) => WorkflowListQuery -> Eff es (Either InspectionError WorkflowListPage)
+    |                              ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Workflow/Inspection.hs:228:28: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         readWorkflowJournalPage :: forall (es :: [Effectful.Internal.Effect.Effect]).
+                                    (IOE :> es, Store :> es) =>
+                                    WorkflowName
+                                    -> WorkflowId
+                                    -> DetailPageQuery
+                                    -> Eff es (Either InspectionError WorkflowJournalPage)
+    |
+228 | readWorkflowJournalPage :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> DetailPageQuery -> Eff es (Either InspectionError WorkflowJournalPage)
+    |                            ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Workflow/Inspection.hs:239:22: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         loadStepIndexPage :: forall (es :: [Effectful.Internal.Effect.Effect]).
+                              (IOE :> es, Store :> es) =>
+                              WorkflowName
+                              -> WorkflowId
+                              -> DetailPageQuery
+                              -> Eff es (Either InspectionError WorkflowStepPage)
+    |
+239 | loadStepIndexPage :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> DetailPageQuery -> Eff es (Either InspectionError WorkflowStepPage)
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Workflow/Inspection.hs:249:29: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         listWorkflowChildrenPage :: forall (es :: [Effectful.Internal.Effect.Effect]).
+                                     (IOE :> es, Store :> es) =>
+                                     WorkflowName
+                                     -> WorkflowId
+                                     -> OwnerPageQuery
+                                     -> Eff es (Either InspectionError WorkflowChildPage)
+    |
+249 | listWorkflowChildrenPage :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> OwnerPageQuery -> Eff es (Either InspectionError WorkflowChildPage)
+    |                             ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Workflow/Inspection.hs:258:31: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         listWorkflowAwakeablesPage :: forall (es :: [Effectful.Internal.Effect.Effect]).
+                                       (IOE :> es, Store :> es) =>
+                                       WorkflowName
+                                       -> WorkflowId
+                                       -> OwnerPageQuery
+                                       -> Eff es (Either InspectionError WorkflowAwakeablePage)
+    |
+258 | listWorkflowAwakeablesPage :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> OwnerPageQuery -> Eff es (Either InspectionError WorkflowAwakeablePage)
+    |                               ^^^^^^^^^^^^^^^^^^^^^^^^
+
+[41 of 74] Compiling Keiro.Workflow.Awakeable.Internal.Identity ( src/Keiro/Workflow/Awakeable/Internal/Identity.hs, dist/build/Keiro/Workflow/Awakeable/Internal/Identity.o, dist/build/Keiro/Workflow/Awakeable/Internal/Identity.dyn_o )
+[42 of 74] Compiling Keiro.Telemetry  ( src/Keiro/Telemetry.hs, dist/build/Keiro/Telemetry.o, dist/build/Keiro/Telemetry.dyn_o )
+[43 of 74] Compiling Keiro.Workflow   ( src/Keiro/Workflow.hs, dist/build/Keiro/Workflow.o, dist/build/Keiro/Workflow.dyn_o )
+[44 of 74] Compiling Keiro.Workflow.Child ( src/Keiro/Workflow/Child.hs, dist/build/Keiro/Workflow/Child.o, dist/build/Keiro/Workflow/Child.dyn_o )
+[45 of 74] Compiling Keiro.Workflow.Resume ( src/Keiro/Workflow/Resume.hs, dist/build/Keiro/Workflow/Resume.o, dist/build/Keiro/Workflow/Resume.dyn_o )
+[46 of 74] Compiling Keiro.Workflow.Awakeable ( src/Keiro/Workflow/Awakeable.hs, dist/build/Keiro/Workflow/Awakeable.o, dist/build/Keiro/Workflow/Awakeable.dyn_o )
+[47 of 74] Compiling Keiro.Workflow.Awakeable.Compatibility ( src/Keiro/Workflow/Awakeable/Compatibility.hs, dist/build/Keiro/Workflow/Awakeable/Compatibility.o, dist/build/Keiro/Workflow/Awakeable/Compatibility.dyn_o )
+[48 of 74] Compiling Keiro.Timer      ( src/Keiro/Timer.hs, dist/build/Keiro/Timer.o, dist/build/Keiro/Timer.dyn_o )
+[49 of 74] Compiling Keiro.Workflow.Sleep ( src/Keiro/Workflow/Sleep.hs, dist/build/Keiro/Workflow/Sleep.o, dist/build/Keiro/Workflow/Sleep.dyn_o )
+[50 of 74] Compiling Keiro.ReadModel  ( src/Keiro/ReadModel.hs, dist/build/Keiro/ReadModel.o, dist/build/Keiro/ReadModel.dyn_o )
+[51 of 74] Compiling Keiro.Projection.Catalog ( src/Keiro/Projection/Catalog.hs, dist/build/Keiro/Projection/Catalog.o, dist/build/Keiro/Projection/Catalog.dyn_o )
+src/Keiro/Projection/Catalog.hs:534:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘arguments’
+    Record selection and update using this field will be partial.
+    |
+534 |         arguments :: ![SqlFunctionArgument],
+    |         ^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:536:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘privateImplementation’
+    Record selection and update using this field will be partial.
+    |
+536 |         privateImplementation :: !QualifiedFunction,
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:537:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘privateImplementationVersion’
+    Record selection and update using this field will be partial.
+    |
+537 |         privateImplementationVersion :: !Int,
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1100:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilitySubscriptionId’
+    Record selection and update using this field will be partial.
+     |
+1100 |         capabilitySubscriptionId :: !SubscriptionId,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1101:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilitySubscriptionName’
+    Record selection and update using this field will be partial.
+     |
+1101 |         capabilitySubscriptionName :: !Text,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1102:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilitySourceId’
+    Record selection and update using this field will be partial.
+     |
+1102 |         capabilitySourceId :: !SourceId,
+     |         ^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1103:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilityCheckpointOnMissing’
+    Record selection and update using this field will be partial.
+     |
+1103 |         capabilityCheckpointOnMissing :: !MissingCheckpointPolicy,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1104:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilityDedupKeyId’
+    Record selection and update using this field will be partial.
+     |
+1104 |         capabilityDedupKeyId :: !DedupKeyId,
+     |         ^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1105:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilityDedupName’
+    Record selection and update using this field will be partial.
+     |
+1105 |         capabilityDedupName :: !Text
+     |         ^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:3412:29: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘argument’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Projection/Catalog.hs:194:1-20
+      (and originally defined in ‘Control.Lens.Setter’)
+     |
+3412 | sqlFunctionArgumentPreimage argument =
+     |                             ^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:3582:20: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘argument’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Projection/Catalog.hs:194:1-20
+      (and originally defined in ‘Control.Lens.Setter’)
+     |
+3582 |     renderArgument argument = argument ^. #argumentName <> ":" <> renderQualifiedType (argument ^. #argumentType)
+     |                    ^^^^^^^^
+
+[52 of 74] Compiling Keiro.ReadModel.External ( src/Keiro/ReadModel/External.hs, dist/build/Keiro/ReadModel/External.o, dist/build/Keiro/ReadModel/External.dyn_o )
+[53 of 74] Compiling Keiro.ReadModel.Rebuild.Group ( src/Keiro/ReadModel/Rebuild/Group.hs, dist/build/Keiro/ReadModel/Rebuild/Group.o, dist/build/Keiro/ReadModel/Rebuild/Group.dyn_o )
+[54 of 74] Compiling Keiro.ReadModel.Rebuild.Stream ( src/Keiro/ReadModel/Rebuild/Stream.hs, dist/build/Keiro/ReadModel/Rebuild/Stream.o, dist/build/Keiro/ReadModel/Rebuild/Stream.dyn_o )
+[55 of 74] Compiling Keiro.ReadModel.Rebuild.Status ( src/Keiro/ReadModel/Rebuild/Status.hs, dist/build/Keiro/ReadModel/Rebuild/Status.o, dist/build/Keiro/ReadModel/Rebuild/Status.dyn_o )
+[56 of 74] Compiling Keiro.ReadModel.Rebuild.Runner ( src/Keiro/ReadModel/Rebuild/Runner.hs, dist/build/Keiro/ReadModel/Rebuild/Runner.o, dist/build/Keiro/ReadModel/Rebuild/Runner.dyn_o )
+[57 of 74] Compiling Keiro.ReadModel.Rebuild.Versioned ( src/Keiro/ReadModel/Rebuild/Versioned.hs, dist/build/Keiro/ReadModel/Rebuild/Versioned.o, dist/build/Keiro/ReadModel/Rebuild/Versioned.dyn_o )
+[58 of 74] Compiling Keiro.ReadModel.Rebuild ( src/Keiro/ReadModel/Rebuild.hs, dist/build/Keiro/ReadModel/Rebuild.o, dist/build/Keiro/ReadModel/Rebuild.dyn_o )
+[59 of 74] Compiling Keiro.Projection.Catalog.Operations ( src/Keiro/Projection/Catalog/Operations.hs, dist/build/Keiro/Projection/Catalog/Operations.o, dist/build/Keiro/Projection/Catalog/Operations.dyn_o )
+[60 of 74] Compiling Keiro.Outbox     ( src/Keiro/Outbox.hs, dist/build/Keiro/Outbox.o, dist/build/Keiro/Outbox.dyn_o )
+[61 of 74] Compiling Keiro.Inbox      ( src/Keiro/Inbox.hs, dist/build/Keiro/Inbox.o, dist/build/Keiro/Inbox.dyn_o )
+[62 of 74] Compiling Keiro.Command    ( src/Keiro/Command.hs, dist/build/Keiro/Command.o, dist/build/Keiro/Command.dyn_o )
+[63 of 74] Compiling Keiro.ReplayAudit ( src/Keiro/ReplayAudit.hs, dist/build/Keiro/ReplayAudit.o, dist/build/Keiro/ReplayAudit.dyn_o )
+src/Keiro/ReplayAudit.hs:141:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘streamVersion’
+    Record selection and update using this field will be partial.
+    |
+141 |       { streamVersion :: !StreamVersion,
+    |         ^^^^^^^^^^^^^
+
+src/Keiro/ReplayAudit.hs:142:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘digest’
+    Record selection and update using this field will be partial.
+    |
+142 |         digest :: !(Maybe Text)
+    |         ^^^^^^
+
+src/Keiro/ReplayAudit.hs:145:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘commandError’
+    Record selection and update using this field will be partial.
+    |
+145 |       { commandError :: !CommandError
+    |         ^^^^^^^^^^^^
+
+src/Keiro/ReplayAudit.hs:148:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘seedVersion’
+    Record selection and update using this field will be partial.
+    |
+148 |       { seedVersion :: !StreamVersion,
+    |         ^^^^^^^^^^^
+
+src/Keiro/ReplayAudit.hs:149:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘seededDigest’
+    Record selection and update using this field will be partial.
+    |
+149 |         seededDigest :: !Text,
+    |         ^^^^^^^^^^^^
+
+src/Keiro/ReplayAudit.hs:150:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘fullDigest’
+    Record selection and update using this field will be partial.
+    |
+150 |         fullDigest :: !Text
+    |         ^^^^^^^^^^
+
+[64 of 74] Compiling Keiro.Projection ( src/Keiro/Projection.hs, dist/build/Keiro/Projection.o, dist/build/Keiro/Projection.dyn_o )
+[65 of 74] Compiling Keiro.ProcessManager.Provenance ( src/Keiro/ProcessManager/Provenance.hs, dist/build/Keiro/ProcessManager/Provenance.o, dist/build/Keiro/ProcessManager/Provenance.dyn_o )
+src/Keiro/ProcessManager/Provenance.hs:14:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Control.Monad’ is redundant
+      except perhaps to import instances from ‘Control.Monad’
+    To import instances alone, use: import Control.Monad()
+   |
+14 | import Control.Monad (unless)
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/ProcessManager/Provenance.hs:79:67: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager/Provenance.hs:24:1-34
+      (and originally defined in ‘Control.Lens.Indexed’)
+   |
+79 |       "dispatched" .= [object ["i" .= index, "target" .= name] | (index, StreamName name) <- provenance.dispatched],
+   |                                                                   ^^^^^
+
+src/Keiro/ProcessManager/Provenance.hs:111:17: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager/Provenance.hs:24:1-34
+      (and originally defined in ‘Control.Lens.Indexed’)
+    |
+111 |                 index <- entry .: "i"
+    |                 ^^^^^
+
+[66 of 74] Compiling Keiro.ProcessManager ( src/Keiro/ProcessManager.hs, dist/build/Keiro/ProcessManager.o, dist/build/Keiro/ProcessManager.dyn_o )
+src/Keiro/ProcessManager.hs:540:78: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager.hs:168:1-20
+      (and originally defined in ‘Control.Lens.Indexed’)
+    |
+540 |                 dispatched = [(index, resolveTarget (command ^. #target)) | (index, command) <- zip [0 ..] (action ^. #commands)],
+    |                                                                              ^^^^^
+
+[67 of 74] Compiling Keiro.Router.Selection ( src/Keiro/Router/Selection.hs, dist/build/Keiro/Router/Selection.o, dist/build/Keiro/Router/Selection.dyn_o )
+[68 of 74] Compiling Keiro.Router     ( src/Keiro/Router.hs, dist/build/Keiro/Router.o, dist/build/Keiro/Router.dyn_o )
+[69 of 74] Compiling Keiro.ProcessManager.Reaction ( src/Keiro/ProcessManager/Reaction.hs, dist/build/Keiro/ProcessManager/Reaction.o, dist/build/Keiro/ProcessManager/Reaction.dyn_o )
+src/Keiro/ProcessManager/Reaction.hs:126:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘command’
+    Record selection and update using this field will be partial.
+    |
+126 |       { command :: !ci,
+    |         ^^^^^^^
+
+src/Keiro/ProcessManager/Reaction.hs:127:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘followUps’
+    Record selection and update using this field will be partial.
+    |
+127 |         followUps :: ![FollowUp targetCi],
+    |         ^^^^^^^^^
+
+src/Keiro/ProcessManager/Reaction.hs:128:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘onAccepted’
+    Record selection and update using this field will be partial.
+    |
+128 |         onAccepted :: ![FollowUp targetCi]
+    |         ^^^^^^^^^^
+
+src/Keiro/ProcessManager/Reaction.hs:489:18: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         runTimerPhase :: forall (es :: [Effectful.Internal.Effect.Effect])
+                                 targetCi.
+                          (IOE :> es, Store :> es) =>
+                          [FollowUp targetCi] -> Eff es ReactionTimerEffects
+    |
+489 | runTimerPhase :: (IOE :> es, Store :> es) => [FollowUp targetCi] -> Eff es ReactionTimerEffects
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/ProcessManager/Reaction.hs:549:3: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         recoverWitness :: forall (es :: [Effectful.Internal.Effect.Effect])
+                                  phi (rs :: [Keiki.Core.Slot]) s ci co.
+                           (IOE :> es, Store :> es) =>
+                           ValidatedEventStream phi rs s ci co
+                           -> StreamName -> EventId -> Eff es (Either ReactionError ())
+    |
+549 |   (IOE :> es, Store :> es) =>
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+[70 of 74] Compiling Keiro.Inspection.Aggregate ( src/Keiro/Inspection/Aggregate.hs, dist/build/Keiro/Inspection/Aggregate.o, dist/build/Keiro/Inspection/Aggregate.dyn_o )
+src/Keiro/Inspection/Aggregate.hs:249:11: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘folded’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Inspection/Aggregate.hs:57:1-34
+      (and originally defined in ‘Control.Lens.Fold’)
+    |
+249 |           folded <- if isJust info.deletedAt then pure (Right Nothing) else fmap (fmap Just) (hydrateWithSource inspectionRunCommandOptions (unvalidated inspector.eventStream) target)
+    |           ^^^^^^
+
+src/Keiro/Inspection/Aggregate.hs:381:19: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘view’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Inspection/Aggregate.hs:57:1-34
+      (and originally defined in ‘Control.Lens.Getter’)
+    |
+381 | aggregateViewJson view =
+    |                   ^^^^
+
+[71 of 74] Compiling Keiro.ProcessManager.Inspect ( src/Keiro/ProcessManager/Inspect.hs, dist/build/Keiro/ProcessManager/Inspect.o, dist/build/Keiro/ProcessManager/Inspect.dyn_o )
+src/Keiro/ProcessManager/Inspect.hs:291:19: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager/Inspect.hs:59:1-34
+      (and originally defined in ‘Control.Lens.Indexed’)
+    |
+291 |     probe record (index, target) = do
+    |                   ^^^^^
+
+src/Keiro/ProcessManager/Inspect.hs:354:24: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘view’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager/Inspect.hs:59:1-34
+      (and originally defined in ‘Control.Lens.Getter’)
+    |
+354 | processManagerViewJson view =
+    |                        ^^^^
+
+[72 of 74] Compiling Keiro.Inbox.Delegated ( src/Keiro/Inbox/Delegated.hs, dist/build/Keiro/Inbox/Delegated.o, dist/build/Keiro/Inbox/Delegated.dyn_o )
+[73 of 74] Compiling Paths_keiro      ( dist/build/autogen/Paths_keiro.hs, dist/build/Paths_keiro.o, dist/build/Paths_keiro.dyn_o )
+[74 of 74] Compiling Keiro            ( src/Keiro.hs, dist/build/Keiro.o, dist/build/Keiro.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-21199/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/kr-0.23.0.0-cd771d05/lib
+Configuring library for keiro-dsl-0.23.0.0...
+Preprocessing library for keiro-dsl-0.23.0.0...
+Building library for keiro-dsl-0.23.0.0...
+[ 1 of 79] Compiling Keiro.Dsl.Grammar ( src/Keiro/Dsl/Grammar.hs, dist/build/Keiro/Dsl/Grammar.o, dist/build/Keiro/Dsl/Grammar.dyn_o )
+[ 2 of 79] Compiling Keiro.Dsl.FieldIdentity ( src/Keiro/Dsl/FieldIdentity.hs, dist/build/Keiro/Dsl/FieldIdentity.o, dist/build/Keiro/Dsl/FieldIdentity.dyn_o )
+[ 3 of 79] Compiling Keiro.Dsl.CanonicalEncoding ( src/Keiro/Dsl/CanonicalEncoding.hs, dist/build/Keiro/Dsl/CanonicalEncoding.o, dist/build/Keiro/Dsl/CanonicalEncoding.dyn_o )
+src/Keiro/Dsl/CanonicalEncoding.hs:166:5: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘list’ shadows the existing binding
+      imported from ‘Prettyprinter’ at src/Keiro/Dsl/CanonicalEncoding.hs:28:1-20
+      (and originally defined in ‘Prettyprinter.Internal’)
+    |
+166 |     list values = scalar (T.concat values)
+    |     ^^^^
+
+[ 4 of 79] Compiling Keiro.Dsl.AggregateGenerationPlan ( src/Keiro/Dsl/AggregateGenerationPlan.hs, dist/build/Keiro/Dsl/AggregateGenerationPlan.o, dist/build/Keiro/Dsl/AggregateGenerationPlan.dyn_o )
+[ 5 of 79] Compiling Keiro.Dsl.HaskellName ( src/Keiro/Dsl/HaskellName.hs, dist/build/Keiro/Dsl/HaskellName.o, dist/build/Keiro/Dsl/HaskellName.dyn_o )
+[ 6 of 79] Compiling Keiro.Dsl.HaskellImport ( src/Keiro/Dsl/HaskellImport.hs, dist/build/Keiro/Dsl/HaskellImport.o, dist/build/Keiro/Dsl/HaskellImport.dyn_o )
+[ 7 of 79] Compiling Keiro.Dsl.LanguageVersion ( src/Keiro/Dsl/LanguageVersion.hs, dist/build/Keiro/Dsl/LanguageVersion.o, dist/build/Keiro/Dsl/LanguageVersion.dyn_o )
+[ 8 of 79] Compiling Keiro.Dsl.PrettyPrint ( src/Keiro/Dsl/PrettyPrint.hs, dist/build/Keiro/Dsl/PrettyPrint.o, dist/build/Keiro/Dsl/PrettyPrint.dyn_o )
+[ 9 of 79] Compiling Keiro.Dsl.ProjectionSupply ( src/Keiro/Dsl/ProjectionSupply.hs, dist/build/Keiro/Dsl/ProjectionSupply.o, dist/build/Keiro/Dsl/ProjectionSupply.dyn_o )
+[10 of 79] Compiling Keiro.Dsl.ReadModelShape ( src/Keiro/Dsl/ReadModelShape.hs, dist/build/Keiro/Dsl/ReadModelShape.o, dist/build/Keiro/Dsl/ReadModelShape.dyn_o )
+[11 of 79] Compiling Keiro.Dsl.RuntimePackage ( src/Keiro/Dsl/RuntimePackage.hs, dist/build/Keiro/Dsl/RuntimePackage.o, dist/build/Keiro/Dsl/RuntimePackage.dyn_o )
+[12 of 79] Compiling Keiro.Dsl.SidecarNames ( src/Keiro/Dsl/SidecarNames.hs, dist/build/Keiro/Dsl/SidecarNames.o, dist/build/Keiro/Dsl/SidecarNames.dyn_o )
+[13 of 79] Compiling Keiro.Dsl.Skeleton ( src/Keiro/Dsl/Skeleton.hs, dist/build/Keiro/Dsl/Skeleton.o, dist/build/Keiro/Dsl/Skeleton.dyn_o )
+[14 of 79] Compiling Keiro.Dsl.Source ( src/Keiro/Dsl/Source.hs, dist/build/Keiro/Dsl/Source.o, dist/build/Keiro/Dsl/Source.dyn_o )
+[15 of 79] Compiling Keiro.Dsl.SourceIndex ( src/Keiro/Dsl/SourceIndex.hs, dist/build/Keiro/Dsl/SourceIndex.o, dist/build/Keiro/Dsl/SourceIndex.dyn_o )
+[16 of 79] Compiling Keiro.Dsl.Syntax ( src/Keiro/Dsl/Syntax.hs, dist/build/Keiro/Dsl/Syntax.o, dist/build/Keiro/Dsl/Syntax.dyn_o )
+[17 of 79] Compiling Keiro.Dsl.Frontend.Internal ( src/Keiro/Dsl/Frontend/Internal.hs, dist/build/Keiro/Dsl/Frontend/Internal.o, dist/build/Keiro/Dsl/Frontend/Internal.dyn_o )
+src/Keiro/Dsl/Frontend/Internal.hs:286:41: warning: [GHC-02256] [-Wambiguous-fields]
+    Ambiguous record update with parent type constructor ‘ProcessNode’.
+    This type-directed disambiguation mechanism will not be supported by -XDuplicateRecordFields in future releases of GHC.
+    Consider disambiguating using module qualification instead.
+    |
+286 |   NProcess process -> NProcess process {loc = loc}
+    |                                         ^^^^^^^^^
+
+[18 of 79] Compiling Keiro.Dsl.Parser.Core ( src/Keiro/Dsl/Parser/Core.hs, dist/build/Keiro/Dsl/Parser/Core.o, dist/build/Keiro/Dsl/Parser/Core.dyn_o )
+[19 of 79] Compiling Keiro.Dsl.Parser.Workflow ( src/Keiro/Dsl/Parser/Workflow.hs, dist/build/Keiro/Dsl/Parser/Workflow.o, dist/build/Keiro/Dsl/Parser/Workflow.dyn_o )
+[20 of 79] Compiling Keiro.Dsl.Parser.ProjectionCatalog ( src/Keiro/Dsl/Parser/ProjectionCatalog.hs, dist/build/Keiro/Dsl/Parser/ProjectionCatalog.o, dist/build/Keiro/Dsl/Parser/ProjectionCatalog.dyn_o )
+[21 of 79] Compiling Keiro.Dsl.Parser.Preamble ( src/Keiro/Dsl/Parser/Preamble.hs, dist/build/Keiro/Dsl/Parser/Preamble.o, dist/build/Keiro/Dsl/Parser/Preamble.dyn_o )
+[22 of 79] Compiling Keiro.Dsl.Parser.Mapped ( src/Keiro/Dsl/Parser/Mapped.hs, dist/build/Keiro/Dsl/Parser/Mapped.o, dist/build/Keiro/Dsl/Parser/Mapped.dyn_o )
+[23 of 79] Compiling Keiro.Dsl.Parser.ReadModel ( src/Keiro/Dsl/Parser/ReadModel.hs, dist/build/Keiro/Dsl/Parser/ReadModel.o, dist/build/Keiro/Dsl/Parser/ReadModel.dyn_o )
+[24 of 79] Compiling Keiro.Dsl.Parser.Queue ( src/Keiro/Dsl/Parser/Queue.hs, dist/build/Keiro/Dsl/Parser/Queue.o, dist/build/Keiro/Dsl/Parser/Queue.dyn_o )
+[25 of 79] Compiling Keiro.Dsl.Parser.Integration ( src/Keiro/Dsl/Parser/Integration.hs, dist/build/Keiro/Dsl/Parser/Integration.o, dist/build/Keiro/Dsl/Parser/Integration.dyn_o )
+[26 of 79] Compiling Keiro.Dsl.Parser.Expression ( src/Keiro/Dsl/Parser/Expression.hs, dist/build/Keiro/Dsl/Parser/Expression.o, dist/build/Keiro/Dsl/Parser/Expression.dyn_o )
+[27 of 79] Compiling Keiro.Dsl.Parser.Declaration ( src/Keiro/Dsl/Parser/Declaration.hs, dist/build/Keiro/Dsl/Parser/Declaration.o, dist/build/Keiro/Dsl/Parser/Declaration.dyn_o )
+[28 of 79] Compiling Keiro.Dsl.Parser.Coordination ( src/Keiro/Dsl/Parser/Coordination.hs, dist/build/Keiro/Dsl/Parser/Coordination.o, dist/build/Keiro/Dsl/Parser/Coordination.dyn_o )
+[29 of 79] Compiling Keiro.Dsl.Parser.Aggregate ( src/Keiro/Dsl/Parser/Aggregate.hs, dist/build/Keiro/Dsl/Parser/Aggregate.o, dist/build/Keiro/Dsl/Parser/Aggregate.dyn_o )
+[30 of 79] Compiling Keiro.Dsl.Parser.Document ( src/Keiro/Dsl/Parser/Document.hs, dist/build/Keiro/Dsl/Parser/Document.o, dist/build/Keiro/Dsl/Parser/Document.dyn_o )
+[31 of 79] Compiling Keiro.Dsl.Frontend ( src/Keiro/Dsl/Frontend.hs, dist/build/Keiro/Dsl/Frontend.o, dist/build/Keiro/Dsl/Frontend.dyn_o )
+[32 of 79] Compiling Keiro.Dsl.Parser ( src/Keiro/Dsl/Parser.hs, dist/build/Keiro/Dsl/Parser.o, dist/build/Keiro/Dsl/Parser.dyn_o )
+[33 of 79] Compiling Keiro.Dsl.TransitionFamily ( src/Keiro/Dsl/TransitionFamily.hs, dist/build/Keiro/Dsl/TransitionFamily.o, dist/build/Keiro/Dsl/TransitionFamily.dyn_o )
+[34 of 79] Compiling Keiro.Dsl.TypeGraph ( src/Keiro/Dsl/TypeGraph.hs, dist/build/Keiro/Dsl/TypeGraph.o, dist/build/Keiro/Dsl/TypeGraph.dyn_o )
+[35 of 79] Compiling Keiro.Dsl.SemanticContract ( src/Keiro/Dsl/SemanticContract.hs, dist/build/Keiro/Dsl/SemanticContract.o, dist/build/Keiro/Dsl/SemanticContract.dyn_o )
+[36 of 79] Compiling Keiro.Dsl.IdDomain ( src/Keiro/Dsl/IdDomain.hs, dist/build/Keiro/Dsl/IdDomain.o, dist/build/Keiro/Dsl/IdDomain.dyn_o )
+[37 of 79] Compiling Keiro.Dsl.ReadModelQueryContract ( src/Keiro/Dsl/ReadModelQueryContract.hs, dist/build/Keiro/Dsl/ReadModelQueryContract.o, dist/build/Keiro/Dsl/ReadModelQueryContract.dyn_o )
+[38 of 79] Compiling Keiro.Dsl.NominalType ( src/Keiro/Dsl/NominalType.hs, dist/build/Keiro/Dsl/NominalType.o, dist/build/Keiro/Dsl/NominalType.dyn_o )
+[39 of 79] Compiling Keiro.Dsl.MappedConsumer ( src/Keiro/Dsl/MappedConsumer.hs, dist/build/Keiro/Dsl/MappedConsumer.o, dist/build/Keiro/Dsl/MappedConsumer.dyn_o )
+[40 of 79] Compiling Keiro.Dsl.ConsumerTypePlan ( src/Keiro/Dsl/ConsumerTypePlan.hs, dist/build/Keiro/Dsl/ConsumerTypePlan.o, dist/build/Keiro/Dsl/ConsumerTypePlan.dyn_o )
+[41 of 79] Compiling Keiro.Dsl.MappedCodecPlan ( src/Keiro/Dsl/MappedCodecPlan.hs, dist/build/Keiro/Dsl/MappedCodecPlan.o, dist/build/Keiro/Dsl/MappedCodecPlan.dyn_o )
+[42 of 79] Compiling Keiro.Dsl.AggregateType ( src/Keiro/Dsl/AggregateType.hs, dist/build/Keiro/Dsl/AggregateType.o, dist/build/Keiro/Dsl/AggregateType.dyn_o )
+[43 of 79] Compiling Keiro.Dsl.RouterSelection ( src/Keiro/Dsl/RouterSelection.hs, dist/build/Keiro/Dsl/RouterSelection.o, dist/build/Keiro/Dsl/RouterSelection.dyn_o )
+[44 of 79] Compiling Keiro.Dsl.SemanticImpact ( src/Keiro/Dsl/SemanticImpact.hs, dist/build/Keiro/Dsl/SemanticImpact.o, dist/build/Keiro/Dsl/SemanticImpact.dyn_o )
+src/Keiro/Dsl/SemanticImpact.hs:742:17: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘key’ shadows the existing binding
+      bound at src/Keiro/Dsl/SemanticImpact.hs:695:27
+    |
+742 |       RKeyedMap key value -> "Map[" <> (.name) key <> "](" <> expressionPresentation value <> ")"
+    |                 ^^^
+
+[45 of 79] Compiling Keiro.Dsl.ProjectionMappedImpact ( src/Keiro/Dsl/ProjectionMappedImpact.hs, dist/build/Keiro/Dsl/ProjectionMappedImpact.o, dist/build/Keiro/Dsl/ProjectionMappedImpact.dyn_o )
+[46 of 79] Compiling Keiro.Dsl.ProcessReaction ( src/Keiro/Dsl/ProcessReaction.hs, dist/build/Keiro/Dsl/ProcessReaction.o, dist/build/Keiro/Dsl/ProcessReaction.dyn_o )
+[47 of 79] Compiling Keiro.Dsl.CoordinationImpact ( src/Keiro/Dsl/CoordinationImpact.hs, dist/build/Keiro/Dsl/CoordinationImpact.o, dist/build/Keiro/Dsl/CoordinationImpact.dyn_o )
+[48 of 79] Compiling Keiro.Dsl.Expression ( src/Keiro/Dsl/Expression.hs, dist/build/Keiro/Dsl/Expression.o, dist/build/Keiro/Dsl/Expression.dyn_o )
+src/Keiro/Dsl/Expression.hs:359:27: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘expected’ shadows the existing binding
+      bound at src/Keiro/Dsl/Expression.hs:330:13
+    |
+359 |           resolveOrdinary expected = case resolveScalarExpr environment (ExpectScalarType expected) expression of
+    |                           ^^^^^^^^
+
+[49 of 79] Compiling Keiro.Dsl.ExplainBindings ( src/Keiro/Dsl/ExplainBindings.hs, dist/build/Keiro/Dsl/ExplainBindings.o, dist/build/Keiro/Dsl/ExplainBindings.dyn_o )
+[50 of 79] Compiling Keiro.Dsl.EventOutput ( src/Keiro/Dsl/EventOutput.hs, dist/build/Keiro/Dsl/EventOutput.o, dist/build/Keiro/Dsl/EventOutput.dyn_o )
+[51 of 79] Compiling Keiro.Dsl.FoldEvidence ( src/Keiro/Dsl/FoldEvidence.hs, dist/build/Keiro/Dsl/FoldEvidence.o, dist/build/Keiro/Dsl/FoldEvidence.dyn_o )
+[52 of 79] Compiling Keiro.Dsl.FoldFingerprint ( src/Keiro/Dsl/FoldFingerprint.hs, dist/build/Keiro/Dsl/FoldFingerprint.o, dist/build/Keiro/Dsl/FoldFingerprint.dyn_o )
+[53 of 79] Compiling Keiro.Dsl.ReplayImpact ( src/Keiro/Dsl/ReplayImpact.hs, dist/build/Keiro/Dsl/ReplayImpact.o, dist/build/Keiro/Dsl/ReplayImpact.dyn_o )
+[54 of 79] Compiling Keiro.Dsl.BehaviorCoverage ( src/Keiro/Dsl/BehaviorCoverage.hs, dist/build/Keiro/Dsl/BehaviorCoverage.o, dist/build/Keiro/Dsl/BehaviorCoverage.dyn_o )
+[55 of 79] Compiling Keiro.Dsl.BehaviorSourceMap ( src/Keiro/Dsl/BehaviorSourceMap.hs, dist/build/Keiro/Dsl/BehaviorSourceMap.o, dist/build/Keiro/Dsl/BehaviorSourceMap.dyn_o )
+[56 of 79] Compiling Keiro.Dsl.Validate ( src/Keiro/Dsl/Validate.hs, dist/build/Keiro/Dsl/Validate.o, dist/build/Keiro/Dsl/Validate.dyn_o )
+[57 of 79] Compiling Keiro.Dsl.MappedDiff ( src/Keiro/Dsl/MappedDiff.hs, dist/build/Keiro/Dsl/MappedDiff.o, dist/build/Keiro/Dsl/MappedDiff.dyn_o )
+[58 of 79] Compiling Keiro.Dsl.Diff   ( src/Keiro/Dsl/Diff.hs, dist/build/Keiro/Dsl/Diff.o, dist/build/Keiro/Dsl/Diff.dyn_o )
+[59 of 79] Compiling Keiro.Dsl.DiffReport ( src/Keiro/Dsl/DiffReport.hs, dist/build/Keiro/Dsl/DiffReport.o, dist/build/Keiro/Dsl/DiffReport.dyn_o )
+[60 of 79] Compiling Keiro.Dsl.Coverage ( src/Keiro/Dsl/Coverage.hs, dist/build/Keiro/Dsl/Coverage.o, dist/build/Keiro/Dsl/Coverage.dyn_o )
+[61 of 79] Compiling Keiro.Dsl.CodecCompare ( src/Keiro/Dsl/CodecCompare.hs, dist/build/Keiro/Dsl/CodecCompare.o, dist/build/Keiro/Dsl/CodecCompare.dyn_o )
+[62 of 79] Compiling Paths_keiro_dsl  ( dist/build/autogen/Paths_keiro_dsl.hs, dist/build/Paths_keiro_dsl.o, dist/build/Paths_keiro_dsl.dyn_o )
+[63 of 79] Compiling Keiro.Dsl.Scaffold ( src/Keiro/Dsl/Scaffold.hs, dist/build/Keiro/Dsl/Scaffold.o, dist/build/Keiro/Dsl/Scaffold.dyn_o )
+src/Keiro/Dsl/Scaffold.hs:2948:15: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘shapeModule’ shadows the existing binding
+      defined at src/Keiro/Dsl/Scaffold.hs:1406:1
+     |
+2948 |       | Just (shapeModule, entries) <- spec.rootEnum =
+     |               ^^^^^^^^^^^
+
+src/Keiro/Dsl/Scaffold.hs:2975:25: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘shapeModule’ shadows the existing binding
+      defined at src/Keiro/Dsl/Scaffold.hs:1406:1
+     |
+2975 |     renderedConstructor shapeModule constructor = renderReferenceOrDie importPlan (HaskellReference shapeModule constructor ConstructorNamespace RequireQualified)
+     |                         ^^^^^^^^^^^
+
+src/Keiro/Dsl/Scaffold.hs:2977:15: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘shapeModule’ shadows the existing binding
+      defined at src/Keiro/Dsl/Scaffold.hs:1406:1
+     |
+2977 |       | Just (shapeModule, entries) <- spec.rootEnum =
+     |               ^^^^^^^^^^^
+
+src/Keiro/Dsl/Scaffold.hs:3028:15: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘shapeModule’ shadows the existing binding
+      defined at src/Keiro/Dsl/Scaffold.hs:1406:1
+     |
+3028 |       | Just (shapeModule, entries) <- spec.rootEnum =
+     |               ^^^^^^^^^^^
+
+[64 of 79] Compiling Keiro.Dsl.WorkspaceRecord ( src/Keiro/Dsl/WorkspaceRecord.hs, dist/build/Keiro/Dsl/WorkspaceRecord.o, dist/build/Keiro/Dsl/WorkspaceRecord.dyn_o )
+[65 of 79] Compiling Keiro.Dsl.StructuralConformance ( src/Keiro/Dsl/StructuralConformance.hs, dist/build/Keiro/Dsl/StructuralConformance.o, dist/build/Keiro/Dsl/StructuralConformance.dyn_o )
+[66 of 79] Compiling Keiro.Dsl.ScaffoldRecord ( src/Keiro/Dsl/ScaffoldRecord.hs, dist/build/Keiro/Dsl/ScaffoldRecord.o, dist/build/Keiro/Dsl/ScaffoldRecord.dyn_o )
+[67 of 79] Compiling Keiro.Dsl.Manifest ( src/Keiro/Dsl/Manifest.hs, dist/build/Keiro/Dsl/Manifest.o, dist/build/Keiro/Dsl/Manifest.dyn_o )
+[68 of 79] Compiling Keiro.Dsl.HaskellSourceMove ( src/Keiro/Dsl/HaskellSourceMove.hs, dist/build/Keiro/Dsl/HaskellSourceMove.o, dist/build/Keiro/Dsl/HaskellSourceMove.dyn_o )
+[69 of 79] Compiling Keiro.Dsl.Goldens ( src/Keiro/Dsl/Goldens.hs, dist/build/Keiro/Dsl/Goldens.o, dist/build/Keiro/Dsl/Goldens.dyn_o )
+[70 of 79] Compiling Keiro.Dsl.Harness ( src/Keiro/Dsl/Harness.hs, dist/build/Keiro/Dsl/Harness.o, dist/build/Keiro/Dsl/Harness.dyn_o )
+[71 of 79] Compiling Keiro.Dsl.ServiceHarness ( src/Keiro/Dsl/ServiceHarness.hs, dist/build/Keiro/Dsl/ServiceHarness.o, dist/build/Keiro/Dsl/ServiceHarness.dyn_o )
+[72 of 79] Compiling Keiro.Dsl.ConformancePackage ( src/Keiro/Dsl/ConformancePackage.hs, dist/build/Keiro/Dsl/ConformancePackage.o, dist/build/Keiro/Dsl/ConformancePackage.dyn_o )
+[73 of 79] Compiling Keiro.Dsl.SidecarMigration ( src/Keiro/Dsl/SidecarMigration.hs, dist/build/Keiro/Dsl/SidecarMigration.o, dist/build/Keiro/Dsl/SidecarMigration.dyn_o )
+[74 of 79] Compiling Keiro.Dsl.ScaffoldRun ( src/Keiro/Dsl/ScaffoldRun.hs, dist/build/Keiro/Dsl/ScaffoldRun.o, dist/build/Keiro/Dsl/ScaffoldRun.dyn_o )
+[75 of 79] Compiling Keiro.Dsl.WorkspaceAdoption ( src/Keiro/Dsl/WorkspaceAdoption.hs, dist/build/Keiro/Dsl/WorkspaceAdoption.o, dist/build/Keiro/Dsl/WorkspaceAdoption.dyn_o )
+[76 of 79] Compiling Keiro.Dsl.Workspace ( src/Keiro/Dsl/Workspace.hs, dist/build/Keiro/Dsl/Workspace.o, dist/build/Keiro/Dsl/Workspace.dyn_o )
+[77 of 79] Compiling Keiro.Dsl.WorkspaceScaffold ( src/Keiro/Dsl/WorkspaceScaffold.hs, dist/build/Keiro/Dsl/WorkspaceScaffold.o, dist/build/Keiro/Dsl/WorkspaceScaffold.dyn_o )
+[78 of 79] Compiling Keiro.Dsl.WorkspaceDiff ( src/Keiro/Dsl/WorkspaceDiff.hs, dist/build/Keiro/Dsl/WorkspaceDiff.o, dist/build/Keiro/Dsl/WorkspaceDiff.dyn_o )
+[79 of 79] Compiling Keiro.Dsl.CheckReport ( src/Keiro/Dsl/CheckReport.hs, dist/build/Keiro/Dsl/CheckReport.o, dist/build/Keiro/Dsl/CheckReport.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-21199/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/kr-dsl-0.23.0.0-53c7d5cb/lib
+Configuring library for keiro-test-support-0.23.0.0...
+Preprocessing library for keiro-test-support-0.23.0.0...
+Building library for keiro-test-support-0.23.0.0...
+[1 of 2] Compiling Keiro.Test.Postgres ( src/Keiro/Test/Postgres.hs, dist/build/Keiro/Test/Postgres.o, dist/build/Keiro/Test/Postgres.dyn_o )
+[2 of 2] Compiling Keiro.Test.ReplayCompatibility ( src/Keiro/Test/ReplayCompatibility.hs, dist/build/Keiro/Test/ReplayCompatibility.o, dist/build/Keiro/Test/ReplayCompatibility.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-21199/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/kr-tst-spprt-0.23.0.0-9f437284/lib
+Configuring library for keiro-ops-0.23.0.0...
+Preprocessing library for keiro-ops-0.23.0.0...
+Building library for keiro-ops-0.23.0.0...
+[ 1 of 19] Compiling Keiro.Ops.Env    ( src/Keiro/Ops/Env.hs, dist/build/Keiro/Ops/Env.o, dist/build/Keiro/Ops/Env.dyn_o )
+[ 2 of 19] Compiling Keiro.Ops.Parse  ( src/Keiro/Ops/Parse.hs, dist/build/Keiro/Ops/Parse.o, dist/build/Keiro/Ops/Parse.dyn_o )
+[ 3 of 19] Compiling Keiro.Ops.Render ( src/Keiro/Ops/Render.hs, dist/build/Keiro/Ops/Render.o, dist/build/Keiro/Ops/Render.dyn_o )
+[ 4 of 19] Compiling Keiro.Ops.Rebuild ( src/Keiro/Ops/Rebuild.hs, dist/build/Keiro/Ops/Rebuild.o, dist/build/Keiro/Ops/Rebuild.dyn_o )
+[ 5 of 19] Compiling Keiro.Ops.Projection ( src/Keiro/Ops/Projection.hs, dist/build/Keiro/Ops/Projection.o, dist/build/Keiro/Ops/Projection.dyn_o )
+src/Keiro/Ops/Projection.hs:103:18: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘head’ shadows the existing binding
+      imported from ‘Prelude’ at src/Keiro/Ops/Projection.hs:42:1-14
+      (and originally defined in ‘ghc-internal-9.1204.0:GHC.Internal.List’)
+    |
+103 |     Right (page, head) ->
+    |                  ^^^^
+
+src/Keiro/Ops/Projection.hs:119:17: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘value’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops/Projection.hs:41:1-42
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+119 |           Right value -> Right . (value,) <$> storeHeadPosition
+    |                 ^^^^^
+
+src/Keiro/Ops/Projection.hs:228:29: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘value’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops/Projection.hs:41:1-42
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+228 | positionInt (GlobalPosition value) = value
+    |                             ^^^^^
+
+src/Keiro/Ops/Projection.hs:258:12: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘value’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops/Projection.hs:41:1-42
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+258 | shellQuote value = "'" <> Text.replace "'" "'\"'\"'" value <> "'"
+    |            ^^^^^
+
+[ 6 of 19] Compiling Keiro.Ops.ProcessManager ( src/Keiro/Ops/ProcessManager.hs, dist/build/Keiro/Ops/ProcessManager.o, dist/build/Keiro/Ops/ProcessManager.dyn_o )
+[ 7 of 19] Compiling Keiro.Ops.Pgmq   ( src/Keiro/Ops/Pgmq.hs, dist/build/Keiro/Ops/Pgmq.o, dist/build/Keiro/Ops/Pgmq.dyn_o )
+[ 8 of 19] Compiling Keiro.Ops.Outbox ( src/Keiro/Ops/Outbox.hs, dist/build/Keiro/Ops/Outbox.o, dist/build/Keiro/Ops/Outbox.dyn_o )
+[ 9 of 19] Compiling Keiro.Ops.Inbox  ( src/Keiro/Ops/Inbox.hs, dist/build/Keiro/Ops/Inbox.o, dist/build/Keiro/Ops/Inbox.dyn_o )
+[10 of 19] Compiling Keiro.Ops.Aggregate ( src/Keiro/Ops/Aggregate.hs, dist/build/Keiro/Ops/Aggregate.o, dist/build/Keiro/Ops/Aggregate.dyn_o )
+[11 of 19] Compiling Keiro.Ops.ReplayAudit ( src/Keiro/Ops/ReplayAudit.hs, dist/build/Keiro/Ops/ReplayAudit.o, dist/build/Keiro/Ops/ReplayAudit.dyn_o )
+[12 of 19] Compiling Keiro.Ops.Shard  ( src/Keiro/Ops/Shard.hs, dist/build/Keiro/Ops/Shard.o, dist/build/Keiro/Ops/Shard.dyn_o )
+src/Keiro/Ops/Shard.hs:21:29: warning: [GHC-38856] [-Wunused-imports]
+    The import of ‘:>’ from module ‘Effectful’ is redundant
+   |
+21 | import Effectful (Eff, IOE, (:>))
+   |                             ^^^^
+
+[13 of 19] Compiling Keiro.Ops.Snapshot ( src/Keiro/Ops/Snapshot.hs, dist/build/Keiro/Ops/Snapshot.o, dist/build/Keiro/Ops/Snapshot.dyn_o )
+[14 of 19] Compiling Keiro.Ops.Stream ( src/Keiro/Ops/Stream.hs, dist/build/Keiro/Ops/Stream.o, dist/build/Keiro/Ops/Stream.dyn_o )
+[15 of 19] Compiling Keiro.Ops.Timer  ( src/Keiro/Ops/Timer.hs, dist/build/Keiro/Ops/Timer.o, dist/build/Keiro/Ops/Timer.dyn_o )
+[16 of 19] Compiling Keiro.Ops.Workflow ( src/Keiro/Ops/Workflow.hs, dist/build/Keiro/Ops/Workflow.o, dist/build/Keiro/Ops/Workflow.dyn_o )
+src/Keiro/Ops/Workflow.hs:351:26: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops/Workflow.hs:58:1-49
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+351 | validateCommand (Inspect command) = either (Left . inspectionError) Right $ case command of
+    |                          ^^^^^^^
+
+[17 of 19] Compiling Keiro.Ops.Embed  ( src/Keiro/Ops/Embed.hs, dist/build/Keiro/Ops/Embed.o, dist/build/Keiro/Ops/Embed.dyn_o )
+[18 of 19] Compiling Keiro.Ops.WorkflowHeaderCache ( src/Keiro/Ops/WorkflowHeaderCache.hs, dist/build/Keiro/Ops/WorkflowHeaderCache.o, dist/build/Keiro/Ops/WorkflowHeaderCache.dyn_o )
+[19 of 19] Compiling Keiro.Ops        ( src/Keiro/Ops.hs, dist/build/Keiro/Ops.o, dist/build/Keiro/Ops.dyn_o )
+src/Keiro/Ops.hs:198:33: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+198 | validateCommand (ProcessManager command) = ProcessManager.validateCommand command
+    |                                 ^^^^^^^
+
+src/Keiro/Ops.hs:199:28: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+199 | validateCommand (Aggregate command) = Aggregate.validateCommand command
+    |                            ^^^^^^^
+
+src/Keiro/Ops.hs:200:27: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+200 | validateCommand (Workflow command) = Workflow.validateCommand command
+    |                           ^^^^^^^
+
+src/Keiro/Ops.hs:201:24: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+201 | validateCommand (Timer command) = Timer.validateCommand command
+    |                        ^^^^^^^
+
+src/Keiro/Ops.hs:202:29: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+202 | validateCommand (Projection command) = Projection.validateCommand command
+    |                             ^^^^^^^
+
+src/Keiro/Ops.hs:208:18: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+208 |   ProcessManager command -> ProcessManager.isMutation command
+    |                  ^^^^^^^
+
+src/Keiro/Ops.hs:209:13: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+209 |   Aggregate command -> Aggregate.isMutation command
+    |             ^^^^^^^
+
+src/Keiro/Ops.hs:227:39: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+227 | runCommandWithHeaderCache _ hooks env command = do
+    |                                       ^^^^^^^
+
+src/Keiro/Ops.hs:236:51: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+236 | runCommandWithReadEncoding encode cache hooks env command = case command of
+    |                                                   ^^^^^^^
+
+src/Keiro/Ops.hs:249:18: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+249 |   ProcessManager command -> maybe (pure (Failed "process-manager inspection hook is not mounted")) (\catalog -> ProcessManager.runCommand catalog env command) hooks.processManagers
+    |                  ^^^^^^^
+
+src/Keiro/Ops.hs:250:13: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+250 |   Aggregate command -> maybe (pure (Failed "aggregate inspection hook is not mounted")) (\catalog -> Aggregate.runCommand env catalog command) hooks.aggregates
+    |             ^^^^^^^
+
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-21199/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/kr-ps-0.23.0.0-135afa19/lib
+Configuring library for keiro-ops-http-0.23.0.0...
+Preprocessing library for keiro-ops-http-0.23.0.0...
+Building library for keiro-ops-http-0.23.0.0...
+[ 1 of 15] Compiling Keiro.Ops.Http.Config ( src/Keiro/Ops/Http/Config.hs, dist/build/Keiro/Ops/Http/Config.o, dist/build/Keiro/Ops/Http/Config.dyn_o )
+[ 2 of 15] Compiling Keiro.Ops.Http.Budget ( src/Keiro/Ops/Http/Budget.hs, dist/build/Keiro/Ops/Http/Budget.o, dist/build/Keiro/Ops/Http/Budget.dyn_o )
+[ 3 of 15] Compiling Keiro.Ops.Http.Cors ( src/Keiro/Ops/Http/Cors.hs, dist/build/Keiro/Ops/Http/Cors.o, dist/build/Keiro/Ops/Http/Cors.dyn_o )
+[ 4 of 15] Compiling Keiro.Ops.Http.Pool ( src/Keiro/Ops/Http/Pool.hs, dist/build/Keiro/Ops/Http/Pool.o, dist/build/Keiro/Ops/Http/Pool.dyn_o )
+[ 5 of 15] Compiling Keiro.Ops.Http.Protocol ( src/Keiro/Ops/Http/Protocol.hs, dist/build/Keiro/Ops/Http/Protocol.o, dist/build/Keiro/Ops/Http/Protocol.dyn_o )
+src/Keiro/Ops/Http/Protocol.hs:84:15: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘feed’
+    Record selection and update using this field will be partial.
+   |
+84 |   = Snapshot {feed :: !FeedName, sequence :: !Word64, trigger :: !Trigger, readAt :: !UTCTime, items :: ![Value], extra :: !(Maybe Value)}
+   |               ^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:84:34: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘sequence’
+    Record selection and update using this field will be partial.
+   |
+84 |   = Snapshot {feed :: !FeedName, sequence :: !Word64, trigger :: !Trigger, readAt :: !UTCTime, items :: ![Value], extra :: !(Maybe Value)}
+   |                                  ^^^^^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:84:55: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘trigger’
+    Record selection and update using this field will be partial.
+   |
+84 |   = Snapshot {feed :: !FeedName, sequence :: !Word64, trigger :: !Trigger, readAt :: !UTCTime, items :: ![Value], extra :: !(Maybe Value)}
+   |                                                       ^^^^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:84:76: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘readAt’
+    Record selection and update using this field will be partial.
+   |
+84 |   = Snapshot {feed :: !FeedName, sequence :: !Word64, trigger :: !Trigger, readAt :: !UTCTime, items :: ![Value], extra :: !(Maybe Value)}
+   |                                                                            ^^^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:84:96: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘items’
+    Record selection and update using this field will be partial.
+   |
+84 |   = Snapshot {feed :: !FeedName, sequence :: !Word64, trigger :: !Trigger, readAt :: !UTCTime, items :: ![Value], extra :: !(Maybe Value)}
+   |                                                                                                ^^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:84:115: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘extra’
+    Record selection and update using this field will be partial.
+   |
+84 |   = Snapshot {feed :: !FeedName, sequence :: !Word64, trigger :: !Trigger, readAt :: !UTCTime, items :: ![Value], extra :: !(Maybe Value)}
+   |                                                                                                                   ^^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:85:94: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘changed’
+    Record selection and update using this field will be partial.
+   |
+85 |   | Update {feed :: !FeedName, sequence :: !Word64, trigger :: !Trigger, readAt :: !UTCTime, changed :: ![Value], removed :: ![Value], extra :: !(Maybe Value)}
+   |                                                                                              ^^^^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:85:115: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘removed’
+    Record selection and update using this field will be partial.
+   |
+85 |   | Update {feed :: !FeedName, sequence :: !Word64, trigger :: !Trigger, readAt :: !UTCTime, changed :: ![Value], removed :: ![Value], extra :: !(Maybe Value)}
+   |                                                                                                                   ^^^^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:88:17: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘code’
+    Record selection and update using this field will be partial.
+   |
+88 |   | ErrorFrame {code :: !SocketErrorCode, message :: !Text, errorFeed :: !(Maybe FeedName)}
+   |                 ^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:88:43: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘message’
+    Record selection and update using this field will be partial.
+   |
+88 |   | ErrorFrame {code :: !SocketErrorCode, message :: !Text, errorFeed :: !(Maybe FeedName)}
+   |                                           ^^^^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:88:61: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘errorFeed’
+    Record selection and update using this field will be partial.
+   |
+88 |   | ErrorFrame {code :: !SocketErrorCode, message :: !Text, errorFeed :: !(Maybe FeedName)}
+   |                                                             ^^^^^^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:94:19: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘sequence’ shadows the existing binding
+      imported from ‘Prelude’ at src/Keiro/Ops/Http/Protocol.hs:3:8-30
+      (and originally defined in ‘ghc-internal-9.1204.0:GHC.Internal.Data.Traversable’)
+   |
+94 |     Snapshot feed sequence trigger stamp items extra ->
+   |                   ^^^^^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:97:17: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘sequence’ shadows the existing binding
+      imported from ‘Prelude’ at src/Keiro/Ops/Http/Protocol.hs:3:8-30
+      (and originally defined in ‘ghc-internal-9.1204.0:GHC.Internal.Data.Traversable’)
+   |
+97 |     Update feed sequence trigger stamp changed removed extra ->
+   |                 ^^^^^^^^
+
+[ 6 of 15] Compiling Keiro.Ops.Http.Feed.Queue ( src/Keiro/Ops/Http/Feed/Queue.hs, dist/build/Keiro/Ops/Http/Feed/Queue.o, dist/build/Keiro/Ops/Http/Feed/Queue.dyn_o )
+[ 7 of 15] Compiling Keiro.Ops.Http.Route ( src/Keiro/Ops/Http/Route.hs, dist/build/Keiro/Ops/Http/Route.o, dist/build/Keiro/Ops/Http/Route.dyn_o )
+[ 8 of 15] Compiling Keiro.Ops.Http.Application ( src/Keiro/Ops/Http/Application.hs, dist/build/Keiro/Ops/Http/Application.o, dist/build/Keiro/Ops/Http/Application.dyn_o )
+[ 9 of 15] Compiling Keiro.Ops.Http.Compose ( src/Keiro/Ops/Http/Compose.hs, dist/build/Keiro/Ops/Http/Compose.o, dist/build/Keiro/Ops/Http/Compose.dyn_o )
+[10 of 15] Compiling Keiro.Ops.Http.Server ( src/Keiro/Ops/Http/Server.hs, dist/build/Keiro/Ops/Http/Server.o, dist/build/Keiro/Ops/Http/Server.dyn_o )
+[11 of 15] Compiling Keiro.Ops.Http.Views ( src/Keiro/Ops/Http/Views.hs, dist/build/Keiro/Ops/Http/Views.o, dist/build/Keiro/Ops/Http/Views.dyn_o )
+[12 of 15] Compiling Keiro.Ops.Http.Feed.Driver ( src/Keiro/Ops/Http/Feed/Driver.hs, dist/build/Keiro/Ops/Http/Feed/Driver.o, dist/build/Keiro/Ops/Http/Feed/Driver.dyn_o )
+src/Keiro/Ops/Http/Feed/Driver.hs:166:11: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘sequence’ shadows the existing binding
+      imported from ‘Prelude’ at src/Keiro/Ops/Http/Feed/Driver.hs:3:8-33
+      (and originally defined in ‘ghc-internal-9.1204.0:GHC.Internal.Data.Traversable’)
+    |
+166 |           sequence = previous.currentSequence + if trigger /= P.Subscribed && different then 1 else 0
+    |           ^^^^^^^^
+
+[13 of 15] Compiling Keiro.Ops.Http.Feed ( src/Keiro/Ops/Http/Feed.hs, dist/build/Keiro/Ops/Http/Feed.o, dist/build/Keiro/Ops/Http/Feed.dyn_o )
+[14 of 15] Compiling Keiro.Ops.Http.WebSocket ( src/Keiro/Ops/Http/WebSocket.hs, dist/build/Keiro/Ops/Http/WebSocket.o, dist/build/Keiro/Ops/Http/WebSocket.dyn_o )
+src/Keiro/Ops/Http/WebSocket.hs:17:1: warning: [GHC-66111] [-Wunused-imports]
+    The qualified import of ‘Data.Text.Encoding’ is redundant
+      except perhaps to import instances from ‘Data.Text.Encoding’
+    To import instances alone, use: import Data.Text.Encoding()
+   |
+17 | import Data.Text.Encoding qualified as Text
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Ops/Http/WebSocket.hs:44:5: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘maximum’ shadows the existing binding
+      imported from ‘Prelude’ at src/Keiro/Ops/Http/WebSocket.hs:3:8-31
+      (and originally defined in ‘ghc-internal-9.1204.0:GHC.Internal.Data.Foldable’)
+   |
+44 |     maximum = fromIntegral config.inspectionLimits.maxRequestBytes
+   |     ^^^^^^^
+
+[15 of 15] Compiling Keiro.Ops.Http   ( src/Keiro/Ops/Http.hs, dist/build/Keiro/Ops/Http.o, dist/build/Keiro/Ops/Http.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-21199/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/kr-ps-http-0.23.0.0-d243f974/lib
+Configuring executable 'release-consumer' for release-consumer-0.1.0.0...
+Preprocessing executable 'release-consumer' for release-consumer-0.1.0.0...
+Building executable 'release-consumer' for release-consumer-0.1.0.0...
+[1 of 1] Compiling Main             ( Main.hs, dist-newstyle/build/aarch64-osx/ghc-9.12.4/release-consumer-0.1.0.0/x/release-consumer/build/release-consumer/release-consumer-tmp/Main.o )
+[2 of 2] Linking dist-newstyle/build/aarch64-osx/ghc-9.12.4/release-consumer-0.1.0.0/x/release-consumer/build/release-consumer/release-consumer
+started=2026-10-31 12:30:23.70343 UTC
+finished=2026-10-31 12:30:23.756845 UTC
+kiroku/0001-kiroku-bootstrap outcome=applied_now duration_ms=6
+kiroku/0002-add-subscription-dead-letters outcome=applied_now duration_ms=1
+kiroku/0003-notify-trigger-append-guard outcome=applied_now duration_ms=0
+kiroku/0004-dead-letters-event-id-index outcome=applied_now duration_ms=0
+kiroku/0005-index-hygiene-and-streams-fillfactor outcome=applied_now duration_ms=1
+kiroku/0006-stream-name-length-check outcome=applied_now duration_ms=0
+kiroku/0007-stream-truncate-before outcome=applied_now duration_ms=0
+kiroku/0008-schema-management-comment outcome=applied_now duration_ms=0
+kiroku/0009 outcome=applied_now duration_ms=3
+kiroku/0010 outcome=applied_now duration_ms=2
+kiroku/0011 outcome=applied_now duration_ms=0
+kiroku/0012 outcome=applied_now duration_ms=1
+kiroku/0013 outcome=applied_now duration_ms=0
+kiroku/0014 outcome=applied_now duration_ms=0
+kiroku/0015 outcome=applied_now duration_ms=0
+kiroku/0016 outcome=applied_now duration_ms=0
+kiroku/0017 outcome=applied_now duration_ms=2
+keiro/0001-keiro-bootstrap outcome=applied_now duration_ms=2
+keiro/0002-keiro-outbox outcome=applied_now duration_ms=1
+keiro/0003-keiro-inbox outcome=applied_now duration_ms=1
+keiro/0004-keiro-timer-recovery outcome=applied_now duration_ms=0
+keiro/0005-keiro-workflow-steps outcome=applied_now duration_ms=1
+keiro/0006-keiro-awakeables outcome=applied_now duration_ms=1
+keiro/0007-keiro-workflow-children outcome=applied_now duration_ms=1
+keiro/0008-keiro-workflow-generation outcome=applied_now duration_ms=1
+keiro/0009-keiro-subscription-shards outcome=applied_now duration_ms=1
+keiro/0010-keiro-messaging-crash-recovery outcome=applied_now duration_ms=1
+keiro/0011-keiro-workflows-instances outcome=applied_now duration_ms=1
+keiro/0012-keiro-workflow-gc-index outcome=applied_now duration_ms=0
+keiro/0013-keiro-workflows-wake-after outcome=applied_now duration_ms=0
+keiro/0014-keiro-projection-dedup outcome=applied_now duration_ms=1
+keiro/0015-keiro-outbox-claim-order-index outcome=applied_now duration_ms=0
+keiro/0016-keiro-inbox-drop-received-idx outcome=applied_now duration_ms=0
+keiro/0017-schema-management-comment outcome=applied_now duration_ms=0
+keiro/0018 outcome=applied_now duration_ms=1
+keiro/0019-keiro-snapshots-state-shape-hash outcome=applied_now duration_ms=0
+keiro/0020-keiro-workflow-children-failure-reason outcome=applied_now duration_ms=0
+keiro/0021-keiro-workflows-exact-discovery outcome=applied_now duration_ms=1
+keiro/0022 outcome=applied_now duration_ms=1
+keiro/0023 outcome=applied_now duration_ms=3
+keiro/0024 outcome=applied_now duration_ms=0
+keiro/0025 outcome=applied_now duration_ms=5
+keiro/0026 outcome=applied_now duration_ms=2
+keiro/0027 outcome=applied_now duration_ms=3
+keiro/0028 outcome=applied_now duration_ms=0
+keiro/0029 outcome=applied_now duration_ms=1
+keiro/0030 outcome=applied_now duration_ms=0
+keiro/0031 outcome=applied_now duration_ms=1
+keiro/0032 outcome=applied_now duration_ms=0
+
+{"mutations_enabled": false, "schema_drift": [], "status": "ok"}

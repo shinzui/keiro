@@ -1,0 +1,146 @@
+{"identity": "04656bbf3e7cc2c83804a0c7500df5d4f60ea62aa2b81459cc5f1d023f007e29", "command": ["scripts/bench-regression.sh", "inbox"]}
+##### guard inbox 2026-10-31T12:14:15Z
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.23.0.0 (bench:keiro-bench) (first run)
+Preprocessing benchmark 'keiro-bench' for keiro-0.23.0.0...
+Building benchmark 'keiro-bench' for keiro-0.23.0.0...
+Running 1 benchmarks...
+Benchmark keiro-bench: RUNNING...
+All
+  inbox
+    single-full:       OK
+      137  ms ± 5.4 ms, 10% more than baseline
+    single-nometrics:  OK
+      134  ms ± 7.8 ms,  9% more than baseline
+    batch-100:         OK
+      59.3 ms ± 2.4 ms,  8% more than baseline
+    single-slim:       OK
+      131  ms ± 8.9 ms,  8% more than baseline
+    downstream
+      table-downstream-single
+        fresh
+          metrics-off: OK
+            459  ms ±  16 ms,       same as baseline
+          metrics-on:  OK
+            456  ms ±  31 ms,       same as baseline
+        repeated-key
+          metrics-off: OK
+            170  ms ±  14 ms,       same as baseline
+          metrics-on:  OK
+            172  ms ± 9.5 ms,       same as baseline
+        all-duplicate
+          metrics-off: OK
+            171  ms ±  15 ms,       same as baseline
+          metrics-on:  OK
+            170  ms ±  16 ms
+      delegated-single
+        fresh
+          metrics-off: OK
+            393  ms ±  35 ms,       same as baseline
+          metrics-on:  OK
+            416  ms ±  26 ms,       same as baseline
+        repeated-key
+          metrics-off: OK
+            26.0 ms ± 2.4 ms,       same as baseline
+          metrics-on:  OK
+            26.9 ms ± 928 μs,       same as baseline
+        all-duplicate
+          metrics-off: OK
+            24.5 ms ± 476 μs,       same as baseline
+          metrics-on:  OK
+            25.8 ms ± 2.2 ms
+      delegated-direct-single
+        fresh
+          metrics-off: OK
+            391  ms ±  33 ms,       same as baseline
+          metrics-on:  OK
+            416  ms ±  29 ms
+        repeated-key
+          metrics-off: OK
+            25.2 ms ± 2.0 ms
+          metrics-on:  OK
+            25.4 ms ± 1.8 ms
+        all-duplicate
+          metrics-off: OK
+            24.8 ms ± 2.2 ms
+          metrics-on:  OK
+            25.0 ms ± 2.2 ms
+      table-downstream-batch-100
+        fresh
+          metrics-off: OK
+            301  ms ±  14 ms,       same as baseline
+          metrics-on:  OK
+            303  ms ±  29 ms
+        repeated-key
+          metrics-off: OK
+            2.04 ms ± 114 μs,       same as baseline
+          metrics-on:  OK
+            3.05 ms ± 251 μs,       same as baseline
+        all-duplicate
+          metrics-off: OK
+            1.88 ms ± 163 μs,       same as baseline
+          metrics-on:  OK
+            2.91 ms ± 229 μs,       same as baseline
+      delegated-batch-100
+        fresh
+          metrics-off: OK
+            407  ms ±  37 ms,       same as baseline
+          metrics-on:  OK
+            414  ms ±  28 ms
+        repeated-key
+          metrics-off: OK
+            553  μs ±  38 μs,       same as baseline
+          metrics-on:  OK
+            1.55 ms ± 112 μs,       same as baseline
+        all-duplicate
+          metrics-off: OK
+            318  μs ±  20 μs,  9% more than baseline
+          metrics-on:  OK
+            1.39 ms ± 128 μs,       same as baseline
+      table-downstream-batch-1000
+        fresh
+          metrics-off: OK
+            433  ms ±  15 ms,       same as baseline
+          metrics-on:  OK
+            428  ms ±  14 ms
+        repeated-key
+          metrics-off: OK
+            628  μs ±  57 μs,       same as baseline
+          metrics-on:  OK
+            1.61 ms ± 158 μs,       same as baseline
+        all-duplicate
+          metrics-off: OK
+            328  μs ±  16 μs,       same as baseline
+          metrics-on:  OK
+            1.30 ms ± 110 μs,       same as baseline
+      delegated-batch-1000
+        fresh
+          metrics-off: OK
+            413  ms ±  27 ms,       same as baseline
+          metrics-on:  OK
+            414  ms ±  29 ms
+        repeated-key
+          metrics-off: OK
+            290  μs ±  22 μs,       same as baseline
+          metrics-on:  OK
+            1.32 ms ±  77 μs,       same as baseline
+        all-duplicate
+          metrics-off: OK
+            90.3 μs ± 4.2 μs,       same as baseline
+          metrics-on:  OK
+            1.10 ms ±  59 μs,       same as baseline
+      delegated-history-duplicate
+        events-10:     OK
+          24.9 ms ± 2.2 ms,       same as baseline
+        events-1000:   OK
+          24.8 ms ± 2.1 ms,       same as baseline
+        events-100000: OK
+          25.0 ms ± 2.0 ms,       same as baseline
+
+All 49 tests passed (156.40s)
+Benchmark keiro-bench: FINISH
+##### guard summary 2026-10-31T12:16:55Z
+GUARD(inbox)=0
+BENCH_REGRESSION=PASSED
+STAGE_EXIT=0

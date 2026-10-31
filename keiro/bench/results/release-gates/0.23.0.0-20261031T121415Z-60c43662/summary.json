@@ -1,0 +1,10 @@
+{
+  "version": "0.23.0.0",
+  "accepted": true,
+  "manifest": "keiro/bench/results/release-gates/20261031T121415Z-60c43662-manifest.json",
+  "source": "5eef0b5b0147cb4a6198f66c6da4a4f62210c61d08116b53fb276f8026f69abe",
+  "native_nix": "passed",
+  "staged_consumer": "passed",
+  "readiness": "passed",
+  "recorded_at": "2026-10-31T12:32:04.059285+00:00"
+}
