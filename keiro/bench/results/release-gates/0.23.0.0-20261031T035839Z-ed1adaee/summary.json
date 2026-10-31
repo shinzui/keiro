@@ -1,0 +1,28 @@
+{
+  "version": "0.23.0.0",
+  "candidate": "abc32dbdf3cd0706dc2706d70a62b9b4360ed1dd",
+  "manifest": "keiro/bench/results/release-gates/20261031T035839Z-ed1adaee-manifest.json",
+  "accepted": false,
+  "stages": {
+    "command": 0,
+    "correctness": 0,
+    "inbox": 1,
+    "outbox": 0,
+    "producer-identity": 0,
+    "projection": 1,
+    "read-model": 0
+  },
+  "stopped_after": "release-gate",
+  "not_run": [
+    "nix flake check",
+    "release-artifacts",
+    "release-consumer staged",
+    "release-ready",
+    "tags and pushes",
+    "Hackage uploads",
+    "release-consumer published",
+    "GitHub release"
+  ],
+  "host_load_note": "Concurrent compiler and virtual-machine activity was observed; contention is a possible contributor, not an established cause. Numerical ceilings and baselines were unchanged.",
+  "recorded_at": "2026-10-31T04:31:42.419861+00:00"
+}

@@ -1,0 +1,114 @@
+{
+  "accepted": false,
+  "commit": "abc32dbdf3cd0706dc2706d70a62b9b4360ed1dd",
+  "finished": 1793421091.942255,
+  "identity": "f27aebf9fa7a04546342c1f3ef4becd46dad5c9a98e4b301fac8047063256fc0",
+  "inputs": {
+    "cabal": "3.16.1.0",
+    "compiler": "[(\"Project name\",\"The Glorious Glasgow Haskell Compilation System\")\n ,(\"C compiler command\",\"/nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc\")\n ,(\"C compiler flags\",\"--target=arm64-apple-darwin  -Qunused-arguments\")\n ,(\"C compiler link flags\",\"--target=arm64-apple-darwin   -Wl,-no_fixup_chains -Wl,-no_warn_duplicate_libraries\")\n ,(\"C compiler supports -no-pie\",\"NO\")\n ,(\"C++ compiler command\",\"/nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/c++\")\n ,(\"C++ compiler flags\",\"--target=arm64-apple-darwin \")\n ,(\"C-- CPP command\",\"/nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc\")\n ,(\"C-- CPP flags\",\"-E\")\n ,(\"C-- CPP supports -g0\",\"YES\")\n ,(\"CPP command\",\"/nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc\")\n ,(\"CPP flags\",\"-E\")\n ,(\"Haskell CPP command\",\"/nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc\")\n ,(\"Haskell CPP flags\",\"-E -undef -traditional -Wno-invalid-pp-token -Wno-unicode -Wno-trigraphs\")\n ,(\"JavaScript CPP command\",\"/nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc\")\n ,(\"JavaScript CPP flags\",\"-E -CC -Wno-unicode -nostdinc\")\n ,(\"LLVM llc command\",\"llc\")\n ,(\"LLVM llvm-as command\",\"clang\")\n ,(\"LLVM opt command\",\"opt\")\n ,(\"LLVM target\",\"arm64-apple-darwin\")\n ,(\"Leading underscore\",\"YES\")\n ,(\"Merge objects command\",\"/nix/store/g06apskfgai9pcp84cn1ig4b7l1rasjx-cctools-binutils-darwin-wrapper-1010.6/bin/ld\")\n ,(\"Merge objects flags\",\"-r\")\n ,(\"Merge objects supports response files\",\"YES\")\n ,(\"RTS expects libdw\",\"NO\")\n ,(\"RTS ways\",\"v thr thr_debug thr_debug_p thr_debug_p_dyn thr_debug_dyn thr_p thr_p_dyn thr_dyn debug debug_p debug_p_dyn debug_dyn p p_dyn dyn\")\n ,(\"Relative Global Package DB\",\"package.conf.d\")\n ,(\"Support SMP\",\"YES\")\n ,(\"Tables next to code\",\"YES\")\n ,(\"Unregisterised\",\"NO\")\n ,(\"Use LibFFI\",\"YES\")\n ,(\"Use inplace MinGW toolchain\",\"NO\")\n ,(\"Use interpreter\",\"YES\")\n ,(\"ar command\",\"/nix/store/g06apskfgai9pcp84cn1ig4b7l1rasjx-cctools-binutils-darwin-wrapper-1010.6/bin/ar\")\n ,(\"ar flags\",\"qcls\")\n ,(\"ar supports -L\",\"NO\")\n ,(\"ar supports at file\",\"YES\")\n ,(\"cross compiling\",\"NO\")\n ,(\"install_name_tool command\",\"/nix/store/4czi5s6rqvdk060p98mzp6cihxq13chs-cctools-binutils-darwin-1010.6/bin/install_name_tool\")\n ,(\"ld is GNU ld\",\"NO\")\n ,(\"ld supports compact unwind\",\"YES\")\n ,(\"ld supports filelist\",\"YES\")\n ,(\"ld supports single module\",\"YES\")\n ,(\"otool command\",\"/nix/store/4czi5s6rqvdk060p98mzp6cihxq13chs-cctools-binutils-darwin-1010.6/bin/otool\")\n ,(\"ranlib command\",\"/nix/store/g06apskfgai9pcp84cn1ig4b7l1rasjx-cctools-binutils-darwin-wrapper-1010.6/bin/ranlib\")\n ,(\"target RTS linker only supports shared libraries\",\"NO\")\n ,(\"target arch\",\"ArchAArch64\")\n ,(\"target has .ident directive\",\"YES\")\n ,(\"target has GNU nonexec stack\",\"NO\")\n ,(\"target has libm\",\"YES\")\n ,(\"target has subsections via symbols\",\"NO\")\n ,(\"target os\",\"OSDarwin\")\n ,(\"target platform string\",\"aarch64-apple-darwin\")\n ,(\"target word big endian\",\"NO\")\n ,(\"target word size\",\"8\")\n ,(\"unlit command\",\"/nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/lib/../bin/unlit\")\n ,(\"windres command\",\"/bin/false\")\n ,(\"Project version\",\"9.12.4\")\n ,(\"Project Git commit id\",\"44c6796f535d60861fa2510025ec79f27696a15e\")\n ,(\"Project Version Int\",\"912\")\n ,(\"Project Patch Level\",\"4\")\n ,(\"Project Patch Level1\",\"4\")\n ,(\"Project Patch Level2\",\"0\")\n ,(\"Project Unit Id\",\"ghc-9.12.4-8bff\")\n ,(\"Booter version\",\"9.10.3\")\n ,(\"Stage\",\"2\")\n ,(\"Build platform\",\"aarch64-apple-darwin\")\n ,(\"Host platform\",\"aarch64-apple-darwin\")\n ,(\"Target platform\",\"aarch64-apple-darwin\")\n ,(\"Have interpreter\",\"YES\")\n ,(\"Object splitting supported\",\"NO\")\n ,(\"Have native code generator\",\"YES\")\n ,(\"target has RTS linker\",\"YES\")\n ,(\"Target default backend\",\"native code generator\")\n ,(\"Support dynamic-too\",\"YES\")\n ,(\"Support parallel --make\",\"YES\")\n ,(\"Support reexported-modules\",\"YES\")\n ,(\"Support thinning and renaming package flags\",\"YES\")\n ,(\"Support Backpack\",\"YES\")\n ,(\"Requires unified installed package IDs\",\"YES\")\n ,(\"Uses package keys\",\"YES\")\n ,(\"Uses unit IDs\",\"YES\")\n ,(\"GHC Dynamic\",\"YES\")\n ,(\"GHC Profiled\",\"NO\")\n ,(\"Debug on\",\"NO\")\n ,(\"LibDir\",\"/nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/lib\")\n ,(\"Global Package DB\",\"/nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/lib/package.conf.d\")\n ]",
+    "dependencies": "39073f357a498dd6e0facfe262ec9859edcdc3886d6ef6735e3497e7c189c533",
+    "environment": {
+      "AR": "8208994143fbc4fbdeab96c0ed932f9df3846568df6187e6833fb647366b1935",
+      "AS": "7957d3712ebabacfb717b4f5188ad8e467bee97c2200b1e61961f57fa1e57d1c",
+      "CC": "d9bc0a315065c53426d35c94fe0dcabb221918da51a4b4b1b8dd9397363df5da",
+      "CPATH": "8d74da32e81f8b2b0d4bf4a2ffcbba5b2334d1b7107ad0491fd645d5c3655cd6",
+      "CXX": "28ac6f0fece646341d676378e7ed59d5a8fe7c9238ac825e4bdfb3984cf37506",
+      "IN_NIX_SHELL": "5a8c729370cf99d111bae012ee5600ac52974d80c3c39c5cf2a1abf6bb3dc341",
+      "LANG": "7f3b359fe6d3eed101e3ea689e7da3976b6b85aa617be90c66cb8d8aa39e07a0",
+      "LC_ALL": "26275e702b089d1487b23b4cb2db11f3362f13f048b05ebc8427739a64d2accc",
+      "LC_CTYPE": "26275e702b089d1487b23b4cb2db11f3362f13f048b05ebc8427739a64d2accc",
+      "LD": "4c3ab4c4f37f59ff710f146cb8a9bfc2bdedb3fd1b0021e1a2107dab43c37aac",
+      "LD_DYLD_PATH": "d865cdb1c3d8dfb625287461eb543af821116467d15bb191aa65762d3a58e7d7",
+      "LIBRARY_PATH": "43fd2b3deee2b18164c41570d3477eccd927bed5cd9b6f62e85f428e7d7eafb0",
+      "NIX_APPLE_SDK_VERSION": "cbe2480f01ea44f47b124adc5b47440302f3beba6e11fab77b99001676ffd498",
+      "NIX_BINTOOLS": "d6b875c8953cca544530ac87d42e953a3dc6f6a0b23aeaaddd7835e1116705d5",
+      "NIX_BINTOOLS_WRAPPER_TARGET_HOST_arm64_apple_darwin": "391552c099c101b131feaf24c5795a6a15bc8ec82015424e0d2b4274a369a0bf",
+      "NIX_BUILD_CORES": "06024be3089840dc57375f951f67e195b31c37b7e819c63a15dcba31e894aa50",
+      "NIX_CC": "6fc52d4356e1f896b6fc96a22effaff0dc49a7b69a6e9cbb8f0d25eee68f26e5",
+      "NIX_CC_WRAPPER_TARGET_HOST_arm64_apple_darwin": "391552c099c101b131feaf24c5795a6a15bc8ec82015424e0d2b4274a369a0bf",
+      "NIX_CFLAGS_COMPILE": "8e6553f6222c0b8432fe0aea5eb5c4be4f131a144b86c8be788883010e0c9735",
+      "NIX_DONT_SET_RPATH": "391552c099c101b131feaf24c5795a6a15bc8ec82015424e0d2b4274a369a0bf",
+      "NIX_DONT_SET_RPATH_FOR_BUILD": "391552c099c101b131feaf24c5795a6a15bc8ec82015424e0d2b4274a369a0bf",
+      "NIX_ENFORCE_NO_NATIVE": "391552c099c101b131feaf24c5795a6a15bc8ec82015424e0d2b4274a369a0bf",
+      "NIX_GCROOT": "382c814789aa2552e15d71f81b005873f7f7fae422297e18fd81023da2c1bebe",
+      "NIX_HARDENING_ENABLE": "791b91de029338be383b7964e470833b67aef9aae0d07c65adae9ae51f79f8f9",
+      "NIX_IGNORE_LD_THROUGH_GCC": "391552c099c101b131feaf24c5795a6a15bc8ec82015424e0d2b4274a369a0bf",
+      "NIX_LDFLAGS": "0876cc1457a66f09b2be35cb353a9c4f2e60e3cc48f5f1944dd55fdece9b8024",
+      "NIX_NO_SELF_RPATH": "391552c099c101b131feaf24c5795a6a15bc8ec82015424e0d2b4274a369a0bf",
+      "NIX_PKG_CONFIG_WRAPPER_TARGET_HOST_arm64_apple_darwin": "391552c099c101b131feaf24c5795a6a15bc8ec82015424e0d2b4274a369a0bf",
+      "NIX_PROFILES": "ba733ff4d8780497ec34531b242e2df8faacf374ebd49a40dacc8dafff5b0d6f",
+      "NIX_SSL_CERT_FILE": "fa136cbb94267a83491f8f09569ca8d37c597dcc648f41d31bdac34d02827094",
+      "NIX_STORE": "1c8d161dce2f26b78705296a0f941ad4796ac4d1e0ac3aeb9e7c3fd8aadf63d1",
+      "NIX_USER_PROFILE_DIR": "642c078ec35e3eed1de89abfb237b3ddf0461433de87c92b1d30302f95b30b2c",
+      "NM": "373d81ca4659c8e9f59589d5ff45c4d21e72084b5b809d880dccd3446e82f7f5",
+      "PATH": "4308a68ab0a25bf94a1a1b4cb3c45087226f05b0bf4c9d7faed58cbdb55dda0c",
+      "PGDATA": "c999e1263ee261b91bdd60455bd14111da95524df8a2cd5192b0358921dfab5e",
+      "PGDATABASE": "005a0b8c90b314f94c804390969060195bb857db4c07faae810523f0912671eb",
+      "PGHOST": "eb6328cfceb0f59ada538befa093c6cf0a40351a0e52025848304299aed7df6a",
+      "PGLOG": "7a214164b90ed7a4c1236cfc647d86700393da8360bfc45200480bfaae4fa658",
+      "PG_CONNECTION_STRING": "b877ac26992a14f437e29f270e304031c439cad1b2f9d12e058ef5e0168970fa",
+      "PKG_CONFIG": "e6701223928483669e7b43cf035d56ae6add89d748897630c67dfc85f69fd666",
+      "PKG_CONFIG_PATH": "0cb90e7c62b53872add0589a4acbc5fef77727dda7f3380bd0e4256fbf9f2590",
+      "RANLIB": "3097f12d8fc79a92fd5f9225bd39f906f9f8a7f4a37b9f30cd155fb0fce45e80"
+    },
+    "local_config": {
+      "/Users/shinzui/.config/cabal/config": "9bd8135e7f9c035ed8fd8290f8fedcf2fddd9ee2c62abacb53e96432af66e4ae",
+      "/Users/shinzui/Keikaku/bokuno/keiro/cabal.project.freeze": null,
+      "/Users/shinzui/Keikaku/bokuno/keiro/cabal.project.local": null
+    },
+    "machine": [
+      "yujin",
+      "macOS-27.0.1-arm64-arm-64bit-Mach-O"
+    ],
+    "postgres": "f0d5d9c6921d1171ee2dc0024e07d4c8fb669aba243c042487704165509e45bd",
+    "schema": 1,
+    "source": "5eef0b5b0147cb4a6198f66c6da4a4f62210c61d08116b53fb276f8026f69abe",
+    "z3": "Z3 version 4.16.0 - 64 bit"
+  },
+  "schema": 1,
+  "stages": {
+    "command": {
+      "receipt": "keiro/bench/results/release-gates/20261031T035839Z-ed1adaee-command.json",
+      "reused": false,
+      "sha256": "23045cfb4b1f14f1f3f562920c0262ef86bb51cb6f718a3e2c5bf05496be95d7",
+      "status": 0
+    },
+    "correctness": {
+      "receipt": "keiro/bench/results/release-gates/20261031T035839Z-ed1adaee-correctness.json",
+      "reused": false,
+      "sha256": "d9a6602f86380be5fcc74557772f3fdc2072e117a2d98755b1277eb90bd71ca4",
+      "status": 0
+    },
+    "inbox": {
+      "receipt": "keiro/bench/results/release-gates/20261031T035839Z-ed1adaee-inbox.json",
+      "reused": false,
+      "sha256": "47042629effe1a6214cb2164a5ca6b06f54c84a55a56e9d0707120db351798c8",
+      "status": 1
+    },
+    "outbox": {
+      "receipt": "keiro/bench/results/release-gates/20261031T035839Z-ed1adaee-outbox.json",
+      "reused": false,
+      "sha256": "1cc79fc4ea006dcfd1415f075b42cd8b641aa2f3201e9434194905440ca0348f",
+      "status": 0
+    },
+    "producer-identity": {
+      "receipt": "keiro/bench/results/release-gates/20261031T035839Z-ed1adaee-producer-identity.json",
+      "reused": false,
+      "sha256": "c4bacafe2944c5362df6a18de16910375efacf85e2b1b625624f5709514513e1",
+      "status": 0
+    },
+    "projection": {
+      "receipt": "keiro/bench/results/release-gates/20261031T035839Z-ed1adaee-projection.json",
+      "reused": false,
+      "sha256": "3d9e23317d2040f70190a0bc8186481353311ac1271a4779a30a11579048191b",
+      "status": 1
+    },
+    "read-model": {
+      "receipt": "keiro/bench/results/release-gates/20261031T035839Z-ed1adaee-read-model.json",
+      "reused": false,
+      "sha256": "dd5b66dcfd291bc0003166709dbe954a3b11bc6f586b3f4782fa54b8c5271014",
+      "status": 0
+    }
+  },
+  "started": 1793419119.461484
+}

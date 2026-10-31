@@ -1,0 +1,142 @@
+2026-10-31T04:16:24.961481+00:00 load_average=(6.03125, 8.17822265625, 6.24609375)
+  PID  PPID     ELAPSED  %CPU COMM
+  602     1 17-00:14:20   2.2 /usr/libexec/syspolicyd
+  722     1 17-00:14:19   3.7 /System/Library/DriverExtensions/AppleCentauriAlpha.dext/AppleCentauriAlpha
+ 6861     1 04-05:13:29   1.1 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+16911     1 09-03:44:07   1.6 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+21583 36668       00:06  28.9 python3
+21741 60435       00:02  16.5 bash
+22235 58307       00:01  68.4 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/156.0.8078.74/Helpers/Google Chrome Helper (Aperitif Renderer).app/Contents/MacOS/Google Chrome Helper (Aperitif Renderer)
+39574     1 15-13:58:45  15.9 tmux
+41341     1 02-00:28:23  23.0 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+43551     1 03-00:13:52  13.2 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+58307     1 01-15:30:34   6.1 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+67127     1 12-10:18:27  53.5 /Applications/WezTerm.app/Contents/MacOS/wezterm-gui
+86291 86286 03-11:21:40   1.2 sshd-session: shinzui@ttys016
+89557     1 16-04:06:27   5.0 /Library/SystemExtensions/A1367164-D904-48E4-B534-01CC038D590B/io.tailscale.ipn.macsys.network-extension.systemextension/Contents/MacOS/io.tailscale.ipn.macsys.network-extension
+38508 37028       27:17   9.6 codex
+60213 34875    08:00:17   4.4 codex
+
+2026-10-31T04:21:57.665830+00:00 load_average=(3.15869140625, 5.4580078125, 5.64990234375)
+  PID  PPID     ELAPSED  %CPU COMM
+  510     1 17-00:19:53   2.5 /System/Library/PrivateFrameworks/TCC.framework/Support/tccd
+  602     1 17-00:19:53   1.6 /usr/libexec/syspolicyd
+  656     1 17-00:19:52  46.1 /usr/libexec/searchpartyd
+  722     1 17-00:19:52   1.8 /System/Library/DriverExtensions/AppleCentauriAlpha.dext/AppleCentauriAlpha
+ 6861     1 04-05:19:02   1.2 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+ 8659     1    09:49:28   2.5 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/FSEvents.framework/Versions/A/Support/fseventsd
+39574     1 15-14:04:18  18.4 tmux
+41341     1 02-00:33:56  29.9 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+43551     1 03-00:19:25  21.9 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+51410 51230       24:39  31.5 python3
+67127     1 12-10:24:00  59.1 /Applications/WezTerm.app/Contents/MacOS/wezterm-gui
+86291 86286 03-11:27:13   1.0 sshd-session: shinzui@ttys016
+89557     1 16-04:12:00   4.1 /Library/SystemExtensions/A1367164-D904-48E4-B534-01CC038D590B/io.tailscale.ipn.macsys.network-extension.systemextension/Contents/MacOS/io.tailscale.ipn.macsys.network-extension
+38508 37028       32:50  11.4 codex
+60213 34875    08:05:50   4.9 codex
+
+2026-10-31T04:22:57.358118+00:00 load_average=(2.82763671875, 4.93408203125, 5.4384765625)
+  PID  PPID     ELAPSED  %CPU COMM
+  509     1 17-00:20:53   1.6 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+  601     1 17-00:20:53   1.8 /usr/libexec/airportd
+  722     1 17-00:20:52   2.5 /System/Library/DriverExtensions/AppleCentauriAlpha.dext/AppleCentauriAlpha
+ 6861     1 04-05:20:02   1.2 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+ 8659     1    09:50:28   1.0 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/FSEvents.framework/Versions/A/Support/fseventsd
+36039 36038       00:46  43.1 /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.23.0.0/b/keiro-bench/build/keiro-bench/keiro-bench
+36182 36147       00:45  53.1 postgres: shinzui keiro_template_5 [local] INSERT
+36366 36147       00:15   3.3 postgres: shinzui keiro_template_5 [local] idle
+36433 36668       00:00   5.7 python3
+39574     1 15-14:05:18  17.5 tmux
+41341     1 02-00:34:56  36.4 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+43551     1 03-00:20:25  14.7 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+58307     1 01-15:37:07   2.0 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+67127     1 12-10:25:00  52.8 /Applications/WezTerm.app/Contents/MacOS/wezterm-gui
+86291 86286 03-11:28:13   1.0 sshd-session: shinzui@ttys016
+89557     1 16-04:13:00   3.9 /Library/SystemExtensions/A1367164-D904-48E4-B534-01CC038D590B/io.tailscale.ipn.macsys.network-extension.systemextension/Contents/MacOS/io.tailscale.ipn.macsys.network-extension
+38508 37028       33:50  10.7 codex
+60213 34875    08:06:50   4.6 codex
+
+2026-10-31T04:24:58.641044+00:00 load_average=(3.892578125, 4.55126953125, 5.21240234375)
+  PID  PPID     ELAPSED  %CPU COMM
+  722     1 17-00:22:53   2.7 /System/Library/DriverExtensions/AppleCentauriAlpha.dext/AppleCentauriAlpha
+ 6861     1 04-05:22:03   1.2 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+36039 36038       02:47  32.2 /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.23.0.0/b/keiro-bench/build/keiro-bench/keiro-bench
+36182 36147       02:46  27.8 postgres: shinzui keiro_template_5 [local] idle
+36366 36147       02:16  27.7 postgres: shinzui keiro_template_5 [local] idle
+37124 37119       00:11 100.0 /nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/bin/./ghc-9.12.4
+39129 36668       00:00   1.8 python3
+39574     1 15-14:07:19  24.0 tmux
+41341     1 02-00:36:57  27.7 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+42962     1 01-05:30:44  11.4 /nix/store/k07j8cq0iyvna81qlhwxz8xq6pkz02z8-python3-3.14.7/bin/python3
+43551     1 03-00:22:26  14.8 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+67127     1 12-10:27:01  63.6 /Applications/WezTerm.app/Contents/MacOS/wezterm-gui
+86291 86286 03-11:30:14   1.3 sshd-session: shinzui@ttys016
+89557     1 16-04:15:01   4.7 /Library/SystemExtensions/A1367164-D904-48E4-B534-01CC038D590B/io.tailscale.ipn.macsys.network-extension.systemextension/Contents/MacOS/io.tailscale.ipn.macsys.network-extension
+38508 37028       35:51  13.1 codex
+60213 34875    08:08:51   6.2 codex
+
+2026-10-31T04:26:28.922046+00:00 load_average=(5.12353515625, 4.7451171875, 5.2158203125)
+  PID  PPID     ELAPSED  %CPU COMM
+  722     1 17-00:24:23   1.9 /System/Library/DriverExtensions/AppleCentauriAlpha.dext/AppleCentauriAlpha
+  774     1 17-00:24:16   1.3 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds_stores
+ 6861     1 04-05:23:33   1.2 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+38118     1       01:37   2.2 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mdworker_shared
+39574     1 15-14:08:49  20.6 tmux
+39772 39771       00:38  46.8 /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.23.0.0/b/keiro-bench/build/keiro-bench/keiro-bench
+39908 39879       00:37  28.6 postgres: shinzui keiro_template_4 [local] SELECT
+39987 39879       00:22  28.3 postgres: shinzui keiro_template_4 [local] idle
+40091 36668       00:00   4.7 python3
+41341     1 02-00:38:27  17.5 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+43551     1 03-00:23:56  23.2 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+67127     1 12-10:28:31  58.8 /Applications/WezTerm.app/Contents/MacOS/wezterm-gui
+86291 86286 03-11:31:44   1.2 sshd-session: shinzui@ttys016
+89557     1 16-04:16:31   4.1 /Library/SystemExtensions/A1367164-D904-48E4-B534-01CC038D590B/io.tailscale.ipn.macsys.network-extension.systemextension/Contents/MacOS/io.tailscale.ipn.macsys.network-extension
+38508 37028       37:21  11.9 codex
+60213 34875    08:10:21   5.6 codex
+
+2026-10-31T04:28:03.929206+00:00 load_average=(7.18359375, 5.37451171875, 5.3955078125)
+  PID  PPID     ELAPSED  %CPU COMM
+  467     1 17-00:25:59   1.1 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds
+  479     1 17-00:25:59   1.1 /usr/libexec/opendirectoryd
+  722     1 17-00:25:58   1.6 /System/Library/DriverExtensions/AppleCentauriAlpha.dext/AppleCentauriAlpha
+  774     1 17-00:25:51   1.0 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds_stores
+ 6861     1 04-05:25:08   1.2 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+39574     1 15-14:10:24  20.9 tmux
+39772 39771       02:13  14.0 /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.23.0.0/b/keiro-bench/build/keiro-bench/keiro-bench
+39881 39879       02:12  30.5 postgres: io worker 0
+39908 39879       02:12  13.7 postgres: shinzui keiro_template_4 [local] idle
+39987 39879       01:57  47.7 postgres: shinzui keiro_template_4 [local] idle
+41341     1 02-00:40:02  31.4 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+43551     1 03-00:25:31   9.3 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+44020 44018       00:04  51.3 /nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/bin/./ghc-9.12.4
+44096 43747       00:00  30.8 /nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/bin/./ghc-9.12.4
+44122 44096       00:00   6.6 /nix/store/yqk6qhawnigv832m2zhcbs25nb37r73i-bash-5.3p15/bin/bash
+44132 44122       00:00   5.1 /nix/store/6fgrwdc1iwn27zqi1gvkgvzjginbr9k6-clang-21.1.8/bin/clang
+44133 44132       00:00   5.1 /nix/store/yqk6qhawnigv832m2zhcbs25nb37r73i-bash-5.3p15/bin/bash
+44137 44133       00:00  32.7 /nix/store/4czi5s6rqvdk060p98mzp6cihxq13chs-cctools-binutils-darwin-1010.6/bin/ld
+44141 36668       00:00   5.6 python3
+67127     1 12-10:30:06  64.7 /Applications/WezTerm.app/Contents/MacOS/wezterm-gui
+86291 86286 03-11:33:19   1.2 sshd-session: shinzui@ttys016
+89557     1 16-04:18:06   4.6 /Library/SystemExtensions/A1367164-D904-48E4-B534-01CC038D590B/io.tailscale.ipn.macsys.network-extension.systemextension/Contents/MacOS/io.tailscale.ipn.macsys.network-extension
+38508 37028       38:56  10.7 codex
+60213 34875    08:11:56   5.6 codex
+
+2026-10-31T04:31:09.434879+00:00 load_average=(5.12353515625, 5.3134765625, 5.36083984375)
+  PID  PPID     ELAPSED  %CPU COMM
+  467     1 17-00:29:05   1.2 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds
+  722     1 17-00:29:04   3.7 /System/Library/DriverExtensions/AppleCentauriAlpha.dext/AppleCentauriAlpha
+ 6861     1 04-05:28:14   1.4 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+ 8659     1    09:58:40   2.7 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/FSEvents.framework/Versions/A/Support/fseventsd
+39574     1 15-14:13:30  20.0 tmux
+41341     1 02-00:43:08  29.5 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+43551     1 03-00:28:37  21.5 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+47747 47746       00:13  30.3 /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.23.0.0/b/keiro-bench/build/keiro-bench/keiro-bench
+47901 47853       00:11  42.9 postgres: shinzui keiro_template_7 [local] INSERT
+47902 47853       00:11  22.3 postgres: shinzui keiro_template_7 [local] idle
+47973 41234       00:01   4.4 /nix/store/qy68c1id3s2smp7892hw3066d25a4lcp-mori/bin/mori
+67127     1 12-10:33:12  65.4 /Applications/WezTerm.app/Contents/MacOS/wezterm-gui
+86291 86286 03-11:36:25   1.2 sshd-session: shinzui@ttys016
+89557     1 16-04:21:12   6.3 /Library/SystemExtensions/A1367164-D904-48E4-B534-01CC038D590B/io.tailscale.ipn.macsys.network-extension.systemextension/Contents/MacOS/io.tailscale.ipn.macsys.network-extension
+38508 37028       42:02  12.1 codex
+60213 34875    08:15:02   5.5 codex
+

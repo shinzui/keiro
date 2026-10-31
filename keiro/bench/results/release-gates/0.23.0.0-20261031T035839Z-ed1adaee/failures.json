@@ -1,0 +1,107 @@
+[
+  {
+    "stage": "inbox",
+    "case": "/inbox/&&/table-downstream-batch-100.repeated-key.metrics-off/",
+    "measurement": "2.52 ms \u00b1 218 \u03bcs, 29% more than baseline",
+    "percent_above_baseline": 29,
+    "limit_percent": 25
+  },
+  {
+    "stage": "inbox",
+    "case": "/inbox/&&/table-downstream-batch-100.all-duplicate.metrics-on/",
+    "measurement": "3.77 ms \u00b1 347 \u03bcs, 33% more than baseline",
+    "percent_above_baseline": 33,
+    "limit_percent": 25
+  },
+  {
+    "stage": "inbox",
+    "case": "/inbox/&&/delegated-batch-100.fresh.metrics-off/",
+    "measurement": "575  ms \u00b1  46 ms, 47% more than baseline",
+    "percent_above_baseline": 47,
+    "limit_percent": 25
+  },
+  {
+    "stage": "inbox",
+    "case": "/inbox/&&/delegated-batch-100.repeated-key.metrics-off/",
+    "measurement": "890  \u03bcs \u00b1 141 \u03bcs, 71% more than baseline",
+    "percent_above_baseline": 71,
+    "limit_percent": 25
+  },
+  {
+    "stage": "inbox",
+    "case": "/inbox/&&/delegated-batch-100.repeated-key.metrics-on/",
+    "measurement": "2.10 ms \u00b1 199 \u03bcs, 38% more than baseline",
+    "percent_above_baseline": 38,
+    "limit_percent": 25
+  },
+  {
+    "stage": "inbox",
+    "case": "/inbox/&&/delegated-batch-100.all-duplicate.metrics-off/",
+    "measurement": "475  \u03bcs \u00b1  19 \u03bcs, 63% more than baseline",
+    "percent_above_baseline": 63,
+    "limit_percent": 25
+  },
+  {
+    "stage": "inbox",
+    "case": "/inbox/&&/delegated-batch-100.all-duplicate.metrics-on/",
+    "measurement": "1.68 ms \u00b1 157 \u03bcs, 25% more than baseline",
+    "percent_above_baseline": 25,
+    "limit_percent": 25
+  },
+  {
+    "stage": "inbox",
+    "case": "/inbox/&&/table-downstream-batch-1000.fresh.metrics-off/",
+    "measurement": "549  ms \u00b1  29 ms, 35% more than baseline",
+    "percent_above_baseline": 35,
+    "limit_percent": 25
+  },
+  {
+    "stage": "projection",
+    "case": "/projection/&&/versioned.one-target/",
+    "measurement": "336  \u03bcs \u00b1  74 \u03bcs, 1.23x, 42% more than baseline",
+    "percent_above_baseline": 42,
+    "limit_percent": 25
+  },
+  {
+    "stage": "projection",
+    "case": "/projection/&&/legacy.three-target/",
+    "measurement": "365  \u03bcs \u00b1  23 \u03bcs, 41% more than baseline",
+    "percent_above_baseline": 41,
+    "limit_percent": 25
+  },
+  {
+    "stage": "projection",
+    "case": "/projection/&&/versioned.three-target/",
+    "measurement": "380  \u03bcs \u00b1  51 \u03bcs, 1.04x, 42% more than baseline",
+    "percent_above_baseline": 42,
+    "limit_percent": 25
+  },
+  {
+    "stage": "projection",
+    "case": "/projection/&&/legacy.three-groups/",
+    "measurement": "472  \u03bcs \u00b1 108 \u03bcs, 51% more than baseline",
+    "percent_above_baseline": 51,
+    "limit_percent": 25
+  },
+  {
+    "stage": "projection",
+    "case": "/projection/&&/versioned.three-groups/",
+    "measurement": "474  \u03bcs \u00b1  63 \u03bcs, 1.00x, 49% more than baseline",
+    "percent_above_baseline": 49,
+    "limit_percent": 25
+  },
+  {
+    "stage": "projection",
+    "case": "/projection/&&/legacy.many-revisions/",
+    "measurement": "347  \u03bcs \u00b1  41 \u03bcs, 50% more than baseline",
+    "percent_above_baseline": 50,
+    "limit_percent": 25
+  },
+  {
+    "stage": "projection",
+    "case": "/projection/&&/versioned.many-revisions/",
+    "measurement": "341  \u03bcs \u00b1  40 \u03bcs, 0.98x, 43% more than baseline",
+    "percent_above_baseline": 43,
+    "limit_percent": 25
+  }
+]
