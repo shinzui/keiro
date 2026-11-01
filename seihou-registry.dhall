@@ -32,6 +32,13 @@
       , "migration"
       ]
     }
+  , { name = "domain-scalar-identity-decoder-audit"
+    , version = Some "0.1.0"
+    , path = "blueprints/domain-scalar-identity-decoder-audit"
+    , description = Some
+        "Audit and remediate domain scalars, identity authority, and owned decoders with exhaustive source-bound classification and behavioral acceptance."
+    , tags = [ "haskell", "domain-modeling", "identity", "decoding", "audit" ]
+    }
   ]
 , prompts =
   [] : List
