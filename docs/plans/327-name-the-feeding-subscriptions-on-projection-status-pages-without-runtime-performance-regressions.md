@@ -71,7 +71,7 @@ unchanged paths are unchanged, and the existing read-model benchmark guard.
 
 - [x] Milestone 1 (2026-11-04; focused core 9 examples, ops inline authority assertions, byte comparison of preserved definitions, strict IR bundle validation): The library page read returns each frozen v1 row together with its registered feeding subscriptions, proven by focused core tests for a two-subscription checkpoint group, an inline-only append group, and an unmanaged group, with the complete-list and lookup SQL byte-identical to the comparison baseline. IR-57 is linked to this plan as `accepted` with its request text corrected.
 - [x] Milestone 2 (2026-11-04; ops 28, jitsurei 56, HTTP 55 examples, all passing; real executable CLI/HTTP items agree): `projection status --json`, `GET /projection/status`, and `projection_groups` feed items carry `feeding_subscriptions` with every existing key and value unchanged; the jitsurei group reports `["jitsurei-order-audit-subscription"]` and its legacy group reports `[]`, over the library, the embedded CLI, and the real HTTP server.
-- [ ] Milestone 3: Retained paired evidence shows the candidate page statement keeps its per-key plan with one primary-key probe per page row and a paired median server execution time within 1.10x of the pre-change binary at 10k and 100k groups for first and deep pages, the read-model guard passes without baseline movement, and the writer and schema paths are shown untouched.
+- [ ] Milestone 3: Retained paired evidence shows the candidate page statement keeps its per-key plan with one primary-key probe per page row and a paired median server execution time within 1.10x of the pre-change binary at 10k and 100k groups for first and deep pages, the matched writer-interference intervals pass, the read-model guard passes without baseline movement, and the writer and schema paths are shown untouched.
 - [ ] Milestone 4: User documentation, guides, changelogs, and ADR-35 describe the field; IR-57 is `completed` with a resolution; the strict OKF bundles validate; and `just verify` passes in the Nix shell on the final candidate.
 
 
@@ -99,9 +99,12 @@ Compare each candidate mode with its matched baseline mode, and the candidate ac
 ratio with the baseline active/idle ratio. Metrics are achieved throughput, writer p95/p99
 including scheduling delay, and writer-thread allocated bytes per operation. A trial refuses
 lost offered load (<99%), any failed client, lost polling requests, missing snapshots,
-non-durable settings, incomplete samples, or abandoned feed resources. Each metric's paired
-median regression ratio must be <=1.10; report all five ratios and absolute medians without
-removing outliers. This measures the specified workload; it is not a universal performance
+non-durable settings, incomplete samples, or abandoned feed resources. Report each metric's paired median ratio and a fixed-seed 95% percentile bootstrap
+interval (20,000 resamples of the five independent trial pairs). An interval wholly above
+1 rejects degradation; an upper endpoint >=1.01 remains inconclusive. Completion requires
+passing intervals, including separately paired same-source idle controls that characterize
+noise. Report all ratios and absolute medians without removing outliers. The SQL-only 1.10
+ceiling does not authorize a 10% writer regression. This measures the specified workload; it is not a universal performance
 claim. Retain source, binaries' hashes, dependencies, raw records and summary alongside the SQL
 evidence. No earlier manager-discovery waiver supplies projection acceptance.
 
@@ -190,6 +193,15 @@ evidence. No earlier manager-discovery waiver supplies projection acceptance.
   feed comparisons. Unchanged writer SQL does not establish unchanged shared-resource cost. If (a)
   exceeds its ceiling, the cause must be attributed and the matched interference protocol of
   plan 323 becomes required before acceptance; ADR-58 forbids moving a baseline to absorb it.
+  Date: 2026-11-04
+- Decision: Require a projection-specific matched idle/poll/feed writer cohort in addition
+  to the SQL ceiling, using the fixed protocol in Progress. Runtime acceptance rejects
+  statistically supported degradation and intervals that cannot exclude a 1% loss;
+  same-source controls must resolve noise within 1%. The earlier manager-types waiver
+  is not inherited, and the 1.10 SQL allowance is not a writer allowance.
+  Rationale: Returned arrays affect transfer, decoding, response encoding and feed comparison
+  even though writer SQL is unchanged. Fixing the workload and refusal rules before
+  sampling addresses the review without narrowing the user's runtime constraint.
   Date: 2026-11-04
 - Decision: Correct IR-57's request text and acceptance in the same change that links it to
   this plan, rather than implementing a request whose acceptance cannot be met by a correct
@@ -563,7 +575,7 @@ mismatches; exit nonzero if any plan or ratio gate fails. Do not discard outlier
 historical all-append fixture timings are context, not a numeric gate for this changed
 fixture; the same-fixture paired ratio is the quantitative acceptance criterion.
 
-Acceptance has three parts. First, plan shape: in every candidate plan the cursors relation
+Acceptance has four parts. First, plan shape: in every candidate plan the cursors relation
 appears as an `Index Scan` or `Index Only Scan` using `keiro_projection_group_cursors_pkey`
 under a `Nested Loop`, with its index condition bound to the page key and actual loops equal to the
 number of SQL rows selected, including look-ahead (101 for these 100-item fixtures);
@@ -584,6 +596,25 @@ settings, both commits, both binary paths and hashes, the acceptance figures, an
 `keiro/bench/results/inspection/projection-status-read/`. If the ratio ceiling is exceeded,
 stop, attribute the cause in Surprises & Discoveries, and either remove it or obtain a scope
 decision; do not record a new baseline or relax the ceiling (ADR-58).
+
+
+The fourth acceptance part is the matched writer cohort specified in Progress. Extend
+`keiro-ops-http/bench/InspectionInterference.hs` with `projection-idle`, `projection-poll`
+and `projection-feed` modes, seed the same checkpoint stripe, and extend
+`keiro-ops-http/bench/InspectionClients.hs` with real polling/feed clients that validate
+non-empty arrays. Use `scripts/measure-projection-feeding-subscriptions.sh` for five
+alternating pairs plus same-source idle controls and
+`scripts/analyze-projection-feeding-subscriptions.py` for the fixed trial-level bootstrap.
+Retain every trial under the evidence folder's `interference/` directory. The analyzer
+must exit nonzero for invalid load, a supported regression, or inconclusive precision;
+none can complete this milestone. Preserve all samples and report uncertainty.
+Compile the same harness sources separately against both package sets, exposing the
+`keiro`, `keiro-ops`, `keiro-ops-http`, `jitsurei`, and `keiro-test-support` packages with
+GHC flags `-O1 -threaded -rtsopts -XGHC2024 -XBlockArguments -XLambdaCase -XOverloadedStrings`
+and the harness directory on `-i`; use separate object/output paths. Build the baseline
+`keiro-ops-http:bench:inspection-interference --enable-benchmarks` first to make its
+transport dependencies available. Retain both exact harness sources, flags, binary hashes,
+package plans, the analyzer and controller with the evidence.
 
 
 ### Milestone 4: Documentation, ADR amendment, request completion, and verification
@@ -804,10 +835,9 @@ git worktree remove ../keiro-feeding-subscriptions-baseline
 ## Validation and Acceptance
 
 
-The plan is complete when all of the following hold on the final candidate and the
-writer-interference acceptance gap recorded in the review handoff has been resolved.
-Until that protocol or an explicit scope narrowing is recorded, the plan is not approved
-for a claim of no runtime performance regressions.
+The plan is complete when all of the following hold on the final candidate, including
+the matched writer-interference protocol specified in Progress and Milestone 3. A
+query-only pass cannot establish runtime acceptance.
 
 Behavior. `keiro-ops projection status --json` (and `jitsurei-demo ops projection status
 --json`) returns items that each contain `feeding_subscriptions`. For jitsurei after catalog
