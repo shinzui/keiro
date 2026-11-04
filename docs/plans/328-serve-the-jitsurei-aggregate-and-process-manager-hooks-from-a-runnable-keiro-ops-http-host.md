@@ -10,6 +10,18 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-11-04T13:12:06Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-04T14:07:24Z
+      verdict: "changes-requested"
+      note: "Shared-host design matches the source; require a non-deletion assertion for preview and safe configured-database recovery; fix the shell ID placeholder."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-04T14:16:09Z
+      mode: "update"
+      note: "Apply review fixes to Cabal targets, preview state assertions, configured-database recovery, and correlation-id input."
 ---
 
 
@@ -61,7 +73,7 @@ then re-recorded).
 
 - [ ] Milestone 1: `keiro-ops-http` exports `Keiro.Ops.Http.Host` (`HostOptions`, `hostOptionsParser`, `withHost`, `mainWithHooks`) and its executable is `mainWithHooks emptyAppHooks`, with `--help` output byte-identical to the creation baseline and `cabal test keiro-ops-http-test` passing unchanged. IR-55 is linked to this plan as `accepted`.
 - [ ] Milestone 2: `jitsurei` exposes `Jitsurei.Ops.jitsureiOpsHooks`, shared by `jitsurei-demo ops` and the new `jitsurei-ops-http` executable; `just jitsurei-ops-http` serves the seeded `jitsurei` database and the curl transcript in Validation shows `/aggregate/types`, `/aggregate/show`, `/pm/list` and `/pm/show` answering for data `just jitsurei-all` wrote; `jitsurei-ops-http --help` lists the same flags as `keiro-ops-http --help`.
-- [ ] Milestone 3: `jitsurei-test` starts the host in-process on an ephemeral database and proves the hook routes return the ops handlers' JSON and the shared gates behave identically (`/health` ok, 403 `mutations_disabled` by default, 403 `origin_not_allowed` and a 200 preview with mutations enabled); `cabal test jitsurei-test` passes.
+- [ ] Milestone 3: `jitsurei-test` starts the host in-process on an ephemeral database and proves the hook routes return the ops handlers' JSON and the shared gates behave identically (`/health` ok, 403 `mutations_disabled` by default, 403 `origin_not_allowed` and a 200 preview with mutations enabled that leaves stream metadata unchanged); `cabal test jitsurei-test` passes.
 - [ ] Milestone 4: `docs/guides/serve-keiro-ops-over-http.md` names the host as the way to see hook-gated routes locally, the jitsurei runbook and both changelogs mention it, ADR-53 records the exported host, IR-55 is `completed` with a resolution, the strict OKF bundles validate, and `just verify` passes in the Nix shell on the final candidate.
 
 
@@ -299,7 +311,7 @@ Re-export the module from `keiro-ops-http/src/Keiro/Ops/Http.hs`. Reduce
 `keiro-ops-http/app/Main.hs` to a `main` that calls `mainWithHooks emptyAppHooks`, and trim
 the executable stanza's `build-depends` to `base`, `keiro-ops` and `keiro-ops-http`.
 
-At the end, `cabal run keiro-ops-http -- --help` prints exactly what it printed before the
+At the end, `cabal run keiro-ops-http:exe:keiro-ops-http -- --help` prints exactly what it printed before the
 change, the executable still starts and serves `/health`, and `cabal test keiro-ops-http-test`
 passes unchanged. Also link IR-55 to this plan as described in Concrete Steps.
 
@@ -367,10 +379,16 @@ same keys of `Ops.runCommand hooks env (Ops.Aggregate (OpsAggregate.Show (OpsAgg
 `last_reaction` and `waiting_for` equal the handler's (the pattern at line 817; do not
 compare `observed_at`); `POST /stream/soft-delete/order-order-100` is 403 with error code
 `mutations_disabled`. Then open a second `withHost` on the same database with `mutations =
-MutationsEnabled` and `allowedOrigins = ["http://ui.example"]`: the same POST with header
+MutationsEnabled` and `allowedOrigins = ["http://ui.example"]`. Before either POST, GET
+`/stream/show/order-order-100`, require 200, and save its `stream` object; assert its
+`exists` is `true` and `deleted_at` is JSON `null`. The same POST with header
 `Origin: http://evil.example` is 403 `origin_not_allowed`, and with `Origin: http://ui.example`
-and an empty body is 200 with `outcome` `preview`, after which `GET /stream/show/order-order-100`
-still succeeds (nothing was deleted). Add `keiro-ops-http ^>=0.23.0.0`, `http-client`,
+and an empty body is 200 with `outcome` `preview`. After each POST, GET
+`/stream/show/order-order-100` again, require 200, and compare the entire `stream` object
+with the saved value, including `exists: true` and `deleted_at: null`. A successful GET
+alone cannot prove non-deletion: `Keiro.Ops.Stream.streamInfoJson` in
+`keiro-ops/src/Keiro/Ops/Stream.hs` also describes missing and soft-deleted streams.
+Add `keiro-ops-http ^>=0.23.0.0`, `http-client`,
 `http-types` and `bytestring` to the test suite's `build-depends`.
 
 At the end, `cabal test jitsurei-test --test-show-details=direct` passes with the new group
@@ -425,7 +443,7 @@ confirm the baseline suites pass:
 
 ```bash
 mkdir -p "${TMPDIR:-/tmp}/ir55"
-cabal run -v0 keiro-ops-http -- --help > "${TMPDIR:-/tmp}/ir55/keiro-ops-http-help.baseline.txt"
+cabal run -v0 keiro-ops-http:exe:keiro-ops-http -- --help > "${TMPDIR:-/tmp}/ir55/keiro-ops-http-help.baseline.txt"
 cabal test keiro-ops-http-test --test-show-details=direct
 cabal test jitsurei-test --test-show-details=direct
 ```
@@ -475,7 +493,7 @@ Format with `nix fmt` (treefmt runs Fourmolu with the repository's `fourmolu.yam
 
 ```bash
 cabal build keiro-ops-http:lib:keiro-ops-http keiro-ops-http:exe:keiro-ops-http
-diff "${TMPDIR:-/tmp}/ir55/keiro-ops-http-help.baseline.txt" <(cabal run -v0 keiro-ops-http -- --help) && echo HELP-UNCHANGED
+diff "${TMPDIR:-/tmp}/ir55/keiro-ops-http-help.baseline.txt" <(cabal run -v0 keiro-ops-http:exe:keiro-ops-http -- --help) && echo HELP-UNCHANGED
 cabal test keiro-ops-http-test --test-show-details=direct
 ```
 
@@ -491,7 +509,7 @@ Then build and compare the flag surfaces:
 
 ```bash
 cabal build jitsurei:lib:jitsurei jitsurei:exe:jitsurei-demo jitsurei:exe:jitsurei-ops-http
-diff <(cabal run -v0 keiro-ops-http -- --help | sed 's/keiro-ops-http/HOST/g') <(cabal run -v0 jitsurei-ops-http -- --help | sed 's/jitsurei-ops-http/HOST/g') && echo FLAGS-IDENTICAL
+diff <(cabal run -v0 keiro-ops-http:exe:keiro-ops-http -- --help | sed 's/keiro-ops-http/HOST/g') <(cabal run -v0 jitsurei-ops-http -- --help | sed 's/jitsurei-ops-http/HOST/g') && echo FLAGS-IDENTICAL
 cabal run -v0 jitsurei-demo -- ops --help | grep -E 'aggregate|pm '
 ```
 
@@ -566,11 +584,11 @@ curl -fsS 'http://127.0.0.1:9092/pm/list?name=jitsurei-fulfillment&limit=5'
 
 Expected: `{"status":"ok","schema_drift":[],"mutations_enabled":false}`; an `items` array
 with two rows whose `name` values are `incident` and `order`; and an `items` array with at
-least one row whose `correlation_id` begins with `demo-`. Copy one correlation id and
-continue:
+least one row whose `correlation_id` begins with `demo-`. Run the following `read`, paste
+one complete correlation id (including `demo-`), and press Enter before running the curls:
 
 ```bash
-ID=demo-<copied>
+read -r ID
 curl -fsS "http://127.0.0.1:9092/aggregate/show?name=order&id=$ID"
 curl -fsS "http://127.0.0.1:9092/pm/show?name=jitsurei-fulfillment&correlation=$ID"
 curl -sS -o /dev/null -w '%{http_code}\n' -X POST "http://127.0.0.1:9092/stream/soft-delete/order-$ID"
@@ -590,7 +608,7 @@ established by construction: both executables call `Keiro.Ops.Http.mainWithHooks
 runs one `withHost`, so schema verification, origin comparison, mutation gating, admission
 limits and feed mounting are the same code. The observable checks are the `--help` diff in
 Milestone 2 (same flags, same defaults) and the Milestone 3 assertions (`/health`, 403
-`mutations_disabled`, 403 `origin_not_allowed`, 200 preview). The existing
+`mutations_disabled`, 403 `origin_not_allowed`, 200 preview with unchanged stream metadata). The existing
 `keiro-ops-http-test` suite remains the gate for the transport rules themselves and must pass
 unchanged after Milestone 1.
 
@@ -599,7 +617,9 @@ unchanged after Milestone 1.
 
 Schema-drift gating: unchanged code, proven by `keiro-ops-http-test` (its drift cases) and by
 `/health` reporting `schema_drift: []` from the new host. Origin exactness and the mutation
-gate: unchanged code, proven by `keiro-ops-http-test` and the Milestone 3 403 cases. Wire
+gate: unchanged code, proven by `keiro-ops-http-test` and the Milestone 3 403 cases;
+Milestone 3 also checks unchanged stream metadata after origin rejection and preview,
+including existence and a null deletion timestamp. Wire
 bytes: the hook routes return the ops handlers' JSON values unchanged, proven by the
 Milestone 3 key-for-key comparisons against `Ops.runCommand` and by the existing CLI-agreement
 test in `keiro-ops-http-test`. Fold identity and snapshots: not touched; no file under
@@ -612,16 +632,35 @@ touched during implementation, record that in Surprises & Discoveries and run
 ## Idempotence and Recovery
 
 
-Every step is additive and repeatable. `just jitsurei-ops-http` can be restarted at any time;
+The implementation steps are additive. `just jitsurei-ops-http` can be restarted at any time;
 it holds no state beyond its connections. `just jitsurei-all` appends new demo orders on each
-run, so repeated seeding only adds instances. If `/health` reports `schema_drift` or the host
-exits at startup with a schema error, the `jitsurei` database was migrated by a different
-keiro build; recreate it with `dropdb -h "$PWD/db" jitsurei` followed by `just jitsurei-all`
-(the keiro-ui stack hit exactly this on 2026-10-21). If port 9092 is taken, pass
-`just jitsurei-ops-http --port 9093` (just forwards dash-prefixed arguments to a variadic
-recipe without a separator). Re-running an `okf log add` for the same change adds a
-duplicate log line; remove the extra line from the bundle's `log.md` before validating. Each
-milestone is its own commit, so a failed later milestone never leaves an earlier one broken.
+run, so repeated seeding adds instances. If `/health` reports `schema_drift` or the host
+exits at startup with a schema error, inspect the reported error first. Check the effective
+`--database-url`, `PGHOST`, `PGUSER`, and `JITSUREI_DATABASE` against the intended target,
+then check connectivity, privileges, and whether migrations from the current checkout have
+been applied. A schema error alone does not establish a version mismatch or justify deleting
+a database. Run `just jitsurei-migrate` against the intended target when pending migrations
+are the cause, then retry the host.
+
+For a clean reproduction, preserve the existing database and seed a fresh disposable one.
+Stop the old host first. From the repository root in the Nix shell, run the following in
+one terminal; both recipes inherit the same database name and honor the existing `PGHOST`
+and `PGUSER` settings:
+
+```bash
+export JITSUREI_DATABASE="keiro_ir55_$(date +%Y%m%d%H%M%S)_$$"
+printf 'Disposable acceptance database: %s\n' "$JITSUREI_DATABASE"
+just jitsurei-all
+just jitsurei-ops-http
+```
+
+Run the acceptance curls in a second terminal, then stop the host with Ctrl-C. Keep the
+printed database name for any later cleanup; this procedure does not drop or reset the
+original database. If port 9092 is taken, pass `just jitsurei-ops-http --port 9093` and use
+9093 in the curl URLs (just forwards dash-prefixed arguments to a variadic recipe without a
+separator). Re-running an `okf log add` for the same change adds a duplicate log line; remove
+the extra line from the bundle's `log.md` before validating. Each milestone is its own
+commit, so a failed later milestone never leaves an earlier one broken.
 
 
 ## Interfaces and Dependencies
@@ -648,3 +687,13 @@ Unchanged dependencies whose behaviour this plan relies on: `Kiroku.Store.Connec
 (`withStore`, `defaultConnectionSettings`, `poolSize`, `statementTimeout`) from
 `mori://shinzui/kiroku/packages/kiroku-store`; `Keiro.Migrations.SchemaCheck.verifyExpectedSchema`;
 `Keiro.Ops.Env.resolveConnectionString`; `optparse-applicative`, `async`, `http-client`.
+
+
+## Revision Notes
+
+
+2026-11-04: Applied the review findings: qualify standalone Cabal run targets to avoid
+Cabal-7070, require unchanged stream metadata to prove preview and origin rejection leave
+the stream intact, replace automatic database deletion with diagnosis and a fresh configured
+database, and use interactive input for the complete correlation id in the curl transcript.
+The architecture and implementation scope are unchanged.
