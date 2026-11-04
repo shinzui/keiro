@@ -36,16 +36,14 @@ import Keiro.Workflow
     WorkflowJournalEvent (StepRecorded, WorkflowCompleted),
     WorkflowName,
     WorkflowOutcome (Completed, Suspended),
-    WorkflowRunOptions,
-    defaultWorkflowRunOptions,
     findUnfinishedWorkflowIds,
     runWorkflowWith,
     workflowJournalCodec,
     workflowStreamName,
   )
 import Keiro.Workflow.Awakeable (AwakeableId, awakeableIdText, signalAwakeable)
-import Keiro.Workflow.Resume (WorkflowRegistry, WorkflowResumeOptions, defaultWorkflowResumeOptions, resumeWorkflowsOnce)
-import Keiro.Workflow.Sleep (runWorkflowTimerWorker, workflowSleepFireAction)
+import Keiro.Workflow.Resume (WorkflowRegistry, WorkflowResumeOptions, resumeWorkflowsOnce)
+import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect qualified as StoreEffect
 import Kiroku.Store.Effect.Resource qualified as StoreResource
@@ -101,17 +99,6 @@ runDemo metrics args =
       runDurableWorkflowDemo metrics
     _ -> fail "usage: jitsurei-demo [fulfillment|snapshots|paging|escalation|agent-qual|workflow|ops|all]"
 
-jitsureiOpsHooks :: Maybe Telemetry.KeiroMetrics -> Ops.AppHooks
-jitsureiOpsHooks metrics =
-  Ops.AppHooks
-    { workflowResume = Just (jitsureiWorkflowRegistry, workflowResumeOptions metrics),
-      timerFire = Just workflowSleepFireAction,
-      replayAudit = Just (Ops.OpsAuditConfig replayAuditTargets),
-      projectionCatalog = Just orderCatalogOperations,
-      aggregates = Just jitsureiAggregateInspectors,
-      processManagers = Just jitsureiProcessManagerInspectors
-    }
-
 -- | Give the whole executable one SDK meter provider and one instrument set.
 -- The console exporter makes the short-lived demo self-observing; shutting the
 -- provider down performs the final collection and flush.
@@ -134,14 +121,6 @@ withJitsureiMetrics action =
 commandOptions :: Maybe Telemetry.KeiroMetrics -> RunCommandOptions
 commandOptions metrics =
   defaultRunCommandOptions & #metrics .~ metrics
-
-workflowRunOptions :: Maybe Telemetry.KeiroMetrics -> WorkflowRunOptions
-workflowRunOptions metrics =
-  defaultWorkflowRunOptions & #metrics .~ metrics
-
-workflowResumeOptions :: Maybe Telemetry.KeiroMetrics -> WorkflowResumeOptions
-workflowResumeOptions metrics =
-  defaultWorkflowResumeOptions & #runOptions .~ workflowRunOptions metrics
 
 runFulfillmentDemo :: Maybe Telemetry.KeiroMetrics -> IO ()
 runFulfillmentDemo metrics = withJitsureiStore $ \store -> do
@@ -478,8 +457,8 @@ runDurableWorkflowDemo :: Maybe Telemetry.KeiroMetrics -> IO ()
 runDurableWorkflowDemo metrics = do
   orderId <- freshOrderId "workflow"
   publishedAwakeables <- newIORef []
-  let runOptions = workflowRunOptions metrics
-      resumeOptions = workflowResumeOptions metrics
+  let runOptions = jitsureiWorkflowRunOptions metrics
+      resumeOptions = jitsureiWorkflowResumeOptions metrics
       publishAwakeable = capturePaymentAwakeable publishedAwakeables
       registry = jitsureiWorkflowRegistryWith publishAwakeable
       workflow = orderFulfillmentWorkflow (raise . publishAwakeable) orderId

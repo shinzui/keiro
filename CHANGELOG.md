@@ -6,6 +6,12 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+### New Features
+
+- **jitsurei**: Add `jitsurei-ops-http` and `just jitsurei-ops-http` to serve
+  the example database with aggregate and process-manager inspection. Share the
+  complete application hooks with the embedded CLI through `Jitsurei.Ops`.
+
 ## 0.23.0.0 — 2026-10-30
 
 ### Breaking Changes

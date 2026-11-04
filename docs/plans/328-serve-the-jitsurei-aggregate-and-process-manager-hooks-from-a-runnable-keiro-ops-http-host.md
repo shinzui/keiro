@@ -77,8 +77,8 @@ then re-recorded).
 
 
 - [x] Milestone 1 (2026-11-04): exported and re-exported `Keiro.Ops.Http.Host`; the standalone executable calls `mainWithHooks emptyAppHooks`. Baseline help is byte-identical (`diff` passed), and the unchanged HTTP suite passed 53 examples with zero failures. IR-55 is accepted and linked; strict validation passed for all 60 requests.
-- [ ] Milestone 2: `jitsurei` exposes `Jitsurei.Ops.jitsureiOpsHooks`, shared by `jitsurei-demo ops` and the new `jitsurei-ops-http` executable; `just jitsurei-ops-http` serves the seeded `jitsurei` database and the curl transcript in Validation shows `/aggregate/types`, `/aggregate/show`, `/pm/list` and `/pm/show` answering for data `just jitsurei-all` wrote; `jitsurei-ops-http --help` lists the same flags as `keiro-ops-http --help`.
-- [ ] Milestone 3: `jitsurei-ops-http-test` starts the host in-process on an ephemeral database and proves the hook routes return the ops handlers' JSON and the shared gates behave identically (`/health` ok, 403 `mutations_disabled` by default, 403 `origin_not_allowed` and a 200 preview with mutations enabled that leaves stream metadata unchanged); `cabal test jitsurei-ops-http-test` passes.
+- [x] Milestone 2 (2026-11-04): `Jitsurei.Ops` shares all six hooks between the CLI and the new executable in the internal `jitsurei/ops-http` package. The recipe seeded a fresh `keiro_ir55_acceptance_20261104_328` database and served on port 19092. The four hook requests returned 200: the order was `packed` with state/stream version 3 and the fulfillment instance was visible; mutation POST returned 403. Help flags match after normalizing program name and its continuation indentation; the embedded CLI still lists `aggregate` and `pm`.
+- [x] Milestone 3 (2026-11-04): `jitsurei-ops-http-test` passed all three in-process examples using ephemeral databases, comparing aggregate/manager handler JSON and checking health, disabled mutations, exact origins, preview, and unchanged complete stream metadata. Added the connection-aware fixture helper and registered the suite in `just verify`. The existing jitsurei suite passed 25 examples and `keiro-test` passed 786 examples with zero failures.
 - [ ] Milestone 4: `docs/guides/serve-keiro-ops-over-http.md` names the host as the way to see hook-gated routes locally, the jitsurei runbook and both changelogs mention it, ADR-53 records the exported host, IR-55 is `completed` with a resolution, the strict OKF bundles validate, and `just verify` passes in the Nix shell on the final candidate.
 
 
@@ -138,8 +138,8 @@ then re-recorded).
   CLI. The library already depends on everything the executable needs
   (`optparse-applicative`, `keiro-migrations`, `async`, `hasql`, `kiroku-store`).
   Date: 2026-11-04.
-- Decision: Ship a dedicated executable `jitsurei-ops-http` in the `jitsurei` package, not a
-  flag on `keiro-ops-http-compose-example`.
+- Decision: Ship a dedicated executable `jitsurei-ops-http` beside the `jitsurei` package (the internal package split above supersedes the
+  original placement), not a flag on `keiro-ops-http-compose-example`.
   Rationale: IR-55 asks for a host that can "replace the standalone server in a local stack
   without other changes"; the keiro-ui stack runs the standalone server at root paths. The
   compose example is flag-gated, composes kiroku beside keiro, and prefixes keiro under
@@ -157,7 +157,7 @@ then re-recorded).
   `--enable-mutations` gate and per-request confirmation, so the default host is still
   read-only.
   Date: 2026-11-04.
-- Decision: Prove the host with an in-process test in `jitsurei-test` that calls `withHost`
+- Decision: Prove the host with an in-process test in `jitsurei-ops-http-test` that calls `withHost`
   on port 0 against an ephemeral database, rather than spawning the executable and parsing
   its banner.
   Rationale: `withHost` returns the bound port directly, closes its connections before the
@@ -367,7 +367,7 @@ jitsurei-ops-http *args: jitsurei-migrate
 ```
 
 At the end, the curl transcript in Validation succeeds against a database seeded by
-`just jitsurei-all`, and `--help` output matches `keiro-ops-http` except for the program name.
+`just jitsurei-all`, and `--help` output matches `keiro-ops-http` except for the program name and help continuation indentation.
 
 ### Milestone 3: the in-process host test
 
@@ -447,7 +447,9 @@ Add to `keiro-ops-http/CHANGELOG.md` under `[Unreleased]` a `### New Features` e
 exported host module and the executable's reduction to it; to `keiro-test-support/CHANGELOG.md`
 under `[Unreleased]` an entry for `withFreshResourceStoreWithConnection` if Milestone 3 added
 it; and to `CHANGELOG.md` under `[Unreleased]` a `**jitsurei**:` entry for `jitsurei-ops-http`,
-`Jitsurei.Ops` and the recipe. Close IR-55 as the bundle precedent does. Run the full
+`Jitsurei.Ops` and the recipe. The HTTP executable and its test suite live in
+the internal package `jitsurei/ops-http` to avoid the existing HTTP test/benchmark
+dependency back to jitsurei. Close IR-55 as the bundle precedent does. Run the full
 verification.
 
 
@@ -465,8 +467,8 @@ Capture the standalone executable's help text so Milestone 1 can prove it unchan
 confirm the baseline suites pass:
 
 ```bash
-mkdir -p "${TMPDIR:-/tmp}/ir55"
-cabal run -v0 keiro-ops-http:exe:keiro-ops-http -- --help > "${TMPDIR:-/tmp}/ir55/keiro-ops-http-help.baseline.txt"
+mkdir -p /tmp/ir55
+cabal run -v0 keiro-ops-http:exe:keiro-ops-http -- --help > /tmp/ir55/keiro-ops-http-help.baseline.txt
 cabal test keiro-ops-http-test --test-show-details=direct
 cabal test jitsurei-test --test-show-details=direct
 ```
@@ -516,7 +518,7 @@ Format with `nix fmt` (treefmt runs Fourmolu with the repository's `fourmolu.yam
 
 ```bash
 cabal build keiro-ops-http:lib:keiro-ops-http keiro-ops-http:exe:keiro-ops-http
-diff "${TMPDIR:-/tmp}/ir55/keiro-ops-http-help.baseline.txt" <(cabal run -v0 keiro-ops-http:exe:keiro-ops-http -- --help) && echo HELP-UNCHANGED
+diff /tmp/ir55/keiro-ops-http-help.baseline.txt <(cabal run -v0 keiro-ops-http:exe:keiro-ops-http -- --help) && echo HELP-UNCHANGED
 cabal test keiro-ops-http-test --test-show-details=direct
 ```
 
@@ -527,12 +529,13 @@ Expected: no diff output, the word `HELP-UNCHANGED`, and `0 failures`. Commit wi
 
 
 Create `jitsurei/src/Jitsurei/Ops.hs`, update `jitsurei/jitsurei.cabal`, `jitsurei/src/Jitsurei.hs`
-and `jitsurei/app/Main.hs`, create `jitsurei/ops-http/app/Main.hs`, and add the Justfile recipe.
+and `jitsurei/app/Main.hs`, create `jitsurei/ops-http/app/Main.hs` and its internal
+package manifest, register `jitsurei/ops-http` in `cabal.project`, and add the Justfile recipe.
 Then build and compare the flag surfaces:
 
 ```bash
 cabal build jitsurei:lib:jitsurei jitsurei:exe:jitsurei-demo jitsurei-ops-http:exe:jitsurei-ops-http
-diff <(cabal run -v0 keiro-ops-http:exe:keiro-ops-http -- --help | sed 's/keiro-ops-http/HOST/g') <(cabal run -v0 jitsurei-ops-http -- --help | sed 's/jitsurei-ops-http/HOST/g') && echo FLAGS-IDENTICAL
+diff <(cabal run -v0 keiro-ops-http:exe:keiro-ops-http -- --help | sed 's/keiro-ops-http/HOST/g' | xargs) <(cabal run -v0 jitsurei-ops-http -- --help | sed 's/jitsurei-ops-http/HOST/g' | xargs) && echo FLAGS-IDENTICAL
 cabal run -v0 jitsurei-demo -- ops --help | grep -E 'aggregate|pm '
 ```
 
@@ -564,7 +567,7 @@ cabal test jitsurei-test
 cabal test keiro-test
 ```
 
-Expected: the group's examples are listed with check marks, `jitsurei-test` ends with
+Expected: the group's examples are listed with check marks, both jitsurei suites end with
 `0 failures`, and `keiro-test` (the largest consumer of `Keiro.Test.Postgres`) still passes.
 Commit with a `test(jitsurei):` subject and both trailers.
 
@@ -683,8 +686,9 @@ printed database name for any later cleanup; this procedure does not drop or res
 original database. If port 9092 is taken, pass `just jitsurei-ops-http --port 9093` and use
 9093 in the curl URLs (just forwards dash-prefixed arguments to a variadic recipe without a
 separator). Re-running an `okf log add` for the same change adds a duplicate log line; remove
-the extra line from the bundle's `log.md` before validating. Each milestone is its own
-commit, so a failed later milestone never leaves an earlier one broken.
+the extra line from the bundle's `log.md` before validating. Commits keep independently buildable boundaries; the internal host package
+and its integration fixture may land together because they share one manifest
+and verification recipe.
 
 
 ## Interfaces and Dependencies
@@ -695,10 +699,10 @@ changelog): module `Keiro.Ops.Http.Host` exporting `HostOptions (..)`, `hostOpti
 `withHost` and `mainWithHooks`, re-exported from `Keiro.Ops.Http`. No existing export
 changes. The executable `keiro-ops-http` keeps its flags, defaults, banner and exit behaviour.
 
-New in `jitsurei` (internal, never published): library module `Jitsurei.Ops` exporting
+New in the jitsurei example packages (internal, never published): library module `Jitsurei.Ops` exporting
 `jitsureiOpsHooks :: Maybe KeiroMetrics -> AppHooks`, `jitsureiWorkflowRunOptions` and
 `jitsureiWorkflowResumeOptions`; library dependency `keiro-ops ^>=0.23.0.0`; executable
-`jitsurei-ops-http` depending on `base`, `jitsurei`, `keiro-ops-http ^>=0.23.0.0`; test-suite
+`jitsurei-ops-http` depending on `base`, `jitsurei`, `keiro-ops-http ^>=0.23.0.0`; integration suite `jitsurei-ops-http-test` in the same new package, with
 dependencies `keiro-ops-http`, `http-client`, `http-types`, `bytestring`. The Justfile gains
 `jitsurei-ops-http *args`.
 

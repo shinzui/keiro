@@ -178,6 +178,7 @@ haskell-test:
     # retention suite is invoked separately above.
     cabal test keiro-dsl:tests
     cabal test jitsurei-test
+    cabal test jitsurei-ops-http-test
     cabal run jitsurei:exe:jitsurei-diagrams -- --check
 
 # Manual/local benchmark guard. The committed baseline reflects the primary
@@ -267,6 +268,10 @@ jitsurei-workflow: jitsurei-migrate
 [group('jitsurei')]
 jitsurei-all: jitsurei-migrate
     PGHOST="{{pg_host}}" PGDATABASE="{{jitsurei_database}}" PG_CONNECTION_STRING="host={{pg_host}} dbname={{jitsurei_database}} user={{pg_user}}" cabal run jitsurei-demo -- all
+
+[group('jitsurei')]
+jitsurei-ops-http *args: jitsurei-migrate
+    cabal run jitsurei-ops-http -- --database-url "host={{pg_host}} dbname={{jitsurei_database}} user={{pg_user}}" {{args}}
 
 [group('jitsurei')]
 jitsurei: jitsurei-all

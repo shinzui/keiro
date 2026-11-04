@@ -5,6 +5,7 @@ packages:
   keiro-pgmq
   keiro-test-support
   jitsurei
+  jitsurei/ops-http
   keiro-dsl
   keiro-ops
   keiro-ops-http

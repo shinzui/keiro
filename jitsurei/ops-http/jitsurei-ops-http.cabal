@@ -1,0 +1,86 @@
+cabal-version: 3.0
+name: jitsurei-ops-http
+version: 0.1.0.0
+synopsis: Runnable HTTP inspection host for the jitsurei examples
+description:
+  Internal executable and integration tests mounting Jitsurei operational hooks.
+
+license: BSD-3-Clause
+author: Nadeem Bitar
+maintainer: nadeem@gmail.com
+copyright: 2026 Nadeem Bitar
+category: Control
+homepage: https://github.com/shinzui/keiro#readme
+bug-reports: https://github.com/shinzui/keiro/issues
+build-type: Simple
+tested-with: ghc >=9.12 && <9.13
+
+source-repository head
+  type: git
+  location: https://github.com/shinzui/keiro.git
+
+common warnings
+  ghc-options:
+    -Wall
+    -Wcompat
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wpartial-fields
+    -Wredundant-constraints
+
+common shared
+  default-language: GHC2024
+  default-extensions:
+    BlockArguments
+    DeriveAnyClass
+    DuplicateRecordFields
+    ImportQualifiedPost
+    MultilineStrings
+    OverloadedLabels
+    OverloadedRecordDot
+    OverloadedStrings
+    PackageImports
+    QualifiedDo
+    TemplateHaskell
+
+executable jitsurei-ops-http
+  import: warnings, shared
+  main-is: Main.hs
+  hs-source-dirs: app
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
+  build-depends:
+    base >=4.21 && <5,
+    jitsurei,
+    keiro-ops-http ^>=0.23.0.0,
+
+test-suite jitsurei-ops-http-test
+  import: warnings, shared
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: Main.hs
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
+  build-depends:
+    aeson >=2.2,
+    base >=4.21 && <5,
+    bytestring >=0.12 && <0.13,
+    hspec >=2.11,
+    http-client >=0.7 && <0.8,
+    http-types >=0.12 && <0.13,
+    jitsurei,
+    keiro ^>=0.23.0.0,
+    keiro-ops ^>=0.23.0.0,
+    keiro-ops-http ^>=0.23.0.0,
+    keiro-test-support ^>=0.23.0.0,
+    kiroku-store ^>=0.13.0.1,
+    pgmq-migration >=0.7.0.0 && <0.8,
+    text >=2.1,
+    vector >=0.13,

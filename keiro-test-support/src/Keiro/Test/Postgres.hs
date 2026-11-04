@@ -33,6 +33,7 @@ module Keiro.Test.Postgres
     StoreRunner (..),
     withFreshResourceStore,
     withFreshResourceStoreWith,
+    withFreshResourceStoreWithConnection,
     withFreshResourceStorePrepared,
     withFreshStores2,
     withFreshResourceStoresSameDatabase,
@@ -220,6 +221,17 @@ withFreshResourceStoreWith ::
 withFreshResourceStoreWith fixture modify action =
   withFreshDatabase fixture \connStr ->
     runResourceStore (modify (Store.defaultConnectionSettings connStr)) action
+
+-- | Like 'withFreshResourceStoreWith', also supplying the clone's connection
+-- string so another bracketed host can connect to the same isolated database.
+withFreshResourceStoreWithConnection ::
+  Fixture ->
+  (Store.ConnectionSettings -> Store.ConnectionSettings) ->
+  (Text -> (Store.KirokuStore, StoreRunner) -> IO a) ->
+  IO a
+withFreshResourceStoreWithConnection fixture modify action =
+  withFreshDatabase fixture \connStr ->
+    runResourceStore (modify (Store.defaultConnectionSettings connStr)) (action connStr)
 
 -- | Clone a database, let a privileged store prepare database roles or ACLs,
 -- then open the resource-aware store with modified application settings.

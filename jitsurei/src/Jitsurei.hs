@@ -10,6 +10,7 @@ module Jitsurei
     module Jitsurei.Incident,
     module Jitsurei.Inspection,
     module Jitsurei.OncallRoster,
+    module Jitsurei.Ops,
     module Jitsurei.OrderStream,
     module Jitsurei.Paging,
     module Jitsurei.ReadModels,
@@ -31,6 +32,7 @@ import Jitsurei.FulfillmentProcess
 import Jitsurei.Incident
 import Jitsurei.Inspection
 import Jitsurei.OncallRoster
+import Jitsurei.Ops
 import Jitsurei.OrderStream
 import Jitsurei.Paging
 import Jitsurei.ReadModels
