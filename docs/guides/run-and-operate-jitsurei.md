@@ -7,7 +7,7 @@ tags: [keiro, jitsurei, operations, runbook]
 generated:
   by: human:nadeem
   at: 2026-08-14T07:37:58Z
-timestamp: 2026-10-27T21:15:00Z
+timestamp: 2026-11-04T14:59:56Z
 ---
 
 # Run And Operate Jitsurei
@@ -219,7 +219,10 @@ runs a disposable demo through `scripts/verify-jitsurei.sh`; the interactive
 `JITSUREI_DATABASE` is preserved. Use a fresh `JITSUREI_DATABASE` when rehearsing
 a changed unreleased migration.
 
-For read-only inspection with the embedded hooks, start with:
+For read-only inspection with the embedded hooks, run `just jitsurei-ops-http`
+to serve the seeded database over HTTP; see
+[the HTTP hook-route walkthrough](serve-keiro-ops-over-http.md#see-the-hook-gated-routes-locally).
+For the embedded CLI, start with:
 
 ```bash
 cabal run jitsurei-demo -- ops aggregate types --json

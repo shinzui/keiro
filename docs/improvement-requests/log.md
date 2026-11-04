@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-04
+* **Completion**: IR-55 completed under ExecPlan 328: jitsurei-ops-http, Jitsurei.Ops, the host recipe, and the HTTP hook-route guide.
 * **Update**: IR-55 accepted under ExecPlan 328: jitsurei-ops-http serves jitsurei's full AppHooks through an exported keiro-ops-http host.
 * **Status audit**: Reconciled all 60 requests against owner plans, the current source,
   retained acceptance evidence and the 0.22/0.23 publication records. Existing local

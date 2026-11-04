@@ -2,7 +2,7 @@
 type: Runbook
 title: Serve Keiro Ops Over HTTP
 description: Mount bounded HTTP inspection and explicitly confirmed operator actions using the supported Keiro command tree.
-timestamp: 2026-10-27T16:27:49Z
+timestamp: 2026-11-04T14:59:56Z
 docId: DOC-30
 tags: [keiro, operations, http, inspection]
 generated:
@@ -18,7 +18,7 @@ authorization, or TLS. It binds loopback by default. The package is published wi
 0.22.0.0 cohort; use `nix develop` for the commands in this checkout.
 
 ```bash
-nix develop -c cabal run exe:keiro-ops-http -- --database-url "$DATABASE_URL" --port 9092
+nix develop -c cabal run keiro-ops-http:exe:keiro-ops-http -- --database-url "$DATABASE_URL" --port 9092
 curl -s http://127.0.0.1:9092/health
 curl -s http://127.0.0.1:9092/wf/list
 ```
@@ -110,7 +110,8 @@ human CLI table. It does not mean false or report pending timer counts.
 
 An explicitly mounted empty catalog (`Just Map.empty`) returns `{"items":[]}`.
 An absent hook (`Nothing`) omits the command and returns 400 `invalid_request`.
-The standalone database-only server has no application catalogs. Discovery
+The standalone database-only server has no application catalogs; use the
+[jitsurei host below](#see-the-hook-gated-routes-locally) to explore them. Discovery
 enumerates in-memory descriptors without journal, state, snapshot, or timer
 reads. HTTP still performs its normal fresh schema verification and applies
 admission, deadlines and response-byte limits on every admitted read.
@@ -151,6 +152,55 @@ It is a mutation despite its name: use POST and confirmation, or CLI `--force`.
 Without confirmation its preview only reports the supported depth observation.
 It cannot be used as an authoritative non-consuming poll. Raw queue browsing
 belongs to the owning PGMQ inspection surface.
+
+## See the hook-gated routes locally
+
+`jitsurei-ops-http` mounts the worked example's complete application hooks,
+including its aggregate and process-manager catalogs. From a Nix shell, seed
+its database, then start the host:
+
+```bash
+just jitsurei-all
+just jitsurei-ops-http
+```
+
+In a second terminal, request the catalogs and fulfillment instances:
+
+```bash
+curl -fsS http://127.0.0.1:9092/aggregate/types
+curl -fsS 'http://127.0.0.1:9092/pm/list?name=jitsurei-fulfillment&limit=5'
+```
+
+The aggregate `items` are named `incident` and `order`. The process-manager
+`items` include a `correlation_id` beginning with `demo-`. Run `read -r ID`,
+paste one complete correlation id from that response, and press Enter:
+
+```bash
+read -r ID
+curl -fsS "http://127.0.0.1:9092/aggregate/show?name=order&id=$ID"
+curl -fsS "http://127.0.0.1:9092/pm/show?name=jitsurei-fulfillment&correlation=$ID"
+```
+
+The aggregate response has `name: "order"`, `aggregate_id`, `stream_name`,
+`stream_version`, hydrated `state`, `state_version`, and `hydration`. The
+process-manager response has `name: "jitsurei-fulfillment"`, `correlation_id`,
+folded `state`, `last_reaction`, and a `pending_timers` page. The host uses the
+database selected by `JITSUREI_DATABASE` (default `jitsurei`) and remains
+read-only unless explicitly started with `--enable-mutations`.
+
+For a browser console on another origin or a different backend port, run:
+
+```bash
+just jitsurei-ops-http --port 9093 --allow-origin http://localhost:5173
+```
+
+The executable in `jitsurei/ops-http/app/Main.hs` calls
+`mainWithHooks (jitsureiOpsHooks Nothing)` using `Jitsurei.Ops`. An application
+binary can likewise call `Keiro.Ops.Http.mainWithHooks` with its own `AppHooks`
+to get the standalone host's flags, schema verification, origin policy,
+mutation gate, and WebSocket feeds. `Keiro.Ops.Http.Host.withHost` exposes the
+same lifecycle with explicit options and a continuation receiving the bound
+port; it releases the listener, feeds, and inspection connections on return.
 
 ## Schema agreement and errors
 

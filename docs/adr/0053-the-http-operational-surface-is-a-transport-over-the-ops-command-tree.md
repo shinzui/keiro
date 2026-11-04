@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: The HTTP operational surface is a transport over the ops command tree
 description: HTTP reuses the supported command grammar and handlers with bounded inspection work, schema agreement, and explicit mutation confirmation.
-timestamp: 2026-10-26T21:13:27Z
+timestamp: 2026-11-04T14:59:56Z
 docId: ADR-53
 status: Accepted
 date: 2026-10-20
@@ -23,7 +23,11 @@ that independently borrow another connection from the same pool.
 ## Decision
 
 `keiro-ops-http` exports an IO constructor returning a bare WAI application,
-a convenience Warp runner, and a database-only executable. Existing packages
+a convenience Warp runner, and a database-only executable. The executable is
+`mainWithHooks emptyAppHooks` over the exported `Keiro.Ops.Http.Host`;
+application binaries call the same function with their own hooks so flags,
+schema verification, origin policy, and the mutation gate share one implementation.
+Existing packages
 acquire no web dependency. It parses requests through `commandParser`, classifies
 through `isMutation`, and calls the owning ops runner. Mounted application hooks determine
 which commands exist. No command data is reconstructed by transport SQL.
@@ -118,6 +122,14 @@ socket terminates with a truncated response and health succeeds. Network excepti
 retain the same bracket-owned permit cleanup.
 
 ## Consequences
+
+`jitsurei-ops-http` is the worked example of an application host, sharing
+`Jitsurei.Ops.jitsureiOpsHooks` with the embedded CLI. Its executable and tests
+live in the separate internal package `jitsurei/ops-http`: the HTTP package's
+own tests and benchmark already depend on jitsurei, so a reverse HTTP dependency
+in the jitsurei package would make Cabal reject the package graph. `withHost` provides the
+same bracketed listener, feed, and inspection-store lifecycle to in-process
+consumers, including tests that bind port zero.
 
 New supported commands become routes without a transport edit. A classifier
 mistake is a safety defect in every front end and must be repaired in the owning

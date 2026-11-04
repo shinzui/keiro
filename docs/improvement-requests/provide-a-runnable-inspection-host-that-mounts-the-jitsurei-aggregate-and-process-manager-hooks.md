@@ -7,10 +7,18 @@ description: >-
   defines the inspectors. Ship an executable, or a flag on the compose example, that mounts
   jitsurei's AppHooks against the jitsurei database so UIs can be built and verified against
   real aggregate and process-manager responses.
-timestamp: 2026-11-04T14:40:00Z
+timestamp: 2026-11-04T14:46:41Z
 requestId: IR-55
 plan: docs/plans/328-serve-the-jitsurei-aggregate-and-process-manager-hooks-from-a-runnable-keiro-ops-http-host.md
-status: accepted
+status: completed
+completedAt: 2026-11-04T14:43:39Z
+resolution: >-
+  ExecPlan 328 ships jitsurei-ops-http, sharing the standalone HTTP lifecycle
+  through Keiro.Ops.Http.Host and the complete CLI hooks through Jitsurei.Ops.
+  The just jitsurei-ops-http recipe serves the demo database; the hook-route
+  section of docs/guides/serve-keiro-ops-over-http.md documents it. Real seeded
+  aggregate and fulfillment responses, flag parity, and in-process origin and
+  mutation checks establish the requested behavior.
 origin: mori://shinzui/keiro-ui
 reviews:
   - kind: model
@@ -33,7 +41,7 @@ reviews:
 
 ## Status
 
-Accepted; implemented by [ExecPlan 328](../plans/328-serve-the-jitsurei-aggregate-and-process-manager-hooks-from-a-runnable-keiro-ops-http-host.md).
+Completed by [ExecPlan 328](../plans/328-serve-the-jitsurei-aggregate-and-process-manager-hooks-from-a-runnable-keiro-ops-http-host.md).
 
 Originally proposed by the keiro runtime console initiative
 (`mori://shinzui/keiro-ui/masterplans/2-build-the-keiro-runtime-console`), filed from
@@ -49,13 +57,13 @@ command words when the host passes `AppHooks` with `aggregates` and `processMana
 `jitsurei/src/Jitsurei/Inspection.hs` already defines the inspectors for the example's
 aggregates and its fulfillment process manager.
 
-Neither runnable host mounts them: `keiro-ops-http/app/Main.hs` and
-`keiro-ops-http/example/Compose.hs` both use `emptyAppHooks`. The routes are therefore
+At filing, neither runnable host mounted them: `keiro-ops-http/app/Main.hs` and
+`keiro-ops-http/example/Compose.hs` both used `emptyAppHooks`. The routes were therefore
 reachable only inside `keiro-ops-http/test/Main.hs` (`seedInspection`). A UI built against
 keiro (the keiro runtime console, with its aggregate browser and process-manager timeline)
-cannot record a real `/aggregate/show` or `/pm/show` response, so its fixtures are derived
+could not record a real `/aggregate/show` or `/pm/show` response, so its fixtures were derived
 by hand from `Keiro.Inspection.Aggregate` and `Keiro.ProcessManager.Inspect`, and drift in
-those encoders goes unnoticed until someone mounts the hooks.
+those encoders could go unnoticed until someone mounted the hooks.
 
 ## Requested Change
 

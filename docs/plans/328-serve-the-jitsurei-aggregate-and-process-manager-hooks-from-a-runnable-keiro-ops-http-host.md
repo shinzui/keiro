@@ -79,7 +79,7 @@ then re-recorded).
 - [x] Milestone 1 (2026-11-04): exported and re-exported `Keiro.Ops.Http.Host`; the standalone executable calls `mainWithHooks emptyAppHooks`. Baseline help is byte-identical (`diff` passed), and the unchanged HTTP suite passed 53 examples with zero failures. IR-55 is accepted and linked; strict validation passed for all 60 requests.
 - [x] Milestone 2 (2026-11-04): `Jitsurei.Ops` shares all six hooks between the CLI and the new executable in the internal `jitsurei/ops-http` package. The recipe seeded a fresh `keiro_ir55_acceptance_20261104_328` database and served on port 19092. The four hook requests returned 200: the order was `packed` with state/stream version 3 and the fulfillment instance was visible; mutation POST returned 403. Help flags match after normalizing program name and its continuation indentation; the embedded CLI still lists `aggregate` and `pm`.
 - [x] Milestone 3 (2026-11-04): `jitsurei-ops-http-test` passed all three in-process examples using ephemeral databases, comparing aggregate/manager handler JSON and checking health, disabled mutations, exact origins, preview, and unchanged complete stream metadata. Added the connection-aware fixture helper and registered the suite in `just verify`. The existing jitsurei suite passed 25 examples and `keiro-test` passed 786 examples with zero failures.
-- [ ] Milestone 4: `docs/guides/serve-keiro-ops-over-http.md` names the host as the way to see hook-gated routes locally, the jitsurei runbook and both changelogs mention it, ADR-53 records the exported host, IR-55 is `completed` with a resolution, the strict OKF bundles validate, and `just verify` passes in the Nix shell on the final candidate.
+- [x] Milestone 4 (2026-11-04): updated both runbooks, all three affected changelogs, and ADR-53 (including the package-cycle constraint); completed IR-55 with a resolution and bundle log. Final strict validation passed for 32 guide concepts, 58 ADRs, and 60 requests. `nix develop -c just verify` exited 0 on the implemented candidate, including all suites, the new host suite, disposable demo run, symbolic tests (Z3 4.16.0), mutation proofs, and documentation/policy gates. The build with tests and benchmarks enabled also passed.
 
 
 ## Surprises & Discoveries
@@ -178,7 +178,25 @@ then re-recorded).
 ## Outcomes & Retrospective
 
 
-(To be filled during and after implementation.)
+All four milestones are complete. Developers can seed the example with
+`just jitsurei-all`, then run `just jitsurei-ops-http` to inspect real aggregates
+and fulfillment instances over HTTP with the standalone host's flags and gates.
+The CLI and HTTP executable share the complete `Jitsurei.Ops.jitsureiOpsHooks`;
+application binaries can reuse the exported `Keiro.Ops.Http.Host` lifecycle.
+
+The only architectural adjustment was placing the executable and its integration
+suite in the internal `jitsurei/ops-http` package. Cabal's package graph rejects
+putting them directly in jitsurei because the HTTP package already uses jitsurei
+in its tests and benchmark. This preserves those existing consumers unchanged.
+ADR-53 now records the shared host boundary and this lasting package constraint;
+no new ADR was needed. Runtime, migration, and wire implementations were untouched.
+
+Acceptance was observed against a fresh demo database on port 19092: `incident`
+and `order` discovery, a `packed` order with state/stream version 3, its fulfillment
+instance and pending-timer page, and 403 for a default mutation. The new ephemeral
+host suite additionally proves handler JSON agreement and complete stream-metadata
+preservation after origin refusal and allowed preview. The full Nix verification
+passed; there is no remaining implementation work.
 
 
 ## Context and Orientation

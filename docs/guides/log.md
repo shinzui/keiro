@@ -1,5 +1,8 @@
 # Keiro Guides Log
 
+## 2026-11-04
+* **Update**: DOC-30, DOC-22: document jitsurei-ops-http and the shared application host (Plan 328).
+
 ## 2026-10-27
 * **Update**: Refresh the 0.22 guide entry points, Nix-shell commands, runnable example coverage, and current guarded-command publication status; label the 0.15 record/edition guides as historical migrations.
 * **Update**: Correct the queue cohort and partitioned polling cutover, qualify framework SQL names, distinguish candidate language status from package publication, and document published owner inspection applications.
