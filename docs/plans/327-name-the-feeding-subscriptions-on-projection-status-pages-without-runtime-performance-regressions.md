@@ -71,12 +71,12 @@ unchanged paths are unchanged, and the existing read-model benchmark guard.
 
 - [x] Milestone 1 (2026-11-04; focused core 9 examples, ops inline authority assertions, byte comparison of preserved definitions, strict IR bundle validation): The library page read returns each frozen v1 row together with its registered feeding subscriptions, proven by focused core tests for a two-subscription checkpoint group, an inline-only append group, and an unmanaged group, with the complete-list and lookup SQL byte-identical to the comparison baseline. IR-57 is linked to this plan as `accepted` with its request text corrected.
 - [x] Milestone 2 (2026-11-04; ops 56, jitsurei 28, HTTP 55 examples, all passing; real executable CLI/HTTP items agree): `projection status --json`, `GET /projection/status`, and `projection_groups` feed items carry `feeding_subscriptions` with every existing key and value unchanged; the jitsurei group reports `["jitsurei-order-audit-subscription"]` and its legacy group reports `[]`, over the library, the embedded CLI, and the real HTTP server.
-- [ ] Milestone 3: Retained paired evidence shows the candidate page statement keeps its per-key plan with one primary-key probe per page row and a paired median server execution time within 1.10x of the pre-change binary at 10k and 100k groups for first and deep pages, the matched writer-interference intervals pass, the read-model guard passes without baseline movement, and the writer and schema paths are shown untouched.
+- [ ] Milestone 3: Retained paired evidence shows the candidate page statement keeps its per-key plan with at most one primary-key probe per checkpoint row, skipping proven-empty append/unmanaged arrays and a paired median server execution time within 1.10x of the pre-change binary at 10k and 100k groups for first and deep pages, the matched writer-interference intervals pass, the read-model guard passes without baseline movement, and the writer and schema paths are shown untouched.
 - [ ] Milestone 4: User documentation, guides, changelogs, and ADR-35 describe the field; IR-57 is `completed` with a resolution; the strict OKF bundles validate; and `just verify` passes in the Nix shell on the final candidate.
 
 
 Implementation checkpoint (2026-11-04): Runtime implementation is committed as
-`3e9fbacd`; the fixed writer protocol is committed as `04fe3e68`. Full
+`3e9fbacd`; the fixed writer protocol is committed as `04fe3e68`. Before the guarded-query optimization, full
 `nix develop -c just verify` passed, including all runtime/DSL suites, mutation and
 policy checks, strict governed bundles, and 41 migration examples. The retained
 `verify.log` records that run. Milestones 3 and 4 remain open: no paired timings or
@@ -120,6 +120,13 @@ evidence. No earlier manager-discovery waiver supplies projection acceptance.
 
 ## Surprises & Discoveries
 
+- 2026-11-04 (implementation): A loaded diagnostic of candidate `3e9fbacd`
+  exceeded the 1.10 SQL ceiling for 10k custom deep pages (1.139823) and 100k
+  generic deep pages (1.104096). Other repositories were compiling, so the cohort
+  is not quiet-machine acceptance evidence; all samples and process observations
+  are retained under the evidence folder's `loaded-diagnostic-v1/`. The extra
+  per-row cursor lookup remains a likely source of work. Query prototypes are
+  investigating cheaper bounded reads before rerunning the unchanged numeric gate.
 - 2026-11-04 (implementation): The ordinary added left join uses a merge join under
   forced generic plans for both 10k and 100k first pages: the added `cursors` index scan
   has no index condition and runs once. The fenced lateral alternative is required
@@ -196,12 +203,23 @@ evidence. No earlier manager-discovery waiver supplies projection acceptance.
   rejects that deferral as sufficient evidence for the broader runtime guarantee.
   Rationale: The release gate's six benchmark guards do not observe the page read, so (a) is
   the only measurement of the changed path, exactly as plan 325 concluded for its new read. The
-  change adds one primary-key probe per page row (at most 501 rows) to a read that already
+  change adds at most one primary-key probe per checkpoint page row (at most 501 rows) to a read that already
   performs a correlated lookup per row; no new route, polling cadence, or writer work is
   introduced, but the extra array changes database result transfer, decoding, JSON encoding, and
   feed comparisons. Unchanged writer SQL does not establish unchanged shared-resource cost. If (a)
   exceeds its ceiling, the cause must be attributed and the matched interference protocol of
   plan 323 becomes required before acceptance; ADR-58 forbids moving a baseline to absorb it.
+  Date: 2026-11-04
+- Decision: Guard the added subscription-name probe with the frozen row's
+  `serving_position_basis = 'checkpoint'`. The existing private-table constraint proves
+  append/unmanaged arrays are empty; no migration or new assumption is needed. Retain
+  the lateral OFFSET 0 fence. Refine the structural gate from one extra probe per SQL
+  row to at most one per checkpoint row (10 probes in these 101-row fixtures), while
+  retaining the 1.10 timing ceiling and all runtime gates.
+  Rationale: The all-row lookup exceeded the SQL ceiling in a loaded diagnostic. Local
+  prototypes showed that a scalar form, changed fence placement, and a batched range
+  read did not consistently reduce cost. Skipping provably unnecessary work reduced
+  the added index scans from 101 to 10 while preserving exact field semantics.
   Date: 2026-11-04
 - Decision: Require a projection-specific matched idle/poll/feed writer cohort in addition
   to the SQL ceiling, using the fixed protocol in Progress. Runtime acceptance rejects
@@ -458,7 +476,7 @@ pageProjectionGroupStatusesStmt after =
         <> " FROM inspection_groups page CROSS JOIN LATERAL ("
         <> statusSelect
         <> " WHERE group_id = page.group_id OFFSET 0) status"
-        <> " LEFT JOIN keiro.keiro_projection_group_cursors cursors ON cursors.group_id = page.group_id"
+        <> " LEFT JOIN LATERAL (SELECT subscription_names FROM keiro.keiro_projection_group_cursors WHERE group_id = page.group_id AND status.serving_position_basis = 'checkpoint' OFFSET 0) cursors ON true"
         <> " ORDER BY status.group_id"
     )
     (contrazip2 (E.param (E.nullable E.text)) (E.param (E.nonNullable E.int8)))
@@ -471,14 +489,14 @@ projectionGroupStatusRowDecoder =
     <*> D.column (D.nonNullable (D.listArray (D.nonNullable D.text)))
 ```
 
-The join key is `page.group_id`, the materialized page key. This ordinary left join
-does not guarantee a particular PostgreSQL plan. Before propagating the row type to the
-ops surfaces, run the Milestone 3 driver on this query under both plan modes. If it scans
-the cursor fleet, replace only the added join with a correlated
-`LEFT JOIN LATERAL (SELECT subscription_names FROM keiro.keiro_projection_group_cursors
-WHERE group_id = page.group_id OFFSET 0) cursors ON true`, then remeasure. Keep the
-existing status lookup fence. Neither SQL spelling establishes acceptance without the
-retained plans and timings. Do not add
+The join key is `page.group_id`, the materialized page key. The implementation
+prototype rejected the ordinary left join because generic first-page plans used an
+unparameterized merge join. The final added lookup is fenced with OFFSET 0 and guarded
+by `status.serving_position_basis = 'checkpoint'`. Migration 0026's existing check
+constraint requires empty arrays for append/unmanaged authority; the frozen view exposes
+that same basis, so skipping those private probes preserves the stored value exactly.
+Keep the existing status lookup fence too. Plan and timing evidence remain required;
+the fence and guard do not themselves establish acceptance. Do not add
 `coalesce`, sorting, or de-duplication beyond the `coalesce` to an empty array: the field
 reports the authority row as stored. Update the continuation to read the last item's
 `status.groupId`. Export `ProjectionGroupStatusRow (..)` from the module and from
@@ -586,8 +604,12 @@ fixture; the same-fixture paired ratio is the quantitative acceptance criterion.
 
 Acceptance has four parts. First, plan shape: in every candidate plan the cursors relation
 appears as an `Index Scan` or `Index Only Scan` using `keiro_projection_group_cursors_pkey`
-under a `Nested Loop`, with its index condition bound to the page key and actual loops equal to the
-number of SQL rows selected, including look-ahead (101 for these 100-item fixtures);
+under a `Nested Loop`, with its index condition bound to the page key. An explicit one-time filter on the
+frozen status basis skips append/unmanaged rows: their arrays are empty by the existing
+private table constraint. Actual added index-scan loops equal the checkpoint keys selected,
+including look-ahead (10 in these 101-row SQL windows with a ten-percent checkpoint stripe);
+the added Result filter runs for the 101 SQL rows. The view's own cursor probes remain
+unchanged. There must be no extra private-table probe for proven-empty arrays;
 identify the newly added lookup by its SQL alias, since the frozen view also reads this
 relation. The materialized page must feed the outer subtree, not necessarily its immediate
 child. A correctly empty or final page may have fewer probes; a `Seq Scan` or `Hash Join` over `keiro_projection_group_cursors` at the fleet level
@@ -955,3 +977,12 @@ lateral lookup after observing a generic-plan merge join, and added the projecti
 writer cohort, same-source controls and explicit confidence-interval refusal rules before
 sampling. Corrected the embedded CLI proof to pass its database URL explicitly. Behavioral,
 contract and full repository verification pass; timing acceptance remains open.
+
+
+Optimization revision (2026-11-04): The rejected loaded diagnostic motivated a guarded
+metadata lookup. Use the existing basis/array constraint to skip append and unmanaged
+rows, retain the per-key lateral fence, and validate 10 added probes for the fixture's
+10 checkpoint keys rather than performing 101 unnecessary probes. Numeric performance
+ceilings, source/schema compatibility and runtime acceptance are unchanged. The earlier
+full verification log is evidence for the pre-optimization candidate; validate the final
+query before completion.

@@ -117,6 +117,8 @@ validateProjectionStatusRequest request
 -- lookups through the frozen owner relation. The OFFSET 0 boundary preserves
 -- parameterized lookups instead of flattening the view into fleet-wide joins.
 -- A group's own model/checkpoint cardinality remains part of its read cost.
+-- The authority constraint proves non-checkpoint arrays are empty, so only
+-- checkpoint rows need the additional subscription-name probe.
 listProjectionGroupStatusesPage :: (Store :> es) => ProjectionStatusPageRequest -> Eff es (Either ProjectionStatusReadError ProjectionStatusPage)
 listProjectionGroupStatusesPage request = case validateProjectionStatusRequest request of
   Left err -> pure (Left err)
@@ -145,7 +147,7 @@ pageProjectionGroupStatusesStmt after =
         <> " ORDER BY group_id LIMIT $2) SELECT status.*, coalesce(cursors.subscription_names, ARRAY[]::text[]) AS feeding_subscriptions FROM inspection_groups page CROSS JOIN LATERAL ("
         <> statusSelect
         <> " WHERE group_id = page.group_id OFFSET 0) status"
-        <> " LEFT JOIN LATERAL (SELECT subscription_names FROM keiro.keiro_projection_group_cursors WHERE group_id = page.group_id OFFSET 0) cursors ON true"
+        <> " LEFT JOIN LATERAL (SELECT subscription_names FROM keiro.keiro_projection_group_cursors WHERE group_id = page.group_id AND status.serving_position_basis = 'checkpoint' OFFSET 0) cursors ON true"
         <> " ORDER BY status.group_id"
     )
     (contrazip2 (E.param (E.nullable E.text)) (E.param (E.nonNullable E.int8)))
