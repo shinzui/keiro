@@ -1,0 +1,34 @@
+{
+  "baseline_commit": "d64849f19d2d922a5373b121d13d0fac5bc9132f",
+  "candidate_commit": "0872843f",
+  "binaries": {
+    "baseline-driver": {
+      "path": "/Users/shinzui/Keikaku/bokuno/keiro/.dev/plan327/baseline-driver",
+      "sha256": "df56f82bd22f3d08da658ec62f85f0a7b985f5b0519c1d6bb42d1d1473834bbd"
+    },
+    "candidate-driver": {
+      "path": "/Users/shinzui/Keikaku/bokuno/keiro/.dev/plan327/candidate-driver-guarded",
+      "sha256": "4966d114f2a5293b816398d8ca845517303f4fb2ee7b3ba869e4b1d0aef7b107"
+    },
+    "baseline-interference": {
+      "path": "/Users/shinzui/Keikaku/bokuno/keiro/.dev/plan327/baseline-interference",
+      "sha256": "80307f08f58f85125ed49f208842a8cc2b5c5aede30a87495c7b9ae37e723126"
+    },
+    "candidate-interference": {
+      "path": "/Users/shinzui/Keikaku/bokuno/keiro/.dev/plan327/candidate-interference-guarded",
+      "sha256": "0e30bb8145f3919bc2842c508ef8e8072ffb482127a01980b5b9cc179523b00f"
+    }
+  },
+  "machine": "macOS-27.2-arm64-arm-64bit-Mach-O",
+  "architecture": "arm64",
+  "ghc": "The Glorious Glasgow Haskell Compilation System, version 9.12.4",
+  "postgres": "postgres (PostgreSQL) 18.6",
+  "external_dependency_versions_matched": 311,
+  "library_optimization": "O1",
+  "sql_driver_flags": "-O2 -threaded -XGHC2024 -package keiro -package keiro-test-support",
+  "interference_flags": "-O1 -threaded -rtsopts -XGHC2024 -XBlockArguments -XLambdaCase -XOverloadedStrings -package keiro -package keiro-ops -package keiro-ops-http -package jitsurei -package keiro-test-support",
+  "interference_rts": "-N2 -T",
+  "sql_driver_rts": "default single capability",
+  "protocol_commit": "04fe3e686403db65cdbe0b71d9d37eaf9cc84682",
+  "external_package_unit_identities_matched": 311
+}

@@ -1,0 +1,5 @@
+# Artifacts are checksummed; preserve their exact bytes across checkouts.
+* -text
+# Captured transcripts and measured-source snapshots retain producer whitespace.
+*.log -whitespace
+*.txt -whitespace

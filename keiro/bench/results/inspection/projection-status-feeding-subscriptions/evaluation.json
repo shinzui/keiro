@@ -1,0 +1,18 @@
+{
+  "candidate_commit": "00fafcd47798e87d0b9c03a71a0eb385ce058471",
+  "correctness": "full Nix just verify passed",
+  "read_model_guard": "passed; committed baseline unchanged",
+  "sql_numeric_pass": true,
+  "sql_maximum_paired_median_ratio": 1.0813743218806509,
+  "sql_conditions": "qualified: background activity recorded",
+  "writer_trials": 40,
+  "writer_operations": 80000,
+  "offered_load_and_cleanup_checks_passed": true,
+  "statistically_supported_final_regressions": 0,
+  "original_runtime_precision_pass": false,
+  "observed_build_test_snapshots": 133,
+  "process_snapshots": 446,
+  "benchmark_database_mode": "private durable ephemeral PostgreSQL clusters",
+  "python": "3.14.7",
+  "acceptance": "open: quiet conditions and 1% latency precision not established"
+}

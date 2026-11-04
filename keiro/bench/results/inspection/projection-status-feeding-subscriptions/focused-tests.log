@@ -1,0 +1,329 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Resolving dependencies...
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.23.0.0 (lib) (configuration changed)
+ - keiro-migrations-0.23.0.0 (lib) (configuration changed)
+ - keiro-test-support-0.23.0.0 (lib) (configuration changed)
+ - keiro-0.23.0.0 (test:keiro-test) (configuration changed)
+ - keiro-0.23.0.0 (test:keiro-retention) (configuration changed)
+Configuring library for keiro-0.23.0.0...
+Configuring library for keiro-migrations-0.23.0.0...
+Preprocessing library for keiro-0.23.0.0...
+Building library for keiro-0.23.0.0...
+Preprocessing library for keiro-migrations-0.23.0.0...
+Building library for keiro-migrations-0.23.0.0...
+[1 of 5] Compiling Keiro.Migrations.Internal.Definition ( src/Keiro/Migrations/Internal/Definition.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.23.0.0/build/Keiro/Migrations/Internal/Definition.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.23.0.0/build/Keiro/Migrations/Internal/Definition.dyn_o ) [Impure plugin forced recompilation]
+Configuring library for keiro-test-support-0.23.0.0...
+Preprocessing library for keiro-test-support-0.23.0.0...
+Building library for keiro-test-support-0.23.0.0...
+Configuring test suite 'keiro-retention' for keiro-0.23.0.0...
+Configuring test suite 'keiro-test' for keiro-0.23.0.0...
+Preprocessing test suite 'keiro-retention' for keiro-0.23.0.0...
+Building test suite 'keiro-retention' for keiro-0.23.0.0...
+Preprocessing test suite 'keiro-test' for keiro-0.23.0.0...
+Building test suite 'keiro-test' for keiro-0.23.0.0...
+[5 of 5] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.23.0.0/t/keiro-retention/build/keiro-retention/keiro-retention [Library changed]
+[24 of 24] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.23.0.0/t/keiro-test/build/keiro-test/keiro-test [Objects changed]
+Resolving dependencies...
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.23.0.0 (lib) (configuration changed)
+ - keiro-migrations-0.23.0.0 (lib) (configuration changed)
+ - keiro-test-support-0.23.0.0 (lib) (configuration changed)
+ - keiro-0.23.0.0 (test:keiro-test) (configuration changed)
+Configuring library for keiro-migrations-0.23.0.0...
+Configuring library for keiro-0.23.0.0...
+Preprocessing library for keiro-0.23.0.0...
+Preprocessing library for keiro-migrations-0.23.0.0...
+Building library for keiro-migrations-0.23.0.0...
+Building library for keiro-0.23.0.0...
+[1 of 5] Compiling Keiro.Migrations.Internal.Definition ( src/Keiro/Migrations/Internal/Definition.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.23.0.0/build/Keiro/Migrations/Internal/Definition.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.23.0.0/build/Keiro/Migrations/Internal/Definition.dyn_o ) [Impure plugin forced recompilation]
+Configuring library for keiro-test-support-0.23.0.0...
+Preprocessing library for keiro-test-support-0.23.0.0...
+Building library for keiro-test-support-0.23.0.0...
+Configuring test suite 'keiro-test' for keiro-0.23.0.0...
+Preprocessing test suite 'keiro-test' for keiro-0.23.0.0...
+Building test suite 'keiro-test' for keiro-0.23.0.0...
+Running 1 test suites...
+Test suite keiro-test: RUNNING...
+
+catalog rebuild groups
+  registers a validated fleet atomically and refuses group-slice drift [✔]
+  publishes conservative checkpoint status without reading private Kiroku storage [✔]
+  keeps adversarial checkpoint inventory and large status listings fail-safe [✔]
+  registers an additive catalog without disturbing the existing group slice [✔]
+  prepares a mixed preserve-parent/clear-child group and derives reset state [✔]
+  condemns missing subscription names and rolls back targets, fences, dedup, and matched member resets [✔]
+  clears a foreign-key parent and child through one multi-table truncate [✔]
+  rolls preparation back when an undeclared foreign key blocks truncate [✔]
+  waits for an in-flight async apply before preparing the group [✔]
+
+Finished in 2.4849 seconds
+9 examples, 0 failures
+Test suite keiro-test: PASS
+Test suite logged to:
+/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.23.0.0/t/keiro-test/test/keiro-0.23.0.0-keiro-test.log
+1 of 1 test suites (1 of 1 test cases) passed.
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-pgmq-0.23.0.0 (lib) (configuration changed)
+ - keiro-ops-0.23.0.0 (lib) (configuration changed)
+ - keiro-ops-http-0.23.0.0 (lib) (configuration changed)
+ - keiro-ops-0.23.0.0 (exe:keiro-ops) (configuration changed)
+ - jitsurei-0.1.0.0 (lib) (configuration changed)
+ - keiro-ops-0.23.0.0 (test:keiro-ops-test) (configuration changed)
+ - keiro-ops-http-0.23.0.0 (test:keiro-ops-http-test) (configuration changed)
+ - jitsurei-0.1.0.0 (test:jitsurei-test) (configuration changed)
+Configuring library for keiro-pgmq-0.23.0.0...
+Preprocessing library for keiro-pgmq-0.23.0.0...
+Building library for keiro-pgmq-0.23.0.0...
+Configuring library for keiro-ops-0.23.0.0...
+Preprocessing library for keiro-ops-0.23.0.0...
+Building library for keiro-ops-0.23.0.0...
+Configuring executable 'keiro-ops' for keiro-ops-0.23.0.0...
+Configuring library for jitsurei-0.1.0.0...
+Configuring library for keiro-ops-http-0.23.0.0...
+Preprocessing executable 'keiro-ops' for keiro-ops-0.23.0.0...
+Building executable 'keiro-ops' for keiro-ops-0.23.0.0...
+Preprocessing library for jitsurei-0.1.0.0...
+Preprocessing library for keiro-ops-http-0.23.0.0...
+Building library for keiro-ops-http-0.23.0.0...
+Building library for jitsurei-0.1.0.0...
+Configuring test suite 'keiro-ops-test' for keiro-ops-0.23.0.0...
+Configuring test suite 'jitsurei-test' for jitsurei-0.1.0.0...
+Configuring test suite 'keiro-ops-http-test' for keiro-ops-http-0.23.0.0...
+Preprocessing test suite 'keiro-ops-test' for keiro-ops-0.23.0.0...
+Building test suite 'keiro-ops-test' for keiro-ops-0.23.0.0...
+Preprocessing test suite 'jitsurei-test' for jitsurei-0.1.0.0...
+Building test suite 'jitsurei-test' for jitsurei-0.1.0.0...
+Preprocessing test suite 'keiro-ops-http-test' for keiro-ops-http-0.23.0.0...
+Building test suite 'keiro-ops-http-test' for keiro-ops-http-0.23.0.0...
+Running 1 test suites...
+Test suite keiro-ops-test: RUNNING...
+Running 1 test suites...
+Test suite keiro-ops-http-test: RUNNING...
+Running 1 test suites...
+Test suite jitsurei-test: RUNNING...
+
+reaction process-manager commands
+  lists metadata with an unusable store and fully renders both formats [✔]
+  mounts a handwritten reaction inspector through pm show and pm list [✔]
+embedded command tree
+  omits code-dependent commands from the standalone tree [✔]
+  mounts every code-dependent command from typed application hooks [✔]
+  parses a complete versioned start and rejects malformed generation identities [✔]
+numeric option rejection
+  rejects non-finite durations on every duration flag [✔]
+  rejects non-positive and wrapped integer options at parse time [✔]
+  shares non-negative admission across global positions, stream versions, and generations [✔]
+targeted stream repair command
+  requires a positive event admission limit [✔]
+  classifies the command as mutating and renders a stable typed refusal [✔]
+
+Jitsurei codec evolution
+  upcasts a v1 OrderPlaced payload into the current event shape [✔]
+Jitsurei command cycle
+  keeps every typed refusal code distinct and stable [✔]
+catalog rebuild adoption
+
+Compose
+  strips exactly one raw segment and preserves route spelling, queries and streaming bodies [✔]
+  validates mounts, lists them in order, refuses absent surfaces and applies CORS once [✔]
+  places and pays for an order in stream order [✔]
+  previews exact slice changes and adopts them only with force [✔]
+  rejects shipping an unpaid order as a domain outcome [✔]
+Jitsurei replay audit
+  annotates preview scope and warns about out-of-scope drift [✔]
+replay-audit category=order mode=targeted selected=1 skipped=0 failures=0 divergences=0 checkpoint=GlobalPosition 1
+replay-audit category=esc mode=targeted selected=0 skipped=1 failures=0 divergences=0 checkpoint=none
+replay-audit category=order mode=full selected=1 skipped=0 failures=0 divergences=0 checkpoint=GlobalPosition 1
+replay-audit category=esc mode=full selected=1 skipped=0 failures=0 divergences=0 checkpoint=GlobalPosition 2
+  skips unaffected targets and full-replays Order plus the escalation saga [✔]
+Jitsurei durable workflow
+  refuses an adoption preview for a group absent from the catalog [✔]
+  step reserve-inventory ran (reservation RES-workflow-regression)
+  step charge ran (charge CHG-workflow-regression for pay_regression)
+  child step create-shipment ran (tracking TRK-workflow-regression-ship)
+  publishes and signals the allocated awakeable, then completes without replaying publication [✔]
+Jitsurei read model
+  recovers a pre-canonical stranded run through preview and force [✔]
+durable checkpoint inventory
+  mounts both read-only commands in the standalone tree without a lag alias [✔]
+  returns the captured store position with empty durable rows and null summaries [✔]
+  names the durable subscriptions feeding the reporting group [✔]
+  lists stopped-worker rows in name/member order and derives the member-aware floor [✔]
+  updates and queries the inline order summary in the append transaction [✔]
+  mounts real Keiro and Kiroku applications and both socket protocols on one port [✔]
+shared feed driver
+  diverges store_position from visible_store_head after a hard delete [✔]
+selectConnectionString
+  prefers the explicit option, then the Keiro variable, then DATABASE_URL [✔]
+  uses an empty libpq string for standard PG environment fallbacks [✔]
+parseDuration
+  rejects every non-finite spelling Read Double accepts [✔]
+  rejects finite durations the timestamptz wire encoding cannot represent [✔]
+  still rejects lowercase non-finite spellings, negatives, and junk [✔]
+  accepts integers, decimals, scientific notation, and suffixes unchanged [✔]
+renderHuman
+  aligns columns without changing the structured JSON value [✔]
+keiro-ops numeric argument rejection
+  returns all domain decisions while projecting only accepted events [✔]
+  diffs fallback truth, extra-only changes, and recovery without duplicate reads per subscriber [✔]
+  signals overflow before retained deltas and resubscribes from the current sequence [✔]
+  drives live, async, preview, and mixed-policy rebuild paths from one catalog [✔]
+  revision delivery routing preserves inline and async ownership across an incompatible V1/V2 rebuild [✔]
+Jitsurei snapshots
+  exposes nonempty current and stored registers through library and embedded ops [✔]
+  writes a snapshot after the configured threshold [✔]
+Jitsurei process manager
+  dispatches a packing command once for a payment event [✔]
+  updates the target inline read model when fulfillment dispatches packing [✔]
+Jitsurei timers
+  claims a due timer and marks it fired [✔]
+Jitsurei agent-qualification router
+  reports unknown feeding authority for legacy read models [✔]
+  routes a transaction to every chapter resolved from its areas, idempotently [✔]
+Jitsurei incident aggregate
+  raises, acknowledges, and rejects a post-acknowledgement escalation [✔]
+Jitsurei paging
+  refuses a NaN duration before any preview or database contact [✔]
+keiro-ops executable
+  sends then acknowledges a page [✔]
+  fans IncidentRaised out to one page per rostered responder, idempotently [✔]
+Jitsurei escalation process manager
+  advances the saga and schedules an escalation timer on IncidentRaised [✔]
+  dispatches AcknowledgeIncident on PageAcknowledged, idempotently [✔]
+  escalates an unacknowledged incident when the timer fires [✔]
+  is a benign no-op when the incident was already acknowledged [✔]
+Jitsurei shipment notices
+  maps OrderShipped to a notice and ignores every other order event [✔]
+  drains an enqueued notice into the notices table, idempotently [✔]
+  dead-letters a notice that can never be sent [✔]
+  emits parseable JSON and refuses a mutation after schema drift [✔]
+  preserves per-order order and drains every grouped notice [✔]
+
+Finished in 4.6324 seconds
+28 examples, 0 failures
+Test suite jitsurei-test: PASS
+Test suite logged to:
+/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/t/jitsurei-test/test/jitsurei-0.1.0.0-jitsurei-test.log
+1 of 1 test suites (1 of 1 test cases) passed.
+  does not treat a registered binding view as schema drift [✔]
+workflow handlers
+  previews and runs one bounded application-registry resume pass [✔]
+keiro resume worker: no registry entry for workflow retired-approval (id wf-resume-unregistered); skipping
+  reports advanced work and the exact unregistered workflow names [✔]
+  classifies a due sleep with no timer worker as blocked, not advanced [✔]
+  lists and decodes a real journal without mutating it [✔]
+  applies exact name/status filters and keyset cursors [✔]
+  previews cancellation without mutation, then records it with force [✔]
+  retains fresh timer presentation without broadcasting a clock-only delta [✔]
+feed registry
+  previews and applies failed-workflow resurrection and lease release [✔]
+  previews and signals an awakeable through the supported library path [✔]
+  reserves initialization, joins cancellation, shares a ready view, and drops the idle wake cursor [✔]
+  previews the exact GC candidates before deleting them [✔]
+timer handlers
+  refuses a retiring view distinctly until blocked cleanup has joined [✔]
+  renders pending timer pages with reusable cursors and due time [✔]
+  rechecks schema for each active view and recovers only after drift is removed [✔]
+inspection sockets
+  previews and dispatches one bounded due-timer pass through the mounted hook [✔]
+  lists, previews, requeues, and dead-letters a stuck timer [✔]
+  shares workflow truth, retains a subscription on refusal, and releases each sent frame [✔]
+  previews and cancels a scheduled timer [✔]
+outbox handlers
+  lists backlog and previews stale recovery without mutation [✔]
+  filters and renders rejected rows with bounded audit fields [✔]
+  surfaces dispatch dead letters through the supported API [✔]
+inbox handlers
+  previews poison marking and GC without bypassing inbox APIs [✔]
+pgmq handlers
+  previews and redrives a DLQ entry, which is then consumable [✔]
+  refuses purge after inspection and leaves the DLQ unchanged [✔]
+  archives an inspected entry by id while it remains hidden [✔]
+projection handlers
+  renders bounded projection status through the owning public relation [✔]
+  prunes only the named dedup rows [✔]
+shard handlers
+  previews exact buckets and relinquishes them for another worker [✔]
+snapshot handlers
+  preserves custom incompatible payloads and returns null for missing snapshots [✔]
+  refuses uncovered truncation, passes matching coverage, and deletes advisories [✔]
+stream handlers
+  reads causation and applies reversible lifecycle operations [✔]
+  previews and applies truncate markers and permanent deletion [✔]
+
+Finished in 10.8192 seconds
+56 examples, 0 failures
+Test suite keiro-ops-test: PASS
+Test suite logged to:
+/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.23.0.0/t/keiro-ops-test/test/keiro-ops-0.23.0.0-keiro-ops-test.log
+1 of 1 test suites (1 of 1 test cases) passed.
+  streams timer fallback truth and projection extra-only changes using the poll encoders [✔]
+  checks upgrade origin, capacity and schema policy and closes active sockets [✔]
+live view parameters
+  canonicalizes equivalent status sets and bounds subscription inputs [✔]
+  compares timer state independently of presentation countdowns [✔]
+request translation
+  preserves path and repeated option order, converting snake_case [✔]
+  translates flags using only the selected command grammar [✔]
+  rejects global options, malformed keys, empty and option-like segments [✔]
+  uses the real parser including the legacy two-value after option [✔]
+budget
+  rejects excess work immediately and releases a cancelled permit after cleanup [✔]
+  joins timed-out work and keeps the permit reusable [✔]
+  bounds encoding and rejects invalid host limits [✔]
+raw snapshot routes
+  returns null for absent rows, preserves arbitrary incompatible JSON and reads without mutations [✔]
+  bounds stored payloads and releases the only admission slot after oversized encoding [✔]
+mounted process-manager discovery
+  serves Jitsurei metadata without journal instances and agrees with the parsed CLI [✔]
+  distinguishes absent and empty hooks and bounds large catalogs [✔]
+  keeps fresh schema refusal for metadata reads [✔]
+workflow page routes
+  rejects an unrepresentable outgoing cursor instead of returning an unusable token [✔]
+  returns wide workflow keys within the continuation and response caps [✔]
+  pages supported reads through the same parser and maps typed failures [✔]
+fresh header presentation reuse
+  preserves canonical bytes and observes edits, deletion and recreation [✔]
+  enforces byte and entry limits through churn, oversized changes and misses [✔]
+  fails oversized changes explicitly and reapplies schema policy to warm headers [✔]
+HTTP boundary
+  shares the supported read/write classification across every mounted domain [✔]
+  renders a real preview and applies the confirmed operation only [✔]
+  requires preview and confirmation for DLQ reads that reserve messages [✔]
+  rejects invalid requests and has structured errors [✔]
+  normalizes parsed origins and rejects malformed or repeated origins [✔]
+  rejects foreign mutations before reading their body or verifying schema [✔]
+  requires JSON for nonempty bodies including chunked confirmation, and permits empty previews [✔]
+  applies exact-origin CORS without credentials or duplicate headers [✔]
+  bounds requests and results before responding [✔]
+  keeps hook-dependent commands absent unless mounted and preserves supported failures [✔]
+  refuses excess requests before verification and cancels schema work on deadline [✔]
+  holds admission during response delivery and releases it when the client cancels [✔]
+  expires four blocked deliveries once, returns all permits, and recovers health [✔]
+  mounts idly without recurring verification and skips SQL for disabled/invalid requests [✔]
+  serves through a loopback socket and releases its port [✔]
+  refuses foreign origins and non-JSON confirmation over a real HTTP socket [✔]
+DeliveryExpired
+  terminates a backpressured Warp delivery and recovers admission [✔]
+  joins idle accepted connections across repeated start/stop churn [✔]
+process-manager discovery database boundary
+  performs only aggregate-types verifier work and rejects parsing before borrowing [✔]
+bounded workflow header
+  uses one supported instance read even with 100000 children [✔]
+schema handshake
+  bounds SQL on every inspection connection and releases pool capacity on cancellation [✔]
+  detects drift after construction, refuses previews/confirmation, and supports explicit policy [✔]
+CLI agreement
+  agrees with executable JSON across the database-only command domains [✔]
+
+Finished in 31.3434 seconds
+55 examples, 0 failures
+Test suite keiro-ops-http-test: PASS
+Test suite logged to:
+/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-http-0.23.0.0/t/keiro-ops-http-test/test/keiro-ops-http-0.23.0.0-keiro-ops-http-test.log
+1 of 1 test suites (1 of 1 test cases) passed.

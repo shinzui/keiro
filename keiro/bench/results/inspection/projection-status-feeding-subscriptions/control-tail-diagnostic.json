@@ -1,0 +1,28 @@
+{
+  "pair": 1,
+  "ratio": 42.57450980392157,
+  "samples": {
+    "control-a": {
+      "p99_us": 4590,
+      "p99_operation_phases_wait_schedule_claim_resume_timer": [
+        2896,
+        99,
+        108,
+        1109,
+        378
+      ],
+      "gc_elapsed_ns": 24893000
+    },
+    "control-b": {
+      "p99_us": 195417,
+      "p99_operation_phases_wait_schedule_claim_resume_timer": [
+        188604,
+        531,
+        508,
+        4310,
+        1464
+      ],
+      "gc_elapsed_ns": 31677000
+    }
+  }
+}

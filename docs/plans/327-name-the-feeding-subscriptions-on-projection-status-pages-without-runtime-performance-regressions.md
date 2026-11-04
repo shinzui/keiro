@@ -75,14 +75,16 @@ unchanged paths are unchanged, and the existing read-model benchmark guard.
 - [ ] Milestone 4: User documentation, guides, changelogs, and ADR-35 describe the field; IR-57 is `completed` with a resolution; the strict OKF bundles validate; and `just verify` passes in the Nix shell on the final candidate.
 
 
-Implementation checkpoint (2026-11-04): Runtime implementation is committed as
-`3e9fbacd`; the fixed writer protocol is committed as `04fe3e68`. Before the guarded-query optimization, full
-`nix develop -c just verify` passed, including all runtime/DSL suites, mutation and
-policy checks, strict governed bundles, and 41 migration examples. The retained
-`verify.log` records that run. Milestones 3 and 4 remain open: no paired timings or
-read-model guard have been accepted yet; other repositories are running builds/tests
-and the quiet-machine requirement must be satisfied before measurement. The user
-has been asked about a quiet window; do not stop their other processes.
+Implementation checkpoint (2026-11-04): Final code is `00fafcd4`. Full
+`nix develop -c just verify` passes on that source, and `just bench-regression read-model`
+passes all ten cases with the original CSV untouched. Final executable CLI/HTTP items
+agree. The final 40-trial writer cohort fulfills all load and cleanup checks and shows
+no statistically supported regression, but latency intervals do not exclude a 1% loss
+and builds/tests overlap 133/446 observations. All eight SQL ratios pass numerically
+(maximum 1.0813744), with background activity qualified. Milestones 3 and 4 remain
+open: current data do not meet quiet-run and precision criteria. All raw observations
+and a reviewable report are retained in the evidence folder; baseline worktree/binaries
+remain available. Do not stop other repository processes without authorization.
 
 Behavioral evidence: `keiro/bench/results/inspection/projection-status-feeding-subscriptions/jitsurei-cli.json`
 and `jitsurei-http.json` retain the complete responses. The embedded CLI used an explicit
@@ -252,7 +254,29 @@ evidence. No earlier manager-discovery waiver supplies projection acceptance.
 ## Outcomes & Retrospective
 
 
-(To be filled during and after implementation.)
+The library, CLI, HTTP route and feed now expose registered subscription arrays beside
+the frozen status row, with all old JSON expressions and SQL compatibility definitions
+preserved. Source is committed through `00fafcd4`. Full Nix verification passes, the
+read-model regression guard passes without CSV movement, and final jitsurei CLI/HTTP
+responses agree. The final query uses checkpoint-only scalar probes and the encoder
+prepends its additional pair without traversing the old pair list.
+
+Performance acceptance remains open. All eight page-read ratios satisfy 1.10 numerically,
+but recorded background activity prevents a quiet-run claim. The final forty writer
+trials sustain all offered work and show no statistically supported regression; their
+latency intervals and same-source controls cannot establish 1% precision. In one
+identical-binary control pair, p99 is 4.590 ms versus 195.417 ms, dominated by 188.604 ms
+of scheduling backlog around operations 1688–1733. That is not a new-field code path.
+The exact transient cause is unproven. The original review requested matched evidence;
+the 1% precision rule was the implementer's predeclared interpretation, not an explicit
+original numerical requirement. Keep the current gate open pending a quiet/calibrated
+repeat or an explicit user scope decision. IR-57 remains accepted, not completed.
+
+ADR-35 now retains the durable interface and query lessons: metadata travels beside
+the unextended v1 relation, non-checkpoint arrays are empty by the existing constraint,
+and a conditional scalar probe preserves keyed reads while avoiding an extra join.
+Task-local timing qualifications remain here and in the retained report; no general
+performance allowance or baseline change is introduced.
 
 
 ## Context and Orientation
@@ -627,7 +651,7 @@ fails. Second, cost: the paired median ratio is at most 1.10 for first and deep 
 and 100k groups under both forced plan modes, and report absolute medians alongside the historical evidence (about 2.8 ms first page
 and 0.6 ms deep page at 100k), attributing large changes without treating that different
 fixture as a calibrated threshold. Third, unchanged paths: `just bench-regression read-model` on the candidate prints
-`GUARD(read-model)=PASSED` with the committed `keiro/bench/baseline-read-model.csv` untouched;
+`GUARD(read-model)=0` with the committed `keiro/bench/baseline-read-model.csv` untouched;
 `git diff d64849f1 -- keiro-migrations/ keiro/src/Keiro/ReadModel/Rebuild/Group.hs
 keiro/src/Keiro/ReadModel/Schema.hs` is empty; and `cabal test keiro-migrations-test` passes
 with `keiro-migrations/expected-schema/native/keiro-v18.txt` unchanged. Retain the driver
@@ -808,7 +832,7 @@ the CLI's. Record both transcripts in the plan's Progress entry for Milestone 2.
 
 For Milestone 3, build the candidate, then compile and run the driver from both checkouts on a
 quiet machine. The driver reads `DATABASE_URL`-independent disposable databases through
-`Keiro.Test.Postgres`, which uses the Nix shell's cluster:
+`Keiro.Test.Postgres`, which starts a private durable ephemeral PostgreSQL cluster by default:
 
 ```bash
 cabal build all --enable-tests --enable-benchmarks
@@ -837,7 +861,7 @@ git diff d64849f1 --stat -- keiro-migrations/ keiro/src/Keiro/ReadModel/Rebuild/
 Expected: six JSON files each containing samples for 10k and 100k groups, custom and generic
 plans, first and deep pages; a `summary.json` whose every `paired_median_ratio` is at most
 `1.10` and whose candidate plans all show the cursors primary-key probe; the guard output
-ending with `GUARD(read-model)=PASSED` and `BENCH_REGRESSION=PASSED`; the migrations suite
+ending with `GUARD(read-model)=0` and `BENCH_REGRESSION=PASSED`; the migrations suite
 passing; and an empty diff listing. Write `README.md`, copy the driver to
 `driver.hs.txt`, and create `manifest.json` with sha256 of each retained artifact except
 `manifest.json` itself. Keep compiled executables and object directories local; record their

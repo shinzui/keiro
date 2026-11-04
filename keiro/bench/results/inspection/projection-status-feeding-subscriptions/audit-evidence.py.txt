@@ -1,0 +1,65 @@
+import hashlib
+import importlib.util
+import json
+import os
+import math
+import platform
+import statistics
+import subprocess
+from pathlib import Path
+r=Path('keiro/bench/results/inspection/projection-status-feeding-subscriptions')
+# Replay the fixed runtime analysis without changing any gate or sample.
+before=(r/'interference/summary.json').read_bytes()
+run=subprocess.run(['python3','scripts/analyze-projection-feeding-subscriptions.py',str(r/'interference')],capture_output=True,text=True)
+assert run.returncode==1
+assert before==(r/'interference/summary.json').read_bytes()
+report=json.loads(before)
+assert not any(v['status']=='regression' for v in report['results'])
+records=[]
+for side in ['baseline','candidate']:
+ for pair in range(1,6):
+  for mode in ['idle','poll','feed']:
+   p=r/'interference'/side/str(pair)/f'projection-{mode}'/f'1-projection-{mode}.json'
+   x=json.loads(p.read_text());assert len(x['samples_wait_schedule_claim_resume_timer_us_writer_bytes'])==2000
+   raw=x['samples_wait_schedule_claim_resume_timer_us_writer_bytes']
+   durations=sorted(sum(v[:5]) for v in raw)
+   assert math.isclose(x['p95_us'],durations[int(len(raw)*.95)],rel_tol=1e-12)
+   assert math.isclose(x['p99_us'],durations[int(len(raw)*.99)],rel_tol=1e-12)
+   assert math.isclose(x['writer_thread_allocated_bytes_per_operation'],sum(v[5] for v in raw)/len(raw),rel_tol=1e-12)
+   assert x['throughput']>=99 and x['poll_failure']==0
+   assert x['resources_after_clients']==dict(views=0,connections=0,wake_pump=False)
+   if mode=='poll':assert x['poll_success']==80
+   if mode=='feed':assert x['poll_success']>=8
+   records.append(x)
+for label in ['control-a','control-b']:
+ for pair in range(1,6):
+  x=json.loads((r/'interference'/label/str(pair)/'1-projection-idle.json').read_text());assert len(x['samples_wait_schedule_claim_resume_timer_us_writer_bytes'])==2000;assert x['throughput']>=99;records.append(x)
+assert len(records)==40
+sql=json.loads((r/'loaded-sql-v4/summary.json').read_text());assert sql['passed']
+# Validate all source and compatibility statements independently of timing.
+path='keiro/src/Keiro/ReadModel/Rebuild/Status.hs';a=subprocess.check_output(['git','show','d64849f1:'+path],text=True);b=Path(path).read_text()
+for start,end in [('data ServingPositionBasis','-- | A bounded observation'),('listProjectionGroupStatuses ::','decodeGroupId ::')]:
+ def region(s):return s[s.index(start):s.index(end,s.index(start))]
+ assert region(a)==region(b)
+assert not subprocess.check_output(['git','diff','d64849f1','--','keiro-migrations/','keiro/src/Keiro/ReadModel/Rebuild/Group.hs','keiro/src/Keiro/ReadModel/Schema.hs','keiro/bench/baseline-read-model.csv'])
+assert 'BENCH_REGRESSION=PASSED' in (r/'read-model-guard.log').read_text()
+for name,item in json.loads((r/'identity.json').read_text())['binaries'].items():assert hashlib.sha256(Path(item['path']).read_bytes()).hexdigest()==item['sha256'],name
+observations=[json.loads(x) for x in (r/'final-writer-processes.jsonl').read_text().splitlines()]
+receipt=dict(candidate_commit=subprocess.check_output(['git','rev-parse','00fafcd4'],text=True).strip(),
+ correctness='full Nix just verify passed',read_model_guard='passed; committed baseline unchanged',
+ sql_numeric_pass=True,sql_maximum_paired_median_ratio=max(v['paired_median_ratio'] for v in sql['shapes']),sql_conditions='qualified: background activity recorded',
+ writer_trials=40,writer_operations=80000,offered_load_and_cleanup_checks_passed=True,statistically_supported_final_regressions=0,
+ original_runtime_precision_pass=False,observed_build_test_snapshots=sum(bool(x['busy']) for x in observations),process_snapshots=len(observations),
+ benchmark_database_mode='configured leased server; connection redacted' if os.environ.get('KEIRO_GUARDED_CATALOG_PG_ADMIN') else 'private durable ephemeral PostgreSQL clusters',
+ python=platform.python_version(),acceptance='open: quiet conditions and 1% latency precision not established')
+(r/'evaluation.json').write_text(json.dumps(receipt,indent=2)+'\n')
+(r/'analysis-replay.txt').write_text('PASS: fixed runtime analysis replay is byte-identical.\nPASS: all 40 workloads valid, including feed updates and cleanup.\nPASS: throughput and writer-allocation intervals; zero supported final latency regressions.\nNOT ACCEPTED: latency precision and quiet-machine requirements remain unmet.\nPASS: frozen definitions, JSON pairs, schema/writer files and benchmark baseline preserved.\n')
+print(json.dumps(receipt,indent=2))
+# Report the negative control's extreme tail without attributing it to the feature.
+controls=next(v for v in report['results'] if v['comparison']=='same-source' and v['metric']=='p99_us')
+pair=controls['ratios'].index(max(controls['ratios']))+1
+out={}
+for label in ['control-a','control-b']:
+ x=json.loads((r/'interference'/label/str(pair)/'1-projection-idle.json').read_text())
+ rows=sorted(x['samples_wait_schedule_claim_resume_timer_us_writer_bytes'],key=lambda a:sum(a[:5]));out[label]=dict(p99_us=x['p99_us'],p99_operation_phases_wait_schedule_claim_resume_timer=rows[int(len(rows)*.99)][:5],gc_elapsed_ns=x['gc_elapsed_ns'])
+(r/'control-tail-diagnostic.json').write_text(json.dumps(dict(pair=pair,ratio=max(controls['ratios']),samples=out),indent=2)+'\n')
