@@ -5,7 +5,7 @@ description: >-
   Give Keiro one validated typed catalog that binds projection handlers to physical read-model
   targets and rebuild groups, then derives registration, live application, replay, and operator
   inventory wiring while rejecting structural drift before startup.
-timestamp: 2026-08-08T00:19:11Z
+timestamp: 2026-11-04T05:30:24Z
 requestId: IR-20
 status: completed
 origin: mori://shinzui/keiro
@@ -56,11 +56,11 @@ fixed-head resumable replay, candidate Language 5 generation and evolution class
 operator integration, examples, and migration guidance. Application schemas and migrations remain
 consumer-owned.
 
-The follow-up
-`mori://shinzui/keiro/masterplans/33-make-subscription-checkpoint-lifecycle-explicit-before-the-next-release`
-extends the catalog with a newly discovered missing-checkpoint lifecycle choice and replaces one
-private reset statement. It does not invalidate IR-20's completed typed-ownership and coordinated
-rebuild acceptance, so IR-20 remains implemented while that pre-release improvement is open.
+The completed follow-up
+[MasterPlan 33](../masterplans/33-make-subscription-checkpoint-lifecycle-explicit-before-the-next-release.md)
+extended the catalog with an explicit missing-checkpoint lifecycle choice and replaced
+the private reset statement. IR-20 remains completed for its typed-ownership and
+coordinated-rebuild scope.
 
 Kiroku companion request
 `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-1` asks the event store to expose its

@@ -6,14 +6,15 @@ description: >-
   keiro's inspection surface with kiroku-metrics', shibuya-metrics', and pgmq-hs's future
   surface under per-surface path prefixes, so an application serves its whole runtime's
   inspection API on one process and one port.
-timestamp: 2026-10-21T03:23:25Z
+timestamp: 2026-11-04T05:28:05Z
 requestId: IR-31
-status: accepted
+status: completed
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/302-mount-composed-runtime-inspection-surfaces-under-one-port.md
 relatedPlans:
   - docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md
   - docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md
+  - docs/plans/326-make-releases-preflighted-resumable-and-isolated.md
 reviews:
   - kind: model
     reviewer: claude-code
@@ -31,35 +32,44 @@ reviews:
       mount is not yet fixed, and planning composition ahead of it would be premature. The
       acceptance against ADR 40's fifth condition ("composition, not duplication") is verifiable
       — ADR 40 is present and validates in `docs/adr`.
+completedAt: 2026-11-04T05:28:05Z
+resolution: >-
+  Plan 302 delivered prefix-only surface composition, shared CORS, streaming, and real owner
+  HTTP/WebSocket integration.
+  Keiro 0.22.0.0 shipped the cohort after the accepted b2be482b release gate.
+  Plan 326 retains an exact-version published consumer with a healthy composed
+  /keiro/health response; the 0.23.0.0 published consumer repeats that proof.
+  Completion reconciles retained evidence; Plan 303 release tracking lags those records.
 ---
 
 # Improvement Request: Mount Composed Runtime Inspection Surfaces
 
 ## Status
 
-Accepted; the pure router and real owner integration are implemented locally.
-Release completion remains with ExecPlan 303. Originally proposed by the keiro runtime UI initiative
-(`mori://shinzui/keiro-ui/masterplans/1-keiro-runtime-ui-foundations`, filed under
-`mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`).
-Composition is the one cross-cutting concern the initiative's layer-ownership matrix
-(`mori://shinzui/keiro-ui/okf/adrs/concepts/ADR-1`) assigns to keiro: each library owns its
-surface, and keiro — already the layer that composes the libraries — owns mounting them into
-one process. Implementation is keiro's downstream work.
-
-Accepted (2026-09-15) against the boundary in
-[ADR-40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md), whose
-fifth condition ("composition, not duplication") sanctions exactly this router-only mounting.
-Planned on 2026-09-30 as
+**Completed; reconciled on 2026-11-04.**
 [ExecPlan 302](../plans/302-mount-composed-runtime-inspection-surfaces-under-one-port.md)
-under [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md)
-(this request is EP-6), which coordinates IR-26 through IR-31 as one cohort. Keiro's own HTTP
-surface is planned as the `keiro-ops-http` sister package in
-[ExecPlan 276](../plans/276-serve-the-keiro-ops-surface-over-http.md), which plan 302 mounts at
-the `/keiro` prefix, and its `/ws` feeds in
-[ExecPlan 277](../plans/277-publish-websocket-live-feeds-over-keiro-wake.md) sit behind that
-prefix as `/keiro/ws`. Plan 302 hard-depends on plan 276 and completes, together with this
-request, through the cohort release in
-[ExecPlan 303](../plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md).
+delivered prefix-only surface composition, shared CORS, streaming, and real owner HTTP/WebSocket
+integration.
+[MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md)
+records all six implementation children Complete and their accepted runtime-interference evidence.
+
+The cohort shipped in Keiro 0.22.0.0 (release commit `fb6e3cff`) after the
+[final release gate](../../keiro/bench/results/release-gates/0.22.0.0-checks.txt)
+passed correctness, all six benchmark guards, native Nix and package checks.
+[ExecPlan 326](../plans/326-make-releases-preflighted-resumable-and-isolated.md) retains the
+[exact-version published consumer](../../keiro/bench/results/release-gates/workflow-326/published/result.json),
+which builds the released packages and serves the composed `/keiro/health` response
+with `status: ok` and no schema drift. The
+[0.23.0.0 published consumer](../../keiro/bench/results/release-gates/0.23.0.0-20261031T121415Z-60c43662/published/result.json)
+repeats that proof (evidence commit `e643c696`). These records satisfy the publication and
+consumer gates assigned to
+[ExecPlan 303](../plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md);
+its older unchecked release milestones do not describe the released state.
+
+Originally proposed by the runtime UI initiative under
+`mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`.
+The implementation notes below retain the earlier local checkpoints; their pending-release
+statements describe those dates, before the release and consumer proof.
 
 ## Context
 
@@ -163,14 +173,15 @@ each requested change directly:
   and pgmq-hs's is requested by `mori://shinzui/pgmq-hs/okf/improvement-requests/concepts/IR-3`).
 
 Acceptance criteria 1 through 5 map to named test cases in the plan's Validation and Acceptance
-section. This request stays `accepted` until implementation starts, and completes through
-plan 303 once the release that carries the module is on Hackage.
+section. At planning time, completion required the release carrying the module to reach Hackage.
+The Status section above records the subsequent release and consumer proof.
 
-## Implementation evidence (2026-10-20)
+## Implementation evidence (2026-10-20, historical checkpoint)
 
 `Keiro.Ops.Http.Compose` mounts allocated applications, preserves encoded
 remainders and query strings, and streams responses unchanged. The focused
 Compose tests cover mount validation, CORS and absent surfaces plus real
 Keiro/Kiroku HTTP and WebSocket protocols on one listener. The default-off
 example flag and DOC-32 provide the mounting recipe; ADR-57 records ownership.
-Core-runtime interference and the published consumer proof remain open.
+Core-runtime interference and the published consumer proof were pending at this
+checkpoint; see Status for subsequent completion.

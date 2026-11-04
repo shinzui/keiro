@@ -6,15 +6,17 @@ description: >-
   children, awakeables) that a browser UI needs beyond the one-shot keiro-ops wf output, in
   the owning library first, so the durable-execution screens can render and refresh
   incrementally against the keiro_workflows wake ledger.
-timestamp: 2026-10-20T22:01:39Z
+timestamp: 2026-11-04T05:28:05Z
 requestId: IR-30
-status: in-progress
+status: completed
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md
 relatedPlans:
   - docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md
   - docs/plans/276-serve-the-keiro-ops-surface-over-http.md
   - docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md
+  - docs/plans/326-make-releases-preflighted-resumable-and-isolated.md
+  - docs/plans/317-bound-the-workflow-listing-cost-without-the-withdrawn-inspection-indexes.md
 reviews:
   - kind: model
     reviewer: claude-code
@@ -32,35 +34,43 @@ reviews:
       The deliberate split — cursor-paged reads, status vocabulary, cursor contract, JSON
       rendering, and `keiro-ops` adoption in plan 275; endpoint exposure in the IR-26 sister
       package — still matches what those two plans scope.
+completedAt: 2026-11-04T05:28:05Z
+resolution: >-
+  Plan 275 delivered cursor-paged workflow instances, headers, journals, steps, children, and
+  awakeables.
+  Keiro 0.22.0.0 shipped the cohort after the accepted b2be482b release gate.
+  Plan 326 retains an exact-version published consumer with a healthy composed
+  /keiro/health response; the 0.23.0.0 published consumer repeats that proof.
+  Completion reconciles retained evidence; Plan 303 release tracking lags those records.
 ---
 
 # Improvement Request: Complete Workflow Inspection Primitives for HTTP
 
 ## Status
 
-Implementation is in progress; query/write-cost and publication gates remain open. Originally proposed by the keiro runtime UI initiative
-(`mori://shinzui/keiro-ui/masterplans/1-keiro-runtime-ui-foundations`, filed under
-`mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`).
-Companion to `mori://shinzui/keiro/okf/improvement-requests/concepts/IR-26`, which serves
-whatever primitives exist; this request is about the primitives that do not exist yet in the
-shape a UI needs. Implementation is keiro's downstream work.
+**Completed; reconciled on 2026-11-04.**
+[ExecPlan 275](../plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md)
+delivered cursor-paged workflow instances, headers, journals, steps, children, and awakeables.
+[MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md)
+records all six implementation children Complete and their accepted runtime-interference evidence.
 
-The library half — the cursor-paged reads, the status vocabulary, the cursor contract, the
-canonical JSON rendering, and `keiro-ops` adoption — is specified by
-[plan 275](../plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md).
-Endpoint exposure is deliberately outside that plan: it belongs to the IR-26 sister package,
-whose own plan ([plan 276](../plans/276-serve-the-keiro-ops-surface-over-http.md)) wraps the
-plan 275 reads. This request remains in progress until the accepted implementation and its
-endpoints are included in the cohort release.
+The cohort shipped in Keiro 0.22.0.0 (release commit `fb6e3cff`) after the
+[final release gate](../../keiro/bench/results/release-gates/0.22.0.0-checks.txt)
+passed correctness, all six benchmark guards, native Nix and package checks.
+[ExecPlan 326](../plans/326-make-releases-preflighted-resumable-and-isolated.md) retains the
+[exact-version published consumer](../../keiro/bench/results/release-gates/workflow-326/published/result.json),
+which builds the released packages and serves the composed `/keiro/health` response
+with `status: ok` and no schema drift. The
+[0.23.0.0 published consumer](../../keiro/bench/results/release-gates/0.23.0.0-20261031T121415Z-60c43662/published/result.json)
+repeats that proof (evidence commit `e643c696`). These records satisfy the publication and
+consumer gates assigned to
+[ExecPlan 303](../plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md);
+its older unchecked release milestones do not describe the released state.
 
-Coordinated since 2026-09-30 by [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md)
-(this request is EP-2), which settles the artifacts shared across plans 274 through 278
-(the cursor codec, the pending-timer read, the hydration primitive, released listing
-interfaces, migration and handle allocation), adds
-[ExecPlan 302](../plans/302-mount-composed-runtime-inspection-surfaces-under-one-port.md)
-for IR-31, and adds
-[ExecPlan 303](../plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md),
-the lockstep release that will move this request to `completed`.
+Originally proposed by the runtime UI initiative under
+`mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`.
+The implementation notes below retain the earlier local checkpoints; their pending-release
+statements describe those dates, before the release and consumer proof.
 
 ## Context
 
@@ -121,7 +131,7 @@ The paged reads with tests (including the CLI-agreement diff), the endpoint expo
 IR-26, and documentation of the status vocabulary and cursors.
 
 
-## Implementation evidence (2026-10-20)
+## Implementation evidence (2026-10-20, historical checkpoint)
 
 [ExecPlan 275](../plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md)
 implements the shared cursor codec, status classes, instance orderings,

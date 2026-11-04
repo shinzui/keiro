@@ -5,7 +5,7 @@ description: >-
   Provide a supported way to enforce a consumer-owned relational precondition
   atomically with a domain command and its synchronous catalog projections, returning a typed
   refusal without committing events or bypassing rebuild and serving-revision guarantees.
-timestamp: 2026-10-12T18:26:16Z
+timestamp: 2026-11-04T05:30:24Z
 requestId: IR-53
 status: completed
 completedAt: 2026-10-12T18:26:16Z
@@ -85,7 +85,9 @@ command authority and must fail closed while unavailable, even though events
 can reconstruct it. Archive retains its mapping; define deletion, re-anchoring,
 and legacy migration policies explicitly. An immediate reader can use a bounded
 post-commit position wait; timeout means committed with view pending. The
-guarded runner remains unreleased and must not be emulated with private catalog SQL. Authorization, definition/scope validation, editor interaction,
+guarded runner is included in Keiro 0.22.0.0
+([release evidence](../../keiro/bench/results/release-gates/README.md#keiro-02200)).
+Use its public API. Authorization, definition/scope validation, editor interaction,
 and other external IO remain consumer preflight work.
 
 ## Existing framework behavior and gap

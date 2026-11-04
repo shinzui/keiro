@@ -5,20 +5,42 @@ description: >-
   `/wf/inspect/list` pages instances but nothing counts them, so a dashboard can only sample a
   page and mark counts as lower bounds. Add a bounded read returning the instance count per
   status class, optionally filtered by workflow name.
-timestamp: 2026-10-21T23:30:00Z
+timestamp: 2026-11-04T05:28:05Z
 requestId: IR-58
-status: proposed
+status: accepted
 origin: mori://shinzui/keiro-ui
+plan: docs/plans/325-count-workflow-instances-by-status-class-without-runtime-performance-regressions.md
+reviews:
+  - kind: model
+    reviewer: codex
+    reviewed_at: 2026-11-04T05:28:05Z
+    document_timestamp: 2026-11-04T05:28:05Z
+    scope: status-and-plan-links
+    outcome: commented
+    provider: openai
+    model: unspecified
+    effort: unspecified
+    context: >-
+      Checked Plan 325 progress and the absence of the requested counting API. Linked the plan
+      and recorded accepted status; implementation and performance acceptance remain open.
+      Documentation audit against the working tree and retained evidence; no runtime
+      suite was rerun for this audit.
 ---
 
 # Improvement Request: Count Workflow Instances by Status Class
 
 ## Status
 
-Proposed by the keiro runtime console initiative
+Accepted for implementation under
+[ExecPlan 325](../plans/325-count-workflow-instances-by-status-class-without-runtime-performance-regressions.md).
+All three implementation milestones remain open: the million-instance query proof, the
+library/CLI/HTTP integration, and matched runtime-performance acceptance. No counting API
+has been delivered yet.
+
+Originally proposed by the keiro runtime console initiative
 (`mori://shinzui/keiro-ui/masterplans/2-build-the-keiro-runtime-console`), filed from
-`mori://shinzui/keiro-ui/plans/17-build-the-projections-and-overview-screens`. An improvement,
-not a dependency.
+`mori://shinzui/keiro-ui/plans/17-build-the-projections-and-overview-screens`.
+An improvement, not a dependency.
 
 ## Context
 

@@ -6,14 +6,15 @@ description: >-
   category, hydrate current state for display through the existing snapshot-plus-fold
   machinery, and expose snapshot metadata — and only then endpoints wrapping them, so an
   operator can see what aggregates exist and what state they hold.
-timestamp: 2026-10-21T00:26:46Z
+timestamp: 2026-11-04T05:28:05Z
 requestId: IR-28
-status: accepted
+status: completed
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/278-expose-aggregate-inspection-read-apis.md
 relatedPlans:
   - docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md
   - docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md
+  - docs/plans/326-make-releases-preflighted-resumable-and-isolated.md
 reviews:
   - kind: model
     reviewer: claude-code
@@ -34,31 +35,43 @@ reviews:
       checkout's `kiroku-store` is 0.8.0.0 with no `listStreams`, and Hackage's newest
       `kiroku-store` release is 0.8.0.0, so kiroku plan 88's prefix-filtered primitive is
       unreleased.
+completedAt: 2026-11-04T05:28:05Z
+resolution: >-
+  Plan 278 delivered aggregate catalogs, source-reporting hydration, snapshot health, and
+  bounded instance listing.
+  Keiro 0.22.0.0 shipped the cohort after the accepted b2be482b release gate.
+  Plan 326 retains an exact-version published consumer with a healthy composed
+  /keiro/health response; the 0.23.0.0 published consumer repeats that proof.
+  Completion reconciles retained evidence; Plan 303 release tracking lags those records.
 ---
 
 # Improvement Request: Expose Aggregate Inspection Read APIs
 
 ## Status
 
-Accepted; implementation has not started. Originally proposed by the keiro runtime UI initiative
-(`mori://shinzui/keiro-ui/masterplans/1-keiro-runtime-ui-foundations`, filed under
-`mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`).
-Library-first by design: the read APIs are the request's substance, the endpoints (served
-under `mori://shinzui/keiro/okf/improvement-requests/concepts/IR-26`) merely wrap them, per
-`mori://shinzui/keiro/okf/adrs/concepts/ADR-28`. Implementation is keiro's downstream work.
+**Completed; reconciled on 2026-11-04.**
+[ExecPlan 278](../plans/278-expose-aggregate-inspection-read-apis.md)
+delivered aggregate catalogs, source-reporting hydration, snapshot health, and bounded instance listing.
+[MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md)
+records all six implementation children Complete and their accepted runtime-interference evidence.
 
-Planned on 2026-09-10 as
-[ExecPlan 278](../plans/278-expose-aggregate-inspection-read-apis.md) and accepted; it
-completes once implementation and release evidence are recorded.
+The cohort shipped in Keiro 0.22.0.0 (release commit `fb6e3cff`) after the
+[final release gate](../../keiro/bench/results/release-gates/0.22.0.0-checks.txt)
+passed correctness, all six benchmark guards, native Nix and package checks.
+[ExecPlan 326](../plans/326-make-releases-preflighted-resumable-and-isolated.md) retains the
+[exact-version published consumer](../../keiro/bench/results/release-gates/workflow-326/published/result.json),
+which builds the released packages and serves the composed `/keiro/health` response
+with `status: ok` and no schema drift. The
+[0.23.0.0 published consumer](../../keiro/bench/results/release-gates/0.23.0.0-20261031T121415Z-60c43662/published/result.json)
+repeats that proof (evidence commit `e643c696`). These records satisfy the publication and
+consumer gates assigned to
+[ExecPlan 303](../plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md);
+its older unchecked release milestones do not describe the released state.
 
-Coordinated since 2026-09-30 by [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md)
-(this request is EP-3), which settles the artifacts shared across plans 274 through 278
-(the cursor codec, the pending-timer read, the hydration primitive, the `kiroku-store`
-0.10.0.0 listing gate, migration and handle allocation), adds
-[ExecPlan 302](../plans/302-mount-composed-runtime-inspection-surfaces-under-one-port.md)
-for IR-31, and adds
-[ExecPlan 303](../plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md),
-the lockstep release that will move this request to `completed`.
+Originally proposed by the runtime UI initiative under
+`mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`.
+The implementation notes below retain the earlier local checkpoints; their pending-release
+statements describe those dates, before the release and consumer proof.
 
 ## Context
 
@@ -177,7 +190,7 @@ while a missing snapshot does not; listing the inputs an aggregate accepts next 
 the `EnabledInput` machinery plan 274 is building for process managers. This request is
 accepted and completes once implementation and release evidence are recorded.
 
-## Implementation evidence (2026-10-20)
+## Implementation evidence (2026-10-20, historical checkpoint)
 
 The development tree now provides `Keiro.Inspection.Aggregate`, explicit display
 catalogs, bounded raw-page listing and source-reporting hydration. Ops mounts
@@ -194,6 +207,5 @@ case under `keiro/bench/results/inspection/hydration-core-path/`. Allocation is
 essentially unchanged; the optimized ordinary worker contains no diagnostic
 constructors. See [ADR-54](../adr/0054-aggregate-inspection-reuses-hydration-without-diagnostics-on-the-command-path.md).
 
-This evidence does not complete the request: cohort publication, the integrated
-runtime-isolation checks and consumer adoption remain under MasterPlan 45 and
-its release child. Status remains accepted until that release evidence exists.
+At this checkpoint, cohort publication, integrated runtime-isolation checks and the
+external consumer proof were pending. The Status section records their subsequent completion.

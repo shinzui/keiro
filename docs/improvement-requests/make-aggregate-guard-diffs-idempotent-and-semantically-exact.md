@@ -5,9 +5,9 @@ description: >-
   Stop keiro-dsl diff from reporting AggGuardTightened for byte-identical or additive-only
   aggregate sources, and emit the replay-only remedy only when the old guard has a real,
   satisfiable region excluded by the new guard.
-timestamp: 2026-09-15T22:33:25Z
+timestamp: 2026-11-04T05:29:12Z
 requestId: IR-33
-status: implemented
+status: in-progress
 origin: mori://shinzui/mori
 plan: docs/plans/265-make-aggregate-transition-family-diffs-idempotent-and-order-independent.md
 relatedPlans:
@@ -56,7 +56,12 @@ reviews:
 
 ## Status
 
-**Implemented for the accepted structural scope; semantic guard proofs remain deferred.** Proposed from
+**In progress: the accepted structural scope is implemented; semantic guard proofs remain deferred.**
+The earlier `implemented` frontmatter value is normalized to the supported request lifecycle
+status `in-progress`: Plans 265 and 266 are complete, while the broader semantic engine
+and its revival conditions below remain deferred.
+
+Proposed from
 `mori://shinzui/mori/plans/236-model-project-releases-in-the-registry`, after reproducing the
 problem with the current published `keiro-dsl` 0.14.0.0 binary and current Keiro `master`.
 The same defect was first isolated during

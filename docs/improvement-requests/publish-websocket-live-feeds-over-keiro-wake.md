@@ -6,14 +6,16 @@ description: >-
   built on Keiro.Wake and speaking the cross-project protocol convention, with every feed
   paired to an authoritative polling read because NOTIFY is a best-effort hint, so a UI stays
   fresh without polling storms and without ever trusting push as truth.
-timestamp: 2026-10-21T03:09:44Z
+timestamp: 2026-11-04T05:28:05Z
 requestId: IR-27
-status: accepted
+status: completed
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/277-publish-websocket-live-feeds-over-keiro-wake.md
 relatedPlans:
   - docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md
   - docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md
+  - docs/plans/326-make-releases-preflighted-resumable-and-isolated.md
+  - docs/plans/318-harden-the-http-operational-surface-against-cross-site-mutations-and-permit-exhaustion.md
 reviews:
   - kind: model
     reviewer: claude-code
@@ -32,31 +34,44 @@ reviews:
       and `listProjectionGroupStatuses` in `Keiro.ReadModel.Rebuild.Status` — both exist. The
       dependency on plan 276's Milestones 1 through 3 is still unmet, consistent with the IR-26
       review.
+completedAt: 2026-11-04T05:28:05Z
+resolution: >-
+  Plan 277 delivered shared WebSocket feeds, canonical polling reads, fallback delivery, bounded
+  queues, and scoped cleanup.
+  Keiro 0.22.0.0 shipped the cohort after the accepted b2be482b release gate.
+  Plan 326 retains an exact-version published consumer with a healthy composed
+  /keiro/health response; the 0.23.0.0 published consumer repeats that proof.
+  Completion reconciles retained evidence; Plan 303 release tracking lags those records.
 ---
 
 # Improvement Request: Publish WebSocket Live Feeds over Keiro.Wake
 
 ## Status
 
-Accepted; implementation has not started. Originally proposed by the keiro runtime UI initiative
-(`mori://shinzui/keiro-ui/masterplans/1-keiro-runtime-ui-foundations`, filed under
-`mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`).
-Companion to `mori://shinzui/keiro/okf/improvement-requests/concepts/IR-26` (the HTTP layer
-these feeds live beside, in the same sister package). Implementation is keiro's downstream
-work.
+**Completed; reconciled on 2026-11-04.**
+[ExecPlan 277](../plans/277-publish-websocket-live-feeds-over-keiro-wake.md)
+delivered shared WebSocket feeds, canonical polling reads, fallback delivery, bounded queues, and scoped
+cleanup.
+[MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md)
+records all six implementation children Complete and their accepted runtime-interference evidence.
 
-Planned on 2026-09-10 as
-[ExecPlan 277](../plans/277-publish-websocket-live-feeds-over-keiro-wake.md) and accepted;
-it completes once implementation and release evidence are recorded.
+The cohort shipped in Keiro 0.22.0.0 (release commit `fb6e3cff`) after the
+[final release gate](../../keiro/bench/results/release-gates/0.22.0.0-checks.txt)
+passed correctness, all six benchmark guards, native Nix and package checks.
+[ExecPlan 326](../plans/326-make-releases-preflighted-resumable-and-isolated.md) retains the
+[exact-version published consumer](../../keiro/bench/results/release-gates/workflow-326/published/result.json),
+which builds the released packages and serves the composed `/keiro/health` response
+with `status: ok` and no schema drift. The
+[0.23.0.0 published consumer](../../keiro/bench/results/release-gates/0.23.0.0-20261031T121415Z-60c43662/published/result.json)
+repeats that proof (evidence commit `e643c696`). These records satisfy the publication and
+consumer gates assigned to
+[ExecPlan 303](../plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md);
+its older unchecked release milestones do not describe the released state.
 
-Coordinated since 2026-09-30 by [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md)
-(this request is EP-5), which settles the artifacts shared across plans 274 through 278
-(the cursor codec, the pending-timer read, the hydration primitive, the `kiroku-store`
-0.10.0.0 listing gate, migration and handle allocation), adds
-[ExecPlan 302](../plans/302-mount-composed-runtime-inspection-surfaces-under-one-port.md)
-for IR-31, and adds
-[ExecPlan 303](../plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md),
-the lockstep release that will move this request to `completed`.
+Originally proposed by the runtime UI initiative under
+`mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`.
+The implementation notes below retain the earlier local checkpoints; their pending-release
+statements describe those dates, before the release and consumer proof.
 
 ## Planning
 
@@ -169,7 +184,7 @@ NOTIFY caveat and example frames, tests for each acceptance criterion (including
 LISTEN connection and the overflow signal), and the paired HTTP poll endpoints where they do
 not already exist under IR-26.
 
-## Implementation evidence (2026-10-20)
+## Implementation evidence (2026-10-20, historical checkpoint)
 
 Plan 277 adds shared canonical first-page drivers for workflows, timers and
 projection status in the HTTP sister package. One active-only wake pump fans
@@ -182,5 +197,5 @@ All 37 HTTP-package examples pass locally, including focused driver cancellation
 shared initialization, strict overflow, fallback/notify delivery, shared poll
 encoders, replacement refusal, upgrade policies and active close. The core,
 core-types, DSL and ops library dependency closures gain no web dependency.
-ADR-56 records the ownership boundary. This request remains accepted while
-composition, integrated writer-interference and release-cohort gates remain open.
+ADR-56 records the ownership boundary. Composition, integrated writer-interference
+and publication were pending at this checkpoint; see Status for subsequent completion.

@@ -5,15 +5,37 @@ description: >-
   Nothing in the ops surface says which projection groups consume a stream category, so an
   aggregate browser cannot show which read models an aggregate's events feed. Expose, per
   projection group, the categories its subscription reads (or a reverse lookup by category).
-timestamp: 2026-10-21T23:30:00Z
+timestamp: 2026-11-04T05:28:05Z
 requestId: IR-59
 status: proposed
 origin: mori://shinzui/keiro-ui
+plan: docs/plans/324-map-categories-to-projection-and-durable-subscription-consumers.md
+reviews:
+  - kind: model
+    reviewer: codex
+    reviewed_at: 2026-11-04T05:28:05Z
+    document_timestamp: 2026-11-04T05:28:05Z
+    scope: status-and-plan-links
+    outcome: commented
+    provider: openai
+    model: unspecified
+    effort: unspecified
+    context: >-
+      Checked all four open Plan 324 milestones and its explicit instruction to retain proposed
+      status until acceptance. Linked that plan without claiming implementation.
+      Documentation audit against the working tree and retained evidence; no runtime
+      suite was rerun for this audit.
 ---
 
 # Improvement Request: Map Categories to the Projections That Consume Them
 
 ## Status
+
+Proposed, with implementation planned in
+[ExecPlan 324](../plans/324-map-categories-to-projection-and-durable-subscription-consumers.md).
+All four milestones remain open. The plan chooses a pure reverse lookup over mounted
+catalog/subscriber metadata and explicitly retains this request's proposed disposition
+until acceptance; creating the plan did not deliver the lookup.
 
 Proposed by the keiro runtime console initiative
 (`mori://shinzui/keiro-ui/masterplans/2-build-the-keiro-runtime-console`), filed from

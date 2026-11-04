@@ -4,7 +4,7 @@ title: Expose reason-bearing dead timer reads
 description: >-
   Expose recorded dead-letter reasons and filtered dead timer listings through the public
   timer API so consumers can inspect deferred work without querying Keiro-owned tables.
-timestamp: 2026-09-08T14:25:26Z
+timestamp: 2026-11-04T05:30:24Z
 requestId: IR-35
 status: completed
 origin: mori://shinzui/kioku
@@ -101,9 +101,9 @@ consumer recovery; it does not require HTTP endpoints.
 Public types and operations, PostgreSQL integration tests, API/compatibility documentation,
 and a tagged Hackage release of `mori://shinzui/keiro/packages/keiro` that consumers can adopt.
 If a migration is necessary, add a new migration rather than changing an applied one. Keep
-this request proposed until implementation and release evidence are recorded.
+the completion record tied to implementation and release evidence.
 
-## Implementation evidence
+## Implementation evidence (2026-09-08, before release)
 
 [ExecPlan 270](../plans/270-expose-reason-bearing-dead-timer-inspection-and-bounded-reads.md)
 adds public `TimerInspection`, `lookupTimerInspection`, and bounded
@@ -116,11 +116,8 @@ changes, unchanged persisted columns, and application permission filtering past
 empty pages with revocation. The consumer-style fixture is local simulation,
 not evidence of downstream adoption.
 
-Status remains proposed: the shared tagged Hackage release is coordinated with
-IR-36, which is still pending. Actual downstream acceptance against a released
-bound remains required. Hackage and upstream tags were rechecked on 2026-09-08;
-0.15.0.0 remains the current normal release, at tagged commit
-`de574cdcb0add3fefbb0fdd96d820258d15f8997`.
+At this checkpoint the shared release and downstream acceptance were pending.
+Both were subsequently recorded for Keiro 0.16.0.0 in the completion evidence below.
 
 ## Completion evidence (2026-09-08)
 

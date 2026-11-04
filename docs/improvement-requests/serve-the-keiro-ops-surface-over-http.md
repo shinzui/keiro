@@ -6,14 +6,15 @@ description: >-
   JSON endpoints reusing the OpsResult envelope, with mutations exposed only behind the existing
   preview/force discipline and the fail-closed schema-drift handshake, so a browser UI can reach
   the operational surface applications already embed as a CLI.
-timestamp: 2026-10-20T17:05:00Z
+timestamp: 2026-11-04T05:28:05Z
 requestId: IR-26
-status: in-progress
+status: completed
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/276-serve-the-keiro-ops-surface-over-http.md
 relatedPlans:
   - docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md
   - docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md
+  - docs/plans/326-make-releases-preflighted-resumable-and-isolated.md
 reviews:
   - kind: model
     reviewer: claude-code
@@ -32,34 +33,44 @@ reviews:
       `opsCommandTree`, and `runOpsInvocation`, so `Command`, `commandParser`, `isMutation`, and
       `runCommand` are present internally but still unexported as the plan describes; and
       `verifyExpectedSchemaSession` does not exist in `keiro-migrations`.
+completedAt: 2026-11-04T05:28:05Z
+resolution: >-
+  Plan 276 delivered parser-derived HTTP routes, mutation previews and gates, schema refusal,
+  and a bare WAI application.
+  Keiro 0.22.0.0 shipped the cohort after the accepted b2be482b release gate.
+  Plan 326 retains an exact-version published consumer with a healthy composed
+  /keiro/health response; the 0.23.0.0 published consumer repeats that proof.
+  Completion reconciles retained evidence; Plan 303 release tracking lags those records.
 ---
 
 # Improvement Request: Serve the keiro-ops Surface over HTTP
 
 ## Status
 
-Implementation is in progress under MasterPlan 45. Originally proposed by the keiro runtime UI initiative
-(`mori://shinzui/keiro-ui/masterplans/1-keiro-runtime-ui-foundations`, filed under
-`mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`). The
-initiative is preparing a browser UI for applications built on the keiro runtime; per its
-recorded ownership principle (`mori://shinzui/keiro-ui/okf/adrs/concepts/ADR-1`),
-framework-level operational views belong to keiro. This request engages keiro's recorded
-no-UI stance through its companion
-`mori://shinzui/keiro/okf/improvement-requests/concepts/IR-32`, which proposes recording the
-boundary in an ADR. Implementation is keiro's downstream work.
+**Completed; reconciled on 2026-11-04.**
+[ExecPlan 276](../plans/276-serve-the-keiro-ops-surface-over-http.md)
+delivered parser-derived HTTP routes, mutation previews and gates, schema refusal, and a bare WAI
+application.
+[MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md)
+records all six implementation children Complete and their accepted runtime-interference evidence.
 
-Planned on 2026-09-10 as
-[ExecPlan 276](../plans/276-serve-the-keiro-ops-surface-over-http.md) and accepted; it
-completes once implementation and release evidence are recorded.
+The cohort shipped in Keiro 0.22.0.0 (release commit `fb6e3cff`) after the
+[final release gate](../../keiro/bench/results/release-gates/0.22.0.0-checks.txt)
+passed correctness, all six benchmark guards, native Nix and package checks.
+[ExecPlan 326](../plans/326-make-releases-preflighted-resumable-and-isolated.md) retains the
+[exact-version published consumer](../../keiro/bench/results/release-gates/workflow-326/published/result.json),
+which builds the released packages and serves the composed `/keiro/health` response
+with `status: ok` and no schema drift. The
+[0.23.0.0 published consumer](../../keiro/bench/results/release-gates/0.23.0.0-20261031T121415Z-60c43662/published/result.json)
+repeats that proof (evidence commit `e643c696`). These records satisfy the publication and
+consumer gates assigned to
+[ExecPlan 303](../plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md);
+its older unchecked release milestones do not describe the released state.
 
-Coordinated since 2026-09-30 by [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md)
-(this request is EP-1), which settles the artifacts shared across plans 274 through 278
-(the cursor codec, the pending-timer read, the hydration primitive, the `kiroku-store`
-0.10.0.0 listing gate, migration and handle allocation), adds
-[ExecPlan 302](../plans/302-mount-composed-runtime-inspection-surfaces-under-one-port.md)
-for IR-31, and adds
-[ExecPlan 303](../plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md),
-the lockstep release that will move this request to `completed`.
+Originally proposed by the runtime UI initiative under
+`mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`.
+The implementation notes below retain the earlier local checkpoints; their pending-release
+statements describe those dates, before the release and consumer proof.
 
 ## Planning
 
@@ -170,7 +181,7 @@ documentation with copyable request/response transcripts. The stance ADR itself 
 separately (`mori://shinzui/keiro/okf/improvement-requests/concepts/IR-32`).
 
 
-## Implementation evidence (2026-10-20)
+## Implementation evidence (2026-10-20, historical checkpoint)
 
 [ExecPlan 276](../plans/276-serve-the-keiro-ops-surface-over-http.md) implements
 `keiro-ops-http`: parser-derived routes, JSON agreement with the executable,
@@ -181,7 +192,5 @@ real sockets; the initial 20 examples pass. The existing ops and migration
 suites pass 51 and 40 examples. DLQ `read` now correctly previews and requires
 confirmation because the supported operation reserves messages.
 
-This request remains in progress. Full repository verification, matched
-interference/retention acceptance, and the published cohort release under
-[ExecPlan 303](../plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md)
-remain required; no published release is claimed here.
+At this checkpoint, full verification, matched interference/retention acceptance
+and publication were pending. The Status section records their subsequent completion.

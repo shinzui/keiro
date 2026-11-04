@@ -5,7 +5,7 @@ description: >-
   keiro-dsl diff --since GIT-REF fails with an aggregate fold output resolution error instead of a
   classification when one change removes a command, the event it emitted, and the state it led
   to, so a consumer's generated-code gate cannot run on that change until it is committed.
-timestamp: 2026-10-14T15:35:26Z
+timestamp: 2026-11-04T05:30:24Z
 requestId: IR-50
 status: completed
 completedAt: 2026-10-14T15:35:26Z
@@ -44,7 +44,9 @@ reviews:
 ## Status
 
 Completed by [ExecPlan 314](../plans/314-fix-ir-50-command-and-event-removal-diff-classification.md)
-and implementation commit `3cd98914` (unreleased). Each valid revision resolves
+and implementation commit `3cd98914`, included in the published Keiro 0.22.0.0
+package set ([release evidence](../../keiro/bench/results/release-gates/README.md#keiro-02200)).
+Each valid revision resolves
 against its own declarations. Single-source and workspace removals produce the
 breaking event finding, removed command/state details, and both JSON reports before
 the normal compatibility gate exits 1. A replay-only remedy whose declarations

@@ -7,17 +7,34 @@ description: >-
   defines the inspectors. Ship an executable, or a flag on the compose example, that mounts
   jitsurei's AppHooks against the jitsurei database so UIs can be built and verified against
   real aggregate and process-manager responses.
-timestamp: 2026-10-21T21:00:00Z
+timestamp: 2026-11-04T05:28:05Z
 requestId: IR-55
 status: proposed
 origin: mori://shinzui/keiro-ui
+reviews:
+  - kind: model
+    reviewer: codex
+    reviewed_at: 2026-11-04T05:28:05Z
+    document_timestamp: 2026-11-04T05:28:05Z
+    scope: status-and-plan-links
+    outcome: commented
+    provider: openai
+    model: unspecified
+    effort: unspecified
+    context: >-
+      Confirmed both runnable HTTP hosts still use emptyAppHooks and Jitsurei mounts inspectors
+      only through its CLI. No implementing host plan exists; proposed remains correct.
+      Documentation audit against the working tree and retained evidence; no runtime
+      suite was rerun for this audit.
 ---
 
 # Improvement Request: Provide a Runnable Inspection Host That Mounts the Jitsurei Aggregate and Process-Manager Hooks
 
 ## Status
 
-Proposed by the keiro runtime console initiative
+Proposed; no implementing ExecPlan exists.
+
+Originally proposed by the keiro runtime console initiative
 (`mori://shinzui/keiro-ui/masterplans/2-build-the-keiro-runtime-console`), filed from
 `mori://shinzui/keiro-ui/plans/9-provision-the-local-runtime-stack-and-recorded-fixtures`.
 Not a dependency of any plan there: the console is built and tested against fixtures

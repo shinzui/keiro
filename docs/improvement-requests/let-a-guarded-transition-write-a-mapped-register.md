@@ -5,9 +5,9 @@ description: >-
   Give a declared transition target-typed initial and mapped-lift register expressions without
   taking the whole edge into an implementation hole, so that a mapped-value construction can be
   one side of a guarded pair without weakening guard, replay, or ownership guarantees.
-timestamp: 2026-10-14T17:57:46Z
+timestamp: 2026-11-04T05:28:05Z
 requestId: IR-34
-status: accepted
+status: in-progress
 generated:
   by: codex-cli/gpt-6.1-sol
   at: 2026-10-14T17:57:46Z
@@ -66,7 +66,8 @@ All 26 focused examples, all nine restoring negative mutations, the compiled
 lifecycle proof, 884 DSL unit examples, full package builds, and every repository
 verification recipe pass in Nix. The restoring mutation driver runs through
 `mapped-register-construction-proof` in `just verify`. Published source contracts and existing generated corpus bytes remain
-unchanged. No consumer adoption or release has occurred.
+unchanged. The implementation is included in Keiro 0.22.0.0; consumer adoption is
+not recorded, and the native metadata acceptance gate below remains open.
 
 The request originated from
 `mori://shinzui/rei/plans/206-author-the-rei-service-workspace-at-keiro-dsl-language-5`,
@@ -75,11 +76,11 @@ reconfirmed against 0.14.0.0 and 0.16.0.0. It is a DSL construction capability,
 not a Keiki runtime defect or an operator error in Rei. The removed Rei register
 remains correctly absent; the new repository fixture supplies the observable proof.
 
-Installed Mori v6 currently reports 73 pre-existing request metadata errors across
-this bundle beyond its pinned OKF profile. This record now carries truthful current
-revision attribution, but remains `accepted` until the required acceptance gate is
-reconciled. Historical authorship and completion times for unrelated requests have
-not been invented to make that gate green.
+Plan 267 records 73 native request-metadata errors at its 2026-10-14 checkpoint.
+The current native validator still rejects missing revision attribution and historical
+completion timestamps across the bundle beyond its pinned OKF profile. This request
+is `in-progress` until that required acceptance gate is reconciled. Historical authorship
+and completion times for unrelated requests remain as recorded.
 
 The original wording was too broad. Keiro already lets a generated transition copy a whole mapped
 value from a same-typed command field into a mapped register. The unsupported operation is

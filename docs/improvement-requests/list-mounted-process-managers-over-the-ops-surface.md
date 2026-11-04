@@ -6,7 +6,7 @@ description: >-
   process managers a host mounts. Add `pm types` (GET /pm/types over HTTP), mirroring
   `aggregate types`, so a UI and an operator can discover managers instead of knowing their
   names in advance.
-timestamp: 2026-10-26T22:20:33Z
+timestamp: 2026-11-04T05:28:05Z
 requestId: IR-56
 status: completed
 completedAt: 2026-10-26T22:20:33Z
@@ -15,9 +15,25 @@ resolution: >-
   documented JSON and 919 passing focused examples. Both retention runs and the full
   release gate pass. The user accepts the observed approximately 0.009% allocation
   overhead and timing results without statistically supported regressions; the final
-  cohort meets those criteria. Publication remains separate.
+  cohort meets those criteria. Publication followed in Keiro 0.22.0.0; downstream
+  console adoption is separate.
 plan: docs/plans/323-list-mounted-process-managers-without-runtime-performance-regressions.md
 origin: mori://shinzui/keiro-ui
+reviews:
+  - kind: model
+    reviewer: codex
+    reviewed_at: 2026-11-04T05:28:05Z
+    document_timestamp: 2026-11-04T05:28:05Z
+    scope: status-and-plan-links
+    outcome: commented
+    provider: openai
+    model: unspecified
+    effort: unspecified
+    context: >-
+      Checked completed Plan 323, retained performance acceptance, pm types implementation and
+      release evidence. Completed remains correct; publication is no longer pending.
+      Documentation audit against the working tree and retained evidence; no runtime
+      suite was rerun for this audit.
 ---
 
 # Improvement Request: List the Mounted Process Managers Over the Ops Surface
@@ -30,13 +46,18 @@ Metadata-only discovery, CLI/HTTP parity, transport limits, retention and the fu
 release gate pass. The final paired cohort shows no statistically supported timing
 regression; the user accepts its approximately 0.009% allocation overhead and the
 reported timing uncertainty. The plan and its evidence retain both original strict
-reports and the separate acceptance decision. Publication remains separate.
+reports and the separate acceptance decision. Publication followed in Keiro 0.22.0.0;
+downstream console adoption is separate.
 
 Proposed by the keiro runtime console initiative
 (`mori://shinzui/keiro-ui/masterplans/2-build-the-keiro-runtime-console`), filed from
 `mori://shinzui/keiro-ui/plans/16-build-the-aggregates-process-managers-and-timers-screens`.
 An improvement, not a dependency: the console is usable without it (see "Console behaviour
 today").
+
+Publication is recorded by the
+[0.22 release evidence](../../keiro/bench/results/release-gates/README.md#keiro-02200)
+and [published consumer](../../keiro/bench/results/release-gates/workflow-326/published/result.json).
 
 ## Context
 

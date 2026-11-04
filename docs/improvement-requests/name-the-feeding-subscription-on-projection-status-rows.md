@@ -6,17 +6,34 @@ description: >-
   that feeds the group, so a UI cannot join a group to its member checkpoints without being told
   the subscription name. Add the feeding subscription (or null when none) to
   projection_group_status_v1 or alongside it.
-timestamp: 2026-10-21T23:30:00Z
+timestamp: 2026-11-04T05:28:05Z
 requestId: IR-57
 status: proposed
 origin: mori://shinzui/keiro-ui
+reviews:
+  - kind: model
+    reviewer: codex
+    reviewed_at: 2026-11-04T05:28:05Z
+    document_timestamp: 2026-11-04T05:28:05Z
+    scope: status-and-plan-links
+    outcome: commented
+    provider: openai
+    model: unspecified
+    effort: unspecified
+    context: >-
+      Confirmed the frozen projection status reader and JSON encoder still lack
+      feeding_subscription. No implementing plan exists; proposed remains correct.
+      Documentation audit against the working tree and retained evidence; no runtime
+      suite was rerun for this audit.
 ---
 
 # Improvement Request: Name the Feeding Subscription on Projection Status Rows
 
 ## Status
 
-Proposed by the keiro runtime console initiative
+Proposed; no implementing ExecPlan exists.
+
+Originally proposed by the keiro runtime console initiative
 (`mori://shinzui/keiro-ui/masterplans/2-build-the-keiro-runtime-console`), filed from
 `mori://shinzui/keiro-ui/plans/17-build-the-projections-and-overview-screens`. An improvement,
 not a dependency.

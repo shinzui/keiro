@@ -6,7 +6,7 @@ description: >-
   restored, so it silently becomes a statement timeout for the rest of the promotion
   transaction. A first attempt to restore it broke a deadline guarantee, so the correct fix
   needs the cutover deadline semantics established first.
-timestamp: 2026-09-21T05:10:00Z
+timestamp: 2026-11-04T05:28:05Z
 requestId: IR-47
 status: accepted
 origin: mori://shinzui/keiro
@@ -30,6 +30,12 @@ reviews:
       and the two candidate readings of it are stated rather than resolved. No
       independent reviewer has read this.
 ---
+
+## Status
+
+Accepted; no implementing ExecPlan exists. The timeout restoration and shared-deadline
+regression described below remain unresolved. Acceptance does not indicate that the
+reverted migration shipped.
 
 ## What is wrong
 

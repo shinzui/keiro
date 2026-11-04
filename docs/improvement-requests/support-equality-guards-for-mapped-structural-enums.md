@@ -4,7 +4,7 @@ title: Support equality guards for mapped structural enums
 description: >-
   Allow a consumer-owned mapped structural enum to participate in exact, type-safe aggregate
   equality guards without introducing a second native enum and an exhaustive adapter.
-timestamp: 2026-10-26T23:43:06Z
+timestamp: 2026-11-04T05:28:05Z
 requestId: IR-60
 status: completed
 completedAt: 2026-10-26T23:43:06Z
@@ -12,23 +12,45 @@ resolution: >-
   Plan 322 implements candidate Language 6 exact equality and inequality for mapped
   structural enums through their existing total binding, including qualified literals,
   finite model reconstruction, binding conformance, scoped identity, and replay evidence.
-  Required repository verification passes; package publication and downstream adoption
-  remain separate actions.
+  Required repository verification passes. Package publication followed in Keiro
+  0.22.0.0; downstream adoption remains separate.
 plan: docs/plans/322-support-exact-equality-guards-for-mapped-structural-enums.md
 origin: mori://shinzui/kotei
+reviews:
+  - kind: model
+    reviewer: codex
+    reviewed_at: 2026-11-04T05:28:05Z
+    document_timestamp: 2026-11-04T05:28:05Z
+    scope: status-and-plan-links
+    outcome: commented
+    provider: openai
+    model: unspecified
+    effort: unspecified
+    context: >-
+      Checked completed Plan 322, retained repository qualification and subsequent 0.22
+      publication. Completed remains correct; consumer adoption is separate.
+      Documentation audit against the working tree and retained evidence; no runtime
+      suite was rerun for this audit.
 ---
 
 # Improvement Request: Support Equality Guards for Mapped Structural Enums
 
 ## Status
 
-Accepted for implementation through
+Completed under
 [Plan 322](../plans/322-support-exact-equality-guards-for-mapped-structural-enums.md).
-Implemented and repository-qualified: the consumer scope fixture checks, scaffolds, compiles, and passes exact finite equality, qualified literals, typed reconstruction, binding conformance, wire-byte, replay, and snapshot checks. All required repository verification passes. Package publication and downstream adoption remain separate.
+The consumer scope fixture checks, scaffolds, compiles, and passes exact finite equality,
+qualified literals, typed reconstruction, binding conformance, wire-byte, replay, and
+snapshot checks. All required repository verification passes. Publication followed in
+Keiro 0.22.0.0; downstream adoption remains separate.
 
 Proposed from `mori://shinzui/kotei/plans/103-reconstruct-recorded-failure-environments-for-inspection-and-debugging`.
 This is a follow-up improvement, not a prerequisite for that implementation. Kotei can retain
 its checked enum adapter and qualify a replacement after an upstream release supports it.
+
+Publication is recorded by the
+[0.22 release evidence](../../keiro/bench/results/release-gates/README.md#keiro-02200)
+and [published consumer](../../keiro/bench/results/release-gates/workflow-326/published/result.json).
 
 ## Context and evidence
 
@@ -37,7 +59,7 @@ It occurs in nested runtime records and is also needed in aggregate guards that 
 terminal command's scope with its scheduled scope. A single structural binding would keep
 the owner type, wire domain and reconstruction contract consistent across both uses.
 
-The current released keiro-dsl 0.21.0.0 rejects this language-6 guard:
+The released keiro-dsl 0.21.0.0 rejected this Language 6 guard at filing time:
 
 ```text
 guard cmd.requiredScope == reg.requiredScope
@@ -63,8 +85,8 @@ mapped structural enum RequiredScope {
 ```
 
 The minimal aggregate has a `RequiredScope` register initialized with `initial`, a command
-with a field of that same type, and the guard above. The current expression capability
-check rejects mapped aggregate scalars. The release version was checked against Hackage
+with a field of that same type, and the guard above. At filing time the expression capability
+check rejected mapped aggregate scalars. The release version was checked against Hackage
 and the upstream `keiro-dsl-0.21.0.0` tag.
 
 [IR-12](make-nominal-id-and-enum-equality-first-class-in-aggregate-expressions.md) and

@@ -6,7 +6,7 @@ description: >-
   typeid, text or int), lowered to a Haskell list and a JSON array by the generated codec and
   governed by diff as public contract evolution, so a service whose integration message names
   several entities at once can keep that contract DSL-owned instead of hand-writing its codec.
-timestamp: 2026-10-14T13:54:48Z
+timestamp: 2026-11-04T05:29:12Z
 generated:
   by: process:claude-code
   at: 2026-10-07T06:30:00Z
@@ -17,7 +17,7 @@ resolution: >-
   Implemented under ExecPlan 312: candidate Language 6 admits lists of every contract
   scalar with ordered strict JSON arrays, indexed element admission, scalar identity
   keys, and shape/admission-aware public evolution. The compiled corpus and repository
-  gates pass; publication and consumer adoption remain the separately tracked release.
+  gates pass. Publication is included in Keiro 0.22.0.0; consumer adoption is separate.
 origin: mori://tan/notification-render-service
 plan: docs/plans/312-support-list-fields-in-integration-contracts.md
 relatedPlans:
@@ -71,9 +71,11 @@ Candidate Language 6 accepts List of an admitted scalar, with ordered strict arr
 required fields, indexed element admission, scalar outbox/dedupe identities, and
 public evolution reporting for shape, prefix, and admission changes. The compiled
 corpus passes 13 runtime checks and the full repository verification passes.
-The implementation is available in this working tree; release publication and
-consumer adoption remain separately tracked by the plan's Release item. Accepted
-scope treats identity keys as publisher outbox and intake dedupe fields; emit key
+The implementation is included in the published Keiro 0.22.0.0 package set;
+[release evidence](../../keiro/bench/results/release-gates/README.md#keiro-02200)
+and the [published consumer](../../keiro/bench/results/release-gates/workflow-326/published/result.json)
+record publication despite the plan's older unchecked Release item. Originating-consumer
+adoption remains separate. The accepted scope treats identity keys as publisher outbox and intake dedupe fields; emit key
 clauses retain their existing descriptive behavior because they do not resolve fields.
 
 Raised by `mori://tan/notification-render-service`, the notification renderer's Haskell domain
@@ -81,8 +83,8 @@ service, from
 `mori://tan/notification-render-service/plans/17-publish-admin-change-signals-to-kafka-through-the-keiro-outbox`.
 
 [Plan 313](../plans/313-fix-contract-parser-nominal-names-and-case-sensitive-list-syntax.md)
-is a newly created, untracked planning skeleton for contract-parser follow-up
-work as of 2026-10-14. It does not reopen this request's completed accepted list-field scope.
+tracks the contract-parser follow-up and is now complete. It does not reopen this
+request's completed accepted list-field scope.
 
 ## Problem and evidence
 

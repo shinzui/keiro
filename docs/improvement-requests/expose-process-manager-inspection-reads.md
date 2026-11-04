@@ -6,14 +6,16 @@ description: >-
   journal streams, list shard ownership from keiro_subscription_shards, and list a process
   manager's pending timers — then endpoints wrapping them — so an operator can see what a
   process manager last did and what it is waiting on.
-timestamp: 2026-10-21T01:53:43Z
+timestamp: 2026-11-04T05:28:05Z
 requestId: IR-29
-status: accepted
+status: completed
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/274-expose-process-manager-inspection-reads.md
 relatedPlans:
   - docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md
   - docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md
+  - docs/plans/326-make-releases-preflighted-resumable-and-isolated.md
+  - docs/plans/319-inspect-reaction-process-managers-and-label-legacy-inspection-before-1-0.md
 reviews:
   - kind: model
     reviewer: claude-code
@@ -33,29 +35,43 @@ reviews:
       Planning section's reference to `listStreamsInCategory` is the name used in kiroku's IR-8;
       plan 274 and IR-28 both describe the delivered shape as the prefix-filtered `listStreams`
       of kiroku plan 88, which is the same primitive under the name kiroku settled on.
+completedAt: 2026-11-04T05:28:05Z
+resolution: >-
+  Plan 274 delivered process-manager state and instance reads, pending-timer paging, and shard
+  inspection.
+  Keiro 0.22.0.0 shipped the cohort after the accepted b2be482b release gate.
+  Plan 326 retains an exact-version published consumer with a healthy composed
+  /keiro/health response; the 0.23.0.0 published consumer repeats that proof.
+  Completion reconciles retained evidence; Plan 303 release tracking lags those records.
 ---
 
 # Improvement Request: Expose Process-Manager Inspection Reads
 
 ## Status
 
-Accepted; implementation has not started. Originally proposed by the keiro runtime UI initiative
-(`mori://shinzui/keiro-ui/masterplans/1-keiro-runtime-ui-foundations`, filed under
-`mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`).
-Library-first like its sibling
-`mori://shinzui/keiro/okf/improvement-requests/concepts/IR-28`: reads in the owning packages,
-endpoints (under `mori://shinzui/keiro/okf/improvement-requests/concepts/IR-26`) wrapping
-them, per `mori://shinzui/keiro/okf/adrs/concepts/ADR-28`. Implementation is keiro's
-downstream work.
+**Completed; reconciled on 2026-11-04.**
+[ExecPlan 274](../plans/274-expose-process-manager-inspection-reads.md)
+delivered process-manager state and instance reads, pending-timer paging, and shard inspection.
+[MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md)
+records all six implementation children Complete and their accepted runtime-interference evidence.
 
-Coordinated since 2026-09-30 by [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md)
-(this request is EP-4), which settles the artifacts shared across plans 274 through 278
-(the cursor codec, the pending-timer read, the hydration primitive, the `kiroku-store`
-0.10.0.0 listing gate, migration and handle allocation), adds
-[ExecPlan 302](../plans/302-mount-composed-runtime-inspection-surfaces-under-one-port.md)
-for IR-31, and adds
-[ExecPlan 303](../plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md),
-the lockstep release that will move this request to `completed`.
+The cohort shipped in Keiro 0.22.0.0 (release commit `fb6e3cff`) after the
+[final release gate](../../keiro/bench/results/release-gates/0.22.0.0-checks.txt)
+passed correctness, all six benchmark guards, native Nix and package checks.
+[ExecPlan 326](../plans/326-make-releases-preflighted-resumable-and-isolated.md) retains the
+[exact-version published consumer](../../keiro/bench/results/release-gates/workflow-326/published/result.json),
+which builds the released packages and serves the composed `/keiro/health` response
+with `status: ok` and no schema drift. The
+[0.23.0.0 published consumer](../../keiro/bench/results/release-gates/0.23.0.0-20261031T121415Z-60c43662/published/result.json)
+repeats that proof (evidence commit `e643c696`). These records satisfy the publication and
+consumer gates assigned to
+[ExecPlan 303](../plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md);
+its older unchecked release milestones do not describe the released state.
+
+Originally proposed by the runtime UI initiative under
+`mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`.
+The implementation notes below retain the earlier local checkpoints; their pending-release
+statements describe those dates, before the release and consumer proof.
 
 ## Context
 
@@ -125,10 +141,11 @@ primitive (`listStreamsInCategory`, item 1a of
 `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-8`), which is added and released in
 kiroku before keiro wraps it. The endpoints of item 2 are delivered as read-only `keiro-ops`
 commands emitting the initiative's wire shapes; the HTTP transport itself is
-`mori://shinzui/keiro/okf/improvement-requests/concepts/IR-26`'s sister package. This request
-is accepted and completes once implementation and release evidence are recorded.
+`mori://shinzui/keiro/okf/improvement-requests/concepts/IR-26`'s sister package.
+At this planning checkpoint, completion awaited implementation and release evidence;
+the Status section above records their subsequent reconciliation.
 
-## Implementation evidence (2026-10-20)
+## Implementation evidence (2026-10-20, historical checkpoint)
 
 Plan 274 adds `Keiro.ProcessManager.Inspect`, pending-timer pages and detailed
 shard ownership/listing through supported owner APIs. The embedded example
@@ -137,5 +154,5 @@ CLI JSON with the library state and intended-dispatch witness. Core tests cover
 runtime rebuild equivalence, default-off metadata, bounded capture, membership
 continuation, read-only timer pages and lease failover. Historical and modern
 reaction provenance remain explicitly unavailable; target witnesses never infer
-failure. The request stays accepted while integrated interference, feeds and
-release-cohort work remain open under MasterPlan 45.
+failure. Integrated interference, feeds and publication were pending at this
+checkpoint; see Status for subsequent completion.

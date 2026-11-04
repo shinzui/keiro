@@ -4,7 +4,7 @@ title: Support atomic guarded dead timer resume
 description: >-
   Let an authorized consumer claim one dead timer by ID and expected reason atomically,
   preserving its identity and retry history while excluding competing resume attempts.
-timestamp: 2026-09-08T14:25:26Z
+timestamp: 2026-11-04T05:30:24Z
 requestId: IR-36
 status: completed
 origin: mori://shinzui/kioku
@@ -117,7 +117,7 @@ Coordinate the release with IR-35 so Kioku can adopt both capabilities. Add a ne
 only if needed; never edit an applied migration. Record source compatibility and downstream
 adoption evidence before marking this request complete.
 
-## Implementation evidence (2026-09-08)
+## Implementation evidence (2026-09-08, before release)
 
 [ExecPlan 272](../plans/272-support-atomic-guarded-dead-timer-resume.md) implements
 `claimDeadTimer`, opaque lease ownership, renewal/completion/parking/cancellation,
@@ -130,8 +130,8 @@ The PostgreSQL suite exercises exact guard refusals, retry history, expiry,
 replacement-token rejection, and two independent stores against one database.
 A public-facade fixture covers preflight revocation/unavailability, one callback
 for a contested claim, crash recovery, and preserved original work identity.
-Validation results are maintained in the plan. Release and actual downstream
-adoption are still incomplete; this request remains proposed until those gates pass.
+Validation results are maintained in the plan. Release and downstream adoption
+were pending at this checkpoint; both are recorded in the completion evidence below.
 
 ## Completion evidence (2026-09-08)
 
