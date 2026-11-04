@@ -328,6 +328,13 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
       [wid | (wid, _) <- unfinished, wid `elem` ourIds] `shouldBe` []
 
   describe "Jitsurei read model" $ around (withFreshResourceStoreWith fixture (withProjectionSchema jitsureiProjectionSchema)) $ do
+    it "names the durable subscriptions feeding the reporting group" $ \(_store, StoreRunner runner) -> do
+      Right () <- runner initializeJitsureiTables
+      Right (Right page) <- runner (listProjectionGroupStatusesPage (ProjectionStatusPageRequest 100 Nothing))
+      let rows = filter ((== "jitsurei-order-reporting") . rebuildGroupIdText . (^. #status . #groupId)) (page ^. #items)
+      map (^. #feedingSubscriptions) rows `shouldBe` [["jitsurei-order-audit-subscription"]]
+      map (^. #status . #servingPositionBasis) rows `shouldBe` [ServingPositionCheckpoint]
+
     it "updates and queries the inline order summary in the append transaction" $ \(_store, StoreRunner runner) -> do
       Right () <- runner initializeJitsureiTables
       Right (Right (ProjectionCommandApplied _)) <-
@@ -945,6 +952,13 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
       claimed `shouldSatisfy` isJust
 
   describe "Jitsurei agent-qualification router" $ around (withFreshResourceStore fixture) $ do
+    it "reports unknown feeding authority for legacy read models" $ \(_store, StoreRunner runner) -> do
+      Right () <- runner initializeAreaChapters
+      Right (Right page) <- runner (listProjectionGroupStatusesPage (ProjectionStatusPageRequest 100 Nothing))
+      let rows = filter ((== "$legacy-read-model:jitsurei-area-chapters") . rebuildGroupIdText . (^. #status . #groupId)) (page ^. #items)
+      map (^. #feedingSubscriptions) rows `shouldBe` [[]]
+      map (^. #status . #servingPositionBasis) rows `shouldBe` [ServingPositionUnmanaged]
+
     it "routes a transaction to every chapter resolved from its areas, idempotently" $ \(_store, StoreRunner runner) -> do
       Right () <-
         runner $

@@ -10,6 +10,7 @@ module Keiro.ReadModel.Rebuild.Status
     ProjectionStatusPageRequest (..),
     ProjectionStatusReadError (..),
     ProjectionStatusPage (..),
+    ProjectionGroupStatusRow (..),
     projectionGroupsCursorKind,
     validateProjectionStatusRequest,
     listProjectionGroupStatusesPage,
@@ -84,8 +85,16 @@ data ProjectionStatusReadError
   | ProjectionStatusResultTooLarge
   deriving stock (Eq, Show, Generic)
 
+-- | A frozen v1 row plus the registered cursor authority. Names are stored
+-- sorted for checkpoint groups; append and unmanaged groups have an empty list.
+data ProjectionGroupStatusRow = ProjectionGroupStatusRow
+  { status :: !ProjectionGroupStatusV1,
+    feedingSubscriptions :: ![Text]
+  }
+  deriving stock (Eq, Show, Generic)
+
 data ProjectionStatusPage = ProjectionStatusPage
-  {observedAt :: !UTCTime, items :: ![ProjectionGroupStatusV1], next :: !(Maybe InspectionCursor)}
+  {observedAt :: !UTCTime, items :: ![ProjectionGroupStatusRow], next :: !(Maybe InspectionCursor)}
   deriving stock (Eq, Show, Generic)
 
 projectionGroupsCursorKind :: Text
@@ -122,23 +131,31 @@ listProjectionGroupStatusesPage request = case validateProjectionStatusRequest r
             maybe
               (Left ProjectionStatusResultTooLarge)
               (Right . Just)
-              (encodeCursorBounded projectionGroupsCursorKind ("projection_group_status_v1" :: Text, rebuildGroupIdText (row ^. #groupId)))
+              (encodeCursorBounded projectionGroupsCursorKind ("projection_group_status_v1" :: Text, rebuildGroupIdText (row ^. #status . #groupId)))
           _ -> Right Nothing
     pure (ProjectionStatusPage observed selected <$> continuation)
   where
     size = request ^. #pageSize
 
-pageProjectionGroupStatusesStmt :: Bool -> Statement (Maybe Text, Int64) [ProjectionGroupStatusV1]
+pageProjectionGroupStatusesStmt :: Bool -> Statement (Maybe Text, Int64) [ProjectionGroupStatusRow]
 pageProjectionGroupStatusesStmt after =
   preparable
     ( "WITH inspection_groups AS MATERIALIZED (SELECT group_id FROM keiro.keiro_projection_rebuild_groups"
         <> (if after then " WHERE group_id > $1" else " WHERE $1::text IS NULL")
-        <> " ORDER BY group_id LIMIT $2) SELECT status.* FROM inspection_groups page CROSS JOIN LATERAL ("
+        <> " ORDER BY group_id LIMIT $2) SELECT status.*, coalesce(cursors.subscription_names, ARRAY[]::text[]) AS feeding_subscriptions FROM inspection_groups page CROSS JOIN LATERAL ("
         <> statusSelect
-        <> " WHERE group_id = page.group_id OFFSET 0) status ORDER BY status.group_id"
+        <> " WHERE group_id = page.group_id OFFSET 0) status"
+        <> " LEFT JOIN LATERAL (SELECT subscription_names FROM keiro.keiro_projection_group_cursors WHERE group_id = page.group_id OFFSET 0) cursors ON true"
+        <> " ORDER BY status.group_id"
     )
     (contrazip2 (E.param (E.nullable E.text)) (E.param (E.nonNullable E.int8)))
-    (D.rowList projectionGroupStatusDecoder)
+    (D.rowList projectionGroupStatusRowDecoder)
+
+projectionGroupStatusRowDecoder :: D.Row ProjectionGroupStatusRow
+projectionGroupStatusRowDecoder =
+  ProjectionGroupStatusRow
+    <$> projectionGroupStatusDecoder
+    <*> D.column (D.nonNullable (D.listArray (D.nonNullable D.text)))
 
 -- | List the complete public status relation in stable group-id order.
 listProjectionGroupStatuses ::

@@ -1303,11 +1303,18 @@ spec fixture = do
       catalog <- expectValidatedCatalog (opsCatalog "status-codec")
       _ <- expectStore store (Rebuild.registerProjectionCatalog catalog)
       Right page <- expectStore store (Rebuild.listProjectionGroupStatusesPage (Rebuild.ProjectionStatusPageRequest 1 Nothing))
+      map (.feedingSubscriptions) page.items `shouldBe` [[]]
+      map (.status.servingPositionBasis) page.items `shouldBe` [Rebuild.ServingPositionAppend]
+      forM_ page.items $ \item -> case OpsProjection.projectionGroupStatusRowJson item of
+        Aeson.Object fields -> do
+          KeyMap.lookup "feeding_subscriptions" fields `shouldBe` Just (Aeson.toJSON ([] :: [Text]))
+          Aeson.Object (KeyMap.delete "feeding_subscriptions" fields) `shouldBe` OpsProjection.projectionGroupStatusJson item.status
+        _ -> expectationFailure "expected status item object"
       shown <- OpsProjection.runCommand (opsEnv False store) (OpsProjection.Status (OpsProjection.ProjectionStatusOptions 1 Nothing))
       case shown of
         Succeeded result -> case result.jsonValue of
           Aeson.Object fields -> do
-            KeyMap.lookup "items" fields `shouldBe` Just (Aeson.toJSON (map OpsProjection.projectionGroupStatusJson page.items))
+            KeyMap.lookup "items" fields `shouldBe` Just (Aeson.toJSON (map OpsProjection.projectionGroupStatusRowJson page.items))
             KeyMap.member "observed_at" fields `shouldBe` True
             KeyMap.lookup "visible_store_head" fields `shouldBe` Just (Aeson.toJSON (0 :: Int))
             KeyMap.lookup "next_cursor" fields `shouldBe` Nothing

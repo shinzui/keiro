@@ -6,6 +6,7 @@ module Keiro.Ops.Projection
   ( Command (..),
     ProjectionStatusOptions (..),
     projectionGroupStatusJson,
+    projectionGroupStatusRowJson,
     validateCommand,
     commandParser,
     isMutation,
@@ -14,6 +15,7 @@ module Keiro.Ops.Projection
 where
 
 import Data.Aeson (Value, object, (.=))
+import Data.Aeson.Types (Pair)
 import Data.Int (Int64)
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -104,9 +106,9 @@ runCommand env = \case
       Succeeded
         ( OpsResult
             ["group_id", "lifecycle_phase", "reads_allowed", "serving_position_basis"]
-            [[rebuildGroupIdText row.groupId, row.lifecyclePhase, Text.pack (show row.readsAllowed), basisText row.servingPositionBasis] | row <- page.items]
+            [[rebuildGroupIdText row.status.groupId, row.status.lifecyclePhase, Text.pack (show row.status.readsAllowed), basisText row.status.servingPositionBasis] | row <- page.items]
             ( object
-                ( ["observed_at" .= page.observedAt, "visible_store_head" .= positionInt head, "items" .= map projectionGroupStatusJson page.items]
+                ( ["observed_at" .= page.observedAt, "visible_store_head" .= positionInt head, "items" .= map projectionGroupStatusRowJson page.items]
                     <> maybe [] (\cursor -> ["next_cursor" .= cursor.cursorText]) page.next
                 )
             )
@@ -130,27 +132,34 @@ runCommand env = \case
 
 -- | The frozen v1 owner relation, using ADR-28 position vocabulary.
 projectionGroupStatusJson :: ProjectionGroupStatusV1 -> Value
-projectionGroupStatusJson row =
-  object
-    [ "group_id" .= rebuildGroupIdText row.groupId,
-      "lifecycle_phase" .= row.lifecyclePhase,
-      "reads_allowed" .= row.readsAllowed,
-      "writes_allowed" .= row.writesAllowed,
-      "serving_revision_id" .= fmap projectionRevisionIdText row.servingRevisionId,
-      "serving_epoch" .= row.servingEpoch,
-      "serving_position_basis" .= basisText row.servingPositionBasis,
-      "serving_applied_position" .= fmap positionInt row.servingAppliedPosition,
-      "active_run_id" .= fmap rebuildRunIdText row.activeRunId,
-      "candidate_revision_id" .= fmap projectionRevisionIdText row.candidateRevisionId,
-      "candidate_rebuild_position" .= fmap positionInt row.candidateRebuildPosition,
-      "candidate_rebuild_head" .= fmap positionInt row.candidateRebuildHead,
-      "query_models" .= row.queryModels,
-      "rebuild_started_at" .= row.rebuildStartedAt,
-      "last_promoted_at" .= row.lastPromotedAt,
-      "failed_at" .= row.failedAt,
-      "failure_code" .= row.failureCode,
-      "failure_detail" .= row.failureDetail
-    ]
+projectionGroupStatusJson = object . projectionGroupStatusPairs
+
+-- | The bounded page item, including registered feeding subscriptions.
+projectionGroupStatusRowJson :: ProjectionGroupStatusRow -> Value
+projectionGroupStatusRowJson row =
+  object (projectionGroupStatusPairs row.status <> ["feeding_subscriptions" .= row.feedingSubscriptions])
+
+projectionGroupStatusPairs :: ProjectionGroupStatusV1 -> [Pair]
+projectionGroupStatusPairs row =
+  [ "group_id" .= rebuildGroupIdText row.groupId,
+    "lifecycle_phase" .= row.lifecyclePhase,
+    "reads_allowed" .= row.readsAllowed,
+    "writes_allowed" .= row.writesAllowed,
+    "serving_revision_id" .= fmap projectionRevisionIdText row.servingRevisionId,
+    "serving_epoch" .= row.servingEpoch,
+    "serving_position_basis" .= basisText row.servingPositionBasis,
+    "serving_applied_position" .= fmap positionInt row.servingAppliedPosition,
+    "active_run_id" .= fmap rebuildRunIdText row.activeRunId,
+    "candidate_revision_id" .= fmap projectionRevisionIdText row.candidateRevisionId,
+    "candidate_rebuild_position" .= fmap positionInt row.candidateRebuildPosition,
+    "candidate_rebuild_head" .= fmap positionInt row.candidateRebuildHead,
+    "query_models" .= row.queryModels,
+    "rebuild_started_at" .= row.rebuildStartedAt,
+    "last_promoted_at" .= row.lastPromotedAt,
+    "failed_at" .= row.failedAt,
+    "failure_code" .= row.failureCode,
+    "failure_detail" .= row.failureDetail
+  ]
 
 basisText :: ServingPositionBasis -> Text
 basisText = \case ServingPositionAppend -> "append"; ServingPositionCheckpoint -> "checkpoint"; ServingPositionUnmanaged -> "unmanaged"

@@ -18,10 +18,14 @@ import Data.Text qualified as Text
 import Network.HTTP.Client qualified as HTTP
 import Network.HTTP.Types (statusCode)
 import Network.WebSockets qualified as WS
+import System.Environment (lookupEnv)
 import System.IO (hFlush, hPutStrLn, stderr, stdout)
 import System.Timeout (timeout)
 
 runClients :: [String] -> IO ()
+runClients [portArg, clientsArg, _, secondsArg, mode]
+  | mode `elem` ["projection-poll", "projection-feed"] =
+      runProjectionClients (read portArg) (read clientsArg) (read secondsArg) (mode == "projection-feed")
 runClients [portArg, clientsArg, _, secondsArg, mode]
   | mode `elem` ["pm-types", "pm-types-many"] =
       runManagerClients (read portArg) (read clientsArg) (read secondsArg) (mode == "pm-types-many")
@@ -139,3 +143,74 @@ runManagerClients port clients seconds many = do
     unless (good == clients * seconds) (fail "manager polling load disappeared")
     hPutStrLn stderr ("manager discovery clients: successes=" <> show good <> " failures=0")
     Char8.putStrLn (encode (good, 0 :: Int))
+
+-- Matched projection-only load. Client encoding and validation live in a separate
+-- process so writer RTS counters measure the mounted runtime, not its clients.
+runProjectionClients :: Int -> Int -> Int -> Bool -> IO ()
+runProjectionClients port clients seconds feed = do
+  expectNames <- (== Just "1") <$> lookupEnv "KEIRO_PROJECTION_EXPECT_SUBSCRIPTIONS"
+  let validateRow (Object fields) = case KeyMap.lookup "group_id" fields of
+        Just (String group) -> do
+          let expected = if "0" `Text.isSuffixOf` group then [group <> "-sub"] else []
+          unless
+            (not expectNames || KeyMap.lookup "feeding_subscriptions" fields == Just (Aeson.toJSON expected))
+            (fail "incorrect feeding subscriptions")
+        _ -> fail "missing projection group identity"
+      validateRow _ = fail "invalid projection row"
+      validateItems (Object fields) = case KeyMap.lookup "items" fields of
+        Just (Array rows) | length rows == 100 -> mapM_ validateRow rows
+        _ -> fail "expected 100 projection items"
+      validateItems _ = fail "invalid projection page"
+  go <- newEmptyMVar
+  successes <- newIORef (0 :: Int)
+  let count = atomicModifyIORef' successes (\n -> (n + 1, ()))
+      ready =
+        putStrLn "ready" >> hFlush stdout >> getLine >>= \line ->
+          if line == "go" then putMVar go () else fail "missing measurement control"
+  if feed
+    then do
+      let worker signal = WS.runClient "127.0.0.1" port "/keiro/ws" $ \connection -> do
+            WS.sendTextData connection (encode (object ["type" .= ("subscribe" :: Text), "feed" .= ("projection_groups" :: Text), "limit" .= (100 :: Int)]))
+            raw <- WS.receiveData connection :: IO Lazy.ByteString
+            value <- either fail pure (Aeson.eitherDecode raw)
+            validateItems value
+            count
+            putMVar signal ()
+            readMVar go
+            forever $ do
+              frame <- WS.receiveData connection :: IO Lazy.ByteString
+              case Aeson.eitherDecode frame of
+                Right (Object fields) | KeyMap.lookup "type" fields == Just (String "update") ->
+                  case KeyMap.lookup "changed" fields of
+                    Just (Array rows) -> mapM_ validateRow rows >> count
+                    _ -> fail "invalid projection update"
+                _ -> fail "projection feed failed"
+          start = do
+            signal <- newEmptyMVar
+            task <- async (worker signal)
+            outcome <- race (wait task) (takeMVar signal)
+            case outcome of Right () -> pure task; _ -> cancel task >> fail "projection feed startup failed"
+      bracket (forM [1 .. clients] (const start)) (mapM_ cancel) $ \tasks -> do
+        ready
+        race_ (threadDelay (seconds * 1000000)) (mapConcurrently_ wait tasks)
+    else bracket (HTTP.newManager HTTP.defaultManagerSettings {HTTP.managerConnCount = clients}) HTTP.closeManager $ \manager -> do
+      request <- HTTP.parseRequest ("http://127.0.0.1:" <> show port <> "/keiro/projection/status?limit=100")
+      let fetch = do
+            response <- HTTP.httpLbs request manager
+            unless (statusCode (HTTP.responseStatus response) == 200) (fail "projection polling refused")
+            either fail validateItems (Aeson.eitherDecode (HTTP.responseBody response))
+          worker index = do
+            readMVar go
+            threadDelay (index * 1000000 `div` clients)
+            forM_ [1 .. seconds] $ \second -> withAsync (threadDelay 1000000) $ \tick -> do
+              fetch
+              count
+              unless (second == seconds) (wait tick)
+      fetch
+      bracket (forM [0 .. clients - 1] (async . worker)) (mapM_ cancel) $ \tasks -> do
+        ready
+        outcome <- timeout ((seconds + 5) * 1000000) (mapConcurrently_ wait tasks)
+        unless (outcome == Just ()) (fail "lost projection polling load")
+  good <- readIORef successes
+  unless (if feed then good >= clients else good == clients * seconds) (fail "lost projection clients")
+  Char8.putStrLn (encode (good, 0 :: Int))

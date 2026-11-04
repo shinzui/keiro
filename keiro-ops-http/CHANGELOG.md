@@ -4,6 +4,11 @@
 
 ### New Features
 
+- `/projection/status` and `projection_groups` feed items include sorted
+  `feeding_subscriptions`, shared with the CLI encoder.
+
+### New Features
+
 - Export `Keiro.Ops.Http.Host` (`HostOptions`, `hostOptionsParser`, `withHost`,
   `mainWithHooks`) and re-export it from `Keiro.Ops.Http`. The standalone
   executable calls `mainWithHooks emptyAppHooks`; application hosts share its

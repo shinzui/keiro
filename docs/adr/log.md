@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-04
+* **Update**: ADR-35: page metadata carries registered subscription sets beside frozen v1; fence the added lookup under generic plans (plan 327).
 * **Update**: ADR-54: distinguish application-owned register displays from raw persisted JSON and independent snapshot health observations (Plan 329).
 * **Update**: ADR-53: application hosts share the exported Keiro.Ops.Http.Host lifecycle with the standalone executable (Plan 328).
 

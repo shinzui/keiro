@@ -6,7 +6,15 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **keiro**: `ProjectionStatusPage.items` now holds `ProjectionGroupStatusRow`, with
+  the frozen v1 row under `status` and registered names under `feedingSubscriptions`.
+
 ### New Features
+
+- Projection status JSON and `projection_groups` feeds carry sorted
+  `feeding_subscriptions` beside the unchanged frozen SQL contract.
 
 - **jitsurei**: Expose named registers in aggregate displays and add the
   snapshot-enabled `credit-limit` example, `just jitsurei-registers`, and a

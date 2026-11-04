@@ -2,7 +2,7 @@
 type: Runbook
 title: Operations
 description: Deploy and operate Keiro applications, workers, rebuilds, retries, and production checks.
-timestamp: 2026-10-27T21:15:00Z
+timestamp: 2026-11-04T18:20:00Z
 docId: DOC-15
 tags: [keiro, operations, deployment, runbook]
 generated:
@@ -773,6 +773,19 @@ and `shard_counts`, adding database `observed_at`, each row's `heartbeat_at` and
 the same strict comparison as the worker; observation does not grant ownership.
 
 ### Projection status pages
+
+Each item also carries `feeding_subscriptions`: the sorted durable subscription names
+from Keiro's registered cursor authority. For `checkpoint` groups, these subscriptions
+feed the asynchronous projections; use each name with `projection position --subscription`.
+For inline-only `append` groups the array is empty. For `unmanaged` groups it is also empty
+because authority is unknown; keep a manual subscription chooser for those groups.
+This metadata travels beside the frozen SQL row and is not a column of
+`keiro_read.projection_group_status_v1`. For example, these fields identify jitsurei's
+reporting group (the other existing status fields are omitted here):
+
+```json
+{"group_id":"jitsurei-order-reporting","serving_position_basis":"checkpoint","feeding_subscriptions":["jitsurei-order-audit-subscription"]}
+```
 
 ```bash
 keiro-ops projection status --limit 100 --json

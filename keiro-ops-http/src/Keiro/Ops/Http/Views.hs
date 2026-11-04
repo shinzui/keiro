@@ -26,7 +26,7 @@ import Effectful (Eff, IOE)
 import Effectful.Error.Static (Error)
 import Effectful.Exception (throwIO)
 import Keiro.Ops.Http.Protocol (FeedName (..), feedNameText)
-import Keiro.Ops.Projection (projectionGroupStatusJson)
+import Keiro.Ops.Projection (projectionGroupStatusRowJson)
 import Keiro.Projection.Catalog (rebuildGroupIdText)
 import Keiro.ReadModel (storeHeadPosition)
 import Keiro.ReadModel.Rebuild
@@ -132,7 +132,7 @@ projectionGroupsView bound filters = do
         GlobalPosition visibleHead <- storeHeadPosition
         pure
           ( page.observedAt,
-            [let groupId = rebuildGroupIdText row.groupId in Item groupId (object ["group_id" .= groupId]) (projectionGroupStatusJson row) | row <- page.items],
+            [let groupId = rebuildGroupIdText row.status.groupId in Item groupId (object ["group_id" .= groupId]) (projectionGroupStatusRowJson row) | row <- page.items],
             Just (object ["visible_store_head" .= visibleHead])
           )
     )

@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Projection group status is a frozen owner-rights SQL contract
 description: Keiro publishes serving availability and progress separately from candidate rebuild progress through a frozen versioned owner-rights view.
-timestamp: 2026-10-21T02:25:39Z
+timestamp: 2026-11-04T18:20:00Z
 docId: ADR-35
 status: Accepted
 date: 2026-08-13
@@ -145,3 +145,12 @@ page is returned. No writer index or SQL contract is changed. Each selected
 group's own model/checkpoint cardinality and encoded size remain read costs,
 subject to inspection deadlines and byte caps. The visible store head and page
 clock are separate observations.
+
+Bounded page items use `ProjectionGroupStatusRow`: the unchanged v1 record under
+`status`, with `feedingSubscriptions` read beside it from Keiro's private cursor-authority
+table. CLI, HTTP and feed items share an additive `feeding_subscriptions` array without
+extending the frozen SQL relation. Registered checkpoint names are sorted; append groups
+have none, while an unmanaged group's empty array means authority is unknown.
+The added lookup also uses an OFFSET 0 lateral boundary: an ordinary left join can
+become an unparameterized merge join under generic plans. Preserve primary-key probes
+per selected page key and validate both custom and generic plans when changing this read.

@@ -16,7 +16,7 @@ import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Session
 import Keiro.Ops (emptyAppHooks)
 import Keiro.Ops.Http hiding (subscribe)
-import Keiro.Ops.Projection (projectionGroupStatusJson)
+import Keiro.Ops.Projection (projectionGroupStatusRowJson)
 import Keiro.ReadModel (registerReadModel)
 import Keiro.ReadModel.Rebuild
 import Keiro.Test.Postgres (Fixture, withFreshStore)
@@ -97,7 +97,7 @@ spec fixture = describe "inspection sockets" $ around (withFreshStore fixture) $
         projection <- receive connection
         field "feed" projection `shouldBe` Just (String "projection_groups")
         Right page <- stored store (listProjectionGroupStatusesPage (ProjectionStatusPageRequest 100 Nothing))
-        field "changed" projection `shouldBe` Just (Aeson.toJSON (map projectionGroupStatusJson page.items))
+        field "changed" projection `shouldBe` Just (Aeson.toJSON (map projectionGroupStatusRowJson page.items))
         void (stored store (appendJournalEntry (WorkflowName "head") (WorkflowId "one") (StepRecorded "head" Null now)))
         headOnly <- receive connection
         field "feed" headOnly `shouldBe` Just (String "projection_groups")

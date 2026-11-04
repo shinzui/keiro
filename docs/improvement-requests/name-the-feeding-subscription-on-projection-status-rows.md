@@ -4,11 +4,12 @@ title: Name the feeding subscription on projection status rows
 description: >-
   `/projection/status` rows carry each group's serving position but not the durable subscription
   that feeds the group, so a UI cannot join a group to its member checkpoints without being told
-  the subscription name. Add the feeding subscription (or null when none) to
-  projection_group_status_v1 or alongside it.
-timestamp: 2026-11-04T05:28:05Z
+  the subscription name. Publish the sorted feeding subscription names beside the frozen
+  projection_group_status_v1 row on bounded status pages and feeds.
+timestamp: 2026-11-04T18:02:00Z
 requestId: IR-57
-status: proposed
+status: accepted
+plan: docs/plans/327-name-the-feeding-subscriptions-on-projection-status-pages-without-runtime-performance-regressions.md
 origin: mori://shinzui/keiro-ui
 reviews:
   - kind: model
@@ -31,7 +32,7 @@ reviews:
 
 ## Status
 
-Proposed; no implementing ExecPlan exists.
+Accepted under [ExecPlan 327](../plans/327-name-the-feeding-subscriptions-on-projection-status-pages-without-runtime-performance-regressions.md).
 
 Originally proposed by the keiro runtime console initiative
 (`mori://shinzui/keiro-ui/masterplans/2-build-the-keiro-runtime-console`), filed from
@@ -45,7 +46,7 @@ not a dependency.
 and rebuild state. `projection position --subscription` gives a subscription's member checkpoints
 and its maximum global position distance. Nothing connects the two: the status row does not say
 which subscription feeds the group. The frozen contract
-(`mori://shinzui/keiro/okf/adrs/concepts/ADR-35`) means the field would be additive.
+(`mori://shinzui/keiro/okf/adrs/concepts/ADR-35`) forbids extending the v1 relation. Registration metadata must travel beside it.
 
 ## Console behaviour today
 
@@ -57,13 +58,17 @@ subscription's checkpoints without asking.
 
 ## Requested Change
 
-1. A `feeding_subscription` field (text, nullable) on each projection status row, from the
-   projection's registration, null for groups without a durable subscription (legacy or
-   unmanaged groups).
-2. The field also in the `projection_groups` feed items, which reuse the row encoder.
+Publish `feeding_subscriptions`, a sorted array of registered durable subscription names,
+on each bounded projection status item and `projection_groups` feed item. Keep the frozen
+v1 SQL relation unchanged. Inline-only (`append`) groups have an empty array. Unmanaged
+groups also have an empty array because their authority is unknown; the console must retain
+its manual chooser for them. Multiple subscriptions are supported.
 
 ## Acceptance
 
-1. For jitsurei, `GET /projection/status` reports `feeding_subscription:
-   "jitsurei-order-reporting"` on that group and null on the `$legacy-read-model:*` groups.
-2. Existing fields and their order are unchanged (ADR-35).
+For jitsurei, `GET /projection/status` reports
+`"feeding_subscriptions":["jitsurei-order-audit-subscription"]` on
+`jitsurei-order-reporting` and `[]` on `$legacy-read-model:*` groups. The CLI and feed
+publish the same field. Removing it yields exactly the previous JSON keys and values;
+the frozen SQL relation retains its ordered column signature. Paired page-read and runtime
+interference evidence must satisfy ExecPlan 327 without moving benchmark baselines.

@@ -125,6 +125,10 @@ benchmark = do
         execute url "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) SELECT 'seed-'||n,'seed-'||(n%31),'running' FROM generate_series(1,100000) n; ANALYZE keiro.keiro_workflows"
         execute url "UPDATE keiro.keiro_workflows SET last_error=repeat('x',65536) WHERE workflow_id=(SELECT workflow_id FROM keiro.keiro_workflows WHERE workflow_name='seed-0' ORDER BY workflow_id LIMIT 1)"
         execute url "INSERT INTO keiro.keiro_timers(timer_id,process_manager_name,correlation_id,fire_at,payload,status) SELECT ('00000000-0000-0000-0000-'||lpad(n::text,12,'0'))::uuid,'seed-timer','corr-'||(n%100),'2100-01-01'::timestamptz+n*interval '1 second',CASE WHEN n=2 THEN to_jsonb(repeat('x',65536)) ELSE jsonb_build_object('n',n) END,CASE WHEN n%4=0 THEN 'fired' WHEN n%8=1 THEN 'firing' ELSE 'scheduled' END FROM generate_series(1,100000) n; ANALYZE keiro.keiro_timers"
+        when ("projection-" `Text.isPrefixOf` mode) $ do
+          execute url "INSERT INTO keiro.keiro_projection_rebuild_groups(group_id,slice_fingerprint,status) SELECT 'group-'||lpad(n::text,8,'0'),'fixture','live' FROM generate_series(1,10000) n"
+          execute url "INSERT INTO keiro.keiro_projection_group_cursors(group_id,position_basis,subscription_names) SELECT group_id,CASE WHEN right(group_id,1)='0' THEN 'checkpoint' ELSE 'append' END,CASE WHEN right(group_id,1)='0' THEN ARRAY[group_id||'-sub'] ELSE ARRAY[]::text[] END FROM keiro.keiro_projection_rebuild_groups"
+          execute url "INSERT INTO keiro.keiro_read_models(name,version,shape_hash,status,rebuild_group_id) SELECT group_id||'-model-'||n,1,'shape','live',group_id FROM keiro.keiro_projection_rebuild_groups CROSS JOIN generate_series(1,3) n; ANALYZE keiro.keiro_projection_rebuild_groups; ANALYZE keiro.keiro_projection_group_cursors; ANALYZE keiro.keiro_read_models"
         withStore (defaultConnectionSettings url) {poolSize = 1} $ \store -> withMount store url mode $ \app -> do
           _ <- runStoreIO store (registerReadModel "inspection-benchmark" 1 "shape") >>= right
           settings <- use store (Session.statement () (Statement.preparable "SELECT jsonb_build_object('fsync',current_setting('fsync'),'synchronous_commit',current_setting('synchronous_commit'),'full_page_writes',current_setting('full_page_writes'),'autovacuum',current_setting('autovacuum'),'server_version',current_setting('server_version'))" E.noParams (D.singleRow (D.column (D.nonNullable D.jsonb)))))
@@ -326,7 +330,7 @@ withPollers mount mode seconds action = case mount of
     (views, clients) = pollingShape mode
 
 inspectionModes :: [Text]
-inspectionModes = ["disabled", "idle", "active-shared", "active-distinct", "slow-reader", "churn", "pm-types-idle", "pm-types", "pm-types-many-idle", "pm-types-many"]
+inspectionModes = ["disabled", "idle", "active-shared", "active-distinct", "slow-reader", "churn", "pm-types-idle", "pm-types", "pm-types-many-idle", "pm-types-many", "projection-idle", "projection-poll", "projection-feed"]
 
 #endif
 
@@ -334,6 +338,8 @@ inspectionModes = ["disabled", "idle", "active-shared", "active-distinct", "slow
 -- poll all views, while many clients can share one view's authoritative route.
 pollingShape :: Text -> (Int, Int)
 pollingShape = \case
+  "projection-poll" -> (0, 4)
+  "projection-feed" -> (1, 4)
   "pm-types" -> (0, 4)
   "pm-types-many" -> (0, 4)
   "active-shared" -> (1, 1)

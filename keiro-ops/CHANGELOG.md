@@ -6,6 +6,11 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## [Unreleased]
 
+### New Features
+
+- `projection status --json` items include sorted `feeding_subscriptions` from
+  registration metadata, empty for inline-only and unmanaged groups.
+
 ## 0.23.0.0 — 2026-10-30
 
 ### Breaking Changes

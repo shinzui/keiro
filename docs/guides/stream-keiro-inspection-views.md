@@ -2,7 +2,7 @@
 type: Runbook
 title: Stream Keiro Inspection Views
 description: Mount bounded workflow, timer and projection-group feeds and recover clients through their paired poll reads.
-timestamp: 2026-10-25T04:48:05Z
+timestamp: 2026-11-04T18:20:00Z
 docId: DOC-31
 tags: [keiro, operations, http, inspection, websocket]
 generated:
@@ -47,6 +47,9 @@ accept `limit`. Unknown fields and invalid limits are refused. Limits are
 {"type":"subscribe","feed":"timers","manager":"escalation","limit":100}
 {"type":"subscribe","feed":"projection_groups"}
 ```
+
+`projection_groups` item bodies equal `projection status` items, including the sorted
+`feeding_subscriptions` array from registration metadata.
 
 Each connection has at most one subscription per feed. A successful replacement
 sends a new snapshot; a refused replacement keeps the old view. Equivalent

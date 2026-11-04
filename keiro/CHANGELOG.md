@@ -6,6 +6,16 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- `ProjectionStatusPage.items` now contains `ProjectionGroupStatusRow`; access the
+  unchanged frozen v1 record through `status`.
+
+### New Features
+
+- Bounded projection status items carry registered `feedingSubscriptions` beside the
+  unchanged v1 row; complete-list and lookup APIs retain their contracts.
+
 ## 0.23.0.0 — 2026-10-30
 
 ### Breaking Changes

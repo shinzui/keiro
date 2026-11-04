@@ -83,6 +83,12 @@ spec fixture = describe "catalog rebuild groups" $ around (withFreshStore fixtur
     validated <- expectValid Catalog.catalogWithMissingSubscription
     _ <- expectStore store (registerProjectionCatalog validated) >>= shouldBeRight
 
+    Right page <- expectStore store (listProjectionGroupStatusesPage (ProjectionStatusPageRequest 100 Nothing))
+    map (^. #feedingSubscriptions) (page ^. #items)
+      `shouldBe` [["catalog-async-subscription", "catalog-missing-subscription"]]
+    map (^. #status . #servingPositionBasis) (page ^. #items)
+      `shouldBe` [ServingPositionCheckpoint]
+
     initial <- expectStore store (lookupProjectionGroupStatus Catalog.mainGroupId)
     initial ^? _Just . #servingPositionBasis
       `shouldBe` Just ServingPositionCheckpoint
@@ -191,7 +197,10 @@ spec fixture = describe "catalog rebuild groups" $ around (withFreshStore fixtur
     Right first <- expectStore store (listProjectionGroupStatusesPage (ProjectionStatusPageRequest 100 Nothing))
     Right second <- expectStore store (listProjectionGroupStatusesPage (ProjectionStatusPageRequest 100 (first ^. #next)))
     Right third <- expectStore store (listProjectionGroupStatusesPage (ProjectionStatusPageRequest 100 (second ^. #next)))
-    (first ^. #items) <> (second ^. #items) <> (third ^. #items) `shouldBe` statuses
+    let rows = (first ^. #items) <> (second ^. #items) <> (third ^. #items)
+    map (^. #status) rows `shouldBe` statuses
+    map (^. #feedingSubscriptions) (filter ((== Catalog.mainGroupId) . (^. #status . #groupId)) rows)
+      `shouldBe` [[]]
     third ^. #next `shouldBe` Nothing
     expectStore store listProjectionGroupStatuses `shouldReturn` statuses
     for_ [0, -1, 501] $ \size ->

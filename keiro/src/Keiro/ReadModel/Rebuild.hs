@@ -78,6 +78,7 @@ module Keiro.ReadModel.Rebuild
     ProjectionStatusPageRequest (..),
     ProjectionStatusReadError (..),
     ProjectionStatusPage (..),
+    ProjectionGroupStatusRow (..),
     projectionGroupsCursorKind,
     validateProjectionStatusRequest,
     listProjectionGroupStatusesPage,

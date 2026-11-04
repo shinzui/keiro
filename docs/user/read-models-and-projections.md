@@ -7,7 +7,7 @@ tags: [keiro, read-models, projections, reference]
 generated:
   by: process:codex-cli
   at: 2026-10-11T21:11:39Z
-timestamp: 2026-10-27T21:15:00Z
+timestamp: 2026-11-04T18:20:00Z
 ---
 
 # Read Models And Projections
@@ -554,6 +554,12 @@ cutover or an offline fence. External applications should use sanctioned same-st
 read contracts once those contracts are deployed rather than granting raw target-table
 access. Polling status remains appropriate for readiness, operations, rebuild progress,
 and choosing which versioned read contract a client can invoke.
+
+The bounded `listProjectionGroupStatusesPage` API returns `ProjectionGroupStatusRow`
+items: `status` contains the unchanged 18-field `ProjectionGroupStatusV1`, and
+`feedingSubscriptions` contains the registered sorted subscription names. The list is
+empty for inline-only groups and for unmanaged groups whose authority is unknown.
+The frozen SQL relation does not publish this metadata.
 
 Haskell callers can decode the same contract through
 `listProjectionGroupStatuses` or `lookupProjectionGroupStatus`. The

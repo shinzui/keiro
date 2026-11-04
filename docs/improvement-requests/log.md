@@ -1,48 +1,49 @@
 # Bundle Update Log
 
 ## 2026-11-04
+* **Update**: IR-57 accepted under ExecPlan 327: sorted feeding_subscriptions beside the unchanged v1 relation; corrected jitsurei subscription identity.
 * **Completion**: IR-55 completed under ExecPlan 328: jitsurei-ops-http, Jitsurei.Ops, the host recipe, and the HTTP hook-route guide.
 * **Update**: IR-55 accepted under ExecPlan 328: jitsurei-ops-http serves jitsurei's full AppHooks through an exported keiro-ops-http host.
 * **Status audit**: Reconciled all 60 requests against owner plans, the current source,
-  retained acceptance evidence and the 0.22/0.23 publication records. Existing local
-  plan links and Markdown file targets resolve. No implementation plan was created.
+retained acceptance evidence and the 0.22/0.23 publication records. Existing local
+plan links and Markdown file targets resolve. No implementation plan was created.
 * **Completion**: IR-26 through IR-31 are completed. MasterPlan 45's six implementation
-  children and integrated interference evidence are complete; release commit `fb6e3cff`
-  shipped Keiro 0.22.0.0 after the accepted `b2be482b` gate. Plan 326's published consumer
-  builds exact-version released packages and serves a healthy composed `/keiro/health`
-  response with no schema drift. The 0.23.0.0 consumer proof in `e643c696` repeats it.
-  Added completion timestamps for this reconciliation and resolutions pointing to the
-  retained evidence. Plan 303's older unchecked release milestones lag those records.
+children and integrated interference evidence are complete; release commit `fb6e3cff`
+shipped Keiro 0.22.0.0 after the accepted `b2be482b` gate. Plan 326's published consumer
+builds exact-version released packages and serves a healthy composed `/keiro/health`
+response with no schema drift. The 0.23.0.0 consumer proof in `e643c696` repeats it.
+Added completion timestamps for this reconciliation and resolutions pointing to the
+retained evidence. Plan 303's older unchecked release milestones lag those records.
 * **Status correction**: IR-34 is in-progress: Plan 267's mapped-register feature and
-  repository qualification are implemented, but its explicit native metadata acceptance
-  gate remains open. IR-33 is in-progress with its structural scope delivered and the
-  semantic engine deferred; this replaces the native validator's unsupported `implemented`
-  lifecycle value. Plans 265/266 retain their completed structural scope.
+repository qualification are implemented, but its explicit native metadata acceptance
+gate remains open. IR-33 is in-progress with its structural scope delivered and the
+semantic engine deferred; this replaces the native validator's unsupported `implemented`
+lifecycle value. Plans 265/266 retain their completed structural scope.
 * **Plan links**: IR-58 is accepted under Plan 325, with all three implementation milestones
-  open. IR-59 links Plan 324 and stays proposed, as that plan explicitly directs until
-  acceptance. Added release-proof Plan 326 to IR-26 through IR-31 and the respective
-  hardening plans 317, 318 and 319 to IR-30, IR-27 and IR-29.
+open. IR-59 links Plan 324 and stays proposed, as that plan explicitly directs until
+acceptance. Added release-proof Plan 326 to IR-26 through IR-31 and the respective
+hardening plans 317, 318 and 319 to IR-30, IR-27 and IR-29.
 * **Publication correction**: IR-54, IR-56 and IR-60 retain their implementation-completed
-  dispositions and now acknowledge inclusion in the published 0.22.0.0 package set.
-  Originating-consumer adoption remains separate. IR-54's parser follow-up Plan 313 is
-  complete; its earlier skeleton description was stale.
+dispositions and now acknowledge inclusion in the published 0.22.0.0 package set.
+Originating-consumer adoption remains separate. IR-54's parser follow-up Plan 313 is
+complete; its earlier skeleton description was stale.
 * **Unchanged gates**: IR-7 still awaits Plan 232's generation baseline and regression
-  wiring. IR-40 still awaits supported-language delivery and originating-consumer replay
-  evidence. IR-49 still lacks its full competing-count startup/external rerun evidence,
-  although its upstream owner plan and downstream implementation are complete. IR-47 is
-  accepted without an implementing plan. IR-55 and IR-57 remain proposed without one.
-  Other proposed, completed and superseded dispositions retain their recorded scope.
+wiring. IR-40 still awaits supported-language delivery and originating-consumer replay
+evidence. IR-49 still lacks its full competing-count startup/external rerun evidence,
+although its upstream owner plan and downstream implementation are complete. IR-47 is
+accepted without an implementing plan. IR-55 and IR-57 remain proposed without one.
+Other proposed, completed and superseded dispositions retain their recorded scope.
 * **Consistency**: Corrected stale pending/unreleased prose in IR-20, IR-35, IR-36,
-  IR-50 and IR-53; retained the dated pre-release evidence and existing completion scope.
+IR-50 and IR-53; retained the dated pre-release evidence and existing completion scope.
 * **Review**: Added bounded status-and-plan-link audit records for IR-55 through IR-60,
-  which lacked the pinned profile's recommended reviews. Historical reviews, authorship,
-  and completion timestamps were preserved; runtime test suites were not rerun.
+which lacked the pinned profile's recommended reviews. Historical reviews, authorship,
+and completion timestamps were preserved; runtime test suites were not rerun.
 * **Validation**: In Nix, strict pinned-profile OKF validation passes all 60 concepts;
-  all 165 local Markdown targets and 97 structured plan targets resolve, every lifecycle
-  value is supported, and `git diff --check` passes. Native Mori validation still reports
-  79 pre-existing metadata findings: 58 missing `generated`, 20 missing historical
-  `completedAt`, and one missing `supersededBy`. These remain separate from the passing
-  pinned profile and IR-34's open native acceptance gate.
+all 165 local Markdown targets and 97 structured plan targets resolve, every lifecycle
+value is supported, and `git diff --check` passes. Native Mori validation still reports
+79 pre-existing metadata findings: 58 missing `generated`, 20 missing historical
+`completedAt`, and one missing `supersededBy`. These remain separate from the passing
+pinned profile and IR-34's open native acceptance gate.
 
 ## 2026-10-26
 * **Update**: Complete IR-60 implementation and repository qualification under Plan 322; publication and downstream adoption remain separate.

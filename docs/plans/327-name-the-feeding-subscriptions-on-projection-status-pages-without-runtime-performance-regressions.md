@@ -22,6 +22,11 @@ provenance:
       at: 2026-11-04T15:47:07Z
       mode: "update"
       note: "Refresh baseline, correct look-ahead and join assumptions, repair compatibility check and reproducible evidence protocol, record remaining runtime acceptance gap."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-04T18:01:55Z
+      mode: "implement"
+      note: "Implement bounded status subscription metadata and retain paired SQL and writer-interference evidence."
 ---
 
 # Name the feeding subscriptions on projection status pages without runtime performance regressions
@@ -64,26 +69,50 @@ unchanged paths are unchanged, and the existing read-model benchmark guard.
 ## Progress
 
 
-- [ ] Milestone 1: The library page read returns each frozen v1 row together with its registered feeding subscriptions, proven by focused core tests for a two-subscription checkpoint group, an inline-only append group, and an unmanaged group, with the complete-list and lookup SQL byte-identical to the comparison baseline. IR-57 is linked to this plan as `accepted` with its request text corrected.
-- [ ] Milestone 2: `projection status --json`, `GET /projection/status`, and `projection_groups` feed items carry `feeding_subscriptions` with every existing key and value unchanged; the jitsurei group reports `["jitsurei-order-audit-subscription"]` and its legacy group reports `[]`, over the library, the embedded CLI, and the real HTTP server.
+- [x] Milestone 1 (2026-11-04; focused core 9 examples, ops inline authority assertions, byte comparison of preserved definitions, strict IR bundle validation): The library page read returns each frozen v1 row together with its registered feeding subscriptions, proven by focused core tests for a two-subscription checkpoint group, an inline-only append group, and an unmanaged group, with the complete-list and lookup SQL byte-identical to the comparison baseline. IR-57 is linked to this plan as `accepted` with its request text corrected.
+- [x] Milestone 2 (2026-11-04; ops 28, jitsurei 56, HTTP 55 examples, all passing; real executable CLI/HTTP items agree): `projection status --json`, `GET /projection/status`, and `projection_groups` feed items carry `feeding_subscriptions` with every existing key and value unchanged; the jitsurei group reports `["jitsurei-order-audit-subscription"]` and its legacy group reports `[]`, over the library, the embedded CLI, and the real HTTP server.
 - [ ] Milestone 3: Retained paired evidence shows the candidate page statement keeps its per-key plan with one primary-key probe per page row and a paired median server execution time within 1.10x of the pre-change binary at 10k and 100k groups for first and deep pages, the read-model guard passes without baseline movement, and the writer and schema paths are shown untouched.
 - [ ] Milestone 4: User documentation, guides, changelogs, and ADR-35 describe the field; IR-57 is `completed` with a resolution; the strict OKF bundles validate; and `just verify` passes in the Nix shell on the final candidate.
 
 
-Review handoff (2026-11-04): The source-level design is ready for a query prototype, but
-performance acceptance is not yet complete. Milestone 3 measures server SQL execution only.
-Before declaring the full no-runtime-regression requirement satisfied, specify and retain a
-matched active/idle writer-interference comparison for projection polling and feeds, including
-non-empty subscription arrays and response encoding, or obtain an explicit narrowing of that
-requirement. Use `keiro-ops-http/bench/InspectionInterference.hs`,
-`keiro-ops-http/bench/InspectionClients.hs`, and the paired controller in
-`scripts/measure-pm-types.sh` as starting points; the prior manager-types result or waiver
-cannot stand in for projection evidence. Fix the workload, offered rate, repetitions, metrics,
-and refusal criteria before measurement. A green SQL ratio alone must not complete Milestone 3.
+Behavioral evidence: `keiro/bench/results/inspection/projection-status-feeding-subscriptions/jitsurei-cli.json`
+and `jitsurei-http.json` retain the complete responses. The embedded CLI used an explicit
+`--database-url` (its ops parser does not consume the demo's `PG_CONNECTION_STRING`).
+The database-only HTTP server used port 19327 because 9092 was already occupied.
+Both returned these fields, with all item keys/values equal across transports:
+
+```json
+{"group_id":"$legacy-read-model:jitsurei-area-chapters","serving_position_basis":"unmanaged","feeding_subscriptions":[]}
+{"group_id":"jitsurei-order-reporting","serving_position_basis":"checkpoint","feeding_subscriptions":["jitsurei-order-audit-subscription"]}
+```
+
+Implementation protocol (2026-11-04): The review's runtime evidence gap is addressed
+by a matched projection cohort, fixed before sampling. Compile identical extended
+`InspectionInterference.hs` and `InspectionClients.hs` sources against baseline and candidate.
+Seed 10,000 groups with three models each, every tenth group checkpoint-backed with one
+non-empty subscription name. Use the existing durable workflow schedule/claim/resume/timer
+writer at 100 offered operations per second, 20 seconds per trial, `+RTS -N2 -T`.
+Run five alternating baseline/candidate pairs for mounted idle, four staggered status
+pollers (four requests per second, limit 100), and four shared `projection_groups` feed
+subscribers with limit 100. Retain every operation timing and client success/failure count.
+Compare each candidate mode with its matched baseline mode, and the candidate active/idle
+ratio with the baseline active/idle ratio. Metrics are achieved throughput, writer p95/p99
+including scheduling delay, and writer-thread allocated bytes per operation. A trial refuses
+lost offered load (<99%), any failed client, lost polling requests, missing snapshots,
+non-durable settings, incomplete samples, or abandoned feed resources. Each metric's paired
+median regression ratio must be <=1.10; report all five ratios and absolute medians without
+removing outliers. This measures the specified workload; it is not a universal performance
+claim. Retain source, binaries' hashes, dependencies, raw records and summary alongside the SQL
+evidence. No earlier manager-discovery waiver supplies projection acceptance.
 
 
 ## Surprises & Discoveries
 
+- 2026-11-04 (implementation): The ordinary added left join uses a merge join under
+  forced generic plans for both 10k and 100k first pages: the added `cursors` index scan
+  has no index condition and runs once. The fenced lateral alternative is required
+  to retain 101 parameterized primary-key probes. Prototype is local at
+  `.dev/plan327/prototype.json`; accepted measurements are retained separately.
 
 - 2026-11-04 (planning): IR-57 states that the frozen contract "means the field would be
   additive" on `projection_group_status_v1`. ADR-35 says the opposite: the v1 relation is
@@ -681,7 +710,7 @@ export JITSUREI_DATABASE=jitsurei_plan327
 just jitsurei-fulfillment
 just jitsurei-agent-qual
 export PG_CONNECTION_STRING="host=$PWD/db dbname=$JITSUREI_DATABASE user=$(whoami)"
-cabal run jitsurei-demo -- ops projection status --json | jq '.items[] | {group_id, serving_position_basis, feeding_subscriptions}'
+cabal run jitsurei-demo -- ops --database-url "$PG_CONNECTION_STRING" projection status --json | jq '.items[] | {group_id, serving_position_basis, feeding_subscriptions}'
 ```
 
 Expected output includes these two objects (other legacy groups may also appear with empty
@@ -716,8 +745,8 @@ mkdir -p keiro/bench/results/inspection/projection-status-feeding-subscriptions
 projection_evidence="$PWD/keiro/bench/results/inspection/projection-status-feeding-subscriptions"
 projection_driver="$PWD/scripts/inspection-projection-feeding-subscriptions-evidence.hs"
 mkdir -p "$projection_evidence/build-baseline" "$projection_evidence/build-candidate"
-(cd ../keiro-feeding-subscriptions-baseline && cabal build keiro keiro-test-support && cabal exec -- ghc -O2 -XGHC2024 -package keiro -package keiro-test-support -outputdir "$projection_evidence/build-baseline" "$projection_driver" -o "$projection_evidence/baseline-driver")
-cabal exec -- ghc -O2 -XGHC2024 -package keiro -package keiro-test-support -outputdir "$projection_evidence/build-candidate" "$projection_driver" -o "$projection_evidence/candidate-driver"
+(cd ../keiro-feeding-subscriptions-baseline && cabal build keiro keiro-test-support && cabal exec -- ghc -O2 -threaded -XGHC2024 -package keiro -package keiro-test-support -outputdir "$projection_evidence/build-baseline" "$projection_driver" -o "$projection_evidence/baseline-driver")
+cabal exec -- ghc -O2 -threaded -XGHC2024 -package keiro -package keiro-test-support -outputdir "$projection_evidence/build-candidate" "$projection_driver" -o "$projection_evidence/candidate-driver"
 for run in 1 2 3; do
   if [ "$run" = 2 ]; then
     "$projection_evidence/candidate-driver" "$projection_evidence/candidate-$run.json"
