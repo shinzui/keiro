@@ -5,24 +5,44 @@ module Jitsurei.CreditLimit
     CreditLimitEvent (..),
     CreditAdjustedData (..),
     CreditLimitRegs,
+    initialCreditLimitRegs,
+    creditLimitStateText,
     creditLimitTransducer,
   )
 where
 
+import Data.Aeson (FromJSON (..), ToJSON (..), withText)
 import Data.Proxy (Proxy (..))
+import Data.Text (Text)
 import GHC.Generics (Generic)
 import Keiki.Builder ((=:))
 import Keiki.Builder qualified as B
 import Keiki.Core (HsPred, RegFile (..), SymTransducer, (.&&), (.+), (.==), (.>=))
 import Keiki.Core qualified as K
 import Keiki.Generics.TH (deriveAggregate)
+import Keiki.Shape (CanonicalStateShape)
 
 -- | A deliberately small scalar aggregate whose generated diagram is the
 -- documentation proof for readable guards, assignments, and literal values.
 data CreditLimitState
   = CreditOpen
   | CreditReviewed
-  deriving stock (Eq, Ord, Show, Enum, Bounded)
+  deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
+
+instance CanonicalStateShape CreditLimitState
+
+creditLimitStateText :: CreditLimitState -> Text
+creditLimitStateText CreditOpen = "credit_open"
+creditLimitStateText CreditReviewed = "credit_reviewed"
+
+instance ToJSON CreditLimitState where
+  toJSON = toJSON . creditLimitStateText
+
+instance FromJSON CreditLimitState where
+  parseJSON = withText "CreditLimitState" $ \case
+    "credit_open" -> pure CreditOpen
+    "credit_reviewed" -> pure CreditReviewed
+    _ -> fail "unknown credit-limit state"
 
 data CreditLimitCommand = AdjustCredit !AdjustCreditData
   deriving stock (Generic, Eq, Show)
@@ -71,7 +91,8 @@ creditLimitTransducer =
             { delta = d.delta
             }
         B.goto CreditReviewed
-  where
-    initialCreditLimitRegs =
-      RCons (Proxy @"balance") (0 :: Int) $
-        RCons (Proxy @"active") True RNil
+
+initialCreditLimitRegs :: RegFile CreditLimitRegs
+initialCreditLimitRegs =
+  RCons (Proxy @"balance") (0 :: Int) $
+    RCons (Proxy @"active") True RNil

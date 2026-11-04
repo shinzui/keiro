@@ -5,7 +5,7 @@ where
 
 import Control.Exception (SomeException, try)
 import Control.Lens ((^.))
-import Control.Monad (replicateM_, when)
+import Control.Monad (forM_, replicateM_, when)
 import Data.Aeson (object)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -39,6 +39,7 @@ import Keiro.Ops.Aggregate qualified as OpsAggregate
 import Keiro.Ops.Env qualified as OpsEnv
 import Keiro.Ops.ProcessManager qualified as OpsPM
 import Keiro.Ops.Render qualified as OpsRender
+import Keiro.Ops.Snapshot qualified as OpsSnapshot
 import Keiro.PGMQ.Job (Job (..))
 import Keiro.PGMQ.Runtime (JobRuntime (..), QueueRef (..), runJobEff, withJobRuntime)
 import Keiro.ProcessManager
@@ -48,6 +49,7 @@ import Keiro.Projection.Catalog.Operations qualified as CatalogOperations
 import Keiro.ReadModel
 import Keiro.ReadModel.Rebuild
 import Keiro.ReplayAudit
+import Keiro.Snapshot.Schema qualified as Snapshot
 import Keiro.Test.Postgres (Fixture, StoreRunner (..), withFreshDatabase, withFreshResourceStore, withFreshResourceStoreWith, withMigratedSuiteWith)
 import Keiro.Timer
 import Keiro.Workflow
@@ -716,6 +718,37 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
       length (retired ^. #generations) `shouldBe` 3
 
   describe "Jitsurei snapshots" $ around (withFreshResourceStore fixture) $ do
+    it "exposes nonempty current and stored registers through library and embedded ops" $ \(store, StoreRunner runner) -> do
+      Right (Right result) <- runner (runCommand defaultRunCommandOptions creditLimitEventStream (creditLimitStream "registers-100") (AdjustCredit (AdjustCreditData 25)))
+      result ^. #streamVersion `shouldBe` StreamVersion 1
+      Just (Aggregate.SomeAggregateInspector inspector) <- pure (Map.lookup "credit-limit" jitsureiAggregateInspectors)
+      Right (Right view) <- runner (Aggregate.inspectAggregate inspector "registers-100")
+      let expected = object ["state" Aeson..= ("credit_reviewed" :: Text), "registers" Aeson..= object ["balance" Aeson..= (25 :: Int), "active" Aeson..= False]]
+          hooks = jitsureiOpsHooks Nothing
+          env = OpsEnv.OpsEnv store OpsEnv.Json False [] False
+      view ^. #state `shouldBe` Just expected
+      view ^. #streamVersion `shouldBe` StreamVersion 1
+      view ^. #stateLabel `shouldBe` Just "credit_reviewed"
+      fmap (^. #compatibility) (view ^. #snapshot . #stored) `shouldBe` Just Aggregate.Compatible
+      Right (Just info) <- runner (Store.getStream (StreamName "creditLimit-registers-100"))
+      Right (Just row) <- runner (Snapshot.lookupSnapshotRow (info ^. #id))
+      row ^. #state `shouldBe` expected
+      row ^. #streamVersion `shouldBe` StreamVersion 1
+      Right recorded <- runner (Store.readStreamForward (StreamName "creditLimit-registers-100") (StreamVersion 0) 10)
+      traverse (decodeRecorded creditLimitCodec) (Vector.toList recorded) `shouldBe` Right [CreditAdjusted (CreditAdjustedData 25)]
+      OpsRender.Succeeded shown <- Ops.runCommand hooks env (Ops.Aggregate (OpsAggregate.Show (OpsAggregate.ShowOptions "credit-limit" "registers-100")))
+      case OpsRender.jsonValue shown of
+        Aeson.Object fields -> KeyMap.lookup "state_version" fields `shouldBe` Just (Aeson.toJSON (1 :: Int))
+        _ -> expectationFailure "expected current state version"
+      OpsRender.Succeeded stored <- Ops.runCommand hooks env (Ops.Snapshot (OpsSnapshot.Show "creditLimit-registers-100"))
+      forM_ [OpsRender.jsonValue shown, OpsRender.jsonValue stored] $ \case
+        Aeson.Object fields -> do
+          KeyMap.lookup "state" fields `shouldBe` Just expected
+          KeyMap.lookup "stream_version" fields `shouldBe` Just (Aeson.toJSON (1 :: Int))
+        _ -> expectationFailure "expected inspection JSON object"
+      runner (Snapshot.lookupSnapshotRow (info ^. #id)) `shouldReturn` Right (Just row)
+      runner (Store.getStream (StreamName "creditLimit-registers-100")) `shouldReturn` Right (Just info)
+
     it "writes a snapshot after the configured threshold" $ \(store, StoreRunner runner) -> do
       let target = orderStream (OrderId "snapshot-100")
       Right (Right _) <-
@@ -751,6 +784,7 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
       Just (Aggregate.SomeAggregateInspector inspector) <- pure (Map.lookup "order" jitsureiAggregateInspectors)
       Right (Right view) <- runner (Aggregate.inspectAggregate inspector "snapshot-100")
       (view ^. #stateLabel) `shouldBe` Just "paid"
+      (view ^. #state) `shouldBe` Just (object ["state" Aeson..= ("paid" :: Text), "registers" Aeson..= object []])
       fmap (^. #compatibility) (view ^. #snapshot . #stored) `shouldBe` Just Aggregate.Compatible
       Right (Right page) <- runner (Aggregate.listAggregates inspector (Aggregate.AggregateListRequest 2 Nothing))
       map (^. #aggregateId) (page ^. #items) `shouldBe` ["snapshot-100"]
@@ -999,6 +1033,7 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
       Just (Aggregate.SomeAggregateInspector inspector) <- pure (Map.lookup "incident" jitsureiAggregateInspectors)
       Right (Right view) <- runner (Aggregate.inspectAggregate inspector "inc-1")
       (view ^. #stateLabel) `shouldBe` Just "acknowledged"
+      (view ^. #state) `shouldBe` Just (object ["state" Aeson..= ("acknowledged" :: Text), "registers" Aeson..= object []])
       (view ^. #hydration) `shouldBe` Just (FullReplay NoStateCodec)
       -- The aggregate's guards resolve the ack/escalate race: once acknowledged,
       -- EscalateIncident has no edge and is a benign domain rejection.

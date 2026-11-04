@@ -4,10 +4,13 @@ module Jitsurei.Inspection (jitsureiAggregateInspectors, jitsureiProcessManagerI
 import Data.Aeson (object, (.=))
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
+import Jitsurei.CreditLimit (creditLimitStateText)
+import Jitsurei.CreditLimitStream
 import Jitsurei.Domain (stateText)
 import Jitsurei.FulfillmentProcess (fulfillmentCategory, fulfillmentProcessManager)
 import Jitsurei.Incident (incidentCategory, incidentEventStream)
 import Jitsurei.OrderStream (orderCategory, snapshotOrderEventStream)
+import Keiki.Codec.JSON (regFileToJSON)
 import Keiro.Inspection.Aggregate qualified as Aggregate
 import Keiro.ProcessManager.Inspect qualified as PM
 
@@ -16,13 +19,18 @@ jitsureiAggregateInspectors =
   either (error . Text.unpack) id $
     Aggregate.aggregateInspectors
       [ Aggregate.SomeAggregateInspector
-          ( (Aggregate.aggregateInspector "order" snapshotOrderEventStream orderCategory (\state _ -> object ["state" .= stateText state]))
+          ( (Aggregate.aggregateInspector "order" snapshotOrderEventStream orderCategory (\state registers -> object ["state" .= stateText state, "registers" .= regFileToJSON registers]))
               { Aggregate.stateLabel = stateText
               }
           ),
         Aggregate.SomeAggregateInspector
-          ( (Aggregate.aggregateInspector "incident" incidentEventStream incidentCategory (\state _ -> object ["state" .= incidentLabel state]))
+          ( (Aggregate.aggregateInspector "incident" incidentEventStream incidentCategory (\state registers -> object ["state" .= incidentLabel state, "registers" .= regFileToJSON registers]))
               { Aggregate.stateLabel = incidentLabel
+              }
+          ),
+        Aggregate.SomeAggregateInspector
+          ( (Aggregate.aggregateInspector "credit-limit" creditLimitEventStream creditLimitCategory displayCreditLimit)
+              { Aggregate.stateLabel = creditLimitStateText
               }
           )
       ]

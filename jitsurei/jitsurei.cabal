@@ -50,6 +50,7 @@ library
     Jitsurei
     Jitsurei.AgentQualRouter
     Jitsurei.CreditLimit
+    Jitsurei.CreditLimitStream
     Jitsurei.Database
     Jitsurei.Diagrams
     Jitsurei.Domain

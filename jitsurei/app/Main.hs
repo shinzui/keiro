@@ -86,6 +86,7 @@ runDemo metrics args =
     [] -> runFulfillmentDemo metrics
     ["fulfillment"] -> runFulfillmentDemo metrics
     ["snapshots"] -> runSnapshotsDemo metrics
+    ["registers"] -> runRegistersDemo metrics
     ["escalation"] -> runEscalationDemo metrics
     ["paging"] -> runPagingDemo metrics
     ["agent-qual"] -> runAgentQualDemo metrics
@@ -93,11 +94,28 @@ runDemo metrics args =
     ["all"] -> do
       runFulfillmentDemo metrics
       runSnapshotsDemo metrics
+      runRegistersDemo metrics
       runPagingDemo metrics
       runEscalationDemo metrics
       runAgentQualDemo metrics
       runDurableWorkflowDemo metrics
-    _ -> fail "usage: jitsurei-demo [fulfillment|snapshots|paging|escalation|agent-qual|workflow|ops|all]"
+    _ -> fail "usage: jitsurei-demo [fulfillment|snapshots|registers|paging|escalation|agent-qual|workflow|ops|all]"
+
+runRegistersDemo :: Maybe Telemetry.KeiroMetrics -> IO ()
+runRegistersDemo metrics = withJitsureiStore $ \store -> do
+  aggregateId <- freshTextId "registers"
+  result <-
+    requireEither
+      =<< requireEither
+      =<< runJitsureiStore store (runCommand (commandOptions metrics) creditLimitEventStream (creditLimitStream aggregateId) (AdjustCredit (AdjustCreditData 25)))
+  print result
+  putStrLn ("[jitsurei:registers] aggregate id: " <> Text.unpack aggregateId)
+  putStrLn ("[jitsurei:registers] stream: creditLimit-" <> Text.unpack aggregateId)
+  putStrLn "[jitsurei:registers] balance=25 active=false at version 1; read URLs:"
+  let base = "http://127.0.0.1:9092"
+  putStrLn (base <> "/aggregate/show?name=credit-limit&id=" <> Text.unpack aggregateId)
+  putStrLn (base <> "/aggregate/snapshot?name=credit-limit&id=" <> Text.unpack aggregateId)
+  putStrLn (base <> "/snapshot/show?stream=creditLimit-" <> Text.unpack aggregateId)
 
 -- | Give the whole executable one SDK meter provider and one instrument set.
 -- The console exporter makes the short-lived demo self-observing; shutting the

@@ -208,6 +208,7 @@ import Keiro.ReadModel
 import Keiro.ReadModel.Rebuild qualified as Rebuild
 import Keiro.ReplayAudit qualified as ReplayAudit
 import Keiro.Snapshot.Policy (shouldSnapshot, shouldSnapshotSpan)
+import Keiro.Snapshot.Schema qualified as SnapshotSchema
 import Keiro.Stream qualified as Stream
 import Keiro.Subscription.Shard
   ( LeaseState (..),
@@ -2459,10 +2460,19 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       forM_ [2, 3, 4] $ \amount -> do
         Right (Right _) <- Store.runStoreIO store (runCommand inspectionRunCommandOptions snapshotCounterEventStream target (Add amount))
         pure ()
+      Right (Just infoBefore) <- Store.runStoreIO store (Store.getStream (StreamName "inspectioncounter-one"))
+      Right (Just storedBefore) <- Store.runStoreIO store (SnapshotSchema.lookupSnapshotRow (infoBefore ^. #id))
+      (storedBefore ^. #streamVersion) `shouldBe` StreamVersion 2
+      (storedBefore ^. #state) `shouldBe` (codec ^. #encode) (Counting, RCons (Proxy @"lastAmount") (3 :: Int) RNil)
       Right (Right view) <- Store.runStoreIO store (Aggregate.inspectAggregate inspector "one")
       Right (Right full) <- Store.runStoreIO store (hydrateFull inspectionRunCommandOptions (unvalidated snapshotCounterEventStream) target)
       (view ^. #state) `shouldBe` Just ((codec ^. #encode) (full ^. #state, full ^. #registers))
       (view ^. #streamVersion) `shouldBe` (full ^. #streamVersion)
+      (view ^. #streamVersion) `shouldBe` StreamVersion 3
+      (view ^. #state) `shouldBe` Just ((codec ^. #encode) (Counting, RCons (Proxy @"lastAmount") (4 :: Int) RNil))
+      case Aggregate.aggregateViewJson view of
+        Aeson.Object fields -> KeyMap.lookup "state_version" fields `shouldBe` Just (Aeson.toJSON (3 :: Int))
+        _ -> expectationFailure "expected aggregate JSON object"
       let mappedDefinition :: SnapshotCounterEventStream
           mappedDefinition = (unvalidated snapshotCounterEventStream) & #resolveStreamName .~ (\typed -> case Stream.streamName typed of StreamName raw -> StreamName ("inspectioncounter-" <> raw))
           mappedStream = mkEventStreamOrThrow "inspection-mapped-counter" mappedDefinition
@@ -2474,14 +2484,35 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Aggregate.aggregateIdOf mappedInspector (StreamName "inspectioncounter-one") `shouldBe` Just "one"
       (view ^. #hydration) `shouldBe` Just (FromSnapshot (StreamVersion 2))
       fmap (^. #compatibility) (view ^. #snapshot . #stored) `shouldBe` Just Aggregate.Compatible
+      Store.runStoreIO store (SnapshotSchema.lookupSnapshotRow (infoBefore ^. #id)) `shouldReturn` Right (Just storedBefore)
+      Store.runStoreIO store (Store.getStream (StreamName "inspectioncounter-one")) `shouldReturn` Right (Just infoBefore)
       Right _ <- Store.runStoreIO store (Store.softDeleteStream (StreamName "inspectioncounter-one"))
       Right (Right deleted) <- Store.runStoreIO store (Aggregate.inspectAggregate inspector "one")
       (deleted ^. #state) `shouldBe` Nothing
       (deleted ^. #hydration) `shouldBe` Nothing
       (deleted ^. #streamVersion) `shouldBe` StreamVersion 3
+      Store.runStoreIO store (SnapshotSchema.lookupSnapshotRow (infoBefore ^. #id)) `shouldReturn` Right (Just storedBefore)
       Aggregate.aggregateStream inspector " " `shouldBe` Left (Aggregate.AggregateIdRejected " ")
       missing <- Store.runStoreIO store (Aggregate.inspectAggregate inspector "missing")
       missing `shouldBe` Right (Left (Aggregate.AggregateNotFound (StreamName "inspectioncounter-missing")))
+
+    it "reports incompatible snapshot identifiers independently while replaying current values" $ \store -> do
+      let codec = defaultStateCodec @SnapshotCounterRegs @CounterState 1
+          inspector = Aggregate.aggregateInspector "counter" snapshotCounterEventStream (Stream.categoryUnsafe "inspectioncounter") (Aggregate.displayViaStateCodec codec)
+          target = Stream.entityStream (Stream.categoryUnsafe "inspectioncounter") "incompatible"
+      forM_ [2, 3, 4] $ \amount -> do
+        Right (Right _) <- Store.runStoreIO store (runCommand inspectionRunCommandOptions snapshotCounterEventStream target (Add amount))
+        pure ()
+      Right (Just info) <- Store.runStoreIO store (Store.getStream (StreamName "inspectioncounter-incompatible"))
+      let payload = object ["legacy" Aeson..= True]
+      Right () <- Store.runStoreIO store (SnapshotSchema.writeSnapshotRow (SnapshotSchema.SnapshotWrite (info ^. #id) (StreamVersion 2) payload 999 "old-registers" "old-fold"))
+      Right before <- Store.runStoreIO store (SnapshotSchema.lookupSnapshotRow (info ^. #id))
+      Right (Right view) <- Store.runStoreIO store (Aggregate.inspectAggregate inspector "incompatible")
+      (view ^. #streamVersion) `shouldBe` StreamVersion 3
+      (view ^. #state) `shouldBe` Just ((codec ^. #encode) (Counting, RCons (Proxy @"lastAmount") (4 :: Int) RNil))
+      fmap (^. #compatibility) (view ^. #snapshot . #stored) `shouldBe` Just (Aggregate.Incompatible ["state_codec_version", "regfile_shape_hash", "state_shape_hash"])
+      Store.runStoreIO store (SnapshotSchema.lookupSnapshotRow (info ^. #id)) `shouldReturn` Right before
+      Store.runStoreIO store (Store.getStream (StreamName "inspectioncounter-incompatible")) `shouldReturn` Right (Just info)
 
     it "advances one raw page through rejected rows without losing the look-ahead row" $ \store -> do
       let base = Aggregate.aggregateInspector "counter" counterEventStream (Stream.categoryUnsafe "inspectionpage") (\state _ -> Aeson.String (Text.pack (show state)))

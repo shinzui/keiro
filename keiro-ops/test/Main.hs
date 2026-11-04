@@ -3,6 +3,7 @@
 module Main (main) where
 
 import Control.Exception (bracket)
+import Control.Monad (forM_)
 import Data.Aeson (object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key (Key)
@@ -1389,6 +1390,28 @@ spec fixture = do
       replacementOwners `shouldSatisfy` all (\(_, owner, _) -> owner == Just replacement)
 
   describe "snapshot handlers" $ around (withFreshStore fixture) do
+    it "preserves custom incompatible payloads and returns null for missing snapshots" $ \store -> do
+      appended <- seedKirokuEvent store "snapshot-raw" "018f5f43-8a70-7b9a-9a9b-59d391a76810" Nothing
+      forM_ ["missing-snapshot-stream", "snapshot-raw"] $ \name -> do
+        Succeeded result <- OpsSnapshot.runCommand (opsEnv False store) (OpsSnapshot.Show name)
+        result.jsonValue `shouldBe` Aeson.Null
+      let payload = object ["custom" .= [object ["secret" .= True]], "legacy" .= ("unrecognized shape" :: Text)]
+      expectStore store $ writeSnapshotRow (SnapshotWrite appended.streamId appended.streamVersion payload 999 "old-registers" "old-fold")
+      before <- expectStore store (lookupSnapshotRow appended.streamId)
+      streamBefore <- expectStore store (getStream (StreamName "snapshot-raw"))
+      Succeeded result <- OpsSnapshot.runCommand (opsEnv False store) (OpsSnapshot.Show "snapshot-raw")
+      case result.jsonValue of
+        Aeson.Object fields -> do
+          KeyMap.lookup "state" fields `shouldBe` Just payload
+          KeyMap.lookup "stream_version" fields `shouldBe` Just (Aeson.toJSON (1 :: Int))
+          KeyMap.lookup "state_codec_version" fields `shouldBe` Just (Aeson.toJSON (999 :: Int))
+          KeyMap.lookup "regfile_shape_hash" fields `shouldBe` Just (Aeson.String "old-registers")
+          KeyMap.lookup "state_shape_hash" fields `shouldBe` Just (Aeson.String "old-fold")
+          KeyMap.member "compatibility" fields `shouldBe` False
+        _ -> expectationFailure "expected raw snapshot object"
+      expectStore store (lookupSnapshotRow appended.streamId) `shouldReturn` before
+      expectStore store (getStream (StreamName "snapshot-raw")) `shouldReturn` streamBefore
+
     it "refuses uncovered truncation, passes matching coverage, and deletes advisories" $ \store -> do
       appended <- seedKirokuEvent store "snapshot-ops" "018f5f43-8a70-7b9a-9a9b-59d391a76811" Nothing
       let expected = OpsSnapshot.ExpectedDiscriminators 7 "regs-v7" "fold-v7"

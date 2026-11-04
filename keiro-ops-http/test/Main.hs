@@ -47,6 +47,7 @@ import Keiro.Ops.WorkflowHeaderCache
 import Keiro.PGMQ
 import Keiro.Projection.Catalog qualified as Catalog
 import Keiro.Projection.Catalog.Operations qualified as CatalogOperations
+import Keiro.Snapshot.Schema qualified as Snapshot
 import Keiro.Test.Postgres
 import Keiro.Timer qualified as Timer
 import Keiro.Workflow (WorkflowId (..), WorkflowJournalEvent (..), WorkflowName (..), appendJournalEntry, continueAsNew, runWorkflow)
@@ -162,6 +163,47 @@ spec fixture = do
       forM_ [0, -1, maxBound] $ \seconds ->
         newInspectionBudget defaultInspectionLimits {deliveryDeadlineSeconds = seconds} `shouldThrow` anyIOException
   around (withFreshStore fixture) $ do
+    describe "raw snapshot routes" $ do
+      it "returns null for absent rows, preserves arbitrary incompatible JSON and reads without mutations" $ \store -> do
+        app <- opsApplication defaultOpsHttpConfig Ops.emptyAppHooks store
+        Right appended <- runStoreIO store (appendToStream (StreamName "snapshot-http") AnyVersion [EventData Nothing (EventType "test") Null Nothing Nothing Nothing])
+        forM_ ["missing", "snapshot-http"] $ \name -> do
+          absent <- call app methodGet ("/snapshot/show?stream=" <> name) ""
+          simpleStatus absent `shouldBe` status200
+          body absent `shouldBe` Null
+        let payload = object ["custom" .= [object ["balance" .= (25 :: Int), "active" .= False]], "legacy" .= True]
+        Right () <- runStoreIO store (Snapshot.writeSnapshotRow (Snapshot.SnapshotWrite appended.streamId appended.streamVersion payload 999 "old-registers" "old-fold"))
+        Right before <- runStoreIO store (Snapshot.lookupSnapshotRow appended.streamId)
+        Right streamBefore <- runStoreIO store (getStream (StreamName "snapshot-http"))
+        shown <- call app methodGet "/snapshot/show?stream=snapshot-http" ""
+        simpleStatus shown `shouldBe` status200
+        field "state" (body shown) `shouldBe` Just payload
+        field "state_codec_version" (body shown) `shouldBe` Just (Aeson.toJSON (999 :: Int))
+        field "regfile_shape_hash" (body shown) `shouldBe` Just (String "old-registers")
+        field "state_shape_hash" (body shown) `shouldBe` Just (String "old-fold")
+        field "compatibility" (body shown) `shouldBe` Nothing
+        refused <- call app methodPost "/snapshot/show?stream=snapshot-http" ""
+        assertError refused status405 "method_not_allowed"
+        runStoreIO store (Snapshot.lookupSnapshotRow appended.streamId) `shouldReturn` Right before
+        runStoreIO store (getStream (StreamName "snapshot-http")) `shouldReturn` Right streamBefore
+
+      it "bounds stored payloads and releases the only admission slot after oversized encoding" $ \store -> do
+        Right appended <- runStoreIO store (appendToStream (StreamName "snapshot-large") AnyVersion [EventData Nothing (EventType "test") Null Nothing Nothing Nothing])
+        Right () <- runStoreIO store (Snapshot.writeSnapshotRow (Snapshot.SnapshotWrite appended.streamId appended.streamVersion (String (Text.replicate 4096 "x")) 1 "regs" "fold"))
+        Right before <- runStoreIO store (Snapshot.lookupSnapshotRow appended.streamId)
+        Right streamBefore <- runStoreIO store (getStream (StreamName "snapshot-large"))
+        let config = defaultOpsHttpConfig {inspectionLimits = defaultInspectionLimits {maxResponseBytes = 1024, maxConcurrentReads = 1}}
+        app <- opsApplication config Ops.emptyAppHooks store
+        oversized <- call app methodGet "/snapshot/show?stream=snapshot-large" ""
+        assertError oversized status413 "inspection_result_too_large"
+        health <- call app methodGet "/health" ""
+        simpleStatus health `shouldBe` status200
+        small <- call app methodGet "/snapshot/show?stream=missing" ""
+        simpleStatus small `shouldBe` status200
+        body small `shouldBe` Null
+        runStoreIO store (Snapshot.lookupSnapshotRow appended.streamId) `shouldReturn` Right before
+        runStoreIO store (getStream (StreamName "snapshot-large")) `shouldReturn` Right streamBefore
+
     describe "mounted process-manager discovery" $ do
       it "serves Jitsurei metadata without journal instances and agrees with the parsed CLI" $ \store -> do
         let mounted = Ops.emptyAppHooks {Ops.processManagers = Just jitsureiProcessManagerInspectors}

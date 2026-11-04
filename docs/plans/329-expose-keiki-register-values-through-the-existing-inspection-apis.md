@@ -22,6 +22,11 @@ provenance:
       at: 2026-11-04T15:02:38Z
       mode: "update"
       note: "Stale working-tree claim fixed; catalog assertion, diagram check, regFileToJSON precondition, Every 1 rationale, guide locations, and performance diff-boundary acceptance added"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-04T15:09:32Z
+      mode: "implement"
+      note: "Implement register inspection example and verify current, persisted, CLI, and HTTP views"
 ---
 
 # Expose Keiki register values through the existing inspection APIs
@@ -57,19 +62,24 @@ contract and worked example; browser rendering belongs to `mori://shinzui/keiro-
 
 ## Progress
 
-- [ ] Milestone 1: current aggregate displays include register objects, and a mounted, snapshot-enabled credit-limit example returns nonempty register values through the library and embedded CLI.
-- [ ] Milestone 2: tests prove that current folded values and persisted snapshot values retain their own versions, including a snapshot followed by more events, missing snapshots, and incompatible snapshot contents.
-- [ ] Milestone 3: HTTP tests retrieve real nonempty registers through the existing routes, agree with CLI/library results, and prove response limits and read-only behavior.
+- [x] Milestone 1 (2026-11-04; `jitsurei-test`: 26 examples, zero failures; live demo confirms version-1 values): current aggregate displays include register objects, and a mounted, snapshot-enabled credit-limit example returns nonempty register values through the library and embedded CLI.
+- [x] Milestone 2 (2026-11-04; focused aggregate: 3 examples and snapshot handlers: 2 examples, zero failures): tests prove that current folded values and persisted snapshot values retain their own versions, including a snapshot followed by more events, missing snapshots, and incompatible snapshot contents.
+- [x] Milestone 3 (2026-11-04; HTTP suites: 55 transport examples and 4 listening-host examples, zero failures): HTTP tests retrieve real nonempty registers through the existing routes, agree with CLI/library results, and prove response limits and read-only behavior.
 - [ ] Milestone 4: a runnable demonstration and documented JSON contract let a UI author reproduce both views; relevant documentation checks and Nix verification pass.
 
-Implementation has not started. The Jitsurei HTTP host from Plan 328 is
-committed (`cd9f5a06`); what remains uncommitted in the working tree is that
-plan's Milestone 4 documentation (`docs/guides/serve-keiro-ops-over-http.md`,
-`docs/guides/run-and-operate-jitsurei.md`, ADR-53, IR-55, and their OKF logs).
-Preserve those edits and build on them; do not commit them under this plan.
+Implementation started on 2026-11-04 from clean commit `e7aa6874`. Plan 328's
+host and documentation are committed. Milestones 1–3 are verified, including unchanged generated diagrams; final
+repository verification is in progress. The runnable register
+demo has also passed against the local database and a port-zero listening host.
 
 
 ## Surprises & Discoveries
+
+2026-11-04 (implementation): the first integration run failed with
+`CategoryContainsSeparator "credit-limit"`. Stream categories cannot contain
+hyphens because the event store splits at the first hyphen. Use `creditLimit`
+as the physical category and retain `credit-limit` as the inspector lookup name;
+physical stream names are `creditLimit-<id>`. No runtime naming rule changes.
 
 2026-11-04 (plan review): the uncommitted Plan 328 guide text at
 `docs/guides/serve-keiro-ops-over-http.md` states that the aggregate `items`
@@ -78,6 +88,11 @@ two plans share one documentation edit; see Context and Orientation.
 
 
 ## Decision Log
+
+2026-11-04: Use the supported camelCase category `creditLimit` and the
+human-facing inspector name `credit-limit`. The plan's original hyphenated
+category failed the existing constructor; this naming correction preserves
+all register/version acceptance criteria and the unchanged-runtime boundary.
 
 2026-11-04: Reuse the database-only `snapshot show` command for stored contents.
 `Keiro.Ops.Snapshot.snapshotJson` already includes the entire `SnapshotRow.state`.
@@ -92,11 +107,12 @@ contract, and applications may select or redact their current display fields.
 The existing raw snapshot route is already independent of those display choices;
 document that distinction without claiming it provides the same redaction.
 
-2026-11-04: Keep every change outside the measured runtime packages. No file
-under `keiro-core/`, `keiro/`, `keiro-ops/`, or `keiro-ops-http/src/` changes;
+2026-11-04: Keep measured runtime source unchanged. No source file under
+`keiro-core/src/`, `keiro/src/`, `keiro-ops/src/`, or `keiro-ops-http/src/` changes;
 the only new per-request work is `regFileToJSON` over the example's two slots
 inside an application display callback. If implementation finds it must touch
-one of those packages, stop and revise this plan first: `Keiro.Command` changes
+one of those runtime source directories, stop and revise this plan first:
+`Keiro.Command` changes
 require `just bench-regression command`, and HTTP application changes require
 `cabal bench inspection-interference` against the committed baseline procedure,
 as ADR-40 and ADR-54 demand. Without such a change neither benchmark is needed,
@@ -175,7 +191,7 @@ and are committed. That suite's first example asserts the exact catalog
 `["incident", "order"]` from `GET /aggregate/types`; it is the only exact
 catalog assertion in the repository and becomes
 `["credit-limit", "incident", "order"]` because the catalog is a `Map` keyed by
-name. Plan 328's Milestone 4 guide text, still uncommitted in this checkout,
+name. Plan 328's committed Milestone 4 guide text
 also says the aggregate `items` are named `incident` and `order`; Milestone 4
 here rewrites that sentence. This plan is standalone and does not reopen the
 inspection cohort's release coordination.
@@ -217,7 +233,7 @@ applications copying the pattern.
 
 Create `jitsurei/src/Jitsurei/CreditLimitStream.hs` to adapt the existing
 credit-limit machine into a validated event stream. Export a stream category
-`credit-limit`, typed stream constructor, validated event stream, and display
+`creditLimit`, typed stream constructor, validated event stream, and display
 function. Factor the initial register value out of `creditLimitTransducer`'s
 local definition in `jitsurei/src/Jitsurei/CreditLimit.hs` so the adapter and
 machine share it. Keep the machine's transitions, guards, labels, and diagram
@@ -282,7 +298,7 @@ or wrote a new snapshot during inspection.
 Extend `jitsurei/ops-http/test/Main.hs` with the credit-limit command and
 requests to `/aggregate/show?name=credit-limit&id=registers-100`,
 `/aggregate/snapshot?name=credit-limit&id=registers-100`, and
-`/snapshot/show?stream=credit-limit-registers-100`. Compare stable data fields
+`/snapshot/show?stream=creditLimit-registers-100`. Compare stable data fields
 and payloads to the embedded ops results; independently generated observation
 times and age fields are not expected to be byte-identical. Assert exact
 register values and the version fields through the real listening host.
@@ -313,7 +329,7 @@ delete a user's existing database to seed the example.
 Update `docs/guides/serve-keiro-ops-over-http.md` and
 `docs/guides/run-and-operate-jitsurei.md` with copyable commands and captured
 response excerpts. In the HTTP guide, extend the existing "See the hook-gated
-routes locally" section (added by Plan 328, uncommitted in this checkout) and
+routes locally" section (added by Plan 328) and
 replace its `incident` and `order` catalog sentence with the three names. In
 the runbook, add a short section before "Rehearse A Catalog Rebuild" that
 walks through `just jitsurei-registers` and the three reads; the runbook
@@ -391,7 +407,7 @@ aggregate id after `read`, then request the views:
 read -r REGISTER_ID
 curl -fsS "http://127.0.0.1:9092/aggregate/show?name=credit-limit&id=$REGISTER_ID"
 curl -fsS "http://127.0.0.1:9092/aggregate/snapshot?name=credit-limit&id=$REGISTER_ID"
-curl -fsS "http://127.0.0.1:9092/snapshot/show?stream=credit-limit-$REGISTER_ID"
+curl -fsS "http://127.0.0.1:9092/snapshot/show?stream=creditLimit-$REGISTER_ID"
 ```
 
 The example's known category makes the last URL copyable. Production consumers
@@ -446,7 +462,7 @@ Do not infer compatibility from the raw endpoint or claim a transaction spanning
 separate HTTP requests.
 
 Performance acceptance is a diff boundary, not a benchmark run. At completion,
-`git diff --stat <base>..HEAD -- keiro-core keiro keiro-ops keiro-ops-http/src`
+`git diff --stat <base>..HEAD -- keiro-core/src keiro/src keiro-ops/src keiro-ops-http/src`
 must be empty, where `<base>` is the commit before the plan's first commit. That
 proves the ordinary command path (`Keiro.Command`, measured by the `command`
 guard of `just bench-regression`) and the HTTP application (measured by
@@ -532,3 +548,13 @@ recorded the `regFileToJSON` initialization precondition and the reason for the
 added the performance acceptance: an empty diff over the measured runtime
 packages, with the `command` benchmark guard and `inspection-interference`
 benchmark named as the gates that would otherwise apply.
+
+2026-11-04 (implementation): narrowed the performance diff boundary to runtime
+source directories. Milestones 2 and 3 explicitly require tests under `keiro/`
+and `keiro-ops/`; their test changes do not affect measured runtime code. The
+unchanged command and HTTP source requirement and conditional benchmark gates
+remain in force. Plan 328 documentation was committed before implementation.
+
+2026-11-04 (integration correction): changed the physical category and stream
+URLs to `creditLimit` after the existing category validator rejected the
+planned hyphenated category. The inspector name remains `credit-limit`.
