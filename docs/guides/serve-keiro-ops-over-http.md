@@ -2,7 +2,7 @@
 type: Runbook
 title: Serve Keiro Ops Over HTTP
 description: Mount bounded HTTP inspection and explicitly confirmed operator actions using the supported Keiro command tree.
-timestamp: 2026-11-04T14:59:56Z
+timestamp: 2026-11-04T15:14:30Z
 docId: DOC-30
 tags: [keiro, operations, http, inspection]
 generated:
@@ -93,7 +93,7 @@ The aggregate discovery envelope contains rows such as:
 {"items":[{"name":"incident","category":"incident","snapshots_configured":false,"snapshot_policy":"never"}]}
 ```
 
-Jitsurei also mounts the `order` aggregate. Its process-manager catalog returns
+Jitsurei also mounts the `credit-limit` and `order` aggregates. Its process-manager catalog returns
 exactly this object, including before any journal instance exists:
 
 ```json
@@ -171,7 +171,7 @@ curl -fsS http://127.0.0.1:9092/aggregate/types
 curl -fsS 'http://127.0.0.1:9092/pm/list?name=jitsurei-fulfillment&limit=5'
 ```
 
-The aggregate `items` are named `incident` and `order`. The process-manager
+The aggregate `items` are named `credit-limit`, `incident`, and `order`. The process-manager
 `items` include a `correlation_id` beginning with `demo-`. Run `read -r ID`,
 paste one complete correlation id from that response, and press Enter:
 
@@ -187,6 +187,74 @@ process-manager response has `name: "jitsurei-fulfillment"`, `correlation_id`,
 folded `state`, `last_reaction`, and a `pending_timers` page. The host uses the
 database selected by `JITSUREI_DATABASE` (default `jitsurei`) and remains
 read-only unless explicitly started with `--enable-mutations`.
+
+To inspect real named registers, run `just jitsurei-registers` from the Nix
+shell. Each invocation creates a fresh credit-limit id and runs `AdjustCredit
+25` once; it preserves existing data. The `all` scenario also seeds this example.
+The demo prints its id, physical stream name, and three complete read URLs.
+With the host running, paste that id after `read`:
+
+```bash
+read -r REGISTER_ID
+curl -fsS "http://127.0.0.1:9092/aggregate/show?name=credit-limit&id=$REGISTER_ID"
+curl -fsS "http://127.0.0.1:9092/aggregate/snapshot?name=credit-limit&id=$REGISTER_ID"
+curl -fsS "http://127.0.0.1:9092/snapshot/show?stream=creditLimit-$REGISTER_ID"
+```
+
+The first response includes this stable subset (timestamps and hashes omitted):
+
+```json
+{"name":"credit-limit","state_version":1,"stream_version":1,"state_label":"credit_reviewed","state":{"state":"credit_reviewed","registers":{"active":false,"balance":25}}}
+```
+
+The health response has `status: "present"`, `stream_version: 1`, and
+`stored.stream_version: 1` with `stored.compatibility: "compatible"`. The raw
+snapshot response includes:
+
+```json
+{"stream_version":1,"state":{"state":"credit_reviewed","registers":{"active":false,"balance":25}}}
+```
+
+For a consumer, use the aggregate response's `stream_name`, URL-encoded, as
+the `stream` parameter of `/snapshot/show`; the category prefix in the example
+above is known only for this demo. Its inspector name is `credit-limit` and
+its physical category is `creditLimit`; categories cannot contain hyphens. Apply the host's mount prefix to all routes
+when composing servers. The embedded CLI uses the same handlers:
+
+```bash
+cabal run jitsurei-demo -- ops aggregate show --name credit-limit --id "$REGISTER_ID" --json
+cabal run jitsurei-demo -- ops aggregate snapshot --name credit-limit --id "$REGISTER_ID" --json
+cabal run jitsurei-demo -- ops snapshot show --stream "creditLimit-$REGISTER_ID" --json
+```
+
+Point the CLI at the same database as the host, for example with
+`PGHOST="$PWD/db" PGDATABASE=jitsurei` and your normal `PGUSER`.
+
+`aggregate show` reports current folded values at `state_version`. The raw
+snapshot's `stream_version` belongs to the cached fold and may be older. For
+example, a current head of 3 can show `lastAmount: 4` while a snapshot at 2
+still contains `lastAmount: 3`. The health view's top-level `stream_version`
+is the separately observed stream head; `stored.stream_version` and
+`stored.events_since` describe the cached row against that observation. Reads
+do not refresh snapshots. A missing stream or missing raw snapshot returns
+HTTP 200 with JSON `null`. Incompatible snapshots remain visible as stored JSON;
+only the application-aware health route evaluates codec compatibility. Each
+request has its own observation time; these responses are not an atomic bundle.
+
+`state.registers` is the contract of this example's display encoder and Keiro's
+default snapshot codec. A custom display encoder or persistence codec can use
+another shape. UIs can render arbitrary returned JSON; typed register tables
+need an application-owned field contract. The order and incident displays retain
+their state strings and now include `registers: {}`. Application display callbacks
+may omit or redact fields, while `/snapshot/show` returns the raw persistence
+JSON independently and can expose those omitted fields.
+
+The example explicitly calls `regFileToJSON` from
+`mori://shinzui/keiki/packages/keiki-codec-json`; every register slot must already
+be initialized. Copying that pattern with an unwritten slot throws `uninit:`
+and results in HTTP 500 `internal_error`. The demo initializes both slots. Its
+`Every 1` snapshot policy is chosen so one command yields a stored snapshot;
+choose a production policy for your workload.
 
 For a browser console on another origin or a different backend port, run:
 

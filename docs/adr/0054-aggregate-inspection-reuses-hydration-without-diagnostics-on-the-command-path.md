@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Aggregate inspection reuses hydration without diagnostics on the command path
 description: Explicit aggregate catalogs render shared hydration and bounded public stream pages while ordinary commands keep a specialized result path.
-timestamp: 2026-10-21T00:49:10Z
+timestamp: 2026-11-04T15:14:30Z
 docId: ADR-54
 status: Accepted
 date: 2026-10-20
@@ -32,12 +32,23 @@ ordinary behavior. Inspection options disable seed verification and telemetry.
 An application explicitly supplies aggregate descriptors and display encoders.
 A descriptor’s membership mapping must resolve back to the selected physical
 stream, so metadata, listing and hydration cannot describe different streams;
-custom audit-target handles retain their mapping.
+custom audit-target handles retain their mapping. Catalog lookup names may differ
+from physical categories; the latter cannot contain the hyphen category/id separator.
 Snapshot encodings are not implicitly a display contract. The library owns JSON,
 ops mounts the catalog through an optional hook, and HTTP derives its routes from
 ops. State reports the exact folded version; separately observed stream heads
 and snapshot clocks are observational metadata rather than an atomic view.
 Deleted streams return metadata without hydration. Raw history remains Kiroku's.
+
+Applications may explicitly render named registers, for example with
+`regFileToJSON` from `mori://shinzui/keiki/packages/keiki-codec-json` after all
+slots have been initialized. A `state.registers` object belongs to that display
+contract or the default snapshot codec, not every possible application codec.
+The database-only `snapshot show` operation returns the persisted JSON verbatim,
+including custom or incompatible contents, at its stored stream version. It
+does not inherit current-display omissions or redaction. `aggregate snapshot`
+separately assesses compatibility against the application codec. Neither read
+refreshes the cache, and observations across requests are independent.
 
 Listings consume one public `listStreams` raw page from
 `mori://shinzui/kiroku/packages/kiroku-store`, with category/prefix selection.

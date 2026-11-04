@@ -65,12 +65,13 @@ contract and worked example; browser rendering belongs to `mori://shinzui/keiro-
 - [x] Milestone 1 (2026-11-04; `jitsurei-test`: 26 examples, zero failures; live demo confirms version-1 values): current aggregate displays include register objects, and a mounted, snapshot-enabled credit-limit example returns nonempty register values through the library and embedded CLI.
 - [x] Milestone 2 (2026-11-04; focused aggregate: 3 examples and snapshot handlers: 2 examples, zero failures): tests prove that current folded values and persisted snapshot values retain their own versions, including a snapshot followed by more events, missing snapshots, and incompatible snapshot contents.
 - [x] Milestone 3 (2026-11-04; HTTP suites: 55 transport examples and 4 listening-host examples, zero failures): HTTP tests retrieve real nonempty registers through the existing routes, agree with CLI/library results, and prove response limits and read-only behavior.
-- [ ] Milestone 4: a runnable demonstration and documented JSON contract let a UI author reproduce both views; relevant documentation checks and Nix verification pass.
+- [x] Milestone 4 (2026-11-04; live demo, unchanged diagrams, strict documentation checks, full test/benchmark build and `just verify` all pass): a runnable demonstration and documented JSON contract let a UI author reproduce both views; relevant documentation checks and Nix verification pass.
 
-Implementation started on 2026-11-04 from clean commit `e7aa6874`. Plan 328's
-host and documentation are committed. Milestones 1–3 are verified, including unchanged generated diagrams; final
-repository verification is in progress. The runnable register
-demo has also passed against the local database and a port-zero listening host.
+Implementation completed on 2026-11-04 from clean baseline `e7aa6874`.
+All four milestones are verified. Plan 328's host and documentation were already
+committed before this work. The runnable register demo passed against the local
+database and a port-zero listening host; the final `just verify` also ran the
+complete `all` demo in its disposable database.
 
 
 ## Surprises & Discoveries
@@ -109,8 +110,8 @@ document that distinction without claiming it provides the same redaction.
 
 2026-11-04: Keep measured runtime source unchanged. No source file under
 `keiro-core/src/`, `keiro/src/`, `keiro-ops/src/`, or `keiro-ops-http/src/` changes;
-the only new per-request work is `regFileToJSON` over the example's two slots
-inside an application display callback. If implementation finds it must touch
+the new per-request work is application display encoding: `regFileToJSON`
+over the credit example's two slots or the empty files for order and incident. If implementation finds it must touch
 one of those runtime source directories, stop and revise this plan first:
 `Keiro.Command` changes
 require `just bench-regression command`, and HTTP application changes require
@@ -128,7 +129,42 @@ implementation are outside this plan.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed on 2026-11-04. Application displays now include named register JSON;
+the `credit-limit` inspector uses physical category `creditLimit`, writes one
+snapshot after `AdjustCredit 25`, and serves current values, snapshot health,
+and persisted contents through the existing library, embedded CLI, and HTTP
+operations. The new `registers` demo and `just jitsurei-registers` print fresh
+identifiers and read URLs, and `all` includes that scenario. Order and incident
+retain their labels and state strings and expose empty register objects.
+
+The focused acceptance run passed 26 Jitsurei examples, 3 aggregate-inspection
+examples, 2 snapshot-handler examples, 55 HTTP transport examples, and 4
+listening-host examples. It proves current version 3 with `lastAmount: 4` versus
+stored version 2 with `lastAmount: 3`, unchanged rows after inspection, raw custom
+and incompatible JSON, missing snapshots, response caps, and admission recovery.
+The live demo returned `balance: 25` and `active: false` at version 1 from both
+value routes, with compatible stored health at version 1.
+
+Final validation ran in the Nix shell: Z3 4.16.0 was available,
+`cabal build all --enable-tests --enable-benchmarks` passed, and the complete
+`just verify` passed, including 787 runtime examples, 898 main DSL examples,
+all conformance suites, retention probes, mutation proofs, demo execution,
+diagram freshness, and documentation/policy checks. The PGMQ suite retains its
+two existing pending cases requiring pg_partman; no new test is pending. Strict
+ADR/user-documentation validation and ADR profile type-checking also passed.
+Formatting used `nix fmt`, and `git diff --check` passed.
+
+The diff from baseline `e7aa6874` is empty under `keiro-core/src`, `keiro/src`,
+`keiro-ops/src`, and `keiro-ops-http/src`. Consequently the conditional command
+and HTTP interference benchmarks were not required. No dependency bounds,
+runtime source, migration, writer query, or background task changed.
+
+Durable lessons were distilled into ADR-54: explicit application register
+contracts remain independent of raw persistence JSON and snapshot health;
+observations have separate clocks and versions; every serialized slot must be
+initialized; catalog lookup names may differ from validated physical categories.
+The guides and their OKF log capture the reproducible consumer contract. No work
+remains under this plan.
 
 
 ## Context and Orientation

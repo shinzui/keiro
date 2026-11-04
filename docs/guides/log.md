@@ -1,6 +1,7 @@
 # Keiro Guides Log
 
 ## 2026-11-04
+* **Update**: DOC-22 and DOC-30: document the credit-limit register demo, current and stored versions, existing read routes, codec contracts and initialized slots (Plan 329).
 * **Update**: DOC-30, DOC-22: document jitsurei-ops-http and the shared application host (Plan 328).
 
 ## 2026-10-27

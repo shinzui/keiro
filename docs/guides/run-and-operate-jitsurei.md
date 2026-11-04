@@ -7,7 +7,7 @@ tags: [keiro, jitsurei, operations, runbook]
 generated:
   by: human:nadeem
   at: 2026-08-14T07:37:58Z
-timestamp: 2026-11-04T14:59:56Z
+timestamp: 2026-11-04T15:14:30Z
 ---
 
 # Run And Operate Jitsurei
@@ -64,6 +64,49 @@ Keiro owns framework tables like `keiro.keiro_snapshots`, `keiro.keiro_read_mode
 tables, indexes, and reporting views in a schema you choose (the example uses
 `jitsurei`) — see
 [Read Models And Projections](../user/read-models-and-projections.md#choosing-your-projection-schema).
+
+## Inspect Current And Stored Registers
+
+With the repository-local PostgreSQL service running (`just postgres-start` starts
+the local database), seed one fresh credit-limit stream and start the inspection host:
+
+```bash
+just jitsurei-registers
+just jitsurei-ops-http
+```
+
+The seeder creates the database if absent, applies migrations, runs
+`AdjustCredit 25` on a fresh id, and prints the id, stream name, and three URLs.
+It preserves existing streams. In another terminal, paste the printed id:
+
+```bash
+read -r REGISTER_ID
+curl -fsS "http://127.0.0.1:9092/aggregate/show?name=credit-limit&id=$REGISTER_ID"
+curl -fsS "http://127.0.0.1:9092/aggregate/snapshot?name=credit-limit&id=$REGISTER_ID"
+curl -fsS "http://127.0.0.1:9092/snapshot/show?stream=creditLimit-$REGISTER_ID"
+```
+
+Current and stored responses both contain this `state` value at version 1:
+
+```json
+{"state":"credit_reviewed","registers":{"active":false,"balance":25}}
+```
+
+The current response uses `state_version`; the raw snapshot uses
+`stream_version`. The health response compares its observed stream head to
+`stored.stream_version` and reports `stored.compatibility: "compatible"`.
+Snapshots are advisory and can lag current values; separate requests observe
+independently and never refresh the snapshot. Missing raw snapshots return
+JSON `null`, and incompatible contents remain inspectable. Consumers use the
+aggregate's returned `stream_name` as the URL-encoded raw snapshot parameter.
+
+This example's display encoder and default persistence codec promise
+`state.registers`; custom encoders may use other shapes. Raw snapshots expose
+persistence JSON even when an application's current display omits fields.
+`regFileToJSON` requires every slot to be initialized. `Every 1` is an example
+policy making the single command write a snapshot, rather than production
+guidance. See the [HTTP register contract](serve-keiro-ops-over-http.md#see-the-hook-gated-routes-locally)
+for CLI equivalents, stale-version semantics, and response excerpts.
 
 ## Rehearse A Catalog Rebuild
 

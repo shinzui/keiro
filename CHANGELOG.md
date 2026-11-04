@@ -8,6 +8,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### New Features
 
+- **jitsurei**: Expose named registers in aggregate displays and add the
+  snapshot-enabled `credit-limit` example, `just jitsurei-registers`, and a
+  current-versus-stored JSON walkthrough using the existing inspection routes.
+  Order and incident displays retain their state text and add `registers: {}`.
+
 - **jitsurei**: Add `jitsurei-ops-http` and `just jitsurei-ops-http` to serve
   the example database with aggregate and process-manager inspection. Share the
   complete application hooks with the embedded CLI through `Jitsurei.Ops`.
