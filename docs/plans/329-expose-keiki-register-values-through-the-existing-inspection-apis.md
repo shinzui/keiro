@@ -10,6 +10,18 @@ provenance:
     model: "gpt-6.1-sol"
     harness: "codex-cli"
     at: 2026-11-04T14:44:18Z
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-11-04T15:02:38Z
+      verdict: "approved"
+      note: "Verified paths, APIs, fixtures and HTTP codes against the tree; no runtime package changes, so no benchmark regression path; applied clarifications in update mode"
+  revisions:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-11-04T15:02:38Z
+      mode: "update"
+      note: "Stale working-tree claim fixed; catalog assertion, diagram check, regFileToJSON precondition, Every 1 rationale, guide locations, and performance diff-boundary acceptance added"
 ---
 
 # Expose Keiki register values through the existing inspection APIs
@@ -50,14 +62,19 @@ contract and worked example; browser rendering belongs to `mori://shinzui/keiro-
 - [ ] Milestone 3: HTTP tests retrieve real nonempty registers through the existing routes, agree with CLI/library results, and prove response limits and read-only behavior.
 - [ ] Milestone 4: a runnable demonstration and documented JSON contract let a UI author reproduce both views; relevant documentation checks and Nix verification pass.
 
-Implementation has not started. The working tree already contains unrelated
-changes implementing the Jitsurei HTTP host from Plan 328; preserve them. The
-host files exist in this checkout even though that plan's progress is incomplete.
+Implementation has not started. The Jitsurei HTTP host from Plan 328 is
+committed (`cd9f5a06`); what remains uncommitted in the working tree is that
+plan's Milestone 4 documentation (`docs/guides/serve-keiro-ops-over-http.md`,
+`docs/guides/run-and-operate-jitsurei.md`, ADR-53, IR-55, and their OKF logs).
+Preserve those edits and build on them; do not commit them under this plan.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+2026-11-04 (plan review): the uncommitted Plan 328 guide text at
+`docs/guides/serve-keiro-ops-over-http.md` states that the aggregate `items`
+are named `incident` and `order`. Milestone 4 must amend that sentence, so the
+two plans share one documentation edit; see Context and Orientation.
 
 
 ## Decision Log
@@ -74,6 +91,16 @@ their persistence codec: custom snapshot encodings are not a public display
 contract, and applications may select or redact their current display fields.
 The existing raw snapshot route is already independent of those display choices;
 document that distinction without claiming it provides the same redaction.
+
+2026-11-04: Keep every change outside the measured runtime packages. No file
+under `keiro-core/`, `keiro/`, `keiro-ops/`, or `keiro-ops-http/src/` changes;
+the only new per-request work is `regFileToJSON` over the example's two slots
+inside an application display callback. If implementation finds it must touch
+one of those packages, stop and revise this plan first: `Keiro.Command` changes
+require `just bench-regression command`, and HTTP application changes require
+`cabal bench inspection-interference` against the committed baseline procedure,
+as ADR-40 and ADR-54 demand. Without such a change neither benchmark is needed,
+and the plan records that as the reason rather than as an omission.
 
 2026-11-04: Demonstrate real values by adapting the existing pure
 `Jitsurei.CreditLimit` machine into a runtime example. Order and incident have
@@ -143,10 +170,20 @@ has no runtime event-stream adapter.
 `jitsurei/ops-http/app/Main.hs` hosts those hooks using the shared HTTP host;
 `jitsurei/ops-http/test/Main.hs` already tests real network requests on an
 ephemeral port. These files and the `just jitsurei-ops-http` recipe come from
-[Plan 328](328-serve-the-jitsurei-aggregate-and-process-manager-hooks-from-a-runnable-keiro-ops-http-host.md).
-Use their present interfaces and integrate with any subsequent changes to that
-work. This plan is standalone and does not reopen the inspection cohort's
-release coordination.
+[Plan 328](328-serve-the-jitsurei-aggregate-and-process-manager-hooks-from-a-runnable-keiro-ops-http-host.md)
+and are committed. That suite's first example asserts the exact catalog
+`["incident", "order"]` from `GET /aggregate/types`; it is the only exact
+catalog assertion in the repository and becomes
+`["credit-limit", "incident", "order"]` because the catalog is a `Map` keyed by
+name. Plan 328's Milestone 4 guide text, still uncommitted in this checkout,
+also says the aggregate `items` are named `incident` and `order`; Milestone 4
+here rewrites that sentence. This plan is standalone and does not reopen the
+inspection cohort's release coordination.
+
+`keiro-ops-http/bench/InspectionInterference.hs` imports
+`Jitsurei.Inspection (jitsureiProcessManagerInspectors)` and compiles under
+`cabal build all --enable-benchmarks`. Keep that export unchanged so the
+benchmark still builds; nothing in this plan requires running it.
 
 Relevant decisions are
 [ADR-3](../adr/0003-snapshot-compatibility-is-a-three-component-discriminator.md),
@@ -171,7 +208,12 @@ In `jitsurei/src/Jitsurei/Inspection.hs`, extend the order and incident display
 objects with `"registers" .= regFileToJSON registers`, retaining their existing
 `state` strings and `stateLabel` callbacks. This is an additive display change;
 do not change the generic `AggregateView` envelope or require codecs for
-current-state display. Empty register files render as `{}`.
+current-state display. Empty register files render as `{}`. `regFileToJSON`
+throws an `ErrorCall` beginning `uninit:` if any slot was never written; the
+HTTP application would report that as a 500 `internal_error`. Every Jitsurei
+stream supplies fully initialized `initialRegisters`, so the display callbacks
+are total here, and the guide text in Milestone 4 states that precondition for
+applications copying the pattern.
 
 Create `jitsurei/src/Jitsurei/CreditLimitStream.hs` to adapt the existing
 credit-limit machine into a validated event stream. Export a stream category
@@ -187,9 +229,13 @@ the event codec for the existing `CreditAdjusted` event as event type
 `Jitsurei.OrderStream.orderCodec`'s validation and decoding pattern.
 
 Use `defaultStateCodecWithFold` with codec version 1, the explicit fold token
-`credit-limit-fold-v1`, and snapshot policy `Every 1`. Register an inspector
-named `credit-limit` with an explicit display object containing `state` and
-`registers`. Export the adapter through `jitsurei/src/Jitsurei.hs` and list its
+`credit-limit-fold-v1`, and snapshot policy `Every 1`. `Every 1` guarantees a
+stored snapshot exists at version 1 so the stored-value view is reproducible
+after a single command; the machine is terminal after that command, so each
+example stream performs exactly one snapshot write. This is an example setting,
+not a recommended production policy, and the guide says so. Register an
+inspector named `credit-limit` with an explicit display object containing
+`state` and `registers`. Export the adapter through `jitsurei/src/Jitsurei.hs` and list its
 module in `jitsurei/jitsurei.cabal`. The library already declares the Keiki JSON
 codec dependency. No new dependency bounds or snapshot migrations are needed.
 
@@ -197,8 +243,11 @@ In `jitsurei/test/Main.hs`, execute the command on a fresh stream, inspect it,
 and run the embedded aggregate and snapshot commands. Prove nonempty values
 through the real writer/reader path before expanding failure cases. Acceptance
 is current and stored `state.registers == {"balance":25,"active":false}` at
-version 1, not merely a successful encode or an empty object. Update exact
-catalog expectations to include `credit-limit` alongside `incident` and `order`.
+version 1, not merely a successful encode or an empty object. Update the exact
+catalog assertion in `jitsurei/ops-http/test/Main.hs` to
+`["credit-limit", "incident", "order"]`. Prove the diagram output is unchanged
+with `cabal run jitsurei:exe:jitsurei-diagrams -- --check`, which `just verify`
+already runs.
 
 ### Milestone 2: current and stored versions remain distinguishable
 
@@ -263,7 +312,12 @@ delete a user's existing database to seed the example.
 
 Update `docs/guides/serve-keiro-ops-over-http.md` and
 `docs/guides/run-and-operate-jitsurei.md` with copyable commands and captured
-response excerpts. Define the difference between current `state_version`,
+response excerpts. In the HTTP guide, extend the existing "See the hook-gated
+routes locally" section (added by Plan 328, uncommitted in this checkout) and
+replace its `incident` and `order` catalog sentence with the three names. In
+the runbook, add a short section before "Rehearse A Catalog Rebuild" that
+walks through `just jitsurei-registers` and the three reads; the runbook
+currently has only that one subsection. Define the difference between current `state_version`,
 stored `stream_version`, and the health view's observed head. Explain missing
 snapshots, stale snapshots, custom codecs, and the independent observations
 across requests. Document that the raw snapshot route exposes persistence JSON
@@ -271,6 +325,8 @@ even when an application's current-state encoder omits fields. Present
 `state.registers` as this example/default codec's shape, not a guarantee for
 every custom codec or display encoder. The UI can always display the returned
 JSON generically; typed register tables require that application contract.
+State that `regFileToJSON` requires every slot to be initialized and that
+`Every 1` is an example policy chosen so one command yields a stored snapshot.
 
 Record the additive display/example change in `CHANGELOG.md`. Update ADR-54
 if its display-contract explanation needs this clarification, preserving its
@@ -389,6 +445,19 @@ while the aggregate health response identifies incompatible discriminators.
 Do not infer compatibility from the raw endpoint or claim a transaction spanning
 separate HTTP requests.
 
+Performance acceptance is a diff boundary, not a benchmark run. At completion,
+`git diff --stat <base>..HEAD -- keiro-core keiro keiro-ops keiro-ops-http/src`
+must be empty, where `<base>` is the commit before the plan's first commit. That
+proves the ordinary command path (`Keiro.Command`, measured by the `command`
+guard of `just bench-regression`) and the HTTP application (measured by
+`cabal bench inspection-interference`) are byte-for-byte unchanged, so neither
+gate needs to run. `aggregate show` for `credit-limit` performs the same store
+reads as it does for `order`: one stream lookup, one snapshot seed lookup, the
+event pages after the seed, and one snapshot observation; the display callback
+adds `regFileToJSON` over two slots and no queries. The diff boundary is the
+acceptance evidence; if it is not empty, the plan must be revised before the
+work is accepted.
+
 Read-only and oversized-result tests must pass through the existing HTTP
 application, not only its encoders. The new capability must require no migration,
 new writer query, automatic snapshot refresh, ordinary-command instrumentation,
@@ -450,3 +519,16 @@ JSON without current-codec validation. `GET /aggregate/snapshot` supplies the
 application-aware health assessment. These are separate observations and are not
 an atomic cross-request bundle. The store keeps only the latest snapshot per
 stream, so an arbitrary per-event register timeline cannot be served from it.
+
+
+## Revision Notes
+
+2026-11-04 (review and update, claude-fable-5-1): corrected the working-tree
+description (the Plan 328 host is committed; its Milestone 4 documentation is
+not), named the one exact catalog assertion and its new ordered value, named
+the diagram check that proves `Jitsurei.CreditLimit` output is unchanged,
+recorded the `regFileToJSON` initialization precondition and the reason for the
+`Every 1` policy, located the documentation edits inside the two guides, and
+added the performance acceptance: an empty diff over the measured runtime
+packages, with the `command` benchmark guard and `inspection-interference`
+benchmark named as the gates that would otherwise apply.
