@@ -10,6 +10,18 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-11-04T05:44:19Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-04T15:47:07Z
+      verdict: "changes-requested"
+      note: "Reviewed current reader, fixtures and ADRs; SQL-only timing does not establish runtime isolation, and paired writer-interference acceptance remains unspecified."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-04T15:47:07Z
+      mode: "update"
+      note: "Refresh baseline, correct look-ahead and join assumptions, repair compatibility check and reproducible evidence protocol, record remaining runtime acceptance gap."
 ---
 
 # Name the feeding subscriptions on projection status pages without runtime performance regressions
@@ -52,10 +64,22 @@ unchanged paths are unchanged, and the existing read-model benchmark guard.
 ## Progress
 
 
-- [ ] Milestone 1: The library page read returns each frozen v1 row together with its registered feeding subscriptions, proven by focused core tests for a two-subscription checkpoint group, an inline-only append group, and an unmanaged group, with the complete-list and lookup SQL byte-identical to the creation baseline. IR-57 is linked to this plan as `accepted` with its request text corrected.
+- [ ] Milestone 1: The library page read returns each frozen v1 row together with its registered feeding subscriptions, proven by focused core tests for a two-subscription checkpoint group, an inline-only append group, and an unmanaged group, with the complete-list and lookup SQL byte-identical to the comparison baseline. IR-57 is linked to this plan as `accepted` with its request text corrected.
 - [ ] Milestone 2: `projection status --json`, `GET /projection/status`, and `projection_groups` feed items carry `feeding_subscriptions` with every existing key and value unchanged; the jitsurei group reports `["jitsurei-order-audit-subscription"]` and its legacy group reports `[]`, over the library, the embedded CLI, and the real HTTP server.
 - [ ] Milestone 3: Retained paired evidence shows the candidate page statement keeps its per-key plan with one primary-key probe per page row and a paired median server execution time within 1.10x of the pre-change binary at 10k and 100k groups for first and deep pages, the read-model guard passes without baseline movement, and the writer and schema paths are shown untouched.
 - [ ] Milestone 4: User documentation, guides, changelogs, and ADR-35 describe the field; IR-57 is `completed` with a resolution; the strict OKF bundles validate; and `just verify` passes in the Nix shell on the final candidate.
+
+
+Review handoff (2026-11-04): The source-level design is ready for a query prototype, but
+performance acceptance is not yet complete. Milestone 3 measures server SQL execution only.
+Before declaring the full no-runtime-regression requirement satisfied, specify and retain a
+matched active/idle writer-interference comparison for projection polling and feeds, including
+non-empty subscription arrays and response encoding, or obtain an explicit narrowing of that
+requirement. Use `keiro-ops-http/bench/InspectionInterference.hs`,
+`keiro-ops-http/bench/InspectionClients.hs`, and the paired controller in
+`scripts/measure-pm-types.sh` as starting points; the prior manager-types result or waiver
+cannot stand in for projection evidence. Fix the workload, offered rate, repetitions, metrics,
+and refusal criteria before measurement. A green SQL ratio alone must not complete Milestone 3.
 
 
 ## Surprises & Discoveries
@@ -127,12 +151,14 @@ unchanged paths are unchanged, and the existing read-model benchmark guard.
   3 and a paired median server execution time within 1.10x of the pre-change binary; (b) a
   passing `just bench-regression read-model` run with no baseline change; and (c) structural
   evidence that no writer, schema, registration, or migration path changed. A matched
-  writer-interference cohort is not required unless (a) fails.
+  writer-interference cohort was initially deferred unless (a) failed; the review below
+  rejects that deferral as sufficient evidence for the broader runtime guarantee.
   Rationale: The release gate's six benchmark guards do not observe the page read, so (a) is
   the only measurement of the changed path, exactly as plan 325 concluded for its new read. The
   change adds one primary-key probe per page row (at most 501 rows) to a read that already
   performs a correlated lookup per row; no new route, polling cadence, or writer work is
-  introduced, so a writer-interference cohort would measure an unchanged workload. If (a)
+  introduced, but the extra array changes database result transfer, decoding, JSON encoding, and
+  feed comparisons. Unchanged writer SQL does not establish unchanged shared-resource cost. If (a)
   exceeds its ceiling, the cause must be attributed and the matched interference protocol of
   plan 323 becomes required before acceptance; ADR-58 forbids moving a baseline to absorb it.
   Date: 2026-11-04
@@ -164,7 +190,10 @@ projection** runs inside the command transaction and has no durable subscription
 subscription** of a group is a durable subscription that delivers events to one of the group's
 asynchronous projections.
 
-The creation baseline is commit `610da7ec` on `master` with a clean working tree. Recheck
+The implementation comparison baseline is commit `d64849f1` (full hash
+`d64849f19d2d922a5373b121d13d0fac5bc9132f`) on `master`. The original planning
+baseline was `610da7ec`; subsequent commits changed the HTTP host and test support.
+Use the newer pre-implementation baseline to avoid mixing those changes into this comparison. Recheck
 `git status` before implementing and preserve any unrelated work. This is a standalone
 follow-up to IR-57, not a child of a MasterPlan. The consumer request originates from
 `mori://shinzui/keiro-ui/plans/17-build-the-projections-and-overview-screens`; changing that
@@ -334,7 +363,7 @@ leave every other reader byte-identical, and bring IR-57 into a verifiable state
 with corrected text.
 
 Before editing runtime code, record the baseline for Milestone 3: create a detached worktree
-of the creation baseline at `../keiro-feeding-subscriptions-baseline` (outside the tracked
+of the comparison baseline at `../keiro-feeding-subscriptions-baseline` (outside the tracked
 tree, following the plan 323 precedent of `../keiro-pm-types-baseline`). Then link IR-57 to
 this plan as the bundle precedent does: set `status: accepted`, add
 `plan: docs/plans/327-name-the-feeding-subscriptions-on-projection-status-pages-without-runtime-performance-regressions.md`,
@@ -392,8 +421,14 @@ projectionGroupStatusRowDecoder =
     <*> D.column (D.nonNullable (D.listArray (D.nonNullable D.text)))
 ```
 
-The join key is `page.group_id`, the materialized page key, so PostgreSQL probes
-`keiro_projection_group_cursors_pkey` once per page row and never scans the fleet. Do not add
+The join key is `page.group_id`, the materialized page key. This ordinary left join
+does not guarantee a particular PostgreSQL plan. Before propagating the row type to the
+ops surfaces, run the Milestone 3 driver on this query under both plan modes. If it scans
+the cursor fleet, replace only the added join with a correlated
+`LEFT JOIN LATERAL (SELECT subscription_names FROM keiro.keiro_projection_group_cursors
+WHERE group_id = page.group_id OFFSET 0) cursors ON true`, then remeasure. Keep the
+existing status lookup fence. Neither SQL spelling establishes acceptance without the
+retained plans and timings. Do not add
 `coalesce`, sorting, or de-duplication beyond the `coalesce` to an empty array: the field
 reports the authority row as stored. Update the continuation to read the last item's
 `status.groupId`. Export `ProjectionGroupStatusRow (..)` from the module and from
@@ -487,23 +522,31 @@ stays comparable with the retained 2026-10-20 evidence. Take five `EXPLAIN (ANAL
 SETTINGS, FORMAT JSON) EXECUTE` samples per shape instead of one, recording each plan and
 its `Execution Time`. Assert on the returned page that `length page.items` is 100 for both
 shapes; the driver must not touch `feedingSubscriptions`, so the same source compiles against
-the baseline worktree, which lacks the field. Run the driver from both checkouts in alternating
-order, baseline then candidate then baseline, for a total of three runs each, on a quiet
+the baseline worktree, which lacks the field. Compile the identical driver source separately against both checkouts before sampling,
+using the same compiler flags and dependency versions. Run the two compiled executables in
+three pairs, baseline/candidate, candidate/baseline, baseline/candidate, on a quiet
 machine with no builds or tests running, and write each run's JSON to the evidence folder. A
 small Python summary (kept beside the results as `summarize.py`) computes, per shape and plan
-mode, the paired median of candidate over baseline `Execution Time` across the fifteen samples
-and reports it with its minimum and maximum.
+mode, pair number, and sample ordinal, the fifteen candidate/baseline `Execution Time`
+ratios. Report their median, minimum and maximum, plus each side's absolute median. Reject
+missing samples, duplicate identities, wrong row counts, nonpositive timings, or settings
+mismatches; exit nonzero if any plan or ratio gate fails. Do not discard outliers. The
+historical all-append fixture timings are context, not a numeric gate for this changed
+fixture; the same-fixture paired ratio is the quantitative acceptance criterion.
 
 Acceptance has three parts. First, plan shape: in every candidate plan the cursors relation
 appears as an `Index Scan` or `Index Only Scan` using `keiro_projection_group_cursors_pkey`
-under a `Nested Loop` whose outer side is the materialized page, with actual loops equal to the
-page size; a `Seq Scan` or `Hash Join` over `keiro_projection_group_cursors` at the fleet level
+under a `Nested Loop`, with its index condition bound to the page key and actual loops equal to the
+number of SQL rows selected, including look-ahead (101 for these 100-item fixtures);
+identify the newly added lookup by its SQL alias, since the frozen view also reads this
+relation. The materialized page must feed the outer subtree, not necessarily its immediate
+child. A correctly empty or final page may have fewer probes; a `Seq Scan` or `Hash Join` over `keiro_projection_group_cursors` at the fleet level
 fails. Second, cost: the paired median ratio is at most 1.10 for first and deep pages at 10k
-and 100k groups under both forced plan modes, and absolute candidate medians stay within the
-same millisecond order as the retained evidence (about 2.8 ms first page and 0.6 ms deep page
-at 100k). Third, unchanged paths: `just bench-regression read-model` on the candidate prints
+and 100k groups under both forced plan modes, and report absolute medians alongside the historical evidence (about 2.8 ms first page
+and 0.6 ms deep page at 100k), attributing large changes without treating that different
+fixture as a calibrated threshold. Third, unchanged paths: `just bench-regression read-model` on the candidate prints
 `GUARD(read-model)=PASSED` with the committed `keiro/bench/baseline-read-model.csv` untouched;
-`git diff 610da7ec -- keiro-migrations/ keiro/src/Keiro/ReadModel/Rebuild/Group.hs
+`git diff d64849f1 -- keiro-migrations/ keiro/src/Keiro/ReadModel/Rebuild/Group.hs
 keiro/src/Keiro/ReadModel/Schema.hs` is empty; and `cabal test keiro-migrations-test` passes
 with `keiro-migrations/expected-schema/native/keiro-v18.txt` unchanged. Retain the driver
 source as `driver.hs.txt`, a `README.md` stating machine, PostgreSQL version and durable
@@ -569,10 +612,13 @@ Record the baseline and link the request before the first implementation commit:
 ```bash
 git status --short
 git rev-parse HEAD
-git worktree add --detach ../keiro-feeding-subscriptions-baseline 610da7ec
+git worktree add --detach ../keiro-feeding-subscriptions-baseline d64849f1
 ```
 
-Expected: an empty status, `610da7eccc9f851abc9684aa6127af0c3413beb9`, and a new worktree.
+Expected: a new detached worktree at `d64849f19d2d922a5373b121d13d0fac5bc9132f`.
+Record the current HEAD separately; documentation commits may have advanced it. Preserve
+unrelated working-tree edits. If relevant runtime or fixture code has advanced beyond this
+baseline before implementation, refresh the comparison baseline and record why first.
 Then edit `docs/improvement-requests/name-the-feeding-subscription-on-projection-status-rows.md`
 as Milestone 1 describes and run:
 
@@ -588,14 +634,30 @@ Implement Milestone 1 in `keiro/src/Keiro/ReadModel/Rebuild/Status.hs`,
 unchanged statements and run the focused suite:
 
 ```bash
-git diff 610da7ec -- keiro/src/Keiro/ReadModel/Rebuild/Status.hs | grep -E '^[-+].*(statusSelect|FROM keiro_read\.projection_group_status_v1|listProjectionGroupStatusesStmt|lookupProjectionGroupStatusStmt)' || echo "compatibility statements unchanged"
+python3 - <<'PYCODE'
+from pathlib import Path
+import subprocess
+path = 'keiro/src/Keiro/ReadModel/Rebuild/Status.hs'
+before = subprocess.check_output(['git', 'show', 'd64849f1:' + path], text=True)
+after = Path(path).read_text()
+# Compare whole preserved regions, including types, decoder, and SQL bodies.
+regions = [
+    ('data ProjectionGroupStatusV1 =', '-- | A bounded observation'),
+    ('listProjectionGroupStatuses ::', 'decodeGroupId ::'),
+]
+for start, end in regions:
+    def region(source):
+        return source[source.index(start):source.index(end, source.index(start))]
+    assert region(before) == region(after), f'compatibility region changed: {start}'
+print('compatibility definitions unchanged')
+PYCODE
 cabal build keiro --enable-tests
 cabal test keiro-test --test-options='-m "catalog rebuild groups"' --test-show-details=direct
 ```
 
-Expected: the first command prints only `compatibility statements unchanged` (the diff must
-not touch those definitions; a hit means the implementation moved shared text and must be
-reverted), and the spec reports the extended examples passing with zero failures.
+Expected: the first command exits 0 and prints `compatibility definitions unchanged`.
+Place new row definitions and the new decoder outside the preserved regions; this check
+compares entire definitions rather than matching selected diff lines. Then and the spec reports the extended examples passing with zero failures.
 
 Implement Milestone 2 in `keiro-ops/src/Keiro/Ops/Projection.hs`,
 `keiro-ops-http/src/Keiro/Ops/Http/Views.hs`, and the three test suites, then run:
@@ -650,24 +712,36 @@ quiet machine. The driver reads `DATABASE_URL`-independent disposable databases 
 ```bash
 cabal build all --enable-tests --enable-benchmarks
 mkdir -p keiro/bench/results/inspection/projection-status-feeding-subscriptions
+# From the repository root in the Nix shell, build both before sampling.
+projection_evidence="$PWD/keiro/bench/results/inspection/projection-status-feeding-subscriptions"
+projection_driver="$PWD/scripts/inspection-projection-feeding-subscriptions-evidence.hs"
+mkdir -p "$projection_evidence/build-baseline" "$projection_evidence/build-candidate"
+(cd ../keiro-feeding-subscriptions-baseline && cabal build keiro keiro-test-support && cabal exec -- ghc -O2 -XGHC2024 -package keiro -package keiro-test-support -outputdir "$projection_evidence/build-baseline" "$projection_driver" -o "$projection_evidence/baseline-driver")
+cabal exec -- ghc -O2 -XGHC2024 -package keiro -package keiro-test-support -outputdir "$projection_evidence/build-candidate" "$projection_driver" -o "$projection_evidence/candidate-driver"
 for run in 1 2 3; do
-  (cd ../keiro-feeding-subscriptions-baseline && cabal build keiro keiro-test-support && cabal exec -- runghc -XGHC2024 -package=keiro -package=keiro-test-support /Users/shinzui/Keikaku/bokuno/keiro/scripts/inspection-projection-feeding-subscriptions-evidence.hs /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/inspection/projection-status-feeding-subscriptions/baseline-$run.json)
-  cabal exec -- runghc -XGHC2024 -package=keiro -package=keiro-test-support scripts/inspection-projection-feeding-subscriptions-evidence.hs keiro/bench/results/inspection/projection-status-feeding-subscriptions/candidate-$run.json
+  if [ "$run" = 2 ]; then
+    "$projection_evidence/candidate-driver" "$projection_evidence/candidate-$run.json"
+    "$projection_evidence/baseline-driver" "$projection_evidence/baseline-$run.json"
+  else
+    "$projection_evidence/baseline-driver" "$projection_evidence/baseline-$run.json"
+    "$projection_evidence/candidate-driver" "$projection_evidence/candidate-$run.json"
+  fi
 done
 python3 keiro/bench/results/inspection/projection-status-feeding-subscriptions/summarize.py keiro/bench/results/inspection/projection-status-feeding-subscriptions > keiro/bench/results/inspection/projection-status-feeding-subscriptions/summary.json
 just bench-regression read-model
 cabal test keiro-migrations-test
-git diff 610da7ec --stat -- keiro-migrations/ keiro/src/Keiro/ReadModel/Rebuild/Group.hs keiro/src/Keiro/ReadModel/Schema.hs
+git diff d64849f1 --stat -- keiro-migrations/ keiro/src/Keiro/ReadModel/Rebuild/Group.hs keiro/src/Keiro/ReadModel/Schema.hs
 ```
 
 Expected: six JSON files each containing samples for 10k and 100k groups, custom and generic
 plans, first and deep pages; a `summary.json` whose every `paired_median_ratio` is at most
 `1.10` and whose candidate plans all show the cursors primary-key probe; the guard output
 ending with `GUARD(read-model)=PASSED` and `BENCH_REGRESSION=PASSED`; the migrations suite
-passing; and an empty diff listing. If the baseline worktree does not compile the driver
-because `cabal exec` needs a built package database there, run `cabal build keiro
-keiro-test-support` inside it first, as the loop does. Write `README.md`, copy the driver to
-`driver.hs.txt`, and create `manifest.json` with `shasum -a 256` of every file in the folder.
+passing; and an empty diff listing. Write `README.md`, copy the driver to
+`driver.hs.txt`, and create `manifest.json` with sha256 of each retained artifact except
+`manifest.json` itself. Keep compiled executables and object directories local; record their
+paths and hashes plus compiler flags and both Cabal dependency plans in the README, and retain
+the source, plans, raw samples, summary script and results for reproduction.
 
 For Milestone 4, after the documentation edits:
 
@@ -701,7 +775,10 @@ git worktree remove ../keiro-feeding-subscriptions-baseline
 ## Validation and Acceptance
 
 
-The plan is complete when all of the following hold on the final candidate.
+The plan is complete when all of the following hold on the final candidate and the
+writer-interference acceptance gap recorded in the review handoff has been resolved.
+Until that protocol or an explicit scope narrowing is recorded, the plan is not approved
+for a claim of no runtime performance regressions.
 
 Behavior. `keiro-ops projection status --json` (and `jitsurei-demo ops projection status
 --json`) returns items that each contain `feeding_subscriptions`. For jitsurei after catalog
@@ -720,7 +797,7 @@ Library. `listProjectionGroupStatusesPage` returns `ProjectionGroupStatusRow` it
 `[]` with basis `append`; after the authority row is deleted it is `[]` with basis `unmanaged`.
 Three pages of 100 over 251 groups, projected through `status`, equal
 `listProjectionGroupStatuses`. `ProjectionGroupStatusV1`, `listProjectionGroupStatuses`,
-`lookupProjectionGroupStatus`, and the SQL text they use are byte-identical to `610da7ec`.
+`lookupProjectionGroupStatus`, and the SQL text they use are byte-identical to `d64849f1`.
 
 Contract. `keiro_read.projection_group_status_v1` is unchanged: `cabal test
 keiro-migrations-test` passes with no edit to the migration or to
@@ -734,8 +811,7 @@ unchanged schema snapshot. Complete-list and lookup APIs: the read-model benchma
 SQL. Bounded page read: the retained paired cohort in
 `keiro/bench/results/inspection/projection-status-feeding-subscriptions/` shows the
 primary-key probe plan shape and paired median ratios at most 1.10 for all eight shapes
-(two sizes, two plan modes, two page positions), with the candidate's absolute medians in the
-same millisecond order as the retained 2026-10-20 evidence. HTTP and feeds: no limit, deadline,
+(two sizes, two plan modes, two page positions), with absolute medians reported and contextualized against the retained 2026-10-20 evidence. HTTP and feeds: no limit, deadline,
 or schema-check code changed, and the suites pass. The release gate's six guards cannot observe
 the page read; the paired cohort is its sole measurement and is required.
 
@@ -761,12 +837,13 @@ text; re-running `okf log add` appends a duplicate entry, so check `log.md` befo
 and remove an accidental duplicate by hand. The evidence driver creates and drops disposable
 databases and can be rerun freely; delete a partial `*-N.json` and rerun that iteration. The
 baseline worktree is detached and read-only in intent; if it is dirty or missing, recreate it
-from `610da7ec`. If the paired ratio fails, keep the failing artifacts in the evidence folder
+from `d64849f1`. If the paired ratio fails, keep the failing artifacts in the evidence folder
 with a README stating they are not accepted, attribute the cause, and do not edit
 `keiro/bench/baseline-read-model.csv`. If a focused test fails after the type change, the most
 likely cause is a remaining `row.groupId` or `row ^. #groupId` that must become
-`row.status.groupId`; the compiler reports each site. Nothing in this plan writes to
-`keiro.keiro_projection_group_cursors` or any other table, so there is no data to roll back;
+`row.status.groupId`; the compiler reports each site. The production reader introduces no writes or migration. Tests, demos and benchmark fixture
+setup do write to disposable databases; their cleanup must remain bracketed. Thus no
+production data migration needs rollback;
 reverting the commits restores the previous API exactly.
 
 
@@ -792,3 +869,12 @@ Dependencies are the existing ones: `hasql` decoders (`D.listArray` for `text[]`
 and the `kiroku-store` cohort already pinned at `^>=0.13.0.1`. No new package, flag, migration,
 or Kiroku API is introduced. The evidence driver depends on `keiro` and `keiro-test-support`
 (`Keiro.Test.Postgres`) exactly like `scripts/inspection-projection-status-evidence.hs`.
+
+
+Revision note (2026-11-04): Reviewed against the current reader, fixtures, transports and
+ADRs. Refreshed the pre-change baseline after intervening host/test-support changes, removed
+the assumed join-plan guarantee, corrected look-ahead probe counts, replaced the ineffective
+compatibility grep, and made the paired benchmark use compiled, attributable executables
+with explicit ordering, aggregation and manifest rules. Recorded the unresolved gap between
+SQL-only timing and the requested runtime guarantee. Implementation and performance
+acceptance remain outstanding.
