@@ -10,6 +10,18 @@ provenance:
     model: "gpt-6-astra"
     harness: "codex-cli"
     at: 2026-10-26T19:30:48Z
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-11-04T05:23:21Z
+      verdict: "changes-requested"
+      note: "Verified cited files, identifiers, schema, HTTP limits, evidence figures and ADRs against the tree; required fixes for binary retention, OKF log and IR-58 lifecycle, M3 pairing, keiro mount prefix and list-SQL identity"
+  revisions:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-11-04T05:23:21Z
+      mode: "update"
+      note: "Applied validation findings: frozen binaries outside the tree, explicit M3 pairing and keiro prefix, byte-identical list SQL, release-gate scope, OKF log and IR-58 obligations"
 ---
 
 # Count workflow instances by status class without runtime performance regressions
@@ -65,6 +77,15 @@ index for this query.
 - Decision: Make performance evidence a prerequisite for completion, including unpaced writer capacity and polling through the actual HTTP application.
   Rationale: A paced test can hide lost writer headroom; a fast isolated SQL query can still interfere with workers. Existing 5% interference guards are rejection ceilings, not permission to introduce a smaller reproducible regression.
   Date: 2026-10-26
+
+Revision note (2026-11-03): Validation against the working tree confirmed the
+cited files, identifiers, schema, HTTP defaults, evidence figures, and ADRs.
+Moved frozen harness binaries outside the tracked tree with retained hashes,
+made the M3 pairing rule and the `keiro` mount prefix explicit, required
+byte-identical list SQL or re-measured list evidence, stated that the release
+gate's six guards cannot observe this change so M3 is the sole interference
+measurement, and added the OKF timestamp/log and IR-58 lifecycle obligations
+that strict validation enforces.
 
 
 ## Outcomes & Retrospective
@@ -123,6 +144,26 @@ connection in the dedicated inspection pool. Direct library and CLI callers
 remain responsible for their connection/statement deadline policy; do not change
 a shared runtime connection's settings inside the read.
 
+The release gate, `just release-gate`, runs the repository correctness suite and
+then six `keiro-bench` guards (producer-identity, outbox, inbox, command,
+projection, read-model) through `scripts/bench-regression.sh`. Those guards
+measure event-store fixtures that never write `keiro.keiro_workflows` or touch
+the HTTP surface, so a passing gate cannot detect interference from this change;
+the matched harness in M3 is the only measurement that can. That harness,
+`keiro-ops-http/bench/InspectionInterference.hs`, takes
+`OUTPUT_DIRECTORY [saturation|OPS_PER_SECOND] [TRIALS] [MODE]`, where `saturation`
+is the unpaced capacity run; it seeds 100,000 uniformly `running` workflow rows
+across 31 names plus 100,000 timers, measures for `KEIRO_INSPECTION_SECONDS`
+seconds (default 20) after warm-up, runs its poll clients in a separate process
+(`keiro-ops-http/bench/InspectionClients.hs`), and mounts the ops application
+under the `keiro` surface prefix, so pollers request `/keiro/wf/inspect/...`
+paths rather than `/wf/inspect/...`. Its writer operation performs a real
+schedule, claim, step, completion, lease release, and timer schedule/claim/fire;
+it has no retry or suspension transition. Its poll modes are `disabled`, `idle`,
+`active-shared`, `active-distinct`, `slow-reader`, `churn`, and the `pm-types`
+family. The 5% core-path rule this plan reuses is the `within_core_gate` test in
+`scripts/inspection-composed-evidence.py`.
+
 Relevant decisions consulted are [ADR-23](../adr/0023-workflow-discovery-is-exact-and-the-instance-row-is-the-complete-wake-ledger.md),
 which makes the instance row the wake ledger and protects exact discovery;
 [ADR-28](../adr/0028-operator-commands-wrap-supported-library-apis-and-respect-schema-ownership.md),
@@ -136,6 +177,22 @@ which requires isolated, fixed workloads and attributed baseline evidence.
 No additional cross-repository ADR is needed. The consumer request originates
 from `mori://shinzui/keiro-ui/plans/17-build-the-projections-and-overview-screens`;
 changing that UI is outside this plan.
+
+Three documentation bundles this plan edits are profile-governed OKF bundles whose
+strict validation includes `--log-enforce`: `docs/user/durable-workflows.md`
+(`DOC-8`) and `docs/guides/serve-keiro-ops-over-http.md` (`DOC-30`) under
+`mori/user-documentation-profile.dhall`, the ADRs under `docs/adr/profile.dhall`,
+and `docs/improvement-requests/` under `mori/improvement-requests-profile.dhall`.
+Editing any of these documents requires advancing its `timestamp` and appending a
+matching entry to that bundle's `log.md` with `okf log add`; otherwise
+`just user-documentation-validate` or `just adr-validate`, and therefore the
+release gate's correctness stage, fail. IR-58 is currently `status: proposed`
+with no `plan` field. Bundle precedent (IR-56 and IR-60 in
+`docs/improvement-requests/log.md`) links an accepted request to its ExecPlan
+with `status: accepted`, a `plan:` path, and an `Update` log entry, then closes
+it with `status: completed`, `completedAt`, a `resolution`, and a `Completion`
+log entry. No Justfile recipe validates that bundle; Concrete Steps run
+`okf validate` on it directly.
 
 
 ## Plan of Work
@@ -151,7 +208,12 @@ HTTP URLs and existing writer APIs, so they can compile before the new count API
 exists. Freeze that binary against unchanged production code, then retain the
 same harness for the candidate. If the workload changes later, rebuild both
 controls from their recorded sources. Preserve unrelated work already in this
-checkout. Create the proposed types below
+checkout. Before the first implementation commit, link IR-58 to this plan as the
+bundle precedent does: set `status: accepted`, add
+`plan: docs/plans/325-count-workflow-instances-by-status-class-without-runtime-performance-regressions.md`,
+advance `timestamp`, append an `Update` entry with
+`okf log add docs/improvement-requests`, and validate the bundle. Create the
+proposed types below
 in `keiro/src/Keiro/Workflow/Inspection/Query.hs`, re-export them through
 `keiro/src/Keiro/Workflow/Inspection.hs`, and prototype
 `inspectionInstanceCounts` in `keiro/src/Keiro/Workflow/Instance.hs`.
@@ -167,8 +229,14 @@ shapes return one row containing `now()` and seven non-null `bigint` values. Use
 separate prepared shapes for no name filter and a bound exact-name filter;
 never interpolate user text or hide the absent filter behind a nullable OR.
 Factor the SQL classification helper for list/count reuse without changing list
-SQL semantics or moving classification onto writer paths. The independent Haskell
-`statusClassOf` remains the parity oracle.
+SQL semantics or moving classification onto writer paths. The prepared list
+statement text, marked `/* keiro-inspection-page-v2 */`, is what Plan 317's
+retained plans under `keiro/bench/results/inspection/query-readside-v2/`
+explained; capture that text before and after the refactor and require it to be
+byte-identical. If it changes for any reason, rerun
+`scripts/inspection-query-evidence.hs` and retain the new list evidence beside
+the counts evidence before claiming unchanged list behavior. The independent
+Haskell `statusClassOf` remains the parity oracle.
 
 Add `scripts/workflow-counts-query-evidence.hs`, following the disposable fixtures
 and prepared-statement discovery in `scripts/inspection-query-evidence.hs`.
@@ -196,8 +264,14 @@ fixtures and the required million-row cases complete within the timeout with
 normal-planner evidence supporting the request's index-backed aggregate. Do not
 force index selection by disabling sequential scans. If the planner instead
 chooses table scans, report precisely which cases do so; fast table scans alone
-do not discharge the index-backed criterion. Select the simplest qualifying
-shape and discard the other prototype. If neither qualifies, retain both
+do not discharge the index-backed criterion. Expect that outcome for the
+running/retrying split and for every name filter: `attempts` and `workflow_name`
+are in no index, so those populations need heap access per row, and a 99%-active
+million-row fixture gives the planner little reason to prefer
+`keiro_workflows_active_idx` over a sequential scan. Record the measured timings
+for exactly those cases so the decision below can weigh an exact count within the
+timeout against the schema change this plan does not authorize. Select the
+simplest qualifying shape and discard the other prototype. If neither qualifies, retain both
 correctness/cost results and leave M1 incomplete. Present a concrete measured
 alternative before seeking a decision about the index requirement or a schema
 change. No index, generated column, trigger, summary table, periodic refresh, or
@@ -255,9 +329,16 @@ Jitsurei comparisons, including an absent name.
 
 Adapt `keiro-ops-http/bench/InspectionInterference.hs` and
 `keiro-ops-http/bench/InspectionClients.hs` with explicit `wf-counts` and
-`wf-counts-many` modes, preserving existing scenarios. Add a configurable workflow
-fixture size defaulting to its existing size; the counts measurements must select
-one million rows. The single-client mode polls unfiltered counts once per second.
+`wf-counts-many` modes, preserving existing scenarios. Because the harness mounts
+the ops application under the `keiro` surface prefix, the count pollers request
+`/keiro/wf/inspect/counts`, with `workflow_name` as the query parameter, and a
+request that misses the prefix is a harness defect, not a refusal. Add a
+configurable workflow fixture size defaulting to its existing size; the counts
+measurements must select one million rows. The existing seed is uniformly
+`running` across 31 names, so the counts fixture must also seed explicit `status`,
+`attempts`, `wake_after`, `completed_at`, and name distributions and record them.
+Set the measurement duration with `KEIRO_INSPECTION_SECONDS`. The single-client
+mode polls unfiltered counts once per second.
 The many-client mode runs eight clients with a mixture of unfiltered, common,
 rare, and absent names, each at one request per second, including aligned bursts
 to exercise the four-slot admission cap. Require successful count responses
@@ -277,9 +358,16 @@ seed. Build the same instrumented writer/measurement harness against both source
 trees; baseline runs existing disabled/idle modes without invoking a nonexistent
 count endpoint. Keep fixtures and measurement code otherwise identical.
 
-Run at least five alternating pairs of unpaced writer capacity measurements, then
-at least five alternating blocks comparing baseline with candidate unmounted,
-mounted-idle, one count poller, and eight count pollers. Qualify a fixed offered
+Run at least five alternating pairs of unpaced (`saturation`) writer capacity
+measurements, baseline unmounted against candidate unmounted. Then run at least
+five paced blocks; each block executes, in alternating order, baseline unmounted,
+baseline mounted-idle, candidate unmounted, candidate mounted-idle, candidate
+`wf-counts`, and candidate `wf-counts-many`. The analyzer pairs legs within a
+block: candidate unmounted with baseline unmounted, candidate mounted-idle with
+baseline mounted-idle, and each count-poller leg with baseline mounted-idle,
+which shares the mount and differs only by the count traffic. It also reports
+each count-poller leg against baseline unmounted so the total cost of serving
+counts is visible. Every pair is subject to the thresholds below. Qualify a fixed offered
 rate below 75% of the slowest baseline capacity; verify stable scheduling delay
 so a growing backlog cannot appear as healthy throughput. Use at least 20 seconds
 of measurement after warm-up, increasing the duration when too few count reads
@@ -309,10 +397,19 @@ README, not just a green summary. Document the measured supported cadence and
 dataset in `docs/user/durable-workflows.md` and
 `docs/guides/serve-keiro-ops-over-http.md`, including exact filtering, zeros,
 clock semantics, timeout/refusal behavior, linear population cost, index plans,
-and the requirement for deadline-configured direct callers. Update the applicable
-unreleased changelogs. Distill the accepted count/isolation contract into ADR-28
-and ADR-40 if it adds durable context; preserve their metadata and log conventions.
-Only mark M3 complete after final-source evidence and `just release-gate` pass.
+and the requirement for deadline-configured direct callers. Advance each edited
+document's `timestamp` and append matching `okf log add docs/user` and
+`okf log add docs/guides` entries, or strict validation fails. Update the
+applicable unreleased changelogs. Distill the accepted count/isolation contract
+into ADR-28 and ADR-40 if it adds durable context; preserve their metadata and
+log conventions, including an `okf log add docs/adr` entry for each advanced
+timestamp. Close IR-58 as the bundle precedent does: `status: completed`,
+`completedAt` equal to the actual completion time, a `resolution` naming the
+evidence, and a `Completion` log entry; if any acceptance item remains open,
+leave it `in-progress` without a completion timestamp. Only mark M3 complete
+after final-source evidence and `just release-gate` pass. The gate requires a
+clean tree apart from retained evidence and plan documents and reuses stage
+receipts only for an identical source identity, so commit the final source first.
 
 
 ## Concrete Steps
@@ -330,26 +427,33 @@ z3 --version
 
 After the measurement-only harness changes, before production edits, freeze the
 baseline. Use a new output directory if one already exists; do not overwrite
-prior evidence. The source identity files must accompany the binary.
+prior evidence. The frozen executables stay outside the checkout, in a directory
+you choose through `KEIRO_COUNTS_BINARIES`: nothing under `keiro/bench/results/`
+is ignored by Git, and prior cohorts retained hashes, build settings, and source
+identity rather than committing binaries. The text files written below are the
+retained identity and must accompany each binary's hash.
 
 ```bash
-mkdir -p keiro/bench/results/workflow-counts/binaries
+export KEIRO_COUNTS_BINARIES="${KEIRO_COUNTS_BINARIES:-$HOME/.cache/keiro/workflow-counts-binaries}"
+mkdir -p "$KEIRO_COUNTS_BINARIES" keiro/bench/results/workflow-counts/binaries
 git rev-parse HEAD > keiro/bench/results/workflow-counts/binaries/baseline-revision.txt
 git diff --binary > keiro/bench/results/workflow-counts/binaries/baseline-source.patch
+git ls-files --others --exclude-standard > keiro/bench/results/workflow-counts/binaries/baseline-untracked.txt
 cabal build keiro-ops-http:bench:inspection-interference --enable-benchmarks
 cabal list-bin keiro-ops-http:bench:inspection-interference > keiro/bench/results/workflow-counts/binaries/baseline-built-path.txt
 python3 - <<'PY'
+import hashlib, os, shutil
 from pathlib import Path
-import shutil
-root = Path('keiro/bench/results/workflow-counts/binaries')
-target = root / 'baseline'
+evidence = Path('keiro/bench/results/workflow-counts/binaries')
+target = Path(os.environ['KEIRO_COUNTS_BINARIES']) / 'baseline'
 assert not target.exists(), 'refusing to replace baseline'
-shutil.copy2((root / 'baseline-built-path.txt').read_text().strip(), target)
+shutil.copy2(evidence.joinpath('baseline-built-path.txt').read_text().strip(), target)
+evidence.joinpath('baseline-sha256.txt').write_text(hashlib.sha256(target.read_bytes()).hexdigest() + '\n')
 PY
 ```
 
 Retain any relevant untracked source files alongside the patch; a Git diff alone
-does not include them. Reconstructible source identity is required for both legs.
+does not include them, which is why the listing above records their names. Reconstructible source identity is required for both legs.
 After implementing M1/M2, run:
 
 ```bash
@@ -389,29 +493,44 @@ database timestamp in place of the example:
 {"observed_at":"2026-10-26T00:00:00Z","counts":{"running":0,"retrying":0,"sleeping":0,"awaiting":0,"completed":0,"cancelled":0,"failed":0}}
 ```
 
+Record the documentation and request changes in their bundle logs before the
+final validation, adjusting each message to what actually changed:
+
+```bash
+okf log add docs/user --kind Update -m "Durable Workflows: document wf inspect counts, exact-name filtering, zero classes, the database clock, timeout behavior and the measured million-row envelope (plan 325)."
+okf log add docs/guides --kind Update -m "Serve Keiro Ops Over HTTP: document GET /wf/inspect/counts inside the inspection budget and statement timeout (plan 325)."
+okf log add docs/adr --kind Update -m "ADR-28, ADR-40: record the exact status-class count read and its measured isolation (plan 325)."
+okf log add docs/improvement-requests --kind Completion -m "IR-58 completed under ExecPlan 325: exact status-class counts over CLI and HTTP with retained million-row query and matched interference evidence."
+```
+
 After building and freezing the matched harness binaries, set `COUNTS_BASELINE_BIN`
 and `COUNTS_CANDIDATE_BIN` to their absolute paths; the controller validates both
-and copies their hashes into its manifest. These are task-specific environment
+against the retained `*-sha256.txt` files and copies their hashes into its manifest. These are task-specific environment
 variables, not system-directory overrides.
 
 ```bash
+export KEIRO_COUNTS_BINARIES="${KEIRO_COUNTS_BINARIES:-$HOME/.cache/keiro/workflow-counts-binaries}"
+git rev-parse HEAD > keiro/bench/results/workflow-counts/binaries/candidate-revision.txt
+git diff --binary > keiro/bench/results/workflow-counts/binaries/candidate-source.patch
 cabal build keiro-ops-http:bench:inspection-interference --enable-benchmarks
 cabal list-bin keiro-ops-http:bench:inspection-interference > keiro/bench/results/workflow-counts/binaries/candidate-built-path.txt
 python3 - <<'PY'
+import hashlib, os, shutil
 from pathlib import Path
-import shutil
-root = Path('keiro/bench/results/workflow-counts/binaries')
-target = root / 'candidate'
+evidence = Path('keiro/bench/results/workflow-counts/binaries')
+target = Path(os.environ['KEIRO_COUNTS_BINARIES']) / 'candidate'
 assert not target.exists(), 'refusing to replace candidate'
-shutil.copy2((root / 'candidate-built-path.txt').read_text().strip(), target)
+shutil.copy2(evidence.joinpath('candidate-built-path.txt').read_text().strip(), target)
+evidence.joinpath('candidate-sha256.txt').write_text(hashlib.sha256(target.read_bytes()).hexdigest() + '\n')
 PY
-export COUNTS_BASELINE_BIN="$PWD/keiro/bench/results/workflow-counts/binaries/baseline"
-export COUNTS_CANDIDATE_BIN="$PWD/keiro/bench/results/workflow-counts/binaries/candidate"
+export COUNTS_BASELINE_BIN="$KEIRO_COUNTS_BINARIES/baseline"
+export COUNTS_CANDIDATE_BIN="$KEIRO_COUNTS_BINARIES/candidate"
 bash scripts/measure-workflow-counts.sh "$COUNTS_BASELINE_BIN" "$COUNTS_CANDIDATE_BIN" keiro/bench/results/workflow-counts/runtime
 python3 scripts/analyze-workflow-counts.py --self-test
 python3 scripts/analyze-workflow-counts.py keiro/bench/results/workflow-counts/runtime
 just user-documentation-validate
 just adr-validate
+okf validate docs/improvement-requests --strict --profile mori/improvement-requests-profile.dhall --profile-enforce --log-enforce
 just release-gate
 git diff --check
 ```
@@ -446,7 +565,9 @@ scan. Failure to meet either IR-58 criterion leaves the plan incomplete.
 
 Performance requires M3's final-source matched capacity and interference evidence
 with real successful poll traffic, no added work on default runtime paths,
-unchanged existing list behavior, and a passing release gate. A dedicated pool
+unchanged existing list behavior, and a passing release gate. A passing gate is
+necessary, not sufficient: its six guards never exercise workflow writers or the
+HTTP surface. A dedicated pool
 does not isolate PostgreSQL CPU, storage, or cache contention. Old cohort evidence
 and historical benchmark smoke tests cannot substitute for measuring these new
 counts on one million rows. Report the observed envelope and uncertainty, rather
@@ -502,8 +623,11 @@ countWorkflowInstancesByStatus
 Use the repository's existing record extensions and deriving conventions.
 There is no cursor or page validation error in this query: a supplied text name
 is an exact filter, and storage failures continue through `Store`. PostgreSQL
-`count(*)` returns `bigint`; decode with the existing Hasql `int8` pattern into
-`Data.Int.Int64`, not `Int32` or floating point. Reuse existing Hasql statements
+`count(*)` returns `bigint`; decode it with Hasql's `D.int8` into
+`Data.Int.Int64`, not `Int32` or floating point.
+`keiro/src/Keiro/Workflow/Instance.hs` currently imports only `Int32` and decodes
+with `D.int4`, so add the `Int64` import there; existing `D.int8` decoders to
+copy are in `keiro/src/Keiro/ReplayAudit.hs` and `keiro/src/Keiro/ReadModel.hs`. Reuse existing Hasql statements
 and `Kiroku.Store.Transaction.runTransaction`; Mori discovery identified the
 owner as `mori://shinzui/kiroku/packages/kiroku-store`, and its source confirms
 the transaction combinator runs at read-committed isolation. A single SELECT
