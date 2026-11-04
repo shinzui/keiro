@@ -144,11 +144,11 @@ pageProjectionGroupStatusesStmt after =
   preparable
     ( "WITH inspection_groups AS MATERIALIZED (SELECT group_id FROM keiro.keiro_projection_rebuild_groups"
         <> (if after then " WHERE group_id > $1" else " WHERE $1::text IS NULL")
-        <> " ORDER BY group_id LIMIT $2) SELECT status.*, coalesce(cursors.subscription_names, ARRAY[]::text[]) AS feeding_subscriptions FROM inspection_groups page CROSS JOIN LATERAL ("
+        <> " ORDER BY group_id LIMIT $2) SELECT status.*, CASE WHEN status.serving_position_basis = 'checkpoint'"
+        <> " THEN coalesce((SELECT subscription_names FROM keiro.keiro_projection_group_cursors feeding_authority WHERE group_id = page.group_id OFFSET 0), ARRAY[]::text[])"
+        <> " ELSE ARRAY[]::text[] END AS feeding_subscriptions FROM inspection_groups page CROSS JOIN LATERAL ("
         <> statusSelect
-        <> " WHERE group_id = page.group_id OFFSET 0) status"
-        <> " LEFT JOIN LATERAL (SELECT subscription_names FROM keiro.keiro_projection_group_cursors WHERE group_id = page.group_id AND status.serving_position_basis = 'checkpoint' OFFSET 0) cursors ON true"
-        <> " ORDER BY status.group_id"
+        <> " WHERE group_id = page.group_id OFFSET 0) status ORDER BY status.group_id"
     )
     (contrazip2 (E.param (E.nullable E.text)) (E.param (E.nonNullable E.int8)))
     (D.rowList projectionGroupStatusRowDecoder)

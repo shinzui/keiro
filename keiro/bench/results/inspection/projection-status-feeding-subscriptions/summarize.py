@@ -38,16 +38,16 @@ def samples(path):
 
 def validate_plan(row):
     root = row['plan'][0]['Plan']
-    # The fenced lateral subquery's private table retains its unqualified table
-    # alias. The view's existing lookups have generated cursors[_N] aliases.
+    # Identify the added scalar subplan independently of the view's own lookups.
     probes = [(p, parents) for p, parents in nodes(root)
               if p.get('Relation Name') == 'keiro_projection_group_cursors'
-              and p.get('Alias') == 'keiro_projection_group_cursors']
+              and p.get('Alias') == 'feeding_authority']
     assert len(probes) == 1, 'added lateral probe missing/ambiguous'
     probe, parents = probes[0]
     assert probe['Node Type'] in ('Index Scan', 'Index Only Scan')
     assert probe['Index Name'] == 'keiro_projection_group_cursors_pkey'
-    assert probe['Actual Loops'] == 101
+    assert probe['Actual Loops'] == 10
+    assert "CASE WHEN status.serving_position_basis = 'checkpoint'" in row['sql']
     assert probe['Index Cond'] == '(group_id = page.group_id)'
     joins = [p for p in parents if p['Node Type'] == 'Nested Loop']
     assert any(any(n.get('CTE Name') == 'inspection_groups' for n, _ in nodes(p['Plans'][0])) for p in joins), 'page does not drive probe'

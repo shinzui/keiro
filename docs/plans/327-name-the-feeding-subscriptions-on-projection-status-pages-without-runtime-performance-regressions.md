@@ -213,13 +213,15 @@ evidence. No earlier manager-discovery waiver supplies projection acceptance.
 - Decision: Guard the added subscription-name probe with the frozen row's
   `serving_position_basis = 'checkpoint'`. The existing private-table constraint proves
   append/unmanaged arrays are empty; no migration or new assumption is needed. Retain
-  the lateral OFFSET 0 fence. Refine the structural gate from one extra probe per SQL
+  the correlated OFFSET 0 boundary and existing public-view fence. Refine the structural gate from one extra probe per SQL
   row to at most one per checkpoint row (10 probes in these 101-row fixtures), while
   retaining the 1.10 timing ceiling and all runtime gates.
   Rationale: The all-row lookup exceeded the SQL ceiling in a loaded diagnostic. Local
   prototypes showed that a scalar form, changed fence placement, and a batched range
   read did not consistently reduce cost. Skipping provably unnecessary work reduced
-  the added index scans from 101 to 10 while preserving exact field semantics.
+  the added index scans from 101 to 10 while preserving exact field semantics. A second
+  loaded cohort with the guarded lateral form narrowly exceeded the deep-page ceiling
+  (1.1046); a CASE-controlled scalar probe also removes its per-row join overhead.
   Date: 2026-11-04
 - Decision: Require a projection-specific matched idle/poll/feed writer cohort in addition
   to the SQL ceiling, using the fixed protocol in Progress. Runtime acceptance rejects
@@ -471,13 +473,11 @@ pageProjectionGroupStatusesStmt after =
   preparable
     ( "WITH inspection_groups AS MATERIALIZED (SELECT group_id FROM keiro.keiro_projection_rebuild_groups"
         <> (if after then " WHERE group_id > $1" else " WHERE $1::text IS NULL")
-        <> " ORDER BY group_id LIMIT $2)"
-        <> " SELECT status.*, coalesce(cursors.subscription_names, ARRAY[]::text[]) AS feeding_subscriptions"
-        <> " FROM inspection_groups page CROSS JOIN LATERAL ("
+        <> " ORDER BY group_id LIMIT $2) SELECT status.*, CASE WHEN status.serving_position_basis = 'checkpoint'"
+        <> " THEN coalesce((SELECT subscription_names FROM keiro.keiro_projection_group_cursors feeding_authority WHERE group_id = page.group_id OFFSET 0), ARRAY[]::text[])"
+        <> " ELSE ARRAY[]::text[] END AS feeding_subscriptions FROM inspection_groups page CROSS JOIN LATERAL ("
         <> statusSelect
-        <> " WHERE group_id = page.group_id OFFSET 0) status"
-        <> " LEFT JOIN LATERAL (SELECT subscription_names FROM keiro.keiro_projection_group_cursors WHERE group_id = page.group_id AND status.serving_position_basis = 'checkpoint' OFFSET 0) cursors ON true"
-        <> " ORDER BY status.group_id"
+        <> " WHERE group_id = page.group_id OFFSET 0) status ORDER BY status.group_id"
     )
     (contrazip2 (E.param (E.nullable E.text)) (E.param (E.nonNullable E.int8)))
     (D.rowList projectionGroupStatusRowDecoder)
@@ -489,14 +489,16 @@ projectionGroupStatusRowDecoder =
     <*> D.column (D.nonNullable (D.listArray (D.nonNullable D.text)))
 ```
 
-The join key is `page.group_id`, the materialized page key. The implementation
-prototype rejected the ordinary left join because generic first-page plans used an
-unparameterized merge join. The final added lookup is fenced with OFFSET 0 and guarded
-by `status.serving_position_basis = 'checkpoint'`. Migration 0026's existing check
-constraint requires empty arrays for append/unmanaged authority; the frozen view exposes
-that same basis, so skipping those private probes preserves the stored value exactly.
-Keep the existing status lookup fence too. Plan and timing evidence remain required;
-the fence and guard do not themselves establish acceptance. Do not add
+The probe key is `page.group_id`, the materialized page key. The implementation
+prototype rejected an ordinary left join because generic first-page plans used an
+unparameterized merge join. An unconditional fenced lookup exceeded the timing ceiling;
+a guarded lateral lookup skipped empty arrays but retained an extra join per SQL row.
+The final CASE expression invokes a correlated scalar subquery only for checkpoint rows,
+with an OFFSET 0 boundary and a primary-key condition on the page key. Migration 0026's
+existing check constraint requires empty arrays for append/unmanaged authority, so skipping
+those probes preserves the stored value exactly. Keep the existing public status lookup
+fence. Retained plans and timings, rather than the SQL spelling, establish acceptance.
+Do not add
 `coalesce`, sorting, or de-duplication beyond the `coalesce` to an empty array: the field
 reports the authority row as stored. Update the continuation to read the last item's
 `status.groupId`. Export `ProjectionGroupStatusRow (..)` from the module and from
@@ -604,11 +606,11 @@ fixture; the same-fixture paired ratio is the quantitative acceptance criterion.
 
 Acceptance has four parts. First, plan shape: in every candidate plan the cursors relation
 appears as an `Index Scan` or `Index Only Scan` using `keiro_projection_group_cursors_pkey`
-under a `Nested Loop`, with its index condition bound to the page key. An explicit one-time filter on the
+under a `Nested Loop`, with its index condition bound to the page key. An explicit CASE condition on the
 frozen status basis skips append/unmanaged rows: their arrays are empty by the existing
 private table constraint. Actual added index-scan loops equal the checkpoint keys selected,
 including look-ahead (10 in these 101-row SQL windows with a ten-percent checkpoint stripe);
-the added Result filter runs for the 101 SQL rows. The view's own cursor probes remain
+the CASE projection handles the 101 SQL rows and invokes the scalar subquery only for those 10 checkpoint keys. The view's own cursor probes remain
 unchanged. There must be no extra private-table probe for proven-empty arrays;
 identify the newly added lookup by its SQL alias, since the frozen view also reads this
 relation. The materialized page must feed the outer subtree, not necessarily its immediate
@@ -986,3 +988,10 @@ rows, retain the per-key lateral fence, and validate 10 added probes for the fix
 ceilings, source/schema compatibility and runtime acceptance are unchanged. The earlier
 full verification log is evidence for the pre-optimization candidate; validate the final
 query before completion.
+
+
+Scalar-probe revision (2026-11-04): The guarded lateral cohort is retained under
+`loaded-diagnostic-v2/` and remains unaccepted (background overlap and 1.1046 in one
+shape). The final CASE-controlled scalar subquery keeps 10 keyed probes on this fixture
+and removes the added join for all 101 SQL rows. The existing public-view fence, the
+frozen definitions, and every numeric and runtime gate remain unchanged.

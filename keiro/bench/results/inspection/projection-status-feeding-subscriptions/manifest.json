@@ -17,7 +17,7 @@
     "machine.txt": "7274450e4e0fdd8ba8907e8621f072be9d3d4c7719da70222ecd7e4c6103aa3e",
     "runtime-negative-controls.json": "35cbdcfc40f3c7e64df6b8efbccaaafcb67017afc7e5953cdc9afd9eaa1bd441",
     "sql-negative-controls.json": "3d8fcbf28f97d11df225114b78dc801e5874047454612e283dde25bd2f601424",
-    "summarize.py": "4ad8e1b7eb357c2f6f2aac578b782af2edb22cde6b86bf59465b72449c170b68",
+    "summarize.py": "b8af92613fbe7d5a506e1c381b9bdcf95838b23606d654171a69535fe2782b99",
     "verify.log": "17586a2b945ab0c5e2f33c6c834b2c9099462504cf16cd974bb95ff9b53dc6c2"
   }
 }

@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-04
+* **Update**: ADR-35: use a conditional scalar probe to avoid an added join per projection status row (plan 327).
 * **Update**: ADR-35: skip subscription probes when the frozen basis and existing constraint prove the array empty (plan 327).
 * **Update**: ADR-35: page metadata carries registered subscription sets beside frozen v1; fence the added lookup under generic plans (plan 327).
 * **Update**: ADR-54: distinguish application-owned register displays from raw persisted JSON and independent snapshot health observations (Plan 329).

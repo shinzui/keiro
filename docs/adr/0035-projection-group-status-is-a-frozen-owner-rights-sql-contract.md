@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Projection group status is a frozen owner-rights SQL contract
 description: Keiro publishes serving availability and progress separately from candidate rebuild progress through a frozen versioned owner-rights view.
-timestamp: 2026-11-04T18:48:20Z
+timestamp: 2026-11-04T18:56:49Z
 docId: ADR-35
 status: Accepted
 date: 2026-08-13
@@ -152,8 +152,9 @@ table. CLI, HTTP and feed items share an additive `feeding_subscriptions` array 
 extending the frozen SQL relation. Registered checkpoint names are sorted; append groups
 have none, while an unmanaged group's empty array means authority is unknown.
 The cursor table's check constraint proves that append and unmanaged authority
-arrays are empty. Probe subscription names only when the frozen row's basis is
-`checkpoint`; other rows need no extra private-table read. The additional lookup
-uses an OFFSET 0 lateral boundary: an ordinary left join can
+arrays are empty. Use CASE to probe subscription names only when the frozen row's basis is
+`checkpoint`; other rows need no extra private-table read. The additional lookup is a
+conditional scalar subquery with an OFFSET 0 boundary, avoiding an extra join
+for every page row: an ordinary left join can
 become an unparameterized merge join under generic plans. Preserve primary-key probes
 per selected checkpoint key and validate both custom and generic plans when changing this read.
