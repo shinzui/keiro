@@ -7,9 +7,10 @@ description: >-
   defines the inspectors. Ship an executable, or a flag on the compose example, that mounts
   jitsurei's AppHooks against the jitsurei database so UIs can be built and verified against
   real aggregate and process-manager responses.
-timestamp: 2026-11-04T05:28:05Z
+timestamp: 2026-11-04T14:40:00Z
 requestId: IR-55
-status: proposed
+plan: docs/plans/328-serve-the-jitsurei-aggregate-and-process-manager-hooks-from-a-runnable-keiro-ops-http-host.md
+status: accepted
 origin: mori://shinzui/keiro-ui
 reviews:
   - kind: model
@@ -32,7 +33,7 @@ reviews:
 
 ## Status
 
-Proposed; no implementing ExecPlan exists.
+Accepted; implemented by [ExecPlan 328](../plans/328-serve-the-jitsurei-aggregate-and-process-manager-hooks-from-a-runnable-keiro-ops-http-host.md).
 
 Originally proposed by the keiro runtime console initiative
 (`mori://shinzui/keiro-ui/masterplans/2-build-the-keiro-runtime-console`), filed from

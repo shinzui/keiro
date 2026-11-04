@@ -7,6 +7,7 @@ module Keiro.Ops.Http
     errorResponse,
     module Keiro.Ops.Http.Config,
     module Keiro.Ops.Http.Server,
+    module Keiro.Ops.Http.Host,
     withOpsInspectionPool,
     corsMiddleware,
   )
@@ -16,6 +17,7 @@ import Keiro.Ops.Http.Application
 import Keiro.Ops.Http.Compose
 import Keiro.Ops.Http.Config
 import Keiro.Ops.Http.Cors
+import Keiro.Ops.Http.Host
 import Keiro.Ops.Http.Pool
 import Keiro.Ops.Http.Server
 

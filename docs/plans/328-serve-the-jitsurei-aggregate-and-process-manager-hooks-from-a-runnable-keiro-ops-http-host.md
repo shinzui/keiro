@@ -22,6 +22,11 @@ provenance:
       at: 2026-11-04T14:16:09Z
       mode: "update"
       note: "Apply review fixes to Cabal targets, preview state assertions, configured-database recovery, and correlation-id input."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-04T14:35:15Z
+      mode: "implement"
+      note: "Implement the shared HTTP host, jitsurei executable, integration acceptance, and documentation."
 ---
 
 
@@ -47,7 +52,7 @@ and pending timers. Today those routes exist nowhere an operator can start: both
 hosts in this repository mount `emptyAppHooks`, so the aggregate and process-manager
 routes are reachable only inside the `keiro-ops-http` test suite.
 
-The new executable is `jitsurei-ops-http`, built from the `jitsurei` example package. It
+The new executable is `jitsurei-ops-http`, built from the internal `jitsurei-ops-http` example package. It
 accepts exactly the flags of the standalone `keiro-ops-http` executable (`--database-url`,
 `--bind`, `--port`, repeatable `--allow-origin`, `--enable-mutations`,
 `--allow-schema-drift`, `--request-timeout`) and serves every route `keiro-ops-http` serves
@@ -71,14 +76,22 @@ then re-recorded).
 ## Progress
 
 
-- [ ] Milestone 1: `keiro-ops-http` exports `Keiro.Ops.Http.Host` (`HostOptions`, `hostOptionsParser`, `withHost`, `mainWithHooks`) and its executable is `mainWithHooks emptyAppHooks`, with `--help` output byte-identical to the creation baseline and `cabal test keiro-ops-http-test` passing unchanged. IR-55 is linked to this plan as `accepted`.
+- [x] Milestone 1 (2026-11-04): exported and re-exported `Keiro.Ops.Http.Host`; the standalone executable calls `mainWithHooks emptyAppHooks`. Baseline help is byte-identical (`diff` passed), and the unchanged HTTP suite passed 53 examples with zero failures. IR-55 is accepted and linked; strict validation passed for all 60 requests.
 - [ ] Milestone 2: `jitsurei` exposes `Jitsurei.Ops.jitsureiOpsHooks`, shared by `jitsurei-demo ops` and the new `jitsurei-ops-http` executable; `just jitsurei-ops-http` serves the seeded `jitsurei` database and the curl transcript in Validation shows `/aggregate/types`, `/aggregate/show`, `/pm/list` and `/pm/show` answering for data `just jitsurei-all` wrote; `jitsurei-ops-http --help` lists the same flags as `keiro-ops-http --help`.
-- [ ] Milestone 3: `jitsurei-test` starts the host in-process on an ephemeral database and proves the hook routes return the ops handlers' JSON and the shared gates behave identically (`/health` ok, 403 `mutations_disabled` by default, 403 `origin_not_allowed` and a 200 preview with mutations enabled that leaves stream metadata unchanged); `cabal test jitsurei-test` passes.
+- [ ] Milestone 3: `jitsurei-ops-http-test` starts the host in-process on an ephemeral database and proves the hook routes return the ops handlers' JSON and the shared gates behave identically (`/health` ok, 403 `mutations_disabled` by default, 403 `origin_not_allowed` and a 200 preview with mutations enabled that leaves stream metadata unchanged); `cabal test jitsurei-ops-http-test` passes.
 - [ ] Milestone 4: `docs/guides/serve-keiro-ops-over-http.md` names the host as the way to see hook-gated routes locally, the jitsurei runbook and both changelogs mention it, ADR-53 records the exported host, IR-55 is `completed` with a resolution, the strict OKF bundles validate, and `just verify` passes in the Nix shell on the final candidate.
 
 
 ## Surprises & Discoveries
 
+
+- 2026-11-04 (implementation): Cabal rejects an HTTP executable/test dependency
+  inside `jitsurei`, because `keiro-ops-http` already depends on jitsurei in its
+  test suite and inspection benchmark. The solver reports `Cabal-7107` with
+  `cyclic dependencies; conflict set: jitsurei, keiro-ops-http`. Component-level
+  library acyclicity is insufficient for this package graph. The executable
+  and its host integration suite therefore live in the separate internal
+  package `jitsurei/ops-http`; existing HTTP tests and benchmark stay unchanged.
 
 - 2026-11-04 (planning): IR-55 says the host should construct `AppHooks` "from
   `jitsurei/src/Jitsurei/Inspection.hs`", but jitsurei's complete hook record already exists
@@ -105,6 +118,14 @@ then re-recorded).
 
 ## Decision Log
 
+
+- Decision: Place the `jitsurei-ops-http` executable and integration suite in an
+  internal package at `jitsurei/ops-http`, with the shared hooks remaining in
+  `Jitsurei.Ops` in the jitsurei library. Register the new suite in `just verify`.
+  Rationale: This removes the observed Cabal package cycle while preserving the
+  executable name, public host API, recipe, and all behavioral acceptance. It
+  also preserves the existing HTTP tests and inspection benchmark unchanged.
+  Date: 2026-11-04.
 
 - Decision: Factor the standalone executable's `main` into an exported library module,
   `Keiro.Ops.Http.Host`, and make both `keiro-ops-http` and `jitsurei-ops-http` call its
@@ -327,11 +348,12 @@ delete the moved definitions and use the library names (the `ops` subcommand and
 durable-workflow demo at line 482 are the two call sites). Keep the demo's observable output
 identical.
 
-Add an executable stanza `jitsurei-ops-http` to `jitsurei/jitsurei.cabal` with
-`hs-source-dirs: app`, `main-is: OpsHttpMain.hs`, the package's `warnings` and `shared`
+Create internal package `jitsurei/ops-http/jitsurei-ops-http.cabal`, registered in
+`cabal.project`, with an executable stanza `jitsurei-ops-http` and
+`hs-source-dirs: app`, `main-is: Main.hs`, the package's `warnings` and `shared`
 common stanzas, the same `-threaded -rtsopts -with-rtsopts=-N` options as `jitsurei-demo`,
 and `build-depends` of `base`, `jitsurei` and `keiro-ops-http ^>=0.23.0.0`. The file
-`jitsurei/app/OpsHttpMain.hs` is a few lines: import `Jitsurei.Ops (jitsureiOpsHooks)` and
+`jitsurei/ops-http/app/Main.hs` is a few lines: import `Jitsurei.Ops (jitsureiOpsHooks)` and
 `Keiro.Ops.Http (mainWithHooks)`, and define `main = mainWithHooks (jitsureiOpsHooks Nothing)`.
 
 Add a recipe to `Justfile` in the `jitsurei` group that depends on `jitsurei-migrate` (so
@@ -360,7 +382,8 @@ If that is undesirable, the fallback is to build the runner inside the test with
 `withKirokuStore`, `getKirokuStore` and `runStoreResource`, copying the eight lines of
 `runResourceStore`; prefer the helper.
 
-Add a `Jitsurei ops HTTP host` group to `jitsurei/test/Main.hs`, using
+Add a `Jitsurei ops HTTP host` group to `jitsurei/ops-http/test/Main.hs` in
+`jitsurei-ops-http-test`, and add that suite to `Justfile`'s `haskell-test` recipe, using
 `withFreshResourceStoreWithConnection fixture (withProjectionSchema jitsureiProjectionSchema)`
 so the test has the `StoreRunner` for seeding, with the projection schema on the search path
 as the `Jitsurei process manager` test requires, and the clone's connection string for the
@@ -391,7 +414,7 @@ alone cannot prove non-deletion: `Keiro.Ops.Stream.streamInfoJson` in
 Add `keiro-ops-http ^>=0.23.0.0`, `http-client`,
 `http-types` and `bytestring` to the test suite's `build-depends`.
 
-At the end, `cabal test jitsurei-test --test-show-details=direct` passes with the new group
+At the end, `cabal test jitsurei-ops-http-test --test-show-details=direct` passes with the new group
 listed.
 
 ### Milestone 4: documentation, changelogs, ADR amendment, closure
@@ -400,7 +423,7 @@ listed.
 Add a section `## See the hook-gated routes locally` to
 `docs/guides/serve-keiro-ops-over-http.md` after "Request mapping and confirmation". It says
 that the standalone executable mounts no application catalogs, that `jitsurei-ops-http`
-(built from `jitsurei/app/OpsHttpMain.hs` with `mainWithHooks (jitsureiOpsHooks Nothing)`) is
+(built from `jitsurei/ops-http/app/Main.hs` with `mainWithHooks (jitsureiOpsHooks Nothing)`) is
 the runnable host that does, shows `just jitsurei-all` then `just jitsurei-ops-http` and the
 four curl requests from Validation with their observed shapes, notes `just jitsurei-ops-http
 --port 9093 --allow-origin http://localhost:5173` for a console on another origin, and
@@ -504,11 +527,11 @@ Expected: no diff output, the word `HELP-UNCHANGED`, and `0 failures`. Commit wi
 
 
 Create `jitsurei/src/Jitsurei/Ops.hs`, update `jitsurei/jitsurei.cabal`, `jitsurei/src/Jitsurei.hs`
-and `jitsurei/app/Main.hs`, create `jitsurei/app/OpsHttpMain.hs`, and add the Justfile recipe.
+and `jitsurei/app/Main.hs`, create `jitsurei/ops-http/app/Main.hs`, and add the Justfile recipe.
 Then build and compare the flag surfaces:
 
 ```bash
-cabal build jitsurei:lib:jitsurei jitsurei:exe:jitsurei-demo jitsurei:exe:jitsurei-ops-http
+cabal build jitsurei:lib:jitsurei jitsurei:exe:jitsurei-demo jitsurei-ops-http:exe:jitsurei-ops-http
 diff <(cabal run -v0 keiro-ops-http:exe:keiro-ops-http -- --help | sed 's/keiro-ops-http/HOST/g') <(cabal run -v0 jitsurei-ops-http -- --help | sed 's/jitsurei-ops-http/HOST/g') && echo FLAGS-IDENTICAL
 cabal run -v0 jitsurei-demo -- ops --help | grep -E 'aggregate|pm '
 ```
@@ -535,7 +558,8 @@ Add the test-support helper, the test group and the dependencies, then:
 
 ```bash
 cabal build keiro-test-support
-cabal test jitsurei-test --test-show-details=direct 2>&1 | grep -A 12 'Jitsurei ops HTTP host'
+cabal test jitsurei-ops-http-test --test-show-details=direct 2>&1 | grep -A 12 'Jitsurei ops HTTP host'
+cabal test jitsurei-ops-http-test
 cabal test jitsurei-test
 cabal test keiro-test
 ```
@@ -697,3 +721,7 @@ Cabal-7070, require unchanged stream metadata to prove preview and origin reject
 the stream intact, replace automatic database deletion with diagnosis and a fresh configured
 database, and use interactive input for the complete correlation id in the curl transcript.
 The architecture and implementation scope are unchanged.
+
+2026-11-04: Implementation exposed a Cabal package dependency cycle. Isolated the
+HTTP executable and host tests in `jitsurei/ops-http`, retaining the planned
+command, hook sharing, gates, and acceptance checks.

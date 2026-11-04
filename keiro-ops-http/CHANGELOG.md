@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### New Features
+
+- Export `Keiro.Ops.Http.Host` (`HostOptions`, `hostOptionsParser`, `withHost`,
+  `mainWithHooks`) and re-export it from `Keiro.Ops.Http`. The standalone
+  executable calls `mainWithHooks emptyAppHooks`; application hosts share its
+  flags, schema verification, origin policy, mutation gate, and feed lifecycle.
+
 ## 0.23.0.0 — 2026-10-30
 
 ### Breaking Changes

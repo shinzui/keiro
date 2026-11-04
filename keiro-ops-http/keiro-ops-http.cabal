@@ -57,6 +57,7 @@ library
     Keiro.Ops.Http.Config
     Keiro.Ops.Http.Cors
     Keiro.Ops.Http.Feed
+    Keiro.Ops.Http.Host
     Keiro.Ops.Http.Pool
     Keiro.Ops.Http.Protocol
     Keiro.Ops.Http.Route
@@ -104,15 +105,9 @@ executable keiro-ops-http
     -with-rtsopts=-N
 
   build-depends:
-    async >=2.2 && <2.3,
     base >=4.21 && <5,
-    hasql >=1.10 && <1.11,
-    keiro-migrations ^>=0.23.0.0,
     keiro-ops ^>=0.23.0.0,
     keiro-ops-http,
-    kiroku-store ^>=0.13.0.1,
-    optparse-applicative >=0.19 && <0.20,
-    text >=2.1 && <2.2,
 
 flag compose-example
   description: Build the composed inspection example with the sibling metrics surface.
