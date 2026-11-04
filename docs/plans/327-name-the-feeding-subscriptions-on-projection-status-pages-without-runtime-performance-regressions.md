@@ -120,6 +120,14 @@ evidence. No earlier manager-discovery waiver supplies projection acceptance.
 
 ## Surprises & Discoveries
 
+- 2026-11-04 (implementation): The first 40-trial writer cohort fulfilled all loads but
+  failed acceptance: feed p95 ratio 1.037748 (CI95 1.015959..1.289418), same-source p99
+  control CI95 0.430751..1.434925, and 416/458 process observations showed other builds/tests.
+  It is retained under `loaded-interference-v1/`, not accepted as a causal comparison.
+  Inspection row encoding appended one field to an 18-element pair list; prepend that
+  new pair instead to avoid an unnecessary list traversal/copy. JSON key order is not a
+  contract, and the old keys/values and v1 encoder remain unchanged. Repeat the fixed
+  cohort on the resulting candidate; no gate or baseline is relaxed.
 - 2026-11-04 (implementation): A loaded diagnostic of candidate `3e9fbacd`
   exceeded the 1.10 SQL ceiling for 10k custom deep pages (1.139823) and 100k
   generic deep pages (1.104096). Other repositories were compiling, so the cohort
@@ -543,7 +551,7 @@ projectionGroupStatusJson = object . projectionGroupStatusPairs
 -- | A page item: the v1 keys plus Keiro's registered feeding subscriptions.
 projectionGroupStatusRowJson :: ProjectionGroupStatusRow -> Value
 projectionGroupStatusRowJson row =
-  object (projectionGroupStatusPairs row.status <> ["feeding_subscriptions" .= row.feedingSubscriptions])
+  object (("feeding_subscriptions" .= row.feedingSubscriptions) : projectionGroupStatusPairs row.status)
 ```
 
 Switch the `Status` handler's `items` to `projectionGroupStatusRowJson` and read the human

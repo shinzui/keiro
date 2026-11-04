@@ -137,7 +137,8 @@ projectionGroupStatusJson = object . projectionGroupStatusPairs
 -- | The bounded page item, including registered feeding subscriptions.
 projectionGroupStatusRowJson :: ProjectionGroupStatusRow -> Value
 projectionGroupStatusRowJson row =
-  object (projectionGroupStatusPairs row.status <> ["feeding_subscriptions" .= row.feedingSubscriptions])
+  -- Prepending avoids traversing the frozen row's pair list.
+  object (("feeding_subscriptions" .= row.feedingSubscriptions) : projectionGroupStatusPairs row.status)
 
 projectionGroupStatusPairs :: ProjectionGroupStatusV1 -> [Pair]
 projectionGroupStatusPairs row =
