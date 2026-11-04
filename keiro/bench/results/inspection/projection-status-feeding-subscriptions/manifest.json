@@ -1,0 +1,23 @@
+{
+  "status": "behavior-and-verification-passed-performance-pending",
+  "sha256": {
+    "InspectionClients.hs.txt": "109f1c858cc92f9a41ef4d89ab420e9d68ed4a2c3ac790a30364054d769b5b83",
+    "InspectionInterference.hs.txt": "6cbda31b1615aa21c51a02733cf2586110da0a4526ff7b61ac0546fafffb8460",
+    "README.md": "896e294003e41058d56eebe701dc9fc95c0da845973aabe32762441808a50ca0",
+    "analyze-interference.py": "3f3fd2efcaa24e7b93fdc358b0e1d7ebf488acaa3b12204c95c5fc9fe09d9978",
+    "baseline-cabal-plan.json": "179f330960742fe1abe7a18010c4ede146a87eb34f14503c8fa409632237c4e8",
+    "candidate-cabal-plan.json": "c575f85e201e5b7d53b5db4a8a13bc5fc09019a2cf1c03606c4c52851b7447ef",
+    "compatibility.txt": "53cba746d54e7ad6bd2bd0e4df38ba0bf0accccb5c6f909dbf6b489fe75fc435",
+    "controller.sh.txt": "9eb7467b739fca87901c4008284ffa1e4e79ae0020aa9df80f1a1f32365f0db4",
+    "driver.hs.txt": "ed7f15dca4c4effa80d6bd259e6521102f34f62407962055a06c15ca46916afd",
+    "focused-tests.log": "88d08f230cbe53c3c513de5d9f3c9ccdd5e2245713f976d2e67200916e34c11a",
+    "identity.json": "325b49f41c7fd6f24f4cd658a2e8f0ffdeee1bc0055a1d5b3761c36a26222fb7",
+    "jitsurei-cli.json": "265200616574b287f0a8b6fd42aca0619485b203f43987cd9a9add30dd9ddc21",
+    "jitsurei-http.json": "edf5569123d70b20d443650bf072109b7a221a64aeb110893e4fb14167316a17",
+    "machine.txt": "7274450e4e0fdd8ba8907e8621f072be9d3d4c7719da70222ecd7e4c6103aa3e",
+    "runtime-negative-controls.json": "35cbdcfc40f3c7e64df6b8efbccaaafcb67017afc7e5953cdc9afd9eaa1bd441",
+    "sql-negative-controls.json": "3d8fcbf28f97d11df225114b78dc801e5874047454612e283dde25bd2f601424",
+    "summarize.py": "4ad8e1b7eb357c2f6f2aac578b782af2edb22cde6b86bf59465b72449c170b68",
+    "verify.log": "17586a2b945ab0c5e2f33c6c834b2c9099462504cf16cd974bb95ff9b53dc6c2"
+  }
+}

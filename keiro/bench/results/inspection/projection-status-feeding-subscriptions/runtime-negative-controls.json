@@ -1,0 +1,5 @@
+{
+  "equal complete synthetic cohort": "passed",
+  "reproducible 2% writer p99 regression": "refused",
+  "lost polling load": "refused"
+}

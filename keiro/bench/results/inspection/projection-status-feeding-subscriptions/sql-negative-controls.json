@@ -1,0 +1,8 @@
+{
+  "missing per-key probes": "refused",
+  "fleet scan": "refused",
+  "missing samples": "refused",
+  "duplicate sample": "refused",
+  "wrong API row count": "refused",
+  "nonpositive timing": "refused"
+}

@@ -1,0 +1,3 @@
+PASS: ProjectionGroupStatusV1 and the complete-list/lookup definitions, SQL and decoder are byte-identical to d64849f1.
+PASS: migrations, expected schema, registration/writer files and read-model CSV baseline are unchanged.
+PASS: 311 external dependency package/version pairs match across the retained Cabal plans.

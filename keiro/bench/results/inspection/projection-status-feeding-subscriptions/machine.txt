@@ -1,0 +1,8 @@
+Darwin yujin 27.2.0 Darwin Kernel Version 27.2.0: Wed Oct 14 23:47:58 PDT 2026; root:xnu-13432.41.4~25/RELEASE_ARM64_T6050 arm64 arm Darwin
+Mac17,15
+274877906944
+36
+Apple M5 Ultra
+The Glorious Glasgow Haskell Compilation System, version 9.12.4
+postgres (PostgreSQL) 18.6
+Z3 version 4.16.0 - 64 bit

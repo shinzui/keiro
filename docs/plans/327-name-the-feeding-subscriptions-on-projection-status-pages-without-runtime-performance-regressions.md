@@ -70,10 +70,19 @@ unchanged paths are unchanged, and the existing read-model benchmark guard.
 
 
 - [x] Milestone 1 (2026-11-04; focused core 9 examples, ops inline authority assertions, byte comparison of preserved definitions, strict IR bundle validation): The library page read returns each frozen v1 row together with its registered feeding subscriptions, proven by focused core tests for a two-subscription checkpoint group, an inline-only append group, and an unmanaged group, with the complete-list and lookup SQL byte-identical to the comparison baseline. IR-57 is linked to this plan as `accepted` with its request text corrected.
-- [x] Milestone 2 (2026-11-04; ops 28, jitsurei 56, HTTP 55 examples, all passing; real executable CLI/HTTP items agree): `projection status --json`, `GET /projection/status`, and `projection_groups` feed items carry `feeding_subscriptions` with every existing key and value unchanged; the jitsurei group reports `["jitsurei-order-audit-subscription"]` and its legacy group reports `[]`, over the library, the embedded CLI, and the real HTTP server.
+- [x] Milestone 2 (2026-11-04; ops 56, jitsurei 28, HTTP 55 examples, all passing; real executable CLI/HTTP items agree): `projection status --json`, `GET /projection/status`, and `projection_groups` feed items carry `feeding_subscriptions` with every existing key and value unchanged; the jitsurei group reports `["jitsurei-order-audit-subscription"]` and its legacy group reports `[]`, over the library, the embedded CLI, and the real HTTP server.
 - [ ] Milestone 3: Retained paired evidence shows the candidate page statement keeps its per-key plan with one primary-key probe per page row and a paired median server execution time within 1.10x of the pre-change binary at 10k and 100k groups for first and deep pages, the matched writer-interference intervals pass, the read-model guard passes without baseline movement, and the writer and schema paths are shown untouched.
 - [ ] Milestone 4: User documentation, guides, changelogs, and ADR-35 describe the field; IR-57 is `completed` with a resolution; the strict OKF bundles validate; and `just verify` passes in the Nix shell on the final candidate.
 
+
+Implementation checkpoint (2026-11-04): Runtime implementation is committed as
+`3e9fbacd`; the fixed writer protocol is committed as `04fe3e68`. Full
+`nix develop -c just verify` passed, including all runtime/DSL suites, mutation and
+policy checks, strict governed bundles, and 41 migration examples. The retained
+`verify.log` records that run. Milestones 3 and 4 remain open: no paired timings or
+read-model guard have been accepted yet; other repositories are running builds/tests
+and the quiet-machine requirement must be satisfied before measurement. The user
+has been asked about a quiet window; do not stop their other processes.
 
 Behavioral evidence: `keiro/bench/results/inspection/projection-status-feeding-subscriptions/jitsurei-cli.json`
 and `jitsurei-http.json` retain the complete responses. The embedded CLI used an explicit
@@ -871,7 +880,8 @@ SQL. Bounded page read: the retained paired cohort in
 `keiro/bench/results/inspection/projection-status-feeding-subscriptions/` shows the
 primary-key probe plan shape and paired median ratios at most 1.10 for all eight shapes
 (two sizes, two plan modes, two page positions), with absolute medians reported and contextualized against the retained 2026-10-20 evidence. HTTP and feeds: no limit, deadline,
-or schema-check code changed, and the suites pass. The release gate's six guards cannot observe
+or schema-check code changed, the suites pass, and the matched idle/poll/feed cohort
+satisfies the fixed runtime interval and load criteria in Progress and Milestone 3. The release gate's six guards cannot observe
 the page read; the paired cohort is its sole measurement and is required.
 
 Tests. `cabal test keiro-test keiro-ops-test keiro-ops-http-test jitsurei-test
@@ -937,3 +947,11 @@ compatibility grep, and made the paired benchmark use compiled, attributable exe
 with explicit ordering, aggregation and manifest rules. Recorded the unresolved gap between
 SQL-only timing and the requested runtime guarantee. Implementation and performance
 acceptance remain outstanding.
+
+
+Implementation revision (2026-11-04): Implemented the enriched bounded row and shared
+encoders without changing the frozen relation or compatibility SQL, selected the fenced
+lateral lookup after observing a generic-plan merge join, and added the projection-specific
+writer cohort, same-source controls and explicit confidence-interval refusal rules before
+sampling. Corrected the embedded CLI proof to pass its database URL explicitly. Behavioral,
+contract and full repository verification pass; timing acceptance remains open.
