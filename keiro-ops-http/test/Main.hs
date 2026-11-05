@@ -735,6 +735,7 @@ spec fixture = do
       it "bounds SQL on every inspection connection and releases pool capacity on cancellation" $ \url -> do
         let limits = defaultInspectionLimits {statementTimeoutMillis = 100, maxConcurrentReads = 1}
         withOpsInspectionPool limits (defaultConnectionSettings url) $ \pool -> do
+          Right () <- Pool.use pool (Session.script "DO $$ BEGIN IF current_setting('max_parallel_workers_per_gather') <> '0' THEN RAISE EXCEPTION 'inspection parallel workers are enabled'; END IF; END $$")
           slow <- Pool.use pool (Session.script "SELECT pg_sleep(1)")
           slow `shouldSatisfy` either (const True) (const False)
           result <- timeout 1000000 (Pool.use pool (Session.script "SELECT 1"))

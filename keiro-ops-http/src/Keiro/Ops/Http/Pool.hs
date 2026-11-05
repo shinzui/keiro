@@ -15,7 +15,8 @@ import Kiroku.Store.Connection qualified as Store
 -- | Create an inspection-owned pool, preserving the host's connection string
 -- and search path. Substitute this pool on the store passed to the HTTP/feed
 -- surface. Every connection gets the same statement timeout, including after
--- cancellation/reconnection. No writer connection is modified.
+-- cancellation/reconnection. Queries use one backend each so concurrent reads
+-- do not multiply into parallel worker groups. No writer connection is modified.
 withOpsInspectionPool :: InspectionLimits -> ConnectionSettings -> (Pool -> IO a) -> IO a
 withOpsInspectionPool limits settings action = do
   _ <- newInspectionBudget limits
@@ -25,7 +26,7 @@ withOpsInspectionPool limits settings action = do
     initScript =
       "SET search_path TO "
         <> Text.intercalate ", " (map quote (settings.schema : settings.extraSearchPath))
-        <> ", pg_catalog; SET statement_timeout = '"
+        <> ", pg_catalog; SET max_parallel_workers_per_gather = 0; SET statement_timeout = '"
         <> Text.pack (show limits.statementTimeoutMillis)
         <> "ms'; SET idle_in_transaction_session_timeout = '"
         <> Text.pack (show settings.idleInTransactionTimeout)

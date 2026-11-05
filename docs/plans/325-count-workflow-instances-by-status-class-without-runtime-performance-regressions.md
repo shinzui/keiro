@@ -63,7 +63,7 @@ index for this query.
 
 - [x] M1 (2026-11-05): 648 cases match a complete list drain, million-row reads peak at 130.473 ms, 19 focused tests pass, and 68 list statements remain byte-identical. The user approved planner-selected scans on condition that the schema remains unchanged; select the simpler single-scan owner read. See [evidence](../../keiro/bench/results/workflow-counts/README.md).
 - [x] M2 (2026-11-05): Public owner API, CLI and mechanically derived HTTP route pass 20 owner, 58 ops and 58 HTTP examples, including cancellation/admission recovery and 64-bit JSON. Read-only Jitsurei checks match full paging for all names (2 completed), order-fulfillment (1 completed), and an absent name (zero); see `keiro/bench/results/workflow-counts/jitsurei.txt`.
-- [ ] M3: Functional checks pass, but runtime timing acceptance remains pending a quiet machine. The initial capacity cohort (nine complete legs, one interrupted) was rejected for concurrent external builds/tests/browser work; no paced block or six-guard run is accepted. Frozen matched binaries, source identity and raw rejected samples are retained under `keiro/bench/results/workflow-counts/`. Rerun the controller into a fresh directory, then the existing six guards, once external work is quiet.
+- [ ] M3: The matched capacity and polling run is executing under the user-approved available machine conditions in `keiro/bench/results/workflow-counts/runtime-paired/`. External processes are diagnostics, not automatic rejection. The earlier interrupted cohort remains historical evidence. Complete the measurements and six existing guards, assess paired results, and document the measured envelope.
 
 
 ## Surprises & Discoveries
@@ -91,8 +91,11 @@ regression or a performance pass. The owned controller was interrupted; nine com
 incomplete tenth leg are retained; unrelated jobs were left running. Raw samples,
 commands, hashes, process basenames and rejection are retained in
 [the rejected cohort](../../keiro/bench/results/workflow-counts/runtime/README.md).
-The controller now refuses active external work at startup or a leg boundary.
-No full six-guard benchmark run is attempted under known competing work.
+The initial process-presence refusal was an overly strict interpretation, not
+a controlled demonstration that those jobs caused the timing variation. The
+user explicitly directed continued measurements on this capable machine; the
+controller now records ambient activity and continues. The current complete
+cohort and six guards will be assessed by their measured results.
 
 The classification-helper extraction preserves all 68 actual prepared list
 statement texts byte-for-byte, with hashes retained in
@@ -120,6 +123,19 @@ this plan in the starting tree; its status now records implementation in progres
 - Decision: Accept planner-selected sequential scans, retain the schema unchanged, and promote the simpler single-scan owner query.
   Rationale: After reviewing the retained exact-count and 130.473 ms worst observed million-row evidence, the user explicitly approved proceeding "as long as we don't change the schema". Existing statement deadlines, exactness and matched runtime-isolation acceptance remain mandatory.
   Date: 2026-11-05
+
+- Decision: Continue matched measurements on the available machine without requiring other work to stop. Record ambient work as diagnostics and judge measured paired effects.
+  Rationale: The user explicitly rejected treating the presence of other processes as a blocker, stated that the machine has enough resources, and directed the implementation to proceed without wasting time. Keep serial measurement legs, fixed datasets, existing numerical thresholds, and source identity; remove automatic process-presence rejection.
+  Date: 2026-11-05
+
+- Decision: Disable PostgreSQL parallel query workers only on connections created by the dedicated inspection-pool helper.
+  Rationale: The first three completed eight-client comparisons increased writer p95 by 593.72%, 35.44% and 12.77% against their mounted-idle controls, which mathematically prevents the planned five-block median from passing the existing 5% ceiling. Limiting read-query fan-out is a one-setting performance fix; admission stays four, deadlines stay unchanged, and no schema or ordinary writer setting changes. All 58 HTTP tests pass, including the pool setting and cancellation recovery. Rebuild against the baseline's exact dependency versions and rerun final-candidate measurements.
+  Date: 2026-11-05
+
+Revision note (2026-11-05, measurement steering): Available-machine matched
+measurements supersede the earlier quiet-machine preflight. Ambient work is
+recorded; process presence alone is not evidence of interference or rejection.
+The runtime pass criteria and no-schema constraint are unchanged.
 
 Revision note (2026-11-05, scope approval): The user approved planner-selected
 scans conditional on no schema changes. This supersedes the original index-backed
@@ -151,9 +167,8 @@ are implemented and tested without any schema, migration, lifecycle-write or
 list-SQL changes. The measured concrete alternative is the simpler single-scan
 query, which fits comfortably inside the existing timeout on this machine.
 The user approved planner-selected scans conditional on no schema changes.
-M1 is complete under that explicit scope decision. M2 now passes its focused tests and Jitsurei checks. M3 is pending a quiet
-measurement window after the first cohort was rejected for concurrent external
-work; no runtime no-regression claim has been made. The read SQL remains unchanged,
+M1 is complete under that explicit scope decision. M2 now passes its focused tests and Jitsurei checks. M3 is running paired measurements under the user-approved available-machine
+conditions after the first cohort was interrupted; no runtime no-regression claim has been made. The read SQL remains unchanged,
 so the retained feasibility measurements apply. The original clean source
 revision remains the baseline for the matched runtime harness.
 

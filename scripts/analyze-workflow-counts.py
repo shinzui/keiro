@@ -109,7 +109,6 @@ def external_work():
 def measure(baseline, candidate, output):
     assert not output.exists(), 'refusing to overwrite measurements'
     active = external_work()
-    assert not active, f"quiet-machine preflight refused active external work: {active}"
     evidence = Path('keiro/bench/results/workflow-counts/binaries')
     for role, binary in [('baseline', baseline), ('candidate', candidate)]:
         assert digest(binary) == (evidence / f'{role}-sha256.txt').read_text().strip(), f'{role} hash differs'
@@ -128,7 +127,7 @@ def measure(baseline, candidate, output):
                 'hardware': read_text('keiro/bench/results/workflow-counts/environment.txt'),
                 'harness_sha256': digest('keiro-ops-http/bench/InspectionInterference.hs'),
                 'clients_sha256': digest('keiro-ops-http/bench/InspectionClients.hs'),
-                'controller_sha256': digest(__file__), 'legs': []}
+                'controller_sha256': digest(__file__), 'initial_external_work': active, 'ambient_load_policy': 'record diagnostics; judge paired measurements, not process presence', 'legs': []}
 
     def run(phase, block, role, mode, rate):
         directory = output / phase / str(block) / f'{role}-{mode}'
@@ -154,11 +153,8 @@ def measure(baseline, candidate, output):
                     raise
         row = read(directory / f'1-{mode}.json')
         active = external_work()
-        if active:
-            manifest['rejected'] = 'External work observed at a measurement boundary'
-            manifest['external_work'] = active
-            write(output / 'manifest.json', manifest)
-            raise RuntimeError(f'quiet-machine measurement refused: {active}')
+        manifest['legs'][-1]['external_work_after'] = active
+        write(output / 'manifest.json', manifest)
         print(phase, block, role, mode, 'ops/s', round(row['throughput'], 2), 'p95_us', round(row['p95_us'], 2), 'polls', row['poll_success'], row['poll_failure'], flush=True)
         return row
 
