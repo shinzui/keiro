@@ -1,0 +1,49 @@
+{
+  "cached_timestamp": {
+    "signatures": [
+      {
+        "keyid": "aa315286e6ad281ad61182235533c41e806e5a787e0b6d1e7eef3f09d137d2e9",
+        "method": "ed25519",
+        "sig": "mXe3l43cnv8z4Vu4asg4dWEo/jn9/ZFx0kegDephjtz0nE8cBg4OihhE/gEgXYodSW6VFlAWU/AxgQIe0bUtCg=="
+      }
+    ],
+    "signed": {
+      "_type": "Timestamp",
+      "expires": "2026-11-08T19:08:16Z",
+      "meta": {
+        "<repo>/snapshot.json": {
+          "hashes": {
+            "md5": "d03b866818393d38cdc71dafe2a10a63",
+            "sha256": "1f50686f895b531215d522719a19227c9b16cfdf169e4e59929ab79f1007d4c9"
+          },
+          "length": 972
+        }
+      },
+      "version": 111999
+    }
+  },
+  "reason_for_new_attempt": "External signed index snapshot advanced after the initial bounded solve attempts; no cache or configuration repair was applied.",
+  "remote_timestamp": {
+    "signatures": [
+      {
+        "keyid": "aa315286e6ad281ad61182235533c41e806e5a787e0b6d1e7eef3f09d137d2e9",
+        "method": "ed25519",
+        "sig": "URMTTDws7y5J+WUqiWbdwkVML1TQHVjl7tGUB3/+dIZINcR+KzuYSJFwL+4ZP1MlEUJ0EOcudmKdcvxKV9hRBw=="
+      }
+    ],
+    "signed": {
+      "_type": "Timestamp",
+      "expires": "2026-11-08T19:13:36Z",
+      "meta": {
+        "<repo>/snapshot.json": {
+          "hashes": {
+            "md5": "6e67abe2d2ef2d7572b79c7ef15b8b82",
+            "sha256": "184b6dc2cac709a4a596776d3e986846edd24b7103d88a4aa8c16b979a2645c8"
+          },
+          "length": 972
+        }
+      },
+      "version": 112000
+    }
+  }
+}

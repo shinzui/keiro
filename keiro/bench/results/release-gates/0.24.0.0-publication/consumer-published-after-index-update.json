@@ -1,0 +1,13 @@
+{
+  "command": [
+    "just",
+    "release-consumer",
+    "published"
+  ],
+  "finished": 1793906161.3193102,
+  "log_sha256": "fc044fde989d7fd382d6127a9afb9e432b6259cb6fc6bcf958685bbf0d07d207",
+  "source": "5cdbcd2d6f7381f38e0e84cca9926bad50c3548b85d6987adceb53693647374f",
+  "source_unchanged": true,
+  "started": 1793906084.7709792,
+  "status": 1
+}

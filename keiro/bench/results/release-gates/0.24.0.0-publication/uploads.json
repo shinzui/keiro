@@ -1,0 +1,171 @@
+{
+  "commit": "382192a9053d23e1cad54d03e43a038a79107c7a",
+  "finished": 1793905905.1563368,
+  "readiness_sha256": "1b7e6ec9cd131d79f9bd17ef5953c83cf10e47e088b9ffbaab7f5a82c3c6b30c",
+  "source": "5cdbcd2d6f7381f38e0e84cca9926bad50c3548b85d6987adceb53693647374f",
+  "started": 1793905888.442948,
+  "status": "passed",
+  "uploads": [
+    {
+      "archive": "keiro-core-0.24.0.0.tar.gz",
+      "documentation": false,
+      "finished": 1793905888.920668,
+      "log": "keiro-core-0.24.0.0.tar.gz.upload.log",
+      "log_sha256": "6c451b5e3c6394e31d7677593a9e6d07461a14772d2425e8f5ab406d4cfbe968",
+      "sha256": "460fe98d7b74104f7fac7186a92488ce0b2b878469411de0320228970db765c7",
+      "started": 1793905888.6295638,
+      "status": 0
+    },
+    {
+      "archive": "keiro-core-0.24.0.0-docs.tar.gz",
+      "documentation": true,
+      "finished": 1793905890.377923,
+      "log": "keiro-core-0.24.0.0-docs.tar.gz.upload.log",
+      "log_sha256": "d8160d677395c16aee730623dd52fc8f8c902c51bdcbfcb4e7f981bbb29cdce4",
+      "sha256": "ea41e8e6547ea63dd99fde171a653a0f930f6b1b002ea1495e10df71f6e3f5f1",
+      "started": 1793905889.133439,
+      "status": 0
+    },
+    {
+      "archive": "keiro-0.24.0.0.tar.gz",
+      "documentation": false,
+      "finished": 1793905891.205198,
+      "log": "keiro-0.24.0.0.tar.gz.upload.log",
+      "log_sha256": "205ff5d10d9cf17fe742bcded1af19e0216a53438cf559c684f1fcfdcf00e89d",
+      "sha256": "e2dbeb72a0b2532e2b4758fcd674f3a04118acb2166436209d0fc14058f4e5f7",
+      "started": 1793905890.59503,
+      "status": 0
+    },
+    {
+      "archive": "keiro-0.24.0.0-docs.tar.gz",
+      "documentation": true,
+      "finished": 1793905893.014405,
+      "log": "keiro-0.24.0.0-docs.tar.gz.upload.log",
+      "log_sha256": "7a7176e862dabb391dd3de97557fca562350b08fdb9c8f71aa33892308ecf5df",
+      "sha256": "dc1541ee3ea0177113f8f45cf74df5a1a540a8154eaa714a852625c8a888e89f",
+      "started": 1793905891.400099,
+      "status": 0
+    },
+    {
+      "archive": "keiro-pgmq-0.24.0.0.tar.gz",
+      "documentation": false,
+      "finished": 1793905893.53107,
+      "log": "keiro-pgmq-0.24.0.0.tar.gz.upload.log",
+      "log_sha256": "a2d0ac16cdd3c8462b02d217c020f4f0ec177e53686c3c3e1b86fc04cec84afa",
+      "sha256": "ef2a366c14602152a3f39d2e49f9908dba130ba003ab8eee8dcc235e12a52791",
+      "started": 1793905893.2035682,
+      "status": 0
+    },
+    {
+      "archive": "keiro-pgmq-0.24.0.0-docs.tar.gz",
+      "documentation": true,
+      "finished": 1793905894.020236,
+      "log": "keiro-pgmq-0.24.0.0-docs.tar.gz.upload.log",
+      "log_sha256": "9d0a7751f321eaac86f48961086e16b208a670e1807728992477963569a07914",
+      "sha256": "d63067be2336284846ddad61477db2db63104ae620c7f2303dfe410f4291798b",
+      "started": 1793905893.721945,
+      "status": 0
+    },
+    {
+      "archive": "keiro-migrations-0.24.0.0.tar.gz",
+      "documentation": false,
+      "finished": 1793905894.637061,
+      "log": "keiro-migrations-0.24.0.0.tar.gz.upload.log",
+      "log_sha256": "9a4a34e110daadc3fa943f288785845c273db6aec52509467ce3a2087690f0cb",
+      "sha256": "aafbe4898bf409722dd9ba4044f140d510baedecfb30b1e570143ad4b3824dd6",
+      "started": 1793905894.225889,
+      "status": 0
+    },
+    {
+      "archive": "keiro-migrations-0.24.0.0-docs.tar.gz",
+      "documentation": true,
+      "finished": 1793905895.166674,
+      "log": "keiro-migrations-0.24.0.0-docs.tar.gz.upload.log",
+      "log_sha256": "34a439df6661c7e897ef0086e24601b834f27891a6eaf3d59ee67d3a7aede225",
+      "sha256": "586e86cab31122dce857d4d503c588d5d00a55e3a46f6681047a1ccbb1a854ae",
+      "started": 1793905894.8466802,
+      "status": 0
+    },
+    {
+      "archive": "keiro-test-support-0.24.0.0.tar.gz",
+      "documentation": false,
+      "finished": 1793905895.687121,
+      "log": "keiro-test-support-0.24.0.0.tar.gz.upload.log",
+      "log_sha256": "052a77986ad21c502160fdc4ebca3eecf72e41568cf22614d2559997f2807261",
+      "sha256": "8730db3e8da26dd6bff58c70df87a21170ab5f512283e59f45461f0a5c1b09b3",
+      "started": 1793905895.402547,
+      "status": 0
+    },
+    {
+      "archive": "keiro-test-support-0.24.0.0-docs.tar.gz",
+      "documentation": true,
+      "finished": 1793905896.244549,
+      "log": "keiro-test-support-0.24.0.0-docs.tar.gz.upload.log",
+      "log_sha256": "5b2533a03c4eb10b34bd7f95fda5b2373bd3819a5d4c0af1cae33758f8694f88",
+      "sha256": "51448696c6bc7d1372dbbe67d85b300443b023d45df7d1856f97331dbaa4e2e5",
+      "started": 1793905895.898782,
+      "status": 0
+    },
+    {
+      "archive": "keiro-dsl-0.24.0.0.tar.gz",
+      "documentation": false,
+      "finished": 1793905900.4644039,
+      "log": "keiro-dsl-0.24.0.0.tar.gz.upload.log",
+      "log_sha256": "8ae1ecf8593611b1a80279b157b0457478ca0c834449abdd8b256fb466e8a001",
+      "sha256": "fa1bc3241673d9383232d94161c4d0848225e83258760b35f25439b40788428f",
+      "started": 1793905896.444343,
+      "status": 0
+    },
+    {
+      "archive": "keiro-dsl-0.24.0.0-docs.tar.gz",
+      "documentation": true,
+      "finished": 1793905902.61485,
+      "log": "keiro-dsl-0.24.0.0-docs.tar.gz.upload.log",
+      "log_sha256": "7ef244ffa9502014223a8762aabee96fba34cda040d83b7a0b77d27b46c7bc31",
+      "sha256": "8e5b5b1440685097400609c78ce5824ba7e5f4a3e5e6ea75d4b753034b67e437",
+      "started": 1793905900.70663,
+      "status": 0
+    },
+    {
+      "archive": "keiro-ops-0.24.0.0.tar.gz",
+      "documentation": false,
+      "finished": 1793905903.1974661,
+      "log": "keiro-ops-0.24.0.0.tar.gz.upload.log",
+      "log_sha256": "a431432b371f767da00c9d4486371a149fbc74526995664bcd691bc90a0d9be6",
+      "sha256": "cd5f879aba1f601e1b3e3f759036a3f24f1abd3cad5089862498420bee61814b",
+      "started": 1793905902.858269,
+      "status": 0
+    },
+    {
+      "archive": "keiro-ops-0.24.0.0-docs.tar.gz",
+      "documentation": true,
+      "finished": 1793905903.8381581,
+      "log": "keiro-ops-0.24.0.0-docs.tar.gz.upload.log",
+      "log_sha256": "7ca0df46c4d93c826fc8004ed7535e79ca9f79bc4e791f41568b8ef37b02006e",
+      "sha256": "7071930fd9154c326680ccbf229202451c42b7e6eaf3fcc1d46040f09c2d8cbb",
+      "started": 1793905903.387779,
+      "status": 0
+    },
+    {
+      "archive": "keiro-ops-http-0.24.0.0.tar.gz",
+      "documentation": false,
+      "finished": 1793905904.642768,
+      "log": "keiro-ops-http-0.24.0.0.tar.gz.upload.log",
+      "log_sha256": "41f1d3b76a09b6669abf9b3af84486ccf52b0cec1ac68903fbdce79bbe82f4c5",
+      "sha256": "30afa40ba4e89109924dbc452ba1a67f515bbfa1694b834f5ef015ec289abb2f",
+      "started": 1793905904.063004,
+      "status": 0
+    },
+    {
+      "archive": "keiro-ops-http-0.24.0.0-docs.tar.gz",
+      "documentation": true,
+      "finished": 1793905905.155873,
+      "log": "keiro-ops-http-0.24.0.0-docs.tar.gz.upload.log",
+      "log_sha256": "4dc0583ffc12a8725e2017abda1301534aa2eb4ab8a282a411ef934ecccf4d93",
+      "sha256": "437e879df3cfe995025a4e2f18c10a2550a089012ec532136d7b5abb3703f57e",
+      "started": 1793905904.859628,
+      "status": 0
+    }
+  ],
+  "version": "0.24.0.0"
+}

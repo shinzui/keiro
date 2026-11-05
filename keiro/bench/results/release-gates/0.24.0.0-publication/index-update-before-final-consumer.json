@@ -1,0 +1,26 @@
+{
+  "observed_at": "2026-11-05T19:17:32.352926+00:00",
+  "timestamp": {
+    "signatures": [
+      {
+        "keyid": "aa315286e6ad281ad61182235533c41e806e5a787e0b6d1e7eef3f09d137d2e9",
+        "method": "ed25519",
+        "sig": "do4+zzGgsrMIyIKg9VxjXBMPfx087uR9ih++ra5DDREWUqr97VdToc8veFl+oyXq1XlvQIgqGNFWqG21E9SqDQ=="
+      }
+    ],
+    "signed": {
+      "_type": "Timestamp",
+      "expires": "2026-11-08T19:16:21Z",
+      "meta": {
+        "<repo>/snapshot.json": {
+          "hashes": {
+            "md5": "6fcda7bf7b73feb72308e0d6b301b162",
+            "sha256": "929c525296d805966c3785908cbbc6e2a9dae4d4e005adcd2ed23efafdbadf17"
+          },
+          "length": 972
+        }
+      },
+      "version": 112001
+    }
+  }
+}

@@ -1,0 +1,6 @@
+python3 scripts/release_consumer.py published
++ cabal --config-file=/Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/consumer-published/cabal.config update
++ cabal --config-file=/Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/consumer-published/cabal.config build all --dry-run
++ cabal --config-file=/Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/consumer-published/cabal.config build all
+{"mutations_enabled": false, "schema_drift": [], "status": "ok"}
+CONSUMER(published)=PASSED dist-release/0.24.0.0/consumer-published/result.json

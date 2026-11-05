@@ -1,0 +1,82 @@
+[
+  {
+    "resolved_url": "https://hackage.haskell.org/package/keiro-core-0.24.0.0",
+    "status": 200,
+    "url": "https://hackage.haskell.org/package/keiro-core-0.24.0.0"
+  },
+  {
+    "resolved_url": "https://hackage.haskell.org/package/keiro-core-0.24.0.0/docs/",
+    "status": 200,
+    "url": "https://hackage.haskell.org/package/keiro-core-0.24.0.0/docs/"
+  },
+  {
+    "resolved_url": "https://hackage.haskell.org/package/keiro-0.24.0.0",
+    "status": 200,
+    "url": "https://hackage.haskell.org/package/keiro-0.24.0.0"
+  },
+  {
+    "resolved_url": "https://hackage.haskell.org/package/keiro-0.24.0.0/docs/",
+    "status": 200,
+    "url": "https://hackage.haskell.org/package/keiro-0.24.0.0/docs/"
+  },
+  {
+    "resolved_url": "https://hackage.haskell.org/package/keiro-pgmq-0.24.0.0",
+    "status": 200,
+    "url": "https://hackage.haskell.org/package/keiro-pgmq-0.24.0.0"
+  },
+  {
+    "resolved_url": "https://hackage.haskell.org/package/keiro-pgmq-0.24.0.0/docs/",
+    "status": 200,
+    "url": "https://hackage.haskell.org/package/keiro-pgmq-0.24.0.0/docs/"
+  },
+  {
+    "resolved_url": "https://hackage.haskell.org/package/keiro-migrations-0.24.0.0",
+    "status": 200,
+    "url": "https://hackage.haskell.org/package/keiro-migrations-0.24.0.0"
+  },
+  {
+    "resolved_url": "https://hackage.haskell.org/package/keiro-migrations-0.24.0.0/docs/",
+    "status": 200,
+    "url": "https://hackage.haskell.org/package/keiro-migrations-0.24.0.0/docs/"
+  },
+  {
+    "resolved_url": "https://hackage.haskell.org/package/keiro-test-support-0.24.0.0",
+    "status": 200,
+    "url": "https://hackage.haskell.org/package/keiro-test-support-0.24.0.0"
+  },
+  {
+    "resolved_url": "https://hackage.haskell.org/package/keiro-test-support-0.24.0.0/docs/",
+    "status": 200,
+    "url": "https://hackage.haskell.org/package/keiro-test-support-0.24.0.0/docs/"
+  },
+  {
+    "resolved_url": "https://hackage.haskell.org/package/keiro-dsl-0.24.0.0",
+    "status": 200,
+    "url": "https://hackage.haskell.org/package/keiro-dsl-0.24.0.0"
+  },
+  {
+    "resolved_url": "https://hackage.haskell.org/package/keiro-dsl-0.24.0.0/docs/",
+    "status": 200,
+    "url": "https://hackage.haskell.org/package/keiro-dsl-0.24.0.0/docs/"
+  },
+  {
+    "resolved_url": "https://hackage.haskell.org/package/keiro-ops-0.24.0.0",
+    "status": 200,
+    "url": "https://hackage.haskell.org/package/keiro-ops-0.24.0.0"
+  },
+  {
+    "resolved_url": "https://hackage.haskell.org/package/keiro-ops-0.24.0.0/docs/",
+    "status": 200,
+    "url": "https://hackage.haskell.org/package/keiro-ops-0.24.0.0/docs/"
+  },
+  {
+    "resolved_url": "https://hackage.haskell.org/package/keiro-ops-http-0.24.0.0",
+    "status": 200,
+    "url": "https://hackage.haskell.org/package/keiro-ops-http-0.24.0.0"
+  },
+  {
+    "resolved_url": "https://hackage.haskell.org/package/keiro-ops-http-0.24.0.0/docs/",
+    "status": 200,
+    "url": "https://hackage.haskell.org/package/keiro-ops-http-0.24.0.0/docs/"
+  }
+]

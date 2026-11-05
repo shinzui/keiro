@@ -1,0 +1,17 @@
+python3 scripts/release_consumer.py published
++ cabal --config-file=/Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/consumer-published/cabal.config update
++ cabal --config-file=/Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/consumer-published/cabal.config build all --dry-run
+Waiting for the published cohort in the Hackage index (1/5).
++ cabal --config-file=/Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/consumer-published/cabal.config update
++ cabal --config-file=/Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/consumer-published/cabal.config build all --dry-run
+Waiting for the published cohort in the Hackage index (2/5).
++ cabal --config-file=/Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/consumer-published/cabal.config update
++ cabal --config-file=/Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/consumer-published/cabal.config build all --dry-run
+Waiting for the published cohort in the Hackage index (3/5).
++ cabal --config-file=/Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/consumer-published/cabal.config update
++ cabal --config-file=/Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/consumer-published/cabal.config build all --dry-run
+Waiting for the published cohort in the Hackage index (4/5).
++ cabal --config-file=/Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/consumer-published/cabal.config update
++ cabal --config-file=/Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/consumer-published/cabal.config build all --dry-run
+release consumer: Consumer dependency solve failed after 5 attempt(s); see /Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/consumer-published/proof.log
+error: recipe `release-consumer` failed on line 43 with exit code 1

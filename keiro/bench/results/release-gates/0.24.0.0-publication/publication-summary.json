@@ -1,0 +1,58 @@
+{
+  "all_package_and_documentation_endpoints_http_200": true,
+  "completed_at": "2026-11-05T19:19:08.981357+00:00",
+  "github_release": "https://github.com/shinzui/keiro/releases/tag/keiro-0.24.0.0",
+  "index_lag": "The first two bounded published-consumer attempts failed dependency solving against signed indexes predating the completed uploads. Both original proof logs and wrapper receipts are retained separately. The final proof passed after signed timestamp version 112001 became available. No global cache or configuration was rewritten.",
+  "native_nix_checks": "passed",
+  "packages": [
+    {
+      "hackage_url": "https://hackage.haskell.org/package/keiro-core-0.24.0.0",
+      "name": "keiro-core",
+      "tag": "keiro-core-0.24.0.0"
+    },
+    {
+      "hackage_url": "https://hackage.haskell.org/package/keiro-0.24.0.0",
+      "name": "keiro",
+      "tag": "keiro-0.24.0.0"
+    },
+    {
+      "hackage_url": "https://hackage.haskell.org/package/keiro-pgmq-0.24.0.0",
+      "name": "keiro-pgmq",
+      "tag": "keiro-pgmq-0.24.0.0"
+    },
+    {
+      "hackage_url": "https://hackage.haskell.org/package/keiro-migrations-0.24.0.0",
+      "name": "keiro-migrations",
+      "tag": "keiro-migrations-0.24.0.0"
+    },
+    {
+      "hackage_url": "https://hackage.haskell.org/package/keiro-test-support-0.24.0.0",
+      "name": "keiro-test-support",
+      "tag": "keiro-test-support-0.24.0.0"
+    },
+    {
+      "hackage_url": "https://hackage.haskell.org/package/keiro-dsl-0.24.0.0",
+      "name": "keiro-dsl",
+      "tag": "keiro-dsl-0.24.0.0"
+    },
+    {
+      "hackage_url": "https://hackage.haskell.org/package/keiro-ops-0.24.0.0",
+      "name": "keiro-ops",
+      "tag": "keiro-ops-0.24.0.0"
+    },
+    {
+      "hackage_url": "https://hackage.haskell.org/package/keiro-ops-http-0.24.0.0",
+      "name": "keiro-ops-http",
+      "tag": "keiro-ops-http-0.24.0.0"
+    }
+  ],
+  "performance_exception": "performance-review.json",
+  "published_consumer": "passed",
+  "source": "5cdbcd2d6f7381f38e0e84cca9926bad50c3548b85d6987adceb53693647374f",
+  "source_and_docs_uploads": 16,
+  "staged_consumer": "passed",
+  "status": "published",
+  "tagged_commit": "382192a9053d23e1cad54d03e43a038a79107c7a",
+  "timing_receipts_preserved_as_failed": true,
+  "version": "0.24.0.0"
+}
