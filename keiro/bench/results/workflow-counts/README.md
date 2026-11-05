@@ -5,7 +5,8 @@ criterion failed for both shapes. After reviewing these measurements, the user
 approved normal planner-selected scans conditional on **no schema changes**.
 M1 is accepted under that decision, and the simpler single-scan query is selected.
 The library, CLI and HTTP contract now pass focused tests and read-only Jitsurei
-comparisons. Matched runtime acceptance is still pending; no runtime-isolation
+comparisons. The first runtime cohort was rejected for concurrent external builds/tests
+([details](runtime/README.md)); a quiet rerun and the six existing guards are pending; no runtime-isolation
 claim is made from the query measurements alone.
 
 The clean starting revision is `9a54e48030ed3080f79a84d3364ea2dd74d0ab39`.

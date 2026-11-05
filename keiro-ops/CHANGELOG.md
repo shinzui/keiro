@@ -9,9 +9,6 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 ### New Features
 
 - Add read-only `wf inspect counts [--workflow-name NAME]` with the owning library JSON.
-
-### New Features
-
 - `projection status --json` items include sorted `feeding_subscriptions` from
   registration metadata, empty for inline-only and unmanaged groups.
 

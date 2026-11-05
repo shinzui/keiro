@@ -5,9 +5,6 @@
 ### New Features
 
 - Expose `GET /wf/inspect/counts` through the shared command grammar, schema checks and inspection limits.
-
-### New Features
-
 - `/projection/status` and `projection_groups` feed items include sorted
   `feeding_subscriptions`, shared with the CLI encoder.
 

@@ -63,7 +63,7 @@ index for this query.
 
 - [x] M1 (2026-11-05): 648 cases match a complete list drain, million-row reads peak at 130.473 ms, 19 focused tests pass, and 68 list statements remain byte-identical. The user approved planner-selected scans on condition that the schema remains unchanged; select the simpler single-scan owner read. See [evidence](../../keiro/bench/results/workflow-counts/README.md).
 - [x] M2 (2026-11-05): Public owner API, CLI and mechanically derived HTTP route pass 20 owner, 58 ops and 58 HTTP examples, including cancellation/admission recovery and 64-bit JSON. Read-only Jitsurei checks match full paging for all names (2 completed), order-fulfillment (1 completed), and an absent name (zero); see `keiro/bench/results/workflow-counts/jitsurei.txt`.
-- [ ] M3: Matched capacity and active-polling measurements establish no attributable runtime regression; the final candidate passes focused correctness and the six existing benchmark guards (DSL conformance excluded) and documents the measured operating envelope.
+- [ ] M3: Functional checks pass, but runtime timing acceptance remains pending a quiet machine. The initial capacity cohort (nine complete legs, one interrupted) was rejected for concurrent external builds/tests/browser work; no paced block or six-guard run is accepted. Frozen matched binaries, source identity and raw rejected samples are retained under `keiro/bench/results/workflow-counts/`. Rerun the controller into a fresh directory, then the existing six guards, once external work is quiet.
 
 
 ## Surprises & Discoveries
@@ -82,6 +82,17 @@ settings, actual prepared SQL, row/buffer/heap/spill observations and the failin
 index check are retained in [workflow-counts](../../keiro/bench/results/workflow-counts/README.md).
 The fixture's existing `random_page_cost=1` is retained in EXPLAIN SETTINGS;
 sequential scans were never disabled. First reads are not OS-cold.
+
+The initial runtime cohort was rejected on 2026-11-05: other active GHC/Cabal
+builds, a test suite and Chromium browser tests broke the quiet-machine condition.
+Unmounted capacities moved from roughly 213 to 331 operations/second across both
+binaries, with large latency drift. This is inconclusive, not an attributed
+regression or a performance pass. The owned controller was interrupted; nine complete capacity legs and the
+incomplete tenth leg are retained; unrelated jobs were left running. Raw samples,
+commands, hashes, process basenames and rejection are retained in
+[the rejected cohort](../../keiro/bench/results/workflow-counts/runtime/README.md).
+The controller now refuses active external work at startup or a leg boundary.
+No full six-guard benchmark run is attempted under known competing work.
 
 The classification-helper extraction preserves all 68 actual prepared list
 statement texts byte-for-byte, with hashes retained in
@@ -140,8 +151,9 @@ are implemented and tested without any schema, migration, lifecycle-write or
 list-SQL changes. The measured concrete alternative is the simpler single-scan
 query, which fits comfortably inside the existing timeout on this machine.
 The user approved planner-selected scans conditional on no schema changes.
-M1 is complete under that explicit scope decision. M2 now passes its focused tests and Jitsurei checks; M3 is in progress;
-no runtime no-regression claim has yet been made. The read SQL remains unchanged,
+M1 is complete under that explicit scope decision. M2 now passes its focused tests and Jitsurei checks. M3 is pending a quiet
+measurement window after the first cohort was rejected for concurrent external
+work; no runtime no-regression claim has been made. The read SQL remains unchanged,
 so the retained feasibility measurements apply. The original clean source
 revision remains the baseline for the matched runtime harness.
 

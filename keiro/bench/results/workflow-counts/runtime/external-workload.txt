@@ -1,0 +1,14 @@
+PID PPID ELAPSED CPU EXECUTABLE
+794 1 01-08:50:49 14.8 syspolicyd
+9425 1 01-08:37:01 34.8 Rex
+13498 40341 00:15 37.9 candidate
+17571 17102 03:40 29.2 ghc-9.12.4
+20942 56337 00:55 61.1 ghc-9.12.4
+34719 14110 00:11 65.2 postgres: shinzui keiro_template_1 [local] idle in transaction
+55379 55353 01:21 100.0 ghc-9.12.4
+60887 59324 02:38 35.6 rei-api-test
+82602 82463 00:01 27.1 cabal
+87632 82602 00:00 70.9 keiro-dsl
+89156 89154 00:00 17.6 clang
+89313 60887 00:00 13.2 (rei)
+66056 64490 43:09 10.3 claude

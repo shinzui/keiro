@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 import os
+import signal
 from pathlib import Path
 import statistics
 import subprocess
@@ -49,6 +50,7 @@ def headroom(row, rate):
 
 def analyze(output):
     manifest = read(output / 'manifest.json')
+    assert not manifest.get("rejected"), manifest.get("rejected")
     comparisons = {}
     for label, phase, baseline, candidate in [
         ('capacity', 'capacity', 'baseline-disabled', 'candidate-disabled'),
@@ -90,8 +92,24 @@ def analyze(output):
     return passed
 
 
+def external_work():
+    """Cheap boundary check; never signal jobs from other work."""
+    rows = []
+    snapshot = subprocess.check_output(['ps', '-axo', 'pid,%cpu,comm'], text=True)
+    for line in snapshot.splitlines()[1:]:
+        fields = line.split(None, 2)
+        if len(fields) != 3 or float(fields[1]) < 5:
+            continue
+        name = Path(fields[2]).name
+        if name.startswith(('ghc', 'cabal', 'clang', 'chrome-headless')) or name.endswith('-test') or name == 'pytest':
+            rows.append({'pid': int(fields[0]), 'cpu': float(fields[1]), 'executable': name})
+    return rows
+
+
 def measure(baseline, candidate, output):
     assert not output.exists(), 'refusing to overwrite measurements'
+    active = external_work()
+    assert not active, f"quiet-machine preflight refused active external work: {active}"
     evidence = Path('keiro/bench/results/workflow-counts/binaries')
     for role, binary in [('baseline', baseline), ('candidate', candidate)]:
         assert digest(binary) == (evidence / f'{role}-sha256.txt').read_text().strip(), f'{role} hash differs'
@@ -120,8 +138,27 @@ def measure(baseline, candidate, output):
         manifest['legs'].append({'phase': phase, 'block': block, 'role': role, 'mode': mode, 'command': command})
         write(output / 'manifest.json', manifest)
         with (directory.parent / f'{role}-{mode}.log').open('w') as log:
-            subprocess.run(command, env=environment, check=True, stdout=log, stderr=subprocess.STDOUT)
+            with subprocess.Popen(command, env=environment, stdout=log, stderr=subprocess.STDOUT, start_new_session=True) as child:
+                try:
+                    status = child.wait()
+                    if status:
+                        raise subprocess.CalledProcessError(status, command)
+                except BaseException:
+                    if child.poll() is None:
+                        os.killpg(child.pid, signal.SIGINT)
+                        try:
+                            child.wait(timeout=10)
+                        except subprocess.TimeoutExpired:
+                            os.killpg(child.pid, signal.SIGKILL)
+                            child.wait()
+                    raise
         row = read(directory / f'1-{mode}.json')
+        active = external_work()
+        if active:
+            manifest['rejected'] = 'External work observed at a measurement boundary'
+            manifest['external_work'] = active
+            write(output / 'manifest.json', manifest)
+            raise RuntimeError(f'quiet-machine measurement refused: {active}')
         print(phase, block, role, mode, 'ops/s', round(row['throughput'], 2), 'p95_us', round(row['p95_us'], 2), 'polls', row['poll_success'], row['poll_failure'], flush=True)
         return row
 

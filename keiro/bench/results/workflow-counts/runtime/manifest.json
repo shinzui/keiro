@@ -1,0 +1,196 @@
+{
+  "baseline": "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+  "candidate": "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+  "baseline_sha256": "dad012a235e105cff5a2c437cb66fc6f09bf92ca43304bfa4ce7682862422e6d",
+  "candidate_sha256": "d2d27a3224fd5760118d42e95768f5948d664e4c64e2b389a73b55400c22e6e0",
+  "fixture_rows": 1000000,
+  "measurement_seconds": 20,
+  "blocks": 5,
+  "distribution": "balanced seven classes; ~90% seed-common; rare n%997=0; other 31 names; timers=100000",
+  "workload": "schedule, crash retry/reset, suspend/resume, claim, named step, complete, release, schedule/claim/fire timer",
+  "rts": [
+    "-N2",
+    "-T"
+  ],
+  "writer_pool_size": 1,
+  "inspection_admission": 4,
+  "statement_timeout_ms": 2000,
+  "read_deadline_seconds": 5,
+  "hardware": "The Glorious Glasgow Haskell Compilation System, version 9.12.4\ncabal-install version 3.16.1.0\ncompiled using version 3.16.1.0 of the Cabal library (in-tree)\nDarwin yujin 27.2.0 Darwin Kernel Version 27.2.0: Wed Oct 14 23:47:58 PDT 2026; root:xnu-13432.41.4~25/RELEASE_ARM64_T6050 arm64 arm Darwin\nhw.model: Mac17,15\nhw.physicalcpu: 36\nhw.memsize: 274877906944\n",
+  "harness_sha256": "266fa2ab96e64fde31f2f4a47052eded9bd6306a1959235806028e29914bff5b",
+  "clients_sha256": "e6973c8ad0682df4f638e6b4e298ac88ee5f5519d54fce60f2dae61f22017bea",
+  "controller_sha256": "05ac8903565c7bf5dd2428d1b01080f029bdfab500dd05b0d973c0b7e87ba591",
+  "legs": [
+    {
+      "phase": "capacity",
+      "block": 1,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime/capacity/1/baseline-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "phase": "capacity",
+      "block": 1,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime/capacity/1/candidate-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "phase": "capacity",
+      "block": 2,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime/capacity/2/candidate-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "phase": "capacity",
+      "block": 2,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime/capacity/2/baseline-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "phase": "capacity",
+      "block": 3,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime/capacity/3/baseline-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "phase": "capacity",
+      "block": 3,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime/capacity/3/candidate-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "phase": "capacity",
+      "block": 4,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime/capacity/4/candidate-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "phase": "capacity",
+      "block": 4,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime/capacity/4/baseline-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "phase": "capacity",
+      "block": 5,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime/capacity/5/baseline-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "phase": "capacity",
+      "block": 5,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime/capacity/5/candidate-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    }
+  ],
+  "rejected": "Concurrent external GHC/Cabal builds, test suite and browser tests violate quiet-machine acceptance; capacity timings show large drift. Controller interrupted before paced acceptance."
+}
