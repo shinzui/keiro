@@ -1,0 +1,36 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+capacity 1 baseline disabled ops/s 331.42 p95_us 4449 polls 0 0
+capacity 1 candidate disabled ops/s 305.85 p95_us 5243 polls 0 0
+capacity 2 candidate disabled ops/s 272.42 p95_us 6479 polls 0 0
+capacity 2 baseline disabled ops/s 242.48 p95_us 6981 polls 0 0
+capacity 3 baseline disabled ops/s 271.47 p95_us 4770 polls 0 0
+capacity 3 candidate disabled ops/s 294.96 p95_us 8635 polls 0 0
+capacity 4 candidate disabled ops/s 224.15 p95_us 7575 polls 0 0
+capacity 4 baseline disabled ops/s 212.96 p95_us 7504 polls 0 0
+capacity 5 baseline disabled ops/s 283.94 p95_us 5397 polls 0 0
+Traceback (most recent call last):
+  File "/Users/shinzui/Keikaku/bokuno/keiro/scripts/analyze-workflow-counts.py", line 164, in <module>
+    sys.exit(0 if measure(Path(sys.argv[2]).resolve(), Path(sys.argv[3]).resolve(), Path(sys.argv[4])) else 1)
+                  ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/shinzui/Keikaku/bokuno/keiro/scripts/analyze-workflow-counts.py", line 132, in measure
+    row = run('capacity', block, role, 'disabled', 'saturation')
+  File "/Users/shinzui/Keikaku/bokuno/keiro/scripts/analyze-workflow-counts.py", line 123, in run
+    subprocess.run(command, env=environment, check=True, stdout=log, stderr=subprocess.STDOUT)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/k07j8cq0iyvna81qlhwxz8xq6pkz02z8-python3-3.14.7/lib/python3.14/subprocess.py", line 557, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/k07j8cq0iyvna81qlhwxz8xq6pkz02z8-python3-3.14.7/lib/python3.14/subprocess.py", line 1213, in communicate
+    self.wait()
+    ~~~~~~~~~^^
+  File "/nix/store/k07j8cq0iyvna81qlhwxz8xq6pkz02z8-python3-3.14.7/lib/python3.14/subprocess.py", line 1279, in wait
+    return self._wait(timeout=timeout)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/nix/store/k07j8cq0iyvna81qlhwxz8xq6pkz02z8-python3-3.14.7/lib/python3.14/subprocess.py", line 2084, in _wait
+    (pid, sts) = self._try_wait(0)
+                 ~~~~~~~~~~~~~~^^^
+  File "/nix/store/k07j8cq0iyvna81qlhwxz8xq6pkz02z8-python3-3.14.7/lib/python3.14/subprocess.py", line 2042, in _try_wait
+    (pid, sts) = os.waitpid(self.pid, wait_flags)
+                 ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

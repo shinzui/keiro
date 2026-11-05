@@ -118,6 +118,17 @@ index 2df0562c..03045856 100644
 @@ -340,0 +364,2 @@ pollingShape = \case
 +  "wf-counts" -> (0, 1)
 +  "wf-counts-many" -> (0, 8)
+diff --git a/keiro-ops-http/src/Keiro/Ops/Http/Pool.hs b/keiro-ops-http/src/Keiro/Ops/Http/Pool.hs
+index 77956250..18332bb5 100644
+--- a/keiro-ops-http/src/Keiro/Ops/Http/Pool.hs
++++ b/keiro-ops-http/src/Keiro/Ops/Http/Pool.hs
+@@ -18 +18,2 @@ import Kiroku.Store.Connection qualified as Store
+--- cancellation/reconnection. No writer connection is modified.
++-- cancellation/reconnection. Queries use one backend each so concurrent reads
++-- do not multiply into parallel worker groups. No writer connection is modified.
+@@ -28 +29 @@ withOpsInspectionPool limits settings action = do
+-        <> ", pg_catalog; SET statement_timeout = '"
++        <> ", pg_catalog; SET max_parallel_workers_per_gather = 0; SET statement_timeout = '"
 diff --git a/keiro-ops/src/Keiro/Ops/Workflow.hs b/keiro-ops/src/Keiro/Ops/Workflow.hs
 index c496e5b8..37cefef2 100644
 --- a/keiro-ops/src/Keiro/Ops/Workflow.hs

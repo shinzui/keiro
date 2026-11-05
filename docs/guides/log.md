@@ -1,6 +1,7 @@
 # Keiro Guides Log
 
 ## 2026-11-05
+* **Update**: Serve Keiro Ops Over HTTP: record count admission, serial query policy and measured operating envelope (plan 325).
 * **Update**: Serve Keiro Ops Over HTTP: counts grammar and shared admission/statement limits (plan 325).
 
 ## 2026-11-04

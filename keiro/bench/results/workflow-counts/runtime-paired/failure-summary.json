@@ -1,0 +1,24 @@
+{
+  "failed": "three of the five planned p95 comparisons exceed 5%, so the median cannot pass",
+  "comparisons": [
+    {
+      "block": 1,
+      "baseline_p95_us": 9123,
+      "burst_p95_us": 63288,
+      "p95_increase": 5.937191713252219
+    },
+    {
+      "block": 2,
+      "baseline_p95_us": 7669,
+      "burst_p95_us": 10387,
+      "p95_increase": 0.35441387403833624
+    },
+    {
+      "block": 3,
+      "baseline_p95_us": 6610,
+      "burst_p95_us": 7454,
+      "p95_increase": 0.1276853252647503
+    }
+  ],
+  "fix": "disable parallel query workers in the dedicated inspection pool; no schema or ordinary writer change"
+}

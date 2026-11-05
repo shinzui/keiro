@@ -1,13 +1,19 @@
-# Workflow count feasibility — plan 325
+# Workflow status counts: query and runtime evidence
 
 The exact read fits the 2,000 ms statement limit. The original index-backed
 criterion failed for both shapes. After reviewing these measurements, the user
 approved normal planner-selected scans conditional on **no schema changes**.
 M1 is accepted under that decision, and the simpler single-scan query is selected.
 The library, CLI and HTTP contract now pass focused tests and read-only Jitsurei
-comparisons. The first runtime cohort was rejected for concurrent external builds/tests
-([details](runtime/README.md)); a quiet rerun and the six existing guards are pending; no runtime-isolation
-claim is made from the query measurements alone.
+comparisons. The [final matched runtime cohort](runtime-serial/README.md) and
+[all six existing benchmark guards](benchmark-guards.log) pass. The measured
+envelope is one million balanced-class headers, 210 writer operations/sec,
+one unfiltered poll/sec and the tested eight-client aligned overload mixture.
+The inspection pool disables parallel-query fan-out while preserving four
+admitted reads and the existing two/five-second deadlines. Ordinary writer
+connections, schema and migrations are unchanged. Earlier interrupted and
+failed runs remain in `runtime/` and `runtime-paired/`; the final run continued
+on the available machine as directed by the user.
 
 The clean starting revision is `9a54e48030ed3080f79a84d3364ea2dd74d0ab39`.
 [manifest.json](manifest.json) records the command, source hashes, build-plan
@@ -23,8 +29,9 @@ tests, or other repository benchmarks ran during measured query execution.
 table-state/plan-mode/shape/filter cases. Every result equals the independent
 Haskell `statusClassOf` totals from a complete 500-row-page list drain of the
 same unchanged fixture. Each case retains its first timed read and five warmed
-reads, separately from EXPLAIN. All completed within 2,000 ms. The driver exits
-**1**, because its explicit index-plan check fails, after retaining all results.
+reads, separately from EXPLAIN. All completed within 2,000 ms. The original cohort exited
+**1** under its original index-plan criterion, after retaining all results; the
+current driver accepts planner-selected scans under the recorded user decision.
 
 Across all 108 million-row cases per shape, the single-scan candidate's largest
 first read was 105.851 ms and largest warmed read 102.445 ms. The selective
@@ -57,8 +64,7 @@ this is not a claim about PostgreSQL's default cost setting of 4.
 The concrete alternative is the simpler single-scan owner read already in the
 prototype: exact, bounded by the existing timeout, and without schema changes.
 The user approved planner-selected sequential scans and plan 325/IR-58 now
-record that change. M2 transport checks pass; M3 matched runtime measurements
-remain required before completion. Adding an index or
+record that change. M2 transport checks and final M3 matched runtime measurements pass. Adding an index or
 writer-maintained summary has not been authorized or attempted.
 
 ## Workload and reproducibility
@@ -130,3 +136,44 @@ The M3 harness is the same in the recorded original baseline and candidate sourc
 trees; frozen binaries are outside the checkout and their hashes/build identities
 are retained in `binaries/`. The overload smoke test completed eight successful
 count reads and eight admission refusals, followed by successful recovery.
+
+## Final operating envelope and reproduction
+
+The final cohort has forty complete legs: five alternating baseline/candidate
+capacity pairs and five paced six-leg blocks. It contains 100 successful
+single-client reads and 400 successful burst reads, 400 expected admission
+refusals, and successful recovery after every polling leg. Throughput and
+writer-thread allocation show no attributable regression; active-count paired
+median p95 changes were -2.677% and -2.683% against mounted-idle controls. Raw
+pair ranges and the small mixed-sign capacity/idle changes are retained in
+`runtime-serial/comparisons.json`; they are not presented as a universal
+zero-cost guarantee or as proof that polling improves writer speed.
+
+All six guards returned zero in `benchmark-guards.log`. They ran serially after
+the matched cohort, using the retained baseline dependency constraints. The
+combined release gate and DSL conformance were excluded per user instructions.
+Strict user, guide, ADR and improvement-request bundle checks also pass.
+
+Frozen binaries remain outside the checkout. `binaries/baseline.json` and
+`binaries/candidate.json` bind their hashes, compiler/optimization and source
+patches. Source patches use zero context; reconstruct on their recorded base
+with `git apply --unidiff-zero`. The original candidate and failed burst behavior
+are preserved separately as `candidate-v1.*`. Retained dependency constraints
+preserve the baseline's exact shared dependency unit identities during rebuilds;
+no project dependency bounds or published pins changed.
+
+```bash
+nix develop -c bash scripts/measure-workflow-counts.sh /Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline /Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial NEW_OUTPUT_DIRECTORY
+nix develop -c python3 scripts/analyze-workflow-counts.py --self-test
+nix develop -c python3 scripts/analyze-workflow-counts.py keiro/bench/results/workflow-counts/runtime-serial
+```
+
+The controller refuses to overwrite evidence. It records ambient activity and
+judges paired results; merely observing another process never rejects a run.
+SQL, dataset, cadence, duration, numerical limits and existing baselines were
+not loosened to obtain acceptance. The actual burst-latency failure was fixed
+by bounding inspection-only parallelism, without adding schema or writer work.
+
+Benchmark `.log` files match ignore rules on this checkout; retain future cohorts
+with an explicit `git add -f` for those logs. JSON, text summaries and source
+patches are retained normally.

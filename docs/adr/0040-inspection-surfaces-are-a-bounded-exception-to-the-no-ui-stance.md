@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Inspection surfaces are a bounded exception to the no-UI stance
 description: Keiro sanctions state browsing and safe operator actions over supported library APIs in opt-in sister packages, while metrics and traces stay in OpenTelemetry and no keiro package grows a dashboard, a server process, or a parallel observability stack.
-timestamp: 2026-11-05T13:08:06Z
+timestamp: 2026-11-05T14:17:25Z
 docId: ADR-40
 status: Accepted
 date: 2026-09-10
@@ -177,6 +177,11 @@ direct library/CLI callers own their deadline policy. Query timing alone does no
 establish runtime isolation; matched unpaced capacity and active HTTP polling
 measurements remain required. [Plan 325](../plans/325-count-workflow-instances-by-status-class-without-runtime-performance-regressions.md)
 retains the query and runtime evidence and records its supported envelope.
+
+The dedicated inspection pool disables PostgreSQL parallel query workers so
+its admitted reads do not multiply into parallel worker groups. This bounds
+read fan-out without changing workflow writes, the schema or runtime connection
+settings. The four-slot admission budget and existing deadlines still apply.
 
 ## Consequences
 

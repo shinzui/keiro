@@ -1,0 +1,54 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+capacity 1 baseline disabled ops/s 333.83 p95_us 4616 polls 0 0
+capacity 1 candidate disabled ops/s 351.34 p95_us 4251 polls 0 0
+capacity 2 candidate disabled ops/s 308.3 p95_us 5640 polls 0 0
+capacity 2 baseline disabled ops/s 194.62 p95_us 6778 polls 0 0
+capacity 3 baseline disabled ops/s 173.44 p95_us 10416 polls 0 0
+capacity 3 candidate disabled ops/s 219.54 p95_us 6533 polls 0 0
+capacity 4 candidate disabled ops/s 238.44 p95_us 5666 polls 0 0
+capacity 4 baseline disabled ops/s 217.09 p95_us 6290 polls 0 0
+capacity 5 baseline disabled ops/s 210.1 p95_us 7063 polls 0 0
+capacity 5 candidate disabled ops/s 210.19 p95_us 6346 polls 0 0
+paced 1 baseline disabled ops/s 80.02 p95_us 7946 polls 0 0
+paced 1 baseline idle ops/s 80.02 p95_us 9123 polls 0 0
+paced 1 candidate disabled ops/s 80.02 p95_us 9043 polls 0 0
+paced 1 candidate idle ops/s 80.02 p95_us 8663 polls 0 0
+paced 1 candidate wf-counts ops/s 80.02 p95_us 9250 polls 20 0
+paced 1 candidate wf-counts-many ops/s 80.03 p95_us 63288 polls 80 80
+paced 2 candidate wf-counts-many ops/s 80.03 p95_us 10387 polls 80 80
+paced 2 candidate wf-counts ops/s 80.02 p95_us 7881 polls 20 0
+paced 2 candidate idle ops/s 80.02 p95_us 8754 polls 0 0
+paced 2 candidate disabled ops/s 80.02 p95_us 7848 polls 0 0
+paced 2 baseline idle ops/s 80.03 p95_us 7669 polls 0 0
+paced 2 baseline disabled ops/s 80.03 p95_us 7008 polls 0 0
+paced 3 baseline disabled ops/s 80.03 p95_us 7107 polls 0 0
+paced 3 baseline idle ops/s 80.03 p95_us 6610 polls 0 0
+paced 3 candidate disabled ops/s 80.03 p95_us 6556 polls 0 0
+paced 3 candidate idle ops/s 80.04 p95_us 5601 polls 0 0
+paced 3 candidate wf-counts ops/s 80.03 p95_us 7017 polls 20 0
+paced 3 candidate wf-counts-many ops/s 80.03 p95_us 7454 polls 80 80
+paced 4 candidate wf-counts-many ops/s 80.04 p95_us 7341 polls 80 80
+paced 4 candidate wf-counts ops/s 80.03 p95_us 6715 polls 20 0
+paced 4 candidate idle ops/s 80.03 p95_us 6762 polls 0 0
+paced 4 candidate disabled ops/s 80.04 p95_us 6584 polls 0 0
+paced 4 baseline idle ops/s 80.03 p95_us 6958 polls 0 0
+paced 4 baseline disabled ops/s 80.03 p95_us 6255 polls 0 0
+Traceback (most recent call last):
+  File "/Users/shinzui/Keikaku/bokuno/keiro/scripts/analyze-workflow-counts.py", line 197, in <module>
+    sys.exit(0 if measure(Path(sys.argv[2]).resolve(), Path(sys.argv[3]).resolve(), Path(sys.argv[4])) else 1)
+                  ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/shinzui/Keikaku/bokuno/keiro/scripts/analyze-workflow-counts.py", line 175, in measure
+    row = run('paced', block, role, mode, rate)
+  File "/Users/shinzui/Keikaku/bokuno/keiro/scripts/analyze-workflow-counts.py", line 142, in run
+    status = child.wait()
+  File "/nix/store/k07j8cq0iyvna81qlhwxz8xq6pkz02z8-python3-3.14.7/lib/python3.14/subprocess.py", line 1279, in wait
+    return self._wait(timeout=timeout)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/nix/store/k07j8cq0iyvna81qlhwxz8xq6pkz02z8-python3-3.14.7/lib/python3.14/subprocess.py", line 2084, in _wait
+    (pid, sts) = self._try_wait(0)
+                 ~~~~~~~~~~~~~~^^^
+  File "/nix/store/k07j8cq0iyvna81qlhwxz8xq6pkz02z8-python3-3.14.7/lib/python3.14/subprocess.py", line 2042, in _try_wait
+    (pid, sts) = os.waitpid(self.pid, wait_flags)
+                 ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

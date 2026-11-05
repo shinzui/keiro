@@ -4,6 +4,8 @@
 
 ### New Features
 
+- Bound dedicated inspection reads to one PostgreSQL backend per query, preserving
+  admission/deadline limits and ordinary writer settings.
 - Expose `GET /wf/inspect/counts` through the shared command grammar, schema checks and inspection limits.
 - `/projection/status` and `projection_groups` feed items include sorted
   `feeding_subscriptions`, shared with the CLI encoder.

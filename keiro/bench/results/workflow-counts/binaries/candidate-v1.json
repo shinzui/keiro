@@ -1,0 +1,11 @@
+{
+  "binary": "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+  "source_revision": "068f67f246eaad7d2bef864292b15ac860613a61",
+  "source_patch": "candidate-v1-source.patch",
+  "harness_sha256": "266fa2ab96e64fde31f2f4a47052eded9bd6306a1959235806028e29914bff5b",
+  "clients_sha256": "e6973c8ad0682df4f638e6b4e298ac88ee5f5519d54fce60f2dae61f22017bea",
+  "build_command": "nix develop -c cabal build keiro-ops-http:bench:inspection-interference --enable-benchmarks",
+  "compiler": "ghc-9.12.4",
+  "optimization": "O1",
+  "patch_format": "git diff --binary --unified=0; apply with git apply --unidiff-zero"
+}

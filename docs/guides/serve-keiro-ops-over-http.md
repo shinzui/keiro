@@ -2,7 +2,7 @@
 type: Runbook
 title: Serve Keiro Ops Over HTTP
 description: Mount bounded HTTP inspection and explicitly confirmed operator actions using the supported Keiro command tree.
-timestamp: 2026-11-05T13:07:18Z
+timestamp: 2026-11-05T14:17:25Z
 docId: DOC-30
 tags: [keiro, operations, http, inspection]
 generated:
@@ -293,10 +293,26 @@ path (HTTP 422 `command_failed`), releases resources and returns no partial tota
 A later request can retry. Direct CLI/library callers supply their own statement
 deadline policy.
 
+The dedicated inspection-pool helper disables PostgreSQL parallel query workers
+(`max_parallel_workers_per_gather=0`) so admitted count reads do not fan out into
+parallel worker groups. This changes no ordinary writer connection. Admission
+remains four and SQL/handler deadlines remain two/five seconds. Direct callers
+manage their own connection, parallelism and deadline policy.
+
 The normal planner may use a sequential scan; exact counting has population-sized
 work even for an absent name. No schema or runtime-write changes support this
 read. Consult [the retained query and runtime evidence](../../keiro/bench/results/workflow-counts/README.md)
 for the measured population and polling envelope before enabling automatic polling.
+
+
+The measured HTTP envelope is one million balanced-class instance headers with
+210 concurrent writer operations/sec: one unfiltered poll/sec, plus a tested
+eight-client aligned overload mixture of unfiltered, common, rare and absent
+names. All 500 measured successful reads completed without timeout; overload
+returned admission refusals and recovered. Five matched capacity pairs and five
+polling blocks passed the runtime guards. See the retained evidence for the
+hardware, raw ranges and exact limits; larger datasets or other cadences require
+their own measurements.
 
 ## Schema agreement and errors
 

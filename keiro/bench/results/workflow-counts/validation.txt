@@ -1,0 +1,46 @@
+Plan 325 final validation
+
+Owner inspection tests: nix develop -c cabal test keiro-test --test-options='-m Keiro.Workflow.Inspection' --test-show-details=direct
+20 examples, 0 failures
+Test suite keiro-test: PASS
+
+Ops and HTTP: nix develop -c cabal test keiro-ops-test keiro-ops-http-test --test-show-details=direct
+58 examples, 0 failures
+Test suite keiro-ops-test: PASS
+58 examples, 0 failures
+Test suite keiro-ops-http-test: PASS
+
+Post-fix HTTP tests: nix develop -c cabal test keiro-ops-http-test --offline with retained dependency-constraints.json
+Test suite keiro-ops-http-test: PASS
+
+Strict bundle validation: nix develop -c just user-documentation-validate; just adr-validate; okf validate docs/improvement-requests --strict --profile mori/improvement-requests-profile.dhall --profile-enforce --log-enforce
+OK: 34 concepts (okf_version 0.2)
+OK: 32 concepts (okf_version 0.2)
+OK: 58 concepts
+OK: 60 concepts
+
+waiting for another Nix process to finish fetching input 'git+file:///Users/shinzui/Keikaku/bokuno/keiro'...
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+error (ignored): SQLite database '/Users/shinzui/.cache/nix/eval-cache-v6/73b173c60b97bc9f918dc2db62259246c11beb855e6463d757f8c69880f59c8c.sqlite' is busy
+PASS: degraded capacity, latency, allocation and consistent smaller loss are rejected
+capacity {'throughput': -0.237, 'p95_us': 0.848, 'writer_thread_allocated_bytes_per_operation': -0.003}
+unmounted {'throughput': 0.005, 'p95_us': 1.607, 'writer_thread_allocated_bytes_per_operation': 0.013}
+mounted-idle {'throughput': -0.003, 'p95_us': 2.649, 'writer_thread_allocated_bytes_per_operation': -0.026}
+counts-vs-idle {'throughput': -0.001, 'p95_us': -2.677, 'writer_thread_allocated_bytes_per_operation': -0.014}
+counts-many-vs-idle {'throughput': -0.0, 'p95_us': -2.683, 'writer_thread_allocated_bytes_per_operation': 0.007}
+counts-total {'throughput': 0.002, 'p95_us': -3.923, 'writer_thread_allocated_bytes_per_operation': 0.003}
+counts-many-total {'throughput': 0.003, 'p95_us': -3.449, 'writer_thread_allocated_bytes_per_operation': 0.012}
+WORKFLOW_COUNTS=PASSED
+
+GUARD(producer-identity)=0
+GUARD(outbox)=0
+GUARD(inbox)=0
+GUARD(command)=0
+GUARD(projection)=0
+GUARD(read-model)=0
+BENCH_REGRESSION=PASSED
+
+Schema audit: git diff 9a54e480 HEAD --name-only -- keiro-migrations is empty.
+No project dependency bounds or pins changed.
+DSL conformance and the combined release gate were not run, per user scope.

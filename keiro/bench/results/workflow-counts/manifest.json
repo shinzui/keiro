@@ -33,5 +33,6 @@
     "build": "passed",
     "sql_identity_cases": 216,
     "scope": "formatting only after full cohort; final 1000-row smoke confirms identical actual prepared SQL for both shapes and all filters; no replacement performance claim"
-  }
+  },
+  "phase": "original M1 feasibility cohort; source hashes are historical, final candidate is in binaries/candidate.json"
 }

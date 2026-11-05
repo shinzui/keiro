@@ -1,0 +1,2363 @@
+{
+  "baseline": "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+  "candidate": "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+  "baseline_sha256": "dad012a235e105cff5a2c437cb66fc6f09bf92ca43304bfa4ce7682862422e6d",
+  "candidate_sha256": "d2d27a3224fd5760118d42e95768f5948d664e4c64e2b389a73b55400c22e6e0",
+  "fixture_rows": 1000000,
+  "measurement_seconds": 20,
+  "blocks": 5,
+  "distribution": "balanced seven classes; ~90% seed-common; rare n%997=0; other 31 names; timers=100000",
+  "workload": "schedule, crash retry/reset, suspend/resume, claim, named step, complete, release, schedule/claim/fire timer",
+  "rts": [
+    "-N2",
+    "-T"
+  ],
+  "writer_pool_size": 1,
+  "inspection_admission": 4,
+  "statement_timeout_ms": 2000,
+  "read_deadline_seconds": 5,
+  "hardware": "The Glorious Glasgow Haskell Compilation System, version 9.12.4\ncabal-install version 3.16.1.0\ncompiled using version 3.16.1.0 of the Cabal library (in-tree)\nDarwin yujin 27.2.0 Darwin Kernel Version 27.2.0: Wed Oct 14 23:47:58 PDT 2026; root:xnu-13432.41.4~25/RELEASE_ARM64_T6050 arm64 arm Darwin\nhw.model: Mac17,15\nhw.physicalcpu: 36\nhw.memsize: 274877906944\n",
+  "harness_sha256": "266fa2ab96e64fde31f2f4a47052eded9bd6306a1959235806028e29914bff5b",
+  "clients_sha256": "e6973c8ad0682df4f638e6b4e298ac88ee5f5519d54fce60f2dae61f22017bea",
+  "controller_sha256": "ad906fcdf38f2d87b627bd440c4e9f52c302a039aca2c72eddceba06d556edb8",
+  "initial_external_work": [
+    {
+      "pid": 21733,
+      "cpu": 42.3,
+      "executable": "cabal"
+    },
+    {
+      "pid": 77451,
+      "cpu": 49.2,
+      "executable": "ghc-9.12.4"
+    }
+  ],
+  "ambient_load_policy": "record diagnostics; judge paired measurements, not process presence",
+  "legs": [
+    {
+      "phase": "capacity",
+      "block": 1,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-paired/capacity/1/baseline-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 21733,
+          "cpu": 51.8,
+          "executable": "cabal"
+        },
+        {
+          "pid": 77451,
+          "cpu": 63.7,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 78688,
+          "cpu": 20.9,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 79117,
+          "cpu": 36.3,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 79128,
+          "cpu": 28.3,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "capacity",
+      "block": 1,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime-paired/capacity/1/candidate-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 83146,
+          "cpu": 61.7,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 83153,
+          "cpu": 10.0,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 83391,
+          "cpu": 59.9,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 83700,
+          "cpu": 31.3,
+          "executable": "cabal"
+        },
+        {
+          "pid": 83711,
+          "cpu": 92.9,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 83719,
+          "cpu": 66.1,
+          "executable": "ghc-pkg-9.12.4"
+        },
+        {
+          "pid": 83732,
+          "cpu": 42.3,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 83733,
+          "cpu": 42.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 83734,
+          "cpu": 33.5,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 83744,
+          "cpu": 9.2,
+          "executable": "clang"
+        }
+      ]
+    },
+    {
+      "phase": "capacity",
+      "block": 2,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime-paired/capacity/2/candidate-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 84077,
+          "cpu": 57.9,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 84089,
+          "cpu": 10.5,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 84109,
+          "cpu": 25.5,
+          "executable": "shikigami-core-postgres-test"
+        },
+        {
+          "pid": 86197,
+          "cpu": 60.1,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 86815,
+          "cpu": 357.1,
+          "executable": "rei-api-test"
+        },
+        {
+          "pid": 89525,
+          "cpu": 70.8,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 89529,
+          "cpu": 105.0,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 89530,
+          "cpu": 36.7,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "capacity",
+      "block": 2,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-paired/capacity/2/baseline-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 791,
+          "cpu": 77.3,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 4071,
+          "cpu": 43.3,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 4759,
+          "cpu": 34.5,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 8142,
+          "cpu": 49.2,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 9824,
+          "cpu": 12.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 10413,
+          "cpu": 79.3,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 10458,
+          "cpu": 75.6,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 11364,
+          "cpu": 82.5,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 11451,
+          "cpu": 78.8,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 11994,
+          "cpu": 67.8,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 12735,
+          "cpu": 30.1,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 12824,
+          "cpu": 81.3,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 14724,
+          "cpu": 24.6,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 14981,
+          "cpu": 25.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 15060,
+          "cpu": 27.9,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 84109,
+          "cpu": 6.6,
+          "executable": "shikigami-core-postgres-test"
+        },
+        {
+          "pid": 86815,
+          "cpu": 18.9,
+          "executable": "rei-api-test"
+        },
+        {
+          "pid": 91195,
+          "cpu": 19.6,
+          "executable": "cabal"
+        },
+        {
+          "pid": 93995,
+          "cpu": 33.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 95674,
+          "cpu": 22.4,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "capacity",
+      "block": 3,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-paired/capacity/3/baseline-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 19117,
+          "cpu": 19.5,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 23467,
+          "cpu": 60.8,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 34450,
+          "cpu": 89.8,
+          "executable": "clang"
+        },
+        {
+          "pid": 34560,
+          "cpu": 75.1,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 41031,
+          "cpu": 59.7,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 42885,
+          "cpu": 23.7,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 43052,
+          "cpu": 5.5,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 43055,
+          "cpu": 7.9,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 44062,
+          "cpu": 61.2,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 47940,
+          "cpu": 89.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 48205,
+          "cpu": 34.9,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 50901,
+          "cpu": 60.9,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 51126,
+          "cpu": 89.9,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 51661,
+          "cpu": 45.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 52237,
+          "cpu": 50.5,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 52259,
+          "cpu": 61.8,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 53775,
+          "cpu": 42.2,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 54278,
+          "cpu": 43.6,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 55151,
+          "cpu": 41.6,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 55628,
+          "cpu": 45.2,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 56108,
+          "cpu": 58.1,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 56217,
+          "cpu": 38.0,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 58872,
+          "cpu": 19.5,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 59173,
+          "cpu": 41.4,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 59290,
+          "cpu": 7.0,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 59313,
+          "cpu": 8.8,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 59350,
+          "cpu": 82.2,
+          "executable": "clang"
+        },
+        {
+          "pid": 59365,
+          "cpu": 20.0,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 59746,
+          "cpu": 9.3,
+          "executable": "clang"
+        },
+        {
+          "pid": 59805,
+          "cpu": 22.3,
+          "executable": "clang"
+        },
+        {
+          "pid": 59808,
+          "cpu": 21.0,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 59811,
+          "cpu": 20.7,
+          "executable": "clang"
+        },
+        {
+          "pid": 59845,
+          "cpu": 10.0,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 59847,
+          "cpu": 11.2,
+          "executable": "ghc-pkg-9.12.4"
+        },
+        {
+          "pid": 59855,
+          "cpu": 8.3,
+          "executable": "clang"
+        },
+        {
+          "pid": 59858,
+          "cpu": 7.9,
+          "executable": "clang"
+        },
+        {
+          "pid": 84109,
+          "cpu": 55.5,
+          "executable": "shikigami-core-postgres-test"
+        },
+        {
+          "pid": 86815,
+          "cpu": 9.7,
+          "executable": "rei-api-test"
+        },
+        {
+          "pid": 91195,
+          "cpu": 11.8,
+          "executable": "cabal"
+        }
+      ]
+    },
+    {
+      "phase": "capacity",
+      "block": 3,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime-paired/capacity/3/candidate-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 3061,
+          "cpu": 32.6,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 3960,
+          "cpu": 88.9,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 34560,
+          "cpu": 92.2,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 55628,
+          "cpu": 27.8,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 65375,
+          "cpu": 78.1,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 68375,
+          "cpu": 92.7,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 68855,
+          "cpu": 92.5,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 84109,
+          "cpu": 7.5,
+          "executable": "shikigami-core-postgres-test"
+        },
+        {
+          "pid": 86815,
+          "cpu": 5.4,
+          "executable": "rei-api-test"
+        },
+        {
+          "pid": 89666,
+          "cpu": 76.0,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 90554,
+          "cpu": 30.2,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 94150,
+          "cpu": 26.6,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 96221,
+          "cpu": 47.8,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "capacity",
+      "block": 4,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime-paired/capacity/4/candidate-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 1429,
+          "cpu": 89.1,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 5695,
+          "cpu": 28.9,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 5703,
+          "cpu": 29.7,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 6042,
+          "cpu": 24.9,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 6049,
+          "cpu": 21.3,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 6052,
+          "cpu": 20.5,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 6054,
+          "cpu": 19.2,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 6062,
+          "cpu": 14.8,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 6073,
+          "cpu": 9.3,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 21733,
+          "cpu": 7.4,
+          "executable": "cabal"
+        },
+        {
+          "pid": 65375,
+          "cpu": 90.3,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 68855,
+          "cpu": 79.6,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 84109,
+          "cpu": 55.1,
+          "executable": "shikigami-core-postgres-test"
+        },
+        {
+          "pid": 86815,
+          "cpu": 134.2,
+          "executable": "rei-api-test"
+        },
+        {
+          "pid": 91195,
+          "cpu": 12.9,
+          "executable": "cabal"
+        }
+      ]
+    },
+    {
+      "phase": "capacity",
+      "block": 4,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-paired/capacity/4/baseline-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 14930,
+          "cpu": 57.1,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 19357,
+          "cpu": 87.4,
+          "executable": "clang"
+        },
+        {
+          "pid": 20679,
+          "cpu": 86.6,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 21980,
+          "cpu": 16.0,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 23636,
+          "cpu": 5.5,
+          "executable": "clang"
+        },
+        {
+          "pid": 47047,
+          "cpu": 90.3,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 65375,
+          "cpu": 58.9,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 67885,
+          "cpu": 77.2,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 84109,
+          "cpu": 52.8,
+          "executable": "shikigami-core-postgres-test"
+        },
+        {
+          "pid": 86815,
+          "cpu": 20.4,
+          "executable": "rei-api-test"
+        },
+        {
+          "pid": 93937,
+          "cpu": 37.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 93950,
+          "cpu": 73.9,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 94975,
+          "cpu": 47.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 96955,
+          "cpu": 89.5,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "capacity",
+      "block": 5,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-paired/capacity/5/baseline-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 14930,
+          "cpu": 36.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 33743,
+          "cpu": 88.0,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 42056,
+          "cpu": 65.7,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 45043,
+          "cpu": 15.7,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 45063,
+          "cpu": 13.5,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 45179,
+          "cpu": 16.2,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 45195,
+          "cpu": 7.6,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 45196,
+          "cpu": 6.8,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 45197,
+          "cpu": 5.8,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 45305,
+          "cpu": 7.4,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 45322,
+          "cpu": 5.4,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 45357,
+          "cpu": 6.6,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 45370,
+          "cpu": 8.7,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 45510,
+          "cpu": 8.8,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 65375,
+          "cpu": 88.7,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 84109,
+          "cpu": 7.5,
+          "executable": "shikigami-core-postgres-test"
+        },
+        {
+          "pid": 86815,
+          "cpu": 64.9,
+          "executable": "rei-api-test"
+        },
+        {
+          "pid": 91195,
+          "cpu": 7.7,
+          "executable": "cabal"
+        },
+        {
+          "pid": 93309,
+          "cpu": 66.5,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 99030,
+          "cpu": 40.0,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "capacity",
+      "block": 5,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime-paired/capacity/5/candidate-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 9706,
+          "cpu": 35.1,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 11248,
+          "cpu": 80.1,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 26751,
+          "cpu": 93.3,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 46744,
+          "cpu": 73.9,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 51837,
+          "cpu": 83.6,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 52012,
+          "cpu": 55.1,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 58324,
+          "cpu": 39.2,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 61879,
+          "cpu": 10.0,
+          "executable": "clang"
+        },
+        {
+          "pid": 65375,
+          "cpu": 64.5,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 77262,
+          "cpu": 93.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 84109,
+          "cpu": 8.4,
+          "executable": "shikigami-core-postgres-test"
+        },
+        {
+          "pid": 86815,
+          "cpu": 65.1,
+          "executable": "rei-api-test"
+        },
+        {
+          "pid": 87565,
+          "cpu": 32.1,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 99030,
+          "cpu": 35.8,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 1,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/1/baseline-disabled",
+        "80",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 10750,
+          "cpu": 90.9,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 26751,
+          "cpu": 90.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 34177,
+          "cpu": 48.1,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 34835,
+          "cpu": 89.9,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 41746,
+          "cpu": 89.8,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 46209,
+          "cpu": 40.8,
+          "executable": "clang"
+        },
+        {
+          "pid": 46556,
+          "cpu": 29.2,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 52012,
+          "cpu": 78.7,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 65375,
+          "cpu": 43.9,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 77262,
+          "cpu": 90.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 84109,
+          "cpu": 5.7,
+          "executable": "shikigami-core-postgres-test"
+        },
+        {
+          "pid": 86815,
+          "cpu": 63.4,
+          "executable": "rei-api-test"
+        },
+        {
+          "pid": 90910,
+          "cpu": 90.6,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 91551,
+          "cpu": 37.8,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 92461,
+          "cpu": 42.1,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 99030,
+          "cpu": 90.0,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 1,
+      "role": "baseline",
+      "mode": "idle",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/1/baseline-idle",
+        "80",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 52012,
+          "cpu": 82.6,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 69518,
+          "cpu": 50.7,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 69525,
+          "cpu": 47.5,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 69741,
+          "cpu": 17.0,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 69764,
+          "cpu": 16.6,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 82184,
+          "cpu": 82.3,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 84109,
+          "cpu": 9.6,
+          "executable": "shikigami-core-postgres-test"
+        },
+        {
+          "pid": 86815,
+          "cpu": 436.6,
+          "executable": "rei-api-test"
+        },
+        {
+          "pid": 88433,
+          "cpu": 57.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 91551,
+          "cpu": 82.6,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 92461,
+          "cpu": 78.2,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 92722,
+          "cpu": 40.8,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 94445,
+          "cpu": 38.3,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 94584,
+          "cpu": 80.6,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 94621,
+          "cpu": 68.5,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 94979,
+          "cpu": 90.8,
+          "executable": "ghc-pkg-9.12.4"
+        },
+        {
+          "pid": 95664,
+          "cpu": 116.3,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 99030,
+          "cpu": 82.6,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 1,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/1/candidate-disabled",
+        "80",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 2663,
+          "cpu": 87.3,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 20119,
+          "cpu": 23.3,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 33620,
+          "cpu": 107.3,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 34783,
+          "cpu": 20.0,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 52012,
+          "cpu": 32.5,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 69525,
+          "cpu": 47.1,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 69741,
+          "cpu": 15.1,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 69764,
+          "cpu": 7.0,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 84109,
+          "cpu": 51.7,
+          "executable": "shikigami-core-postgres-test"
+        },
+        {
+          "pid": 86815,
+          "cpu": 153.5,
+          "executable": "rei-api-test"
+        },
+        {
+          "pid": 88433,
+          "cpu": 70.0,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 91551,
+          "cpu": 87.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 99030,
+          "cpu": 9.0,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 1,
+      "role": "candidate",
+      "mode": "idle",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/1/candidate-idle",
+        "80",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 2663,
+          "cpu": 84.5,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 27151,
+          "cpu": 5.2,
+          "executable": "clang"
+        },
+        {
+          "pid": 37345,
+          "cpu": 16.3,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 37356,
+          "cpu": 10.5,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 85203,
+          "cpu": 113.6,
+          "executable": "shomei-postgres-test"
+        },
+        {
+          "pid": 86815,
+          "cpu": 103.0,
+          "executable": "rei-api-test"
+        },
+        {
+          "pid": 88433,
+          "cpu": 41.3,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 91551,
+          "cpu": 86.1,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 99030,
+          "cpu": 51.0,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 1,
+      "role": "candidate",
+      "mode": "wf-counts",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/1/candidate-wf-counts",
+        "80",
+        "1",
+        "wf-counts",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 2663,
+          "cpu": 80.1,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 9849,
+          "cpu": 45.7,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 37345,
+          "cpu": 13.6,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 37356,
+          "cpu": 9.1,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 84109,
+          "cpu": 44.3,
+          "executable": "shikigami-core-postgres-test"
+        },
+        {
+          "pid": 85203,
+          "cpu": 122.4,
+          "executable": "shomei-postgres-test"
+        },
+        {
+          "pid": 86815,
+          "cpu": 108.3,
+          "executable": "rei-api-test"
+        },
+        {
+          "pid": 88433,
+          "cpu": 80.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 91551,
+          "cpu": 80.1,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 99030,
+          "cpu": 42.1,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 1,
+      "role": "candidate",
+      "mode": "wf-counts-many",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/1/candidate-wf-counts-many",
+        "80",
+        "1",
+        "wf-counts-many",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 21733,
+          "cpu": 90.9,
+          "executable": "cabal"
+        },
+        {
+          "pid": 37345,
+          "cpu": 35.4,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 37356,
+          "cpu": 13.4,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 37357,
+          "cpu": 9.2,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 54246,
+          "cpu": 19.2,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 72758,
+          "cpu": 58.1,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 84109,
+          "cpu": 6.7,
+          "executable": "shikigami-core-postgres-test"
+        },
+        {
+          "pid": 86815,
+          "cpu": 24.1,
+          "executable": "rei-api-test"
+        },
+        {
+          "pid": 91551,
+          "cpu": 94.8,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 99030,
+          "cpu": 67.3,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 2,
+      "role": "candidate",
+      "mode": "wf-counts-many",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/2/candidate-wf-counts-many",
+        "80",
+        "1",
+        "wf-counts-many",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 2663,
+          "cpu": 52.3,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 13301,
+          "cpu": 54.2,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 21733,
+          "cpu": 72.2,
+          "executable": "cabal"
+        },
+        {
+          "pid": 86815,
+          "cpu": 208.9,
+          "executable": "rei-api-test"
+        },
+        {
+          "pid": 89561,
+          "cpu": 22.6,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 89581,
+          "cpu": 6.9,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 89582,
+          "cpu": 7.6,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 91551,
+          "cpu": 33.7,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 2,
+      "role": "candidate",
+      "mode": "wf-counts",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/2/candidate-wf-counts",
+        "80",
+        "1",
+        "wf-counts",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 2663,
+          "cpu": 31.1,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 42395,
+          "cpu": 99.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 42427,
+          "cpu": 45.2,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 42487,
+          "cpu": 67.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 42591,
+          "cpu": 98.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 44110,
+          "cpu": 91.2,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 44163,
+          "cpu": 35.2,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 44175,
+          "cpu": 60.6,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 44194,
+          "cpu": 74.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 44233,
+          "cpu": 58.5,
+          "executable": "clang"
+        },
+        {
+          "pid": 89561,
+          "cpu": 15.1,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 89581,
+          "cpu": 5.1,
+          "executable": "chrome-headless-shell"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 2,
+      "role": "candidate",
+      "mode": "idle",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/2/candidate-idle",
+        "80",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 2663,
+          "cpu": 91.8,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 41200,
+          "cpu": 32.8,
+          "executable": "rei-api-live-test"
+        },
+        {
+          "pid": 42427,
+          "cpu": 79.9,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 44175,
+          "cpu": 91.8,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 72404,
+          "cpu": 93.8,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 73913,
+          "cpu": 19.3,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 73990,
+          "cpu": 36.3,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 74320,
+          "cpu": 72.3,
+          "executable": "ghc-pkg-9.12.4"
+        },
+        {
+          "pid": 74350,
+          "cpu": 5.2,
+          "executable": "clang"
+        },
+        {
+          "pid": 74374,
+          "cpu": 9.4,
+          "executable": "clang"
+        },
+        {
+          "pid": 77278,
+          "cpu": 12.8,
+          "executable": "cabal"
+        },
+        {
+          "pid": 89561,
+          "cpu": 31.1,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 89581,
+          "cpu": 14.1,
+          "executable": "chrome-headless-shell"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 2,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/2/candidate-disabled",
+        "80",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 2663,
+          "cpu": 94.5,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 44175,
+          "cpu": 95.5,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 75523,
+          "cpu": 37.7,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 75529,
+          "cpu": 12.8,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 75530,
+          "cpu": 5.4,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 76391,
+          "cpu": 9.4,
+          "executable": "shikigami-workers-test"
+        },
+        {
+          "pid": 76792,
+          "cpu": 47.5,
+          "executable": "shomei-postgres-test"
+        },
+        {
+          "pid": 79154,
+          "cpu": 25.7,
+          "executable": "rei-api-client-live-test"
+        },
+        {
+          "pid": 92057,
+          "cpu": 80.9,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 92072,
+          "cpu": 57.2,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 93158,
+          "cpu": 83.5,
+          "executable": "chrome-headless-shell"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 2,
+      "role": "baseline",
+      "mode": "idle",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/2/baseline-idle",
+        "80",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 2663,
+          "cpu": 97.0,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 7876,
+          "cpu": 48.6,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 12652,
+          "cpu": 96.2,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 14899,
+          "cpu": 56.7,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 14905,
+          "cpu": 17.1,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 14906,
+          "cpu": 10.8,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 15729,
+          "cpu": 92.0,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 44175,
+          "cpu": 94.2,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 76391,
+          "cpu": 12.2,
+          "executable": "shikigami-workers-test"
+        },
+        {
+          "pid": 79154,
+          "cpu": 11.8,
+          "executable": "rei-api-client-live-test"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 2,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/2/baseline-disabled",
+        "80",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 23233,
+          "cpu": 53.7,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 31939,
+          "cpu": 55.0,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 31960,
+          "cpu": 9.8,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 35712,
+          "cpu": 101.0,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 36318,
+          "cpu": 42.1,
+          "executable": "clang"
+        },
+        {
+          "pid": 44175,
+          "cpu": 68.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 76391,
+          "cpu": 41.8,
+          "executable": "shikigami-workers-test"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 3,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/3/baseline-disabled",
+        "80",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 23233,
+          "cpu": 99.2,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 43675,
+          "cpu": 48.9,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 43697,
+          "cpu": 8.4,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 44949,
+          "cpu": 60.0,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 51088,
+          "cpu": 88.9,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 76391,
+          "cpu": 29.4,
+          "executable": "shikigami-workers-test"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 3,
+      "role": "baseline",
+      "mode": "idle",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/3/baseline-idle",
+        "80",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 44953,
+          "cpu": 57.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 67658,
+          "cpu": 51.9,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 67676,
+          "cpu": 7.9,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 69089,
+          "cpu": 99.0,
+          "executable": "clang"
+        },
+        {
+          "pid": 69100,
+          "cpu": 98.4,
+          "executable": "chrome-headless-shell"
+        },
+        {
+          "pid": 76391,
+          "cpu": 11.3,
+          "executable": "shikigami-workers-test"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 3,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/3/candidate-disabled",
+        "80",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 23233,
+          "cpu": 98.8,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 74105,
+          "cpu": 62.3,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 76391,
+          "cpu": 18.0,
+          "executable": "shikigami-workers-test"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 3,
+      "role": "candidate",
+      "mode": "idle",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/3/candidate-idle",
+        "80",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 23233,
+          "cpu": 100.0,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 74105,
+          "cpu": 90.9,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 76391,
+          "cpu": 29.7,
+          "executable": "shikigami-workers-test"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 3,
+      "role": "candidate",
+      "mode": "wf-counts",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/3/candidate-wf-counts",
+        "80",
+        "1",
+        "wf-counts",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 23233,
+          "cpu": 95.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 46852,
+          "cpu": 88.4,
+          "executable": "clang"
+        },
+        {
+          "pid": 74105,
+          "cpu": 9.9,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 76391,
+          "cpu": 13.3,
+          "executable": "shikigami-workers-test"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 3,
+      "role": "candidate",
+      "mode": "wf-counts-many",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/3/candidate-wf-counts-many",
+        "80",
+        "1",
+        "wf-counts-many",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 23233,
+          "cpu": 97.9,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 74105,
+          "cpu": 98.6,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 4,
+      "role": "candidate",
+      "mode": "wf-counts-many",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/4/candidate-wf-counts-many",
+        "80",
+        "1",
+        "wf-counts-many",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 68714,
+          "cpu": 98.8,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 74105,
+          "cpu": 71.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 76391,
+          "cpu": 76.2,
+          "executable": "shikigami-workers-test"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 4,
+      "role": "candidate",
+      "mode": "wf-counts",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/4/candidate-wf-counts",
+        "80",
+        "1",
+        "wf-counts",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 74105,
+          "cpu": 92.8,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 82796,
+          "cpu": 98.2,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 4,
+      "role": "candidate",
+      "mode": "idle",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/4/candidate-idle",
+        "80",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 74105,
+          "cpu": 99.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 88896,
+          "cpu": 171.6,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 4,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/4/candidate-disabled",
+        "80",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 74105,
+          "cpu": 33.0,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 88896,
+          "cpu": 161.2,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 90465,
+          "cpu": 63.5,
+          "executable": "clang"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 4,
+      "role": "baseline",
+      "mode": "idle",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/4/baseline-idle",
+        "80",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 74105,
+          "cpu": 92.7,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 4,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/4/baseline-disabled",
+        "80",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 74105,
+          "cpu": 100.0,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 97561,
+          "cpu": 40.9,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 5,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-paired/paced/5/baseline-disabled",
+        "80",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    }
+  ],
+  "offered_rate": 80,
+  "rejected": "Eight-client polling p95 exceeds the existing 5% limit in the first three complete comparisons; the five-block median cannot pass. Candidate inspection SQL parallelism is being bounded; retain this original failed cohort."
+}

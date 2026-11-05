@@ -5,9 +5,18 @@ description: >-
   `/wf/inspect/list` pages instances but nothing counts them, so a dashboard can only sample a
   page and mark counts as lower bounds. Add a bounded read returning the instance count per
   status class, optionally filtered by workflow name.
-timestamp: 2026-11-05T13:07:18Z
+timestamp: 2026-11-05T14:17:25Z
 requestId: IR-58
-status: in-progress
+status: completed
+completedAt: 2026-11-05T14:17:25Z
+resolution: >-
+  Implemented under ExecPlan 325 with the exact supported library read, CLI/HTTP,
+  136 focused passing examples, Jitsurei full-paging agreement and million-row
+  query evidence. User-approved planner-selected scans preserve the schema.
+  Final paired capacity/polling measurements and all six benchmark guards pass;
+  dedicated inspection connections bound parallelism without changing workflow
+  writes. Evidence is retained under keiro/bench/results/workflow-counts/.
+  DSL conformance and the combined release gate were excluded by user scope.
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/325-count-workflow-instances-by-status-class-without-runtime-performance-regressions.md
 reviews:
@@ -31,12 +40,12 @@ reviews:
 
 ## Status
 
-Implementation started under
+Completed under
 [ExecPlan 325](../plans/325-count-workflow-instances-by-status-class-without-runtime-performance-regressions.md).
-The exact library read, CLI command and HTTP endpoint are implemented and pass
-focused tests and read-only Jitsurei paging comparisons. Million-instance query
-evidence is retained in `keiro/bench/results/workflow-counts/`. Matched runtime
-performance acceptance remains open.
+The exact owner read, CLI and HTTP endpoint pass focused tests, read-only
+Jitsurei paging comparisons, million-row query checks, final paired runtime
+measurements and all six existing benchmark guards. The schema and ordinary
+writer paths remain unchanged. See [retained evidence](../../keiro/bench/results/workflow-counts/README.md).
 
 Originally proposed by the keiro runtime console initiative
 (`mori://shinzui/keiro-ui/masterplans/2-build-the-keiro-runtime-console`), filed from

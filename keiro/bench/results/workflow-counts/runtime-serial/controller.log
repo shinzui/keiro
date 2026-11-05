@@ -1,0 +1,50 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+capacity 1 baseline disabled ops/s 424.15 p95_us 3212 polls 0 0
+capacity 1 candidate disabled ops/s 434.16 p95_us 3209 polls 0 0
+capacity 2 candidate disabled ops/s 451.43 p95_us 2974 polls 0 0
+capacity 2 baseline disabled ops/s 452.5 p95_us 2949 polls 0 0
+capacity 3 baseline disabled ops/s 453.88 p95_us 2960 polls 0 0
+capacity 3 candidate disabled ops/s 452.69 p95_us 3002 polls 0 0
+capacity 4 candidate disabled ops/s 437.42 p95_us 3094 polls 0 0
+capacity 4 baseline disabled ops/s 452.23 p95_us 2960 polls 0 0
+capacity 5 baseline disabled ops/s 443.38 p95_us 3008 polls 0 0
+capacity 5 candidate disabled ops/s 449.53 p95_us 2979 polls 0 0
+paced 1 baseline disabled ops/s 210.01 p95_us 4616.18 polls 0 0
+paced 1 baseline idle ops/s 210.01 p95_us 4557.06 polls 0 0
+paced 1 candidate disabled ops/s 210.01 p95_us 4575.15 polls 0 0
+paced 1 candidate idle ops/s 210.0 p95_us 4677.79 polls 0 0
+paced 1 candidate wf-counts ops/s 210.01 p95_us 4435.06 polls 20 0
+paced 1 candidate wf-counts-many ops/s 210.01 p95_us 4434.82 polls 80 80
+paced 2 candidate wf-counts-many ops/s 210.01 p95_us 4255.77 polls 80 80
+paced 2 candidate wf-counts ops/s 210.02 p95_us 4074.33 polls 20 0
+paced 2 candidate idle ops/s 210.02 p95_us 4657.04 polls 0 0
+paced 2 candidate disabled ops/s 210.01 p95_us 5004.99 polls 0 0
+paced 2 baseline idle ops/s 210.01 p95_us 4464.67 polls 0 0
+paced 2 baseline disabled ops/s 210.0 p95_us 4015.8 polls 0 0
+paced 3 baseline disabled ops/s 210.0 p95_us 4687.04 polls 0 0
+paced 3 baseline idle ops/s 210.02 p95_us 4535.78 polls 0 0
+paced 3 candidate disabled ops/s 210.01 p95_us 4540.73 polls 0 0
+paced 3 candidate idle ops/s 210.02 p95_us 4626.08 polls 0 0
+paced 3 candidate wf-counts ops/s 210.01 p95_us 4475.82 polls 20 0
+paced 3 candidate wf-counts-many ops/s 210.01 p95_us 4525.38 polls 80 80
+paced 4 candidate wf-counts-many ops/s 210.02 p95_us 4578.9 polls 80 80
+paced 4 candidate wf-counts ops/s 210.01 p95_us 4519.88 polls 20 0
+paced 4 candidate idle ops/s 210.01 p95_us 4516.8 polls 0 0
+paced 4 candidate disabled ops/s 210.02 p95_us 4198.34 polls 0 0
+paced 4 baseline idle ops/s 210.02 p95_us 3982.38 polls 0 0
+paced 4 baseline disabled ops/s 210.02 p95_us 4131.93 polls 0 0
+paced 5 baseline disabled ops/s 210.0 p95_us 4436.27 polls 0 0
+paced 5 baseline idle ops/s 210.01 p95_us 4696.62 polls 0 0
+paced 5 candidate disabled ops/s 210.02 p95_us 4635.1 polls 0 0
+paced 5 candidate idle ops/s 210.02 p95_us 3936.62 polls 0 0
+paced 5 candidate wf-counts ops/s 210.01 p95_us 3882.31 polls 20 0
+paced 5 candidate wf-counts-many ops/s 210.01 p95_us 4095.91 polls 80 80
+capacity {'throughput': -0.237, 'p95_us': 0.848, 'writer_thread_allocated_bytes_per_operation': -0.003}
+unmounted {'throughput': 0.005, 'p95_us': 1.607, 'writer_thread_allocated_bytes_per_operation': 0.013}
+mounted-idle {'throughput': -0.003, 'p95_us': 2.649, 'writer_thread_allocated_bytes_per_operation': -0.026}
+counts-vs-idle {'throughput': -0.001, 'p95_us': -2.677, 'writer_thread_allocated_bytes_per_operation': -0.014}
+counts-many-vs-idle {'throughput': -0.0, 'p95_us': -2.683, 'writer_thread_allocated_bytes_per_operation': 0.007}
+counts-total {'throughput': 0.002, 'p95_us': -3.923, 'writer_thread_allocated_bytes_per_operation': 0.003}
+counts-many-total {'throughput': 0.003, 'p95_us': -3.449, 'writer_thread_allocated_bytes_per_operation': 0.012}
+WORKFLOW_COUNTS=PASSED

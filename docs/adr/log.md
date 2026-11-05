@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-05
+* **Update**: ADR-40: bound inspection query parallelism after measured count-burst interference; preserve schema and ordinary writer policy (plan 325).
 * **Update**: ADR-28 and ADR-40: owning exact count API, planner-selected scans, unchanged schema and measured runtime isolation requirement (plan 325).
 
 ## 2026-11-04

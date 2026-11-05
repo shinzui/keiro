@@ -1,0 +1,834 @@
+{
+  "baseline": "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+  "candidate": "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+  "baseline_sha256": "dad012a235e105cff5a2c437cb66fc6f09bf92ca43304bfa4ce7682862422e6d",
+  "candidate_sha256": "cf19629f150853838439edc5348b45ee9f0afc4fa8c119a3443c470afbe5d99f",
+  "fixture_rows": 1000000,
+  "measurement_seconds": 20,
+  "blocks": 5,
+  "distribution": "balanced seven classes; ~90% seed-common; rare n%997=0; other 31 names; timers=100000",
+  "workload": "schedule, crash retry/reset, suspend/resume, claim, named step, complete, release, schedule/claim/fire timer",
+  "rts": [
+    "-N2",
+    "-T"
+  ],
+  "writer_pool_size": 1,
+  "inspection_admission": 4,
+  "statement_timeout_ms": 2000,
+  "read_deadline_seconds": 5,
+  "hardware": "The Glorious Glasgow Haskell Compilation System, version 9.12.4\ncabal-install version 3.16.1.0\ncompiled using version 3.16.1.0 of the Cabal library (in-tree)\nDarwin yujin 27.2.0 Darwin Kernel Version 27.2.0: Wed Oct 14 23:47:58 PDT 2026; root:xnu-13432.41.4~25/RELEASE_ARM64_T6050 arm64 arm Darwin\nhw.model: Mac17,15\nhw.physicalcpu: 36\nhw.memsize: 274877906944\n",
+  "harness_sha256": "266fa2ab96e64fde31f2f4a47052eded9bd6306a1959235806028e29914bff5b",
+  "clients_sha256": "e6973c8ad0682df4f638e6b4e298ac88ee5f5519d54fce60f2dae61f22017bea",
+  "controller_sha256": "ad906fcdf38f2d87b627bd440c4e9f52c302a039aca2c72eddceba06d556edb8",
+  "initial_external_work": [],
+  "ambient_load_policy": "record diagnostics; judge paired measurements, not process presence",
+  "legs": [
+    {
+      "phase": "capacity",
+      "block": 1,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-serial/capacity/1/baseline-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "capacity",
+      "block": 1,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/capacity/1/candidate-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "capacity",
+      "block": 2,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/capacity/2/candidate-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "capacity",
+      "block": 2,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-serial/capacity/2/baseline-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "capacity",
+      "block": 3,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-serial/capacity/3/baseline-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "capacity",
+      "block": 3,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/capacity/3/candidate-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "capacity",
+      "block": 4,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/capacity/4/candidate-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "capacity",
+      "block": 4,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-serial/capacity/4/baseline-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "capacity",
+      "block": 5,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-serial/capacity/5/baseline-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "capacity",
+      "block": 5,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/capacity/5/candidate-disabled",
+        "saturation",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "paced",
+      "block": 1,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/1/baseline-disabled",
+        "210",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "paced",
+      "block": 1,
+      "role": "baseline",
+      "mode": "idle",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/1/baseline-idle",
+        "210",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 79770,
+          "cpu": 46.6,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 1,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/1/candidate-disabled",
+        "210",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "paced",
+      "block": 1,
+      "role": "candidate",
+      "mode": "idle",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/1/candidate-idle",
+        "210",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "paced",
+      "block": 1,
+      "role": "candidate",
+      "mode": "wf-counts",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/1/candidate-wf-counts",
+        "210",
+        "1",
+        "wf-counts",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "paced",
+      "block": 1,
+      "role": "candidate",
+      "mode": "wf-counts-many",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/1/candidate-wf-counts-many",
+        "210",
+        "1",
+        "wf-counts-many",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 81415,
+          "cpu": 74.3,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 2,
+      "role": "candidate",
+      "mode": "wf-counts-many",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/2/candidate-wf-counts-many",
+        "210",
+        "1",
+        "wf-counts-many",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 82139,
+          "cpu": 93.1,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 2,
+      "role": "candidate",
+      "mode": "wf-counts",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/2/candidate-wf-counts",
+        "210",
+        "1",
+        "wf-counts",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "paced",
+      "block": 2,
+      "role": "candidate",
+      "mode": "idle",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/2/candidate-idle",
+        "210",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "paced",
+      "block": 2,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/2/candidate-disabled",
+        "210",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "paced",
+      "block": 2,
+      "role": "baseline",
+      "mode": "idle",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/2/baseline-idle",
+        "210",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 83701,
+          "cpu": 43.0,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 2,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/2/baseline-disabled",
+        "210",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 84259,
+          "cpu": 29.2,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 3,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/3/baseline-disabled",
+        "210",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "paced",
+      "block": 3,
+      "role": "baseline",
+      "mode": "idle",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/3/baseline-idle",
+        "210",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "paced",
+      "block": 3,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/3/candidate-disabled",
+        "210",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "paced",
+      "block": 3,
+      "role": "candidate",
+      "mode": "idle",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/3/candidate-idle",
+        "210",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "paced",
+      "block": 3,
+      "role": "candidate",
+      "mode": "wf-counts",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/3/candidate-wf-counts",
+        "210",
+        "1",
+        "wf-counts",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "paced",
+      "block": 3,
+      "role": "candidate",
+      "mode": "wf-counts-many",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/3/candidate-wf-counts-many",
+        "210",
+        "1",
+        "wf-counts-many",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "paced",
+      "block": 4,
+      "role": "candidate",
+      "mode": "wf-counts-many",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/4/candidate-wf-counts-many",
+        "210",
+        "1",
+        "wf-counts-many",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "paced",
+      "block": 4,
+      "role": "candidate",
+      "mode": "wf-counts",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/4/candidate-wf-counts",
+        "210",
+        "1",
+        "wf-counts",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "paced",
+      "block": 4,
+      "role": "candidate",
+      "mode": "idle",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/4/candidate-idle",
+        "210",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "paced",
+      "block": 4,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/4/candidate-disabled",
+        "210",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 86911,
+          "cpu": 99.3,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 87078,
+          "cpu": 50.8,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 4,
+      "role": "baseline",
+      "mode": "idle",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/4/baseline-idle",
+        "210",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 86911,
+          "cpu": 99.4,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 87078,
+          "cpu": 42.9,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 4,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/4/baseline-disabled",
+        "210",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 89861,
+          "cpu": 98.8,
+          "executable": "ghc-9.12.4"
+        },
+        {
+          "pid": 89986,
+          "cpu": 100.0,
+          "executable": "clang"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 5,
+      "role": "baseline",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/5/baseline-disabled",
+        "210",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "paced",
+      "block": 5,
+      "role": "baseline",
+      "mode": "idle",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/5/baseline-idle",
+        "210",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "paced",
+      "block": 5,
+      "role": "candidate",
+      "mode": "disabled",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/5/candidate-disabled",
+        "210",
+        "1",
+        "disabled",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": []
+    },
+    {
+      "phase": "paced",
+      "block": 5,
+      "role": "candidate",
+      "mode": "idle",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/5/candidate-idle",
+        "210",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 91046,
+          "cpu": 99.0,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 5,
+      "role": "candidate",
+      "mode": "wf-counts",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/5/candidate-wf-counts",
+        "210",
+        "1",
+        "wf-counts",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 91046,
+          "cpu": 95.2,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    },
+    {
+      "phase": "paced",
+      "block": 5,
+      "role": "candidate",
+      "mode": "wf-counts-many",
+      "command": [
+        "/Users/shinzui/.cache/keiro/workflow-counts-20261105/candidate-serial",
+        "keiro/bench/results/workflow-counts/runtime-serial/paced/5/candidate-wf-counts-many",
+        "210",
+        "1",
+        "wf-counts-many",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ],
+      "external_work_after": [
+        {
+          "pid": 91046,
+          "cpu": 89.8,
+          "executable": "ghc-9.12.4"
+        }
+      ]
+    }
+  ],
+  "offered_rate": 210,
+  "inspection_parallel_workers_per_gather": 0,
+  "client_rts": "compiled benchmark default -N8, external client process",
+  "baseline_build": "../binaries/baseline.json",
+  "candidate_build": "../binaries/candidate.json",
+  "shared_dependency_units_match": true
+}

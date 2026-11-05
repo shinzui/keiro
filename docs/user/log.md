@@ -1,6 +1,7 @@
 # Keiro User Documentation Log
 
 ## 2026-11-05
+* **Update**: Durable Workflows: record exact count semantics, bounded inspection parallelism and the passing million-row polling envelope (plan 325).
 * **Update**: Durable Workflows: exact status counts, snapshot and timeout semantics, no schema or writer maintenance (plan 325).
 
 ## 2026-11-04

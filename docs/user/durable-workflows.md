@@ -7,7 +7,7 @@ tags: [keiro, workflows, durability, reference]
 generated:
   by: human:nadeem
   at: 2026-08-14T15:06:34Z
-timestamp: 2026-11-05T13:07:18Z
+timestamp: 2026-11-05T14:17:25Z
 ---
 
 # Durable Workflows
@@ -371,3 +371,19 @@ the read does not alter a shared runtime connection's settings. HTTP uses the
 existing admission budget, two-second SQL timeout and five-second read deadline.
 [Plan 325 evidence](../../keiro/bench/results/workflow-counts/README.md) records
 query costs at up to one million rows and the runtime measurement status.
+
+The dedicated inspection-pool helper disables PostgreSQL parallel query workers
+(`max_parallel_workers_per_gather=0`) so admitted count reads do not fan out into
+parallel worker groups. This changes no ordinary writer connection. Admission
+remains four and SQL/handler deadlines remain two/five seconds. Direct callers
+manage their own connection, parallelism and deadline policy.
+
+
+The measured HTTP envelope is one million balanced-class instance headers with
+210 concurrent writer operations/sec: one unfiltered poll/sec, plus a tested
+eight-client aligned overload mixture of unfiltered, common, rare and absent
+names. All 500 measured successful reads completed without timeout; overload
+returned admission refusals and recovered. Five matched capacity pairs and five
+polling blocks passed the runtime guards. See the retained evidence for the
+hardware, raw ranges and exact limits; larger datasets or other cadences require
+their own measurements.

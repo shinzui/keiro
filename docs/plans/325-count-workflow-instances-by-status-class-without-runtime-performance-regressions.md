@@ -63,7 +63,7 @@ index for this query.
 
 - [x] M1 (2026-11-05): 648 cases match a complete list drain, million-row reads peak at 130.473 ms, 19 focused tests pass, and 68 list statements remain byte-identical. The user approved planner-selected scans on condition that the schema remains unchanged; select the simpler single-scan owner read. See [evidence](../../keiro/bench/results/workflow-counts/README.md).
 - [x] M2 (2026-11-05): Public owner API, CLI and mechanically derived HTTP route pass 20 owner, 58 ops and 58 HTTP examples, including cancellation/admission recovery and 64-bit JSON. Read-only Jitsurei checks match full paging for all names (2 completed), order-fulfillment (1 completed), and an absent name (zero); see `keiro/bench/results/workflow-counts/jitsurei.txt`.
-- [ ] M3: The matched capacity and polling run is executing under the user-approved available machine conditions in `keiro/bench/results/workflow-counts/runtime-paired/`. External processes are diagnostics, not automatic rejection. The earlier interrupted cohort remains historical evidence. Complete the measurements and six existing guards, assess paired results, and document the measured envelope.
+- [x] M3 (2026-11-05): Final-source five capacity pairs and five paced blocks pass at one million balanced-class headers and 210 writer operations/sec, with 500 successful measured polls, 400 admission refusals and recovery. Capacity median throughput -0.237%, p95 +0.848%, writer allocation -0.003%; active-count p95 medians -2.677%/-2.683% against idle. All six existing benchmark guards pass. Source/commands, uncertainty, raw data, failed cohorts and the unchanged-schema audit are retained in [runtime evidence](../../keiro/bench/results/workflow-counts/runtime-serial/README.md). DSL conformance and the combined release gate remain excluded per user scope.
 
 
 ## Surprises & Discoveries
@@ -94,15 +94,27 @@ commands, hashes, process basenames and rejection are retained in
 The initial process-presence refusal was an overly strict interpretation, not
 a controlled demonstration that those jobs caused the timing variation. The
 user explicitly directed continued measurements on this capable machine; the
-controller now records ambient activity and continues. The current complete
-cohort and six guards will be assessed by their measured results.
+controller now records ambient activity and continues. The final complete
+cohort and all six guards passed under those available-machine conditions.
 
 The classification-helper extraction preserves all 68 actual prepared list
 statement texts byte-for-byte, with hashes retained in
 [list-sql-identity.json](../../keiro/bench/results/workflow-counts/list-sql-identity.json).
 The focused `Keiro.Workflow.Inspection` suite passes 19 examples, including the
 two new prototype count checks. IR-58 had already been accepted and linked to
-this plan in the starting tree; its status now records implementation in progress.
+this plan in the starting tree; it is now completed with final evidence.
+
+The first available-machine polling cohort exposed an actual burst-latency
+failure: the first three eight-client p95 comparisons were +593.72%, +35.44%
+and +12.77%, making the five-block median unable to pass the unchanged 5%
+ceiling. A one-setting change disables PostgreSQL parallel workers only on
+inspection-pool connections. All 58 HTTP tests then passed; both frozen controls
+used identical measurement sources and exact shared dependency unit identities.
+The final complete cohort passes every metric, including 500 successful measured
+count reads and all overload recovery checks. Individual p95 pairs have spread;
+the retained ranges and unchanged ordinary-path work do not support attributing
+the small mixed-sign capacity/idle medians to extra runtime work. The result is
+a measured envelope, not a universal zero-cost statement.
 
 ## Decision Log
 
@@ -162,15 +174,32 @@ that strict validation enforces.
 ## Outcomes & Retrospective
 
 
-Feasibility checkpoint, 2026-11-05: the owner prototype and two-shape query driver
-are implemented and tested without any schema, migration, lifecycle-write or
-list-SQL changes. The measured concrete alternative is the simpler single-scan
-query, which fits comfortably inside the existing timeout on this machine.
-The user approved planner-selected scans conditional on no schema changes.
-M1 is complete under that explicit scope decision. M2 now passes its focused tests and Jitsurei checks. M3 is running paired measurements under the user-approved available-machine
-conditions after the first cohort was interrupted; no runtime no-regression claim has been made. The read SQL remains unchanged,
-so the retained feasibility measurements apply. The original clean source
-revision remains the baseline for the matched runtime harness.
+Completed on 2026-11-05. Operators can call the supported exact-count owner
+API, `keiro-ops wf inspect counts [--workflow-name NAME] --json`, or its derived
+HTTP route, with canonical seven-class integer JSON and the database clock.
+Empty selections, exact names, snapshot semantics, cancellation, admission and
+resource recovery pass focused tests and read-only Jitsurei paging comparisons.
+No schema, migration, ordinary workflow SQL, per-instance counting state or
+background refresh was added. The selected count SQL and all 68 list statement
+texts are unchanged from their retained query evidence.
+
+The final measurement passes five alternating capacity pairs, five paced blocks,
+and all six existing benchmark guards. The supported measured operating envelope
+is one million balanced-class headers, 100,000 timers, 210 writer operations/sec,
+one unfiltered poll/sec and the tested eight-client aligned overload mixture.
+Admission remains four, SQL/handler deadlines two/five seconds; the dedicated
+inspection pool now prevents parallel-query fan-out. All original and failed
+cohorts remain auditable. No baseline or numerical threshold was moved.
+
+The initial process-presence blocker was unnecessary: the user directed measured
+comparisons on the available machine, and ambient processes became diagnostics.
+The real burst failure led to the small pool-setting fix. ADR-28 records owner
+API and snapshot/JSON ownership; ADR-40 records unchanged-schema counting and
+inspection parallelism isolation. User/guides, changelogs and IR-58 reflect the
+final contract and measured envelope. DSL conformance and the full combined
+release gate were intentionally excluded by the user's scope; focused correctness,
+strict bundle checks and the six numerical guards supply this task's acceptance.
+
 
 ## Context and Orientation
 
@@ -451,8 +480,8 @@ counts is visible. Every pair is subject to the thresholds below. Qualify a fixe
 rate below 75% of the slowest baseline capacity; verify stable scheduling delay
 so a growing backlog cannot appear as healthy throughput. Use at least 20 seconds
 of measurement after warm-up, increasing the duration when too few count reads
-or maintenance noise make results inconclusive. Do not run builds, tests, or
-other repository benchmarks concurrently. The measured runtime work must retain
+or maintenance noise make results inconclusive. Do not start our builds, tests, or other repository benchmarks concurrently
+with a measurement leg; ambient work is recorded without automatic rejection. The measured runtime work must retain
 real schedule/claim/resume/release, workflow completion, and timer work, and add
 representative retry and suspension transitions if the selected harness lacks
 them. Retain per-operation timings, throughput, writer-thread allocation, query
@@ -508,9 +537,9 @@ z3 --version
 After the measurement-only harness changes, before production edits, freeze the
 baseline. Use a new output directory if one already exists; do not overwrite
 prior evidence. The frozen executables stay outside the checkout, in a directory
-you choose through `KEIRO_COUNTS_BINARIES`: nothing under `keiro/bench/results/`
-is ignored by Git, and prior cohorts retained hashes, build settings, and source
-identity rather than committing binaries. The text files written below are the
+you choose through `KEIRO_COUNTS_BINARIES`: benchmark `.log` files require explicit `git add -f` under this checkout's ignore
+rules. Prior cohorts retained hashes, build settings, and source identity rather
+than committing binaries. The text files written below are the
 retained identity and must accompany each binary's hash.
 
 ```bash
