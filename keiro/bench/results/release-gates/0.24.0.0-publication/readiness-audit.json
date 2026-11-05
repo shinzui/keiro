@@ -1,0 +1,12 @@
+{
+  "command": [
+    "python3",
+    "keiro/bench/results/release-gates/0.24.0.0-publication/review-readiness.py"
+  ],
+  "finished": 1793905817.3250072,
+  "log_sha256": "fcbf97e3abefd196737fe76f8241e827e95c184d4746f800b3bc1b27c9e724ee",
+  "source": "5cdbcd2d6f7381f38e0e84cca9926bad50c3548b85d6987adceb53693647374f",
+  "source_unchanged": true,
+  "started": 1793905744.128333,
+  "status": 0
+}

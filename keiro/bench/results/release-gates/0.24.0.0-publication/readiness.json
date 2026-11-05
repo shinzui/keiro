@@ -1,0 +1,13 @@
+{
+  "artifact_inventory_sha256": "a6cbab4e055df99897cf39c79b84d2be667814a32fff763e509049e1cf8251bb",
+  "manifest": "keiro/bench/results/release-gates/20261105T185142Z-3c0cad0f-manifest.json",
+  "manifest_sha256": "00bd44ce56d1e5a814311880d38cd93b90b00d875b10ab642ae199c9cdf749bf",
+  "native_nix_receipt_sha256": "bcb0bc87f0f01bf0bfa0fe692b7d217dab167a09fb3a3fa9e8fd12419ddb7ba3",
+  "original_manifest_accepted": false,
+  "performance_review_sha256": "ac8643f7bdf2bd8172cb51068de14053aeab82cdb7f55cc65b177dccfe495f4f",
+  "reviewed_failed_stage": "inbox",
+  "source": "5cdbcd2d6f7381f38e0e84cca9926bad50c3548b85d6987adceb53693647374f",
+  "staged_consumer_result_sha256": "e4a3255f445427d6b9213a89cb37f2e46d7b85cad5d9612516634863c79769c0",
+  "status": "ready_with_reviewed_performance_exception",
+  "version": "0.24.0.0"
+}

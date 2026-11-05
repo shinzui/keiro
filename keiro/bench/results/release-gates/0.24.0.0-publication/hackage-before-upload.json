@@ -1,0 +1,34 @@
+{
+  "keiro": {
+    "latest_existing_version": "0.23.0.0",
+    "target_version_absent": true
+  },
+  "keiro-core": {
+    "latest_existing_version": "0.23.0.0",
+    "target_version_absent": true
+  },
+  "keiro-dsl": {
+    "latest_existing_version": "0.23.0.0",
+    "target_version_absent": true
+  },
+  "keiro-migrations": {
+    "latest_existing_version": "0.23.0.0",
+    "target_version_absent": true
+  },
+  "keiro-ops": {
+    "latest_existing_version": "0.23.0.0",
+    "target_version_absent": true
+  },
+  "keiro-ops-http": {
+    "latest_existing_version": "0.23.0.0",
+    "target_version_absent": true
+  },
+  "keiro-pgmq": {
+    "latest_existing_version": "0.23.0.0",
+    "target_version_absent": true
+  },
+  "keiro-test-support": {
+    "latest_existing_version": "0.23.0.0",
+    "target_version_absent": true
+  }
+}

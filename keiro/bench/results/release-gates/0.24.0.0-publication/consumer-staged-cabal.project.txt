@@ -1,0 +1,9 @@
+packages: .
+  /Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/keiro-core-0.24.0.0.tar.gz
+  /Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/keiro-0.24.0.0.tar.gz
+  /Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/keiro-pgmq-0.24.0.0.tar.gz
+  /Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/keiro-migrations-0.24.0.0.tar.gz
+  /Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/keiro-test-support-0.24.0.0.tar.gz
+  /Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/keiro-dsl-0.24.0.0.tar.gz
+  /Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/keiro-ops-0.24.0.0.tar.gz
+  /Users/shinzui/Keikaku/bokuno/keiro/dist-release/0.24.0.0/keiro-ops-http-0.24.0.0.tar.gz

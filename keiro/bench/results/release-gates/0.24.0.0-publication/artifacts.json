@@ -1,0 +1,12 @@
+{
+  "command": [
+    "just",
+    "release-artifacts"
+  ],
+  "finished": 1793905382.517619,
+  "log_sha256": "6b696ac704f2c654b69e3201bbc4021f7a684c7cbcc7abc6e02bdf5f58afecc4",
+  "source": "5cdbcd2d6f7381f38e0e84cca9926bad50c3548b85d6987adceb53693647374f",
+  "source_unchanged": true,
+  "started": 1793905052.7904441,
+  "status": 0
+}

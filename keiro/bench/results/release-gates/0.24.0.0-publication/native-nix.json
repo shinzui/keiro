@@ -1,0 +1,14 @@
+{
+  "command": [
+    "nix",
+    "flake",
+    "check",
+    "-L"
+  ],
+  "finished": 1793905027.373431,
+  "log_sha256": "41677936c41340616292779d6a4acc9eaf482235e8f090eb652a9241a2b7dbcd",
+  "source": "5cdbcd2d6f7381f38e0e84cca9926bad50c3548b85d6987adceb53693647374f",
+  "source_unchanged": true,
+  "started": 1793904997.6468039,
+  "status": 0
+}

@@ -1,0 +1,40 @@
+{
+  "approved_at": "2026-11-05T18:56:36.178562+00:00",
+  "authorization": {
+    "quote": "let's release then since we don't have a regression",
+    "source": "User instruction in this conversation after reviewing the focused controls"
+  },
+  "manifest": "keiro/bench/results/release-gates/20261105T185142Z-3c0cad0f-manifest.json",
+  "manifest_sha256": "00bd44ce56d1e5a814311880d38cd93b90b00d875b10ab642ae199c9cdf749bf",
+  "reviewed_stages": {
+    "inbox": {
+      "failures": [
+        {
+          "measurement": "155  ms \u00b1  14 ms, 25% more than baseline",
+          "selector": "Use -p '/inbox/&&/single-full/' to rerun this test only.",
+          "test": "single-full"
+        },
+        {
+          "measurement": "151  ms \u00b1  30 ms, 25% more than baseline",
+          "selector": "Use -p '/inbox/&&/single-slim/' to rerun this test only.",
+          "test": "single-slim"
+        },
+        {
+          "measurement": "364  ms \u00b1  33 ms, 28% more than baseline",
+          "selector": "Use -p '/inbox/&&/table-downstream-batch-100.fresh.metrics-off/' to rerun this test only.",
+          "test": "metrics-off"
+        }
+      ],
+      "receipt": "keiro/bench/results/release-gates/20261105T185142Z-3c0cad0f-inbox.json",
+      "sha256": "31a8eb0151a4a1aad31481e24086c451e49c0b92698568c50f1758a25d971466"
+    }
+  },
+  "scope": "One release only: accept the reviewed noisy inbox timing failure using the retained old/candidate and same-version controls. Existing failed receipts remain failed. All non-performance checks remain required. No default release policy is changed.",
+  "source": "5cdbcd2d6f7381f38e0e84cca9926bad50c3548b85d6987adceb53693647374f",
+  "supporting_assessments": {
+    "keiro/bench/results/release-gates/20261105-benchmark-investigation/assessment.json": "a38a6a7068aea02c63ba09a07ae8bee3cedf6873904c8eb4027cd1a75a90ef3b",
+    "keiro/bench/results/release-gates/20261105-focused-noise/assessment.json": "11165c9e43e60c7c42d3e5e1ac7d69f68bfb2dceff9d0bbce2a622d1ce021eac",
+    "keiro/bench/results/release-gates/20261105-focused-noise/sha256.json": "9d51b3601b854f1cb807e5621533ded237a7d6f6b2ff12ac9e5723e7aed0fadd"
+  },
+  "version": "0.24.0.0"
+}
