@@ -1,0 +1,5 @@
+Name,Mean (ps),2*Stdev (ps)
+All.inbox.downstream.delegated-batch-1000.all-duplicate.metrics-off,84163037,7122444
+All.inbox.downstream.delegated-history-duplicate.events-10,25158512500,2511495650
+All.inbox.downstream.delegated-history-duplicate.events-1000,33284012499,1500373662
+All.inbox.downstream.delegated-history-duplicate.events-100000,54504325000,4663990584

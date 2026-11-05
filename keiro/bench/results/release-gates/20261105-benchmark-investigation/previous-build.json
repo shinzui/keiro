@@ -1,0 +1,17 @@
+{
+  "command": [
+    "nix",
+    "develop",
+    "-c",
+    "cabal",
+    "build",
+    "keiro:bench:keiro-bench"
+  ],
+  "exit_status": 0,
+  "initial_offline_attempt": {
+    "exit_status": 1,
+    "reason": "The detached checkout had no cached codd git source. Repeated without --offline fetched the existing v0.1.8 project pin and built successfully."
+  },
+  "source_commit": "c3b3e05511a4c0e7b3d59626815cb546f5e91728",
+  "tracked_source_diff": ""
+}

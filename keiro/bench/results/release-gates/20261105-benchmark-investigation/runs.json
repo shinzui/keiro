@@ -1,0 +1,470 @@
+[
+  {
+    "csv": "pair-1-command-previous.csv",
+    "finished": 1793901455.3333938,
+    "group": "command",
+    "log": "pair-1-command-previous.log",
+    "measurements_ps": {
+      "All.command.control.accepted-1": 158002929,
+      "All.command.domain-warmup.accepted-1": 154816308,
+      "All.command.domain.accepted-1": 159611914,
+      "All.command.legacy.accepted-1": 156964794
+    },
+    "pair": 1,
+    "started": 1793901437.392904,
+    "status": 0,
+    "version": "previous"
+  },
+  {
+    "csv": "pair-1-command-candidate.csv",
+    "finished": 1793901474.142869,
+    "group": "command",
+    "log": "pair-1-command-candidate.log",
+    "measurements_ps": {
+      "All.command.control.accepted-1": 148549267,
+      "All.command.domain-warmup.accepted-1": 158367041,
+      "All.command.domain.accepted-1": 154864453,
+      "All.command.legacy.accepted-1": 157204394
+    },
+    "pair": 1,
+    "started": 1793901455.333687,
+    "status": 0,
+    "version": "candidate"
+  },
+  {
+    "csv": "pair-1-inbox-previous.csv",
+    "finished": 1793901525.7971442,
+    "group": "inbox",
+    "log": "pair-1-inbox-previous.log",
+    "measurements_ps": {
+      "All.inbox.downstream.delegated-batch-1000.all-duplicate.metrics-off": 84163037,
+      "All.inbox.downstream.delegated-history-duplicate.events-10": 25158512500,
+      "All.inbox.downstream.delegated-history-duplicate.events-1000": 33284012499,
+      "All.inbox.downstream.delegated-history-duplicate.events-100000": 54504325000
+    },
+    "pair": 1,
+    "started": 1793901474.143163,
+    "status": 1,
+    "version": "previous"
+  },
+  {
+    "csv": "pair-1-inbox-candidate.csv",
+    "finished": 1793901542.592117,
+    "group": "inbox",
+    "log": "pair-1-inbox-candidate.log",
+    "measurements_ps": {
+      "All.inbox.downstream.delegated-batch-1000.all-duplicate.metrics-off": 84982812,
+      "All.inbox.downstream.delegated-history-duplicate.events-10": 27590668750,
+      "All.inbox.downstream.delegated-history-duplicate.events-1000": 27499050000,
+      "All.inbox.downstream.delegated-history-duplicate.events-100000": 58508850000
+    },
+    "pair": 1,
+    "started": 1793901525.797447,
+    "status": 1,
+    "version": "candidate"
+  },
+  {
+    "csv": "pair-1-projection-previous.csv",
+    "finished": 1793901582.639443,
+    "group": "projection",
+    "log": "pair-1-projection-previous.log",
+    "measurements_ps": {
+      "All.projection.async.legacy.mixed-delivery": 98158544,
+      "All.projection.async.versioned.mixed-delivery": 104098632,
+      "All.projection.inline.legacy.many-revisions": 241511816,
+      "All.projection.inline.legacy.mixed-delivery": 259060449,
+      "All.projection.inline.legacy.one-target": 252384277,
+      "All.projection.inline.legacy.three-groups": 332211816,
+      "All.projection.inline.legacy.three-target": 277946777,
+      "All.projection.inline.versioned.many-revisions": 243800781,
+      "All.projection.inline.versioned.mixed-delivery": 270602441,
+      "All.projection.inline.versioned.one-target": 250904882,
+      "All.projection.inline.versioned.three-groups": 334259374,
+      "All.projection.inline.versioned.three-target": 286369335
+    },
+    "pair": 1,
+    "started": 1793901542.592441,
+    "status": 0,
+    "version": "previous"
+  },
+  {
+    "csv": "pair-1-projection-candidate.csv",
+    "finished": 1793901620.788639,
+    "group": "projection",
+    "log": "pair-1-projection-candidate.log",
+    "measurements_ps": {
+      "All.projection.async.legacy.mixed-delivery": 110400903,
+      "All.projection.async.versioned.mixed-delivery": 115768457,
+      "All.projection.inline.legacy.many-revisions": 237162207,
+      "All.projection.inline.legacy.mixed-delivery": 254432910,
+      "All.projection.inline.legacy.one-target": 237292529,
+      "All.projection.inline.legacy.three-groups": 320865039,
+      "All.projection.inline.legacy.three-target": 265235839,
+      "All.projection.inline.versioned.many-revisions": 245000683,
+      "All.projection.inline.versioned.mixed-delivery": 258030957,
+      "All.projection.inline.versioned.one-target": 239667773,
+      "All.projection.inline.versioned.three-groups": 329165234,
+      "All.projection.inline.versioned.three-target": 271062988
+    },
+    "pair": 1,
+    "started": 1793901582.63977,
+    "status": 0,
+    "version": "candidate"
+  },
+  {
+    "csv": "pair-1-read-model-previous.csv",
+    "finished": 1793901663.573824,
+    "group": "read-model",
+    "log": "pair-1-read-model-previous.log",
+    "measurements_ps": {
+      "All.read-model-lifecycle.promotion.three-target-end-to-end": 15519029687,
+      "All.read-model-lifecycle.repair.10": 401468554,
+      "All.read-model-lifecycle.repair.100": 2338414062,
+      "All.read-model-lifecycle.repair.1000": 28381774999,
+      "All.read-model-lifecycle.serving-binding.legacy-three": 65138208,
+      "All.read-model-lifecycle.serving-binding.versioned-three": 71264978,
+      "All.read-model-reads.guarded.all-rows-100": 202604150,
+      "All.read-model-reads.guarded.keyed-10000": 71901586,
+      "All.read-model-reads.status.list-1000-synthetic-groups": 8630365624,
+      "All.read-model-reads.status.lookup-among-1000-synthetic-groups": 85371166
+    },
+    "pair": 1,
+    "started": 1793901620.7889862,
+    "status": 1,
+    "version": "previous"
+  },
+  {
+    "csv": "pair-1-read-model-candidate.csv",
+    "finished": 1793901698.0977101,
+    "group": "read-model",
+    "log": "pair-1-read-model-candidate.log",
+    "measurements_ps": {
+      "All.read-model-lifecycle.promotion.three-target-end-to-end": 15172500000,
+      "All.read-model-lifecycle.repair.10": 445609179,
+      "All.read-model-lifecycle.repair.100": 2528467968,
+      "All.read-model-lifecycle.repair.1000": 29239775000,
+      "All.read-model-lifecycle.serving-binding.legacy-three": 71804248,
+      "All.read-model-lifecycle.serving-binding.versioned-three": 71815624,
+      "All.read-model-reads.guarded.all-rows-100": 179074462,
+      "All.read-model-reads.guarded.keyed-10000": 68648681,
+      "All.read-model-reads.status.list-1000-synthetic-groups": 8276353125,
+      "All.read-model-reads.status.lookup-among-1000-synthetic-groups": 61791894
+    },
+    "pair": 1,
+    "started": 1793901663.574168,
+    "status": 0,
+    "version": "candidate"
+  },
+  {
+    "csv": "pair-2-command-candidate.csv",
+    "finished": 1793901715.6329658,
+    "group": "command",
+    "log": "pair-2-command-candidate.log",
+    "measurements_ps": {
+      "All.command.control.accepted-1": 170243212,
+      "All.command.domain-warmup.accepted-1": 241057666,
+      "All.command.domain.accepted-1": 190697070,
+      "All.command.legacy.accepted-1": 158316943
+    },
+    "pair": 2,
+    "started": 1793901698.098073,
+    "status": 1,
+    "version": "candidate"
+  },
+  {
+    "csv": "pair-2-command-previous.csv",
+    "finished": 1793901741.59685,
+    "group": "command",
+    "log": "pair-2-command-previous.log",
+    "measurements_ps": {
+      "All.command.control.accepted-1": 185429321,
+      "All.command.domain-warmup.accepted-1": 197544531,
+      "All.command.domain.accepted-1": 191895800,
+      "All.command.legacy.accepted-1": 194421630
+    },
+    "pair": 2,
+    "started": 1793901715.633329,
+    "status": 1,
+    "version": "previous"
+  },
+  {
+    "csv": "pair-2-inbox-candidate.csv",
+    "finished": 1793901803.553222,
+    "group": "inbox",
+    "log": "pair-2-inbox-candidate.log",
+    "measurements_ps": {
+      "All.inbox.downstream.delegated-batch-1000.all-duplicate.metrics-off": 102726489,
+      "All.inbox.downstream.delegated-history-duplicate.events-10": 30185437499,
+      "All.inbox.downstream.delegated-history-duplicate.events-1000": 31214325000,
+      "All.inbox.downstream.delegated-history-duplicate.events-100000": 57502606249
+    },
+    "pair": 2,
+    "started": 1793901741.597286,
+    "status": 1,
+    "version": "candidate"
+  },
+  {
+    "csv": "pair-2-inbox-previous.csv",
+    "finished": 1793901856.5093539,
+    "group": "inbox",
+    "log": "pair-2-inbox-previous.log",
+    "measurements_ps": {
+      "All.inbox.downstream.delegated-batch-1000.all-duplicate.metrics-off": 94070605,
+      "All.inbox.downstream.delegated-history-duplicate.events-10": 25399525000,
+      "All.inbox.downstream.delegated-history-duplicate.events-1000": 26612749999,
+      "All.inbox.downstream.delegated-history-duplicate.events-100000": 53508074999
+    },
+    "pair": 2,
+    "started": 1793901803.553618,
+    "status": 1,
+    "version": "previous"
+  },
+  {
+    "csv": "pair-2-projection-candidate.csv",
+    "finished": 1793901901.3244328,
+    "group": "projection",
+    "log": "pair-2-projection-candidate.log",
+    "measurements_ps": {
+      "All.projection.async.legacy.mixed-delivery": 95423681,
+      "All.projection.async.versioned.mixed-delivery": 100318176,
+      "All.projection.inline.legacy.many-revisions": 235580664,
+      "All.projection.inline.legacy.mixed-delivery": 253454882,
+      "All.projection.inline.legacy.one-target": 239194677,
+      "All.projection.inline.legacy.three-groups": 320093554,
+      "All.projection.inline.legacy.three-target": 269783300,
+      "All.projection.inline.versioned.many-revisions": 241914550,
+      "All.projection.inline.versioned.mixed-delivery": 264680078,
+      "All.projection.inline.versioned.one-target": 252689453,
+      "All.projection.inline.versioned.three-groups": 324391796,
+      "All.projection.inline.versioned.three-target": 279633789
+    },
+    "pair": 2,
+    "started": 1793901856.509716,
+    "status": 0,
+    "version": "candidate"
+  },
+  {
+    "csv": "pair-2-projection-previous.csv",
+    "finished": 1793901936.921644,
+    "group": "projection",
+    "log": "pair-2-projection-previous.log",
+    "measurements_ps": {
+      "All.projection.async.legacy.mixed-delivery": 106803662,
+      "All.projection.async.versioned.mixed-delivery": 109961267,
+      "All.projection.inline.legacy.many-revisions": 233709863,
+      "All.projection.inline.legacy.mixed-delivery": 256771191,
+      "All.projection.inline.legacy.one-target": 235887939,
+      "All.projection.inline.legacy.three-groups": 317209570,
+      "All.projection.inline.legacy.three-target": 262867187,
+      "All.projection.inline.versioned.many-revisions": 240006445,
+      "All.projection.inline.versioned.mixed-delivery": 263755761,
+      "All.projection.inline.versioned.one-target": 236887695,
+      "All.projection.inline.versioned.three-groups": 329027734,
+      "All.projection.inline.versioned.three-target": 274766796
+    },
+    "pair": 2,
+    "started": 1793901901.324808,
+    "status": 0,
+    "version": "previous"
+  },
+  {
+    "csv": "pair-2-read-model-candidate.csv",
+    "finished": 1793901971.6927218,
+    "group": "read-model",
+    "log": "pair-2-read-model-candidate.log",
+    "measurements_ps": {
+      "All.read-model-lifecycle.promotion.three-target-end-to-end": 13510481250,
+      "All.read-model-lifecycle.repair.10": 402582031,
+      "All.read-model-lifecycle.repair.100": 2257181250,
+      "All.read-model-lifecycle.repair.1000": 28372825000,
+      "All.read-model-lifecycle.serving-binding.legacy-three": 73377124,
+      "All.read-model-lifecycle.serving-binding.versioned-three": 74919287,
+      "All.read-model-reads.guarded.all-rows-100": 170483496,
+      "All.read-model-reads.guarded.keyed-10000": 67004687,
+      "All.read-model-reads.status.list-1000-synthetic-groups": 7655971875,
+      "All.read-model-reads.status.lookup-among-1000-synthetic-groups": 62019018
+    },
+    "pair": 2,
+    "started": 1793901936.922051,
+    "status": 0,
+    "version": "candidate"
+  },
+  {
+    "csv": "pair-2-read-model-previous.csv",
+    "finished": 1793902014.647787,
+    "group": "read-model",
+    "log": "pair-2-read-model-previous.log",
+    "measurements_ps": {
+      "All.read-model-lifecycle.promotion.three-target-end-to-end": 15428710937,
+      "All.read-model-lifecycle.repair.10": 519679492,
+      "All.read-model-lifecycle.repair.100": 2916061718,
+      "All.read-model-lifecycle.repair.1000": 33087575000,
+      "All.read-model-lifecycle.serving-binding.legacy-three": 64579687,
+      "All.read-model-lifecycle.serving-binding.versioned-three": 69277880,
+      "All.read-model-reads.guarded.all-rows-100": 195764257,
+      "All.read-model-reads.guarded.keyed-10000": 82001489,
+      "All.read-model-reads.status.list-1000-synthetic-groups": 8532915624,
+      "All.read-model-reads.status.lookup-among-1000-synthetic-groups": 71600634
+    },
+    "pair": 2,
+    "started": 1793901971.693108,
+    "status": 1,
+    "version": "previous"
+  },
+  {
+    "csv": "pair-3-command-previous.csv",
+    "finished": 1793902036.776892,
+    "group": "command",
+    "log": "pair-3-command-previous.log",
+    "measurements_ps": {
+      "All.command.control.accepted-1": 182678564,
+      "All.command.domain-warmup.accepted-1": 182181640,
+      "All.command.domain.accepted-1": 195834082,
+      "All.command.legacy.accepted-1": 181725439
+    },
+    "pair": 3,
+    "started": 1793902014.6482172,
+    "status": 1,
+    "version": "previous"
+  },
+  {
+    "csv": "pair-3-command-candidate.csv",
+    "finished": 1793902056.283477,
+    "group": "command",
+    "log": "pair-3-command-candidate.log",
+    "measurements_ps": {
+      "All.command.control.accepted-1": 185667382,
+      "All.command.domain-warmup.accepted-1": 183893066,
+      "All.command.domain.accepted-1": 161893115,
+      "All.command.legacy.accepted-1": 185844799
+    },
+    "pair": 3,
+    "started": 1793902036.777334,
+    "status": 0,
+    "version": "candidate"
+  },
+  {
+    "csv": "pair-3-inbox-previous.csv",
+    "finished": 1793902071.3669481,
+    "group": "inbox",
+    "log": "pair-3-inbox-previous.log",
+    "measurements_ps": {
+      "All.inbox.downstream.delegated-batch-1000.all-duplicate.metrics-off": 95902807,
+      "All.inbox.downstream.delegated-history-duplicate.events-10": 25334324999,
+      "All.inbox.downstream.delegated-history-duplicate.events-1000": 27277825000,
+      "All.inbox.downstream.delegated-history-duplicate.events-100000": 60867775002
+    },
+    "pair": 3,
+    "started": 1793902056.283883,
+    "status": 1,
+    "version": "previous"
+  },
+  {
+    "csv": "pair-3-inbox-candidate.csv",
+    "finished": 1793902087.637652,
+    "group": "inbox",
+    "log": "pair-3-inbox-candidate.log",
+    "measurements_ps": {
+      "All.inbox.downstream.delegated-batch-1000.all-duplicate.metrics-off": 86650048,
+      "All.inbox.downstream.delegated-history-duplicate.events-10": 26833693750,
+      "All.inbox.downstream.delegated-history-duplicate.events-1000": 26835537499,
+      "All.inbox.downstream.delegated-history-duplicate.events-100000": 54951700000
+    },
+    "pair": 3,
+    "started": 1793902071.367349,
+    "status": 1,
+    "version": "candidate"
+  },
+  {
+    "csv": "pair-3-projection-previous.csv",
+    "finished": 1793902127.864969,
+    "group": "projection",
+    "log": "pair-3-projection-previous.log",
+    "measurements_ps": {
+      "All.projection.async.legacy.mixed-delivery": 94041894,
+      "All.projection.async.versioned.mixed-delivery": 99576025,
+      "All.projection.inline.legacy.many-revisions": 240722265,
+      "All.projection.inline.legacy.mixed-delivery": 250274804,
+      "All.projection.inline.legacy.one-target": 238127978,
+      "All.projection.inline.legacy.three-groups": 316293750,
+      "All.projection.inline.legacy.three-target": 261801074,
+      "All.projection.inline.versioned.many-revisions": 243114062,
+      "All.projection.inline.versioned.mixed-delivery": 336416845,
+      "All.projection.inline.versioned.one-target": 243004199,
+      "All.projection.inline.versioned.three-groups": 326537109,
+      "All.projection.inline.versioned.three-target": 279099755
+    },
+    "pair": 3,
+    "started": 1793902087.638046,
+    "status": 0,
+    "version": "previous"
+  },
+  {
+    "csv": "pair-3-projection-candidate.csv",
+    "finished": 1793902160.096341,
+    "group": "projection",
+    "log": "pair-3-projection-candidate.log",
+    "measurements_ps": {
+      "All.projection.async.legacy.mixed-delivery": 95379199,
+      "All.projection.async.versioned.mixed-delivery": 100428613,
+      "All.projection.inline.legacy.many-revisions": 235580664,
+      "All.projection.inline.legacy.mixed-delivery": 249847363,
+      "All.projection.inline.legacy.one-target": 237057373,
+      "All.projection.inline.legacy.three-groups": 319094531,
+      "All.projection.inline.legacy.three-target": 264676855,
+      "All.projection.inline.versioned.many-revisions": 242229003,
+      "All.projection.inline.versioned.mixed-delivery": 259468261,
+      "All.projection.inline.versioned.one-target": 241972070,
+      "All.projection.inline.versioned.three-groups": 329801367,
+      "All.projection.inline.versioned.three-target": 285462207
+    },
+    "pair": 3,
+    "started": 1793902127.865364,
+    "status": 0,
+    "version": "candidate"
+  },
+  {
+    "csv": "pair-3-read-model-previous.csv",
+    "finished": 1793902199.473213,
+    "group": "read-model",
+    "log": "pair-3-read-model-previous.log",
+    "measurements_ps": {
+      "All.read-model-lifecycle.promotion.three-target-end-to-end": 13656220312,
+      "All.read-model-lifecycle.repair.10": 400974707,
+      "All.read-model-lifecycle.repair.100": 2422946093,
+      "All.read-model-lifecycle.repair.1000": 29336925000,
+      "All.read-model-lifecycle.serving-binding.legacy-three": 62718066,
+      "All.read-model-lifecycle.serving-binding.versioned-three": 66486865,
+      "All.read-model-reads.guarded.all-rows-100": 173592358,
+      "All.read-model-reads.guarded.keyed-10000": 64093090,
+      "All.read-model-reads.status.list-1000-synthetic-groups": 7948184374,
+      "All.read-model-reads.status.lookup-among-1000-synthetic-groups": 59189099
+    },
+    "pair": 3,
+    "started": 1793902160.0967438,
+    "status": 0,
+    "version": "previous"
+  },
+  {
+    "csv": "pair-3-read-model-candidate.csv",
+    "finished": 1793902229.599293,
+    "group": "read-model",
+    "log": "pair-3-read-model-candidate.log",
+    "measurements_ps": {
+      "All.read-model-lifecycle.promotion.three-target-end-to-end": 13539009374,
+      "All.read-model-lifecycle.repair.10": 405848046,
+      "All.read-model-lifecycle.repair.100": 2239614843,
+      "All.read-model-lifecycle.repair.1000": 28376050000,
+      "All.read-model-lifecycle.serving-binding.legacy-three": 63201977,
+      "All.read-model-lifecycle.serving-binding.versioned-three": 66737011,
+      "All.read-model-reads.guarded.all-rows-100": 178230566,
+      "All.read-model-reads.guarded.keyed-10000": 64902758,
+      "All.read-model-reads.status.list-1000-synthetic-groups": 7670790624,
+      "All.read-model-reads.status.lookup-among-1000-synthetic-groups": 61969213
+    },
+    "pair": 3,
+    "started": 1793902199.473619,
+    "status": 0,
+    "version": "candidate"
+  }
+]

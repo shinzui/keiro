@@ -1,0 +1,17 @@
+{"command": ["/private/tmp/keiro-0.23-ab-sg3_hq3m/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.23.0.0/b/keiro-bench/build/keiro-bench/keiro-bench", "-p", "/command/&&/accepted-1/", "-j1", "--time-mode", "wall", "--hide-progress", "--stdev", "5", "--timeout", "10s", "--baseline", "/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/baseline-command.csv", "--fail-if-slower", "25", "--csv", "/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261105-benchmark-investigation/pair-1-command-previous.csv", "+RTS", "-N2", "-RTS"], "started": 1793901437.392904}
+All
+  command
+    legacy
+      accepted-1: OK
+        157  μs ± 6.1 μs,       same as baseline
+    control
+      accepted-1: OK
+        158  μs ±  14 μs,       same as baseline
+    domain-warmup
+      accepted-1: OK
+        155  μs ±  11 μs,       same as baseline
+    domain
+      accepted-1: OK
+        160  μs ± 6.6 μs, 1.01x,       same as baseline
+
+All 4 tests passed (15.57s)

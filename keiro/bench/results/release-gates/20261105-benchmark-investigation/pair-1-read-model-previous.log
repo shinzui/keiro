@@ -1,0 +1,32 @@
+{"command": ["/private/tmp/keiro-0.23-ab-sg3_hq3m/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.23.0.0/b/keiro-bench/build/keiro-bench/keiro-bench", "-p", "read-model", "-j1", "--time-mode", "wall", "--hide-progress", "--stdev", "5", "--timeout", "10s", "--baseline", "/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/baseline-read-model.csv", "--fail-if-slower", "25", "--csv", "/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261105-benchmark-investigation/pair-1-read-model-previous.csv", "+RTS", "-N2", "-RTS"], "started": 1793901620.7889862}
+All
+  read-model-lifecycle
+    serving-binding
+      legacy-three:                       OK
+        65.1 μs ± 3.4 μs,       same as baseline
+      versioned-three:                    OK
+        71.3 μs ± 2.0 μs,  9% more than baseline
+    promotion
+      three-target-end-to-end:            OK
+        15.5 ms ± 7.0 ms,       same as baseline
+    repair
+      10:                                 OK
+        401  μs ±  37 μs,       same as baseline
+      100:                                OK
+        2.34 ms ± 232 μs,       same as baseline
+      1000:                               OK
+        28.4 ms ± 2.4 ms,       same as baseline
+  read-model-reads
+    status
+      list-1000-synthetic-groups:         OK
+        8.63 ms ± 756 μs, 14% more than baseline
+      lookup-among-1000-synthetic-groups: FAIL
+        85.4 μs ± 4.5 μs, 41% more than baseline
+        Use -p '/read-model/&&/lookup-among-1000-synthetic-groups/' to rerun this test only.
+    guarded
+      all-rows-100:                       OK
+        203  μs ±  32 μs, 20% more than baseline
+      keyed-10000:                        OK
+        71.9 μs ± 2.9 μs, 15% more than baseline
+
+1 out of 10 tests failed (40.96s)

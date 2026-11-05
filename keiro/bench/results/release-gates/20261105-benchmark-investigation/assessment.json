@@ -1,0 +1,75 @@
+{
+  "baselines_changed": false,
+  "candidate_version": "0.24.0.0",
+  "case_count": 30,
+  "complete_pairs_per_case": 3,
+  "conclusion": "The investigation did not reproduce a candidate-specific regression explaining the original failures. The original failed cases all passed the unmodified candidate on rerun. Exact released 0.23.0.0 also fails baseline comparisons under the current concurrent load. Environmental variability is the supported explanation; the contribution of the OS upgrade is not isolated.",
+  "current_machine_platform": "macOS-27.2-arm64-arm-64bit-Mach-O",
+  "framework": {
+    "observations": [
+      "The timeout covers the adaptive benchmark sampling period rather than proving one operation took ten seconds.",
+      "Sequential bcompareWithin estimates are compared as a point-estimate ratio."
+    ],
+    "owner": "mori://Bodigrim/tasty-bench",
+    "package": "mori://Bodigrim/tasty-bench/packages/tasty-bench",
+    "project_relative_source": "tasty-bench/src/Test/Tasty/Bench.hs",
+    "source_artifact_uri": "pending"
+  },
+  "input_verification": "verified-inputs.json",
+  "largest_per_case_median_candidate_over_previous": 1.102336865023981,
+  "latest_release_manifest": "keiro/bench/results/release-gates/20261105T174859Z-0a102c6b-manifest.json",
+  "limits_changed": false,
+  "measurement_limitations": [
+    "Other work remained running at the user request. These are diagnostic alternating comparisons under changing background load, not quiet-machine release acceptance.",
+    "Three pairs describe the sampled cases; they do not prove the absence of every possible performance regression."
+  ],
+  "median_ratio_above_1_25_cases": [],
+  "paired_results": "paired-summary.json",
+  "per_group": {
+    "command": {
+      "candidate_failed_runs": 1,
+      "median_ratio_range": [
+        0.9401678053702409,
+        1.0229351354897316
+      ],
+      "previous_failed_runs": 2
+    },
+    "inbox": {
+      "candidate_failed_runs": 3,
+      "median_ratio_range": [
+        0.9837858223300429,
+        1.0966732929858234
+      ],
+      "previous_failed_runs": 3
+    },
+    "projection": {
+      "candidate_failed_runs": 0,
+      "median_ratio_range": [
+        0.9535426068089312,
+        1.0177131773957142
+      ],
+      "previous_failed_runs": 0
+    },
+    "read-model": {
+      "candidate_failed_runs": 0,
+      "median_ratio_range": [
+        0.8661797324308609,
+        1.102336865023981
+      ],
+      "previous_failed_runs": 2
+    }
+  },
+  "previous_machine_platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "previous_tag": "keiro-0.23.0.0",
+  "process_load": "comparison-process-load.jsonl",
+  "raw_runs": "runs.json",
+  "recommended_follow_up": [
+    "Classify measurements contaminated by external load as inconclusive before attributing a runtime regression.",
+    "Use repeated alternating previous/candidate controls to attribute changes, with exact source, dependency, machine and load evidence.",
+    "Preserve existing numerical limits and require the current release gate to pass before publication."
+  ],
+  "release_status": "Still blocked: the latest release-gate manifest has failed inbox and command stages. Projection and read-model passed; unchanged correctness, producer-identity and outbox stages were reused.",
+  "runtime_code_changed": false,
+  "scope": "30 selected benchmark cases, three fixed alternating previous/candidate pairs per case. Diagnostic comparison only; does not replace release acceptance.",
+  "source_comparison": "hot-path-source-comparison.json"
+}

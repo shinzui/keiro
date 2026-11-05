@@ -1,0 +1,18 @@
+{"command": ["/private/tmp/keiro-0.23-ab-sg3_hq3m/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.23.0.0/b/keiro-bench/build/keiro-bench/keiro-bench", "-p", "/delegated-history-duplicate/||/delegated-batch-1000.all-duplicate.metrics-off/", "-j1", "--time-mode", "wall", "--hide-progress", "--stdev", "5", "--timeout", "10s", "--baseline", "/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/baseline-inbox.csv", "--fail-if-slower", "25", "--csv", "/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261105-benchmark-investigation/pair-2-inbox-previous.csv", "+RTS", "-N2", "-RTS"], "started": 1793901803.553618}
+All
+  inbox
+    downstream
+      delegated-batch-1000
+        all-duplicate
+          metrics-off: OK
+            94.1 μs ± 6.9 μs,  9% more than baseline
+      delegated-history-duplicate
+        events-10:     OK
+          25.4 ms ± 2.1 ms,       same as baseline
+        events-1000:   OK
+          26.6 ms ± 1.4 ms, 12% more than baseline
+        events-100000: FAIL
+          53.5 ms ± 5.2 ms, 126% more than baseline
+          Use -p '(/delegated-history-duplicate/||/delegated-batch-1000.all-duplicate.metrics-off/)&&/events-100000/' to rerun this test only.
+
+1 out of 4 tests failed (51.28s)

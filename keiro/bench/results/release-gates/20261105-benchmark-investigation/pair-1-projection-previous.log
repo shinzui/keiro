@@ -1,0 +1,49 @@
+{"command": ["/private/tmp/keiro-0.23-ab-sg3_hq3m/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.23.0.0/b/keiro-bench/build/keiro-bench/keiro-bench", "-p", "projection", "-j1", "--time-mode", "wall", "--hide-progress", "--stdev", "5", "--timeout", "10s", "--baseline", "/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/baseline-projection.csv", "--fail-if-slower", "25", "--csv", "/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261105-benchmark-investigation/pair-1-projection-previous.csv", "+RTS", "-N2", "-RTS"], "started": 1793901542.592441}
+All
+  projection
+    inline
+      legacy
+        one-target:     read-model-latency-run=1 samples=500 legacy_p95_ns=416000 versioned_p95_ns=424000 p95_ratio=1.0192307692307692 throughput_ratio=0.9684354445763541
+read-model-latency-run=2 samples=500 legacy_p95_ns=423000 versioned_p95_ns=440000 p95_ratio=1.0401891252955082 throughput_ratio=0.9720473545418842
+read-model-latency-run=3 samples=500 legacy_p95_ns=427000 versioned_p95_ns=440000 p95_ratio=1.0304449648711944 throughput_ratio=0.9718574633671454
+read-model-latency-run=4 samples=500 legacy_p95_ns=406000 versioned_p95_ns=408000 p95_ratio=1.0049261083743843 throughput_ratio=0.973403003071976
+read-model-latency-run=5 samples=500 legacy_p95_ns=430000 versioned_p95_ns=424000 p95_ratio=0.986046511627907 throughput_ratio=0.9710501160726479
+read-model-latency-median runs=5 samples_per_run=500 p95_ratio=1.0192307692307692 p95_budget=1.25 throughput_ratio=0.9718574633671454 throughput_budget=0.90
+OK
+          252  μs ±  29 μs,       same as baseline
+      versioned
+        one-target:     OK
+          251  μs ±  21 μs, 0.99x,       same as baseline
+      legacy
+        three-target:   OK
+          278  μs ±  20 μs,  7% more than baseline
+      versioned
+        three-target:   OK
+          286  μs ±  28 μs, 1.03x,       same as baseline
+      legacy
+        three-groups:   OK
+          332  μs ±  13 μs,       same as baseline
+      versioned
+        three-groups:   OK
+          334  μs ±  33 μs, 1.01x,       same as baseline
+      legacy
+        many-revisions: OK
+          242  μs ±  16 μs,       same as baseline
+      versioned
+        many-revisions: OK
+          244  μs ±  19 μs, 1.01x,       same as baseline
+      legacy
+        mixed-delivery: OK
+          259  μs ±  23 μs,       same as baseline
+      versioned
+        mixed-delivery: OK
+          271  μs ±  17 μs, 1.04x,  6% more than baseline
+    async
+      legacy
+        mixed-delivery: OK
+          98.2 μs ± 6.6 μs,  7% more than baseline
+      versioned
+        mixed-delivery: OK
+          104  μs ± 9.8 μs, 1.06x,       same as baseline
+
+All 12 tests passed (38.34s)

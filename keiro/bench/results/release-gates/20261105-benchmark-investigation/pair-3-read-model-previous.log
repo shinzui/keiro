@@ -1,0 +1,31 @@
+{"command": ["/private/tmp/keiro-0.23-ab-sg3_hq3m/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.23.0.0/b/keiro-bench/build/keiro-bench/keiro-bench", "-p", "read-model", "-j1", "--time-mode", "wall", "--hide-progress", "--stdev", "5", "--timeout", "10s", "--baseline", "/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/baseline-read-model.csv", "--fail-if-slower", "25", "--csv", "/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261105-benchmark-investigation/pair-3-read-model-previous.csv", "+RTS", "-N2", "-RTS"], "started": 1793902160.0967438}
+All
+  read-model-lifecycle
+    serving-binding
+      legacy-three:                       OK
+        62.7 μs ± 3.5 μs,       same as baseline
+      versioned-three:                    OK
+        66.5 μs ± 3.5 μs,       same as baseline
+    promotion
+      three-target-end-to-end:            OK
+        13.7 ms ± 5.0 ms,       same as baseline
+    repair
+      10:                                 OK
+        401  μs ±  23 μs,       same as baseline
+      100:                                OK
+        2.42 ms ±  67 μs, 10% more than baseline
+      1000:                               OK
+        29.3 ms ± 2.1 ms,  8% more than baseline
+  read-model-reads
+    status
+      list-1000-synthetic-groups:         OK
+        7.95 ms ± 610 μs,       same as baseline
+      lookup-among-1000-synthetic-groups: OK
+        59.2 μs ± 5.9 μs,       same as baseline
+    guarded
+      all-rows-100:                       OK
+        174  μs ±  17 μs,       same as baseline
+      keyed-10000:                        OK
+        64.1 μs ± 4.3 μs,       same as baseline
+
+All 10 tests passed (37.63s)

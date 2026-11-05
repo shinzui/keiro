@@ -1,0 +1,5 @@
+Name,Mean (ps),2*Stdev (ps)
+All.command.legacy.accepted-1,156964794,6128332
+All.command.control.accepted-1,158002929,13571446
+All.command.domain-warmup.accepted-1,154816308,10807698
+All.command.domain.accepted-1,159611914,6563862
