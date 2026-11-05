@@ -1,0 +1,8 @@
+{"command": ["/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/b/keiro-bench/build/keiro-bench/keiro-bench", "-p", "$0 == \"All.read-model-lifecycle.serving-binding.legacy-three\"", "-j1", "--time-mode", "wall", "--hide-progress", "--stdev", "5", "--timeout", "10s", "--csv", "/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261105-focused-noise/block-4-lookup-1-B.csv", "+RTS", "-N2", "-RTS"], "started": 1793904176.555422}
+All
+  read-model-lifecycle
+    serving-binding
+      legacy-three: OK
+        67.0 μs ± 5.3 μs
+
+All 1 tests passed (5.29s)

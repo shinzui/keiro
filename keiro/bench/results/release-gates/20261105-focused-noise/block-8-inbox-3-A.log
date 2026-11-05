@@ -1,0 +1,9 @@
+{"command": ["/private/tmp/keiro-0.23-ab-sg3_hq3m/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.23.0.0/b/keiro-bench/build/keiro-bench/keiro-bench", "-p", "$0 == \"All.inbox.downstream.delegated-history-duplicate.events-10\"", "-j1", "--time-mode", "wall", "--hide-progress", "--stdev", "5", "--timeout", "10s", "--csv", "/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261105-focused-noise/block-8-inbox-3-A.csv", "+RTS", "-N2", "-RTS"], "started": 1793904332.5847309}
+All
+  inbox
+    downstream
+      delegated-history-duplicate
+        events-10: OK
+          26.5 ms ± 1.8 ms
+
+All 1 tests passed (1.69s)

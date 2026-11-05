@@ -1,0 +1,47 @@
+{
+  "baselines_changed": false,
+  "binary_sha256": {
+    "candidate": "14ebf89953e783546beced868b04e1421efd0512ea81843db1efabb3e4bc6c44",
+    "previous": "183ced0ec21a01d6eb5396a8da25776a31f756a923a4d1731cb2313e52954f44"
+  },
+  "blocks_per_case": 8,
+  "case_count": 2,
+  "cases": {
+    "inbox": {
+      "block_change_range_percent": [
+        -6.810759934203093,
+        0.4513325636731347
+      ],
+      "blocks_where_candidate_is_slower": 1,
+      "blocks_with_at_least_ten_percent_slowdown": 0,
+      "candidate_change_percent": -3.335819064779044,
+      "same_version_absolute_repeat_change_max_percent": 8.136601391515175,
+      "same_version_absolute_repeat_change_median_percent": 2.0520049223456516
+    },
+    "lookup": {
+      "block_change_range_percent": [
+        -1.2001291588662477,
+        1.4667805834480019
+      ],
+      "blocks_where_candidate_is_slower": 4,
+      "blocks_with_at_least_ten_percent_slowdown": 0,
+      "candidate_change_percent": -0.133414068612292,
+      "same_version_absolute_repeat_change_max_percent": 5.307367927423523,
+      "same_version_absolute_repeat_change_median_percent": 0.8018487579237732
+    }
+  },
+  "conclusion": "Neither suspected slowdown reproduced in the fixed focused cohort. Lookup block contrasts straddle zero and inbox block contrasts mostly favor the candidate. The evidence supports measurement variability as the explanation for the earlier roughly ten-percent readings, without identifying the cause of each individual historical sample.",
+  "design": "Eight fixed ABBA/BAAB blocks per case, each with two exact old-release and two unchanged candidate observations. Block case order also alternates. The same-version repeats quantify variation without a version change. No measurements were discarded or retried.",
+  "limitations": [
+    "Other work remained running as requested; all load samples are retained.",
+    "These are descriptive focused measurements of two workloads, not proof of the absence of regressions in every workload or environment.",
+    "Fresh process fixtures can vary; block contrasts reduce linear time drift but cannot eliminate every environmental effect."
+  ],
+  "observations": 64,
+  "prior_evidence": "../20261105-benchmark-investigation/assessment.json",
+  "release_acceptance": "This diagnostic result does not replace the current mandatory release gate. No publication actions were performed.",
+  "release_policy_changed": false,
+  "runtime_code_changed": false,
+  "source_identity": "5cdbcd2d6f7381f38e0e84cca9926bad50c3548b85d6987adceb53693647374f",
+  "successful_observations": 64
+}

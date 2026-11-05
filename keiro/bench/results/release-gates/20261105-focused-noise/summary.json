@@ -1,0 +1,266 @@
+{
+  "inbox": {
+    "blocks": [
+      {
+        "block": 1,
+        "candidate_over_previous": 0.9667496489237253,
+        "candidate_repeat_ratio": 1.0762189033013085,
+        "candidate_us": [
+          23562.806249,
+          25358.7375
+        ],
+        "complete": true,
+        "previous_repeat_ratio": 1.0019095707647896,
+        "previous_us": [
+          25260.912499,
+          25309.149999
+        ]
+      },
+      {
+        "block": 2,
+        "candidate_over_previous": 0.9554630026429649,
+        "candidate_repeat_ratio": 1.0184391194826994,
+        "candidate_us": [
+          25490.98125,
+          25961.012499
+        ],
+        "complete": true,
+        "previous_repeat_ratio": 0.9247562685824007,
+        "previous_us": [
+          27997.971875,
+          25891.299999
+        ]
+      },
+      {
+        "block": 3,
+        "candidate_over_previous": 0.9813763701742363,
+        "candidate_repeat_ratio": 1.0153557679224008,
+        "candidate_us": [
+          26118.85,
+          26519.924999
+        ],
+        "complete": true,
+        "previous_repeat_ratio": 1.0234533444059244,
+        "previous_us": [
+          26509.012499,
+          27130.737499
+        ]
+      },
+      {
+        "block": 4,
+        "candidate_over_previous": 0.966533969780694,
+        "candidate_repeat_ratio": 1.0045339291019462,
+        "candidate_us": [
+          25127.212499,
+          25241.137499
+        ],
+        "complete": true,
+        "previous_repeat_ratio": 0.9434781332669833,
+        "previous_us": [
+          26825.237499,
+          25309.025
+        ]
+      },
+      {
+        "block": 5,
+        "candidate_over_previous": 0.9636550788631055,
+        "candidate_repeat_ratio": 0.9370973263728378,
+        "candidate_us": [
+          25850.65,
+          24224.575
+        ],
+        "complete": true,
+        "previous_repeat_ratio": 0.9957092677031734,
+        "previous_us": [
+          26024.1125,
+          25912.45
+        ]
+      },
+      {
+        "block": 6,
+        "candidate_over_previous": 0.990071599001367,
+        "candidate_repeat_ratio": 1.0358628792218985,
+        "candidate_us": [
+          24554.6375,
+          25435.237499
+        ],
+        "complete": true,
+        "previous_repeat_ratio": 1.0217644093264742,
+        "previous_us": [
+          24971.3875,
+          25514.874999
+        ]
+      },
+      {
+        "block": 7,
+        "candidate_over_previous": 1.0045133256367313,
+        "candidate_repeat_ratio": 1.0192756891204389,
+        "candidate_us": [
+          25338.9125,
+          25827.3375
+        ],
+        "complete": true,
+        "previous_repeat_ratio": 0.992222285820426,
+        "previous_us": [
+          25566.637499,
+          25367.7875
+        ]
+      },
+      {
+        "block": 8,
+        "candidate_over_previous": 0.9318924006579691,
+        "candidate_repeat_ratio": 1.0046156443776981,
+        "candidate_us": [
+          25100.774999,
+          25216.63125
+        ],
+        "complete": true,
+        "previous_repeat_ratio": 0.964719830370491,
+        "previous_us": [
+          27486.581249,
+          26516.85
+        ]
+      }
+    ],
+    "candidate_over_previous_median": 0.9666418093522096,
+    "candidate_over_previous_range": [
+      0.9318924006579691,
+      1.0045133256367313
+    ],
+    "complete_blocks": 8,
+    "same_version_absolute_repeat_ratio_max": 1.0813660139151517,
+    "same_version_absolute_repeat_ratio_median": 1.0205200492234565
+  },
+  "lookup": {
+    "blocks": [
+      {
+        "block": 1,
+        "candidate_over_previous": 0.9964140498186554,
+        "candidate_repeat_ratio": 1.0061953052824648,
+        "candidate_us": [
+          62.086206,
+          62.470849
+        ],
+        "complete": true,
+        "previous_repeat_ratio": 1.0081884850895342,
+        "previous_us": [
+          62.248022,
+          62.757739
+        ]
+      },
+      {
+        "block": 2,
+        "candidate_over_previous": 1.0045132657643239,
+        "candidate_repeat_ratio": 1.0213041303162191,
+        "candidate_us": [
+          62.058154,
+          63.380249
+        ],
+        "complete": true,
+        "previous_repeat_ratio": 1.0130111562817514,
+        "previous_us": [
+          62.031689,
+          62.838793
+        ]
+      },
+      {
+        "block": 3,
+        "candidate_over_previous": 0.9898756715525833,
+        "candidate_repeat_ratio": 1.0530736792742352,
+        "candidate_us": [
+          61.917358,
+          65.20354
+        ],
+        "complete": true,
+        "previous_repeat_ratio": 1.0480634003442586,
+        "previous_us": [
+          62.699975,
+          65.713549
+        ]
+      },
+      {
+        "block": 4,
+        "candidate_over_previous": 0.9945065598523454,
+        "candidate_repeat_ratio": 0.9718552337635497,
+        "candidate_us": [
+          67.021484,
+          65.13518
+        ],
+        "complete": true,
+        "previous_repeat_ratio": 0.9935525054678959,
+        "previous_us": [
+          66.651782,
+          66.222045
+        ]
+      },
+      {
+        "block": 5,
+        "candidate_over_previous": 0.9879987084113375,
+        "candidate_repeat_ratio": 0.9947494134219005,
+        "candidate_us": [
+          64.255297,
+          63.917919
+        ],
+        "complete": true,
+        "previous_repeat_ratio": 1.007848490068941,
+        "previous_us": [
+          64.611791,
+          65.118896
+        ]
+      },
+      {
+        "block": 6,
+        "candidate_over_previous": 1.0137279386029048,
+        "candidate_repeat_ratio": 0.9811916569036334,
+        "candidate_us": [
+          63.456201,
+          62.262695
+        ],
+        "complete": true,
+        "previous_repeat_ratio": 1.0030446980297436,
+        "previous_us": [
+          61.91123,
+          62.099731
+        ]
+      },
+      {
+        "block": 7,
+        "candidate_over_previous": 1.0009176688090986,
+        "candidate_repeat_ratio": 0.9966148659372781,
+        "candidate_us": [
+          62.507421,
+          62.295825
+        ],
+        "complete": true,
+        "previous_repeat_ratio": 0.9949895440236906,
+        "previous_us": [
+          62.501098,
+          62.187939
+        ]
+      },
+      {
+        "block": 8,
+        "candidate_over_previous": 1.01466780583448,
+        "candidate_repeat_ratio": 0.957248561986911,
+        "candidate_us": [
+          65.049999,
+          62.269018
+        ],
+        "complete": true,
+        "previous_repeat_ratio": 0.9940520732330277,
+        "previous_us": [
+          62.911669,
+          62.537475
+        ]
+      }
+    ],
+    "candidate_over_previous_median": 0.9986658593138771,
+    "candidate_over_previous_range": [
+      0.9879987084113375,
+      1.01466780583448
+    ],
+    "complete_blocks": 8,
+    "same_version_absolute_repeat_ratio_max": 1.0530736792742352,
+    "same_version_absolute_repeat_ratio_median": 1.0080184875792377
+  }
+}
