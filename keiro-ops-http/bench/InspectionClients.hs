@@ -24,6 +24,9 @@ import System.Timeout (timeout)
 
 runClients :: [String] -> IO ()
 runClients [portArg, clientsArg, _, secondsArg, mode]
+  | mode `elem` ["wf-counts", "wf-counts-many"] =
+      runCountClients (read portArg) (read clientsArg) (read secondsArg)
+runClients [portArg, clientsArg, _, secondsArg, mode]
   | mode `elem` ["projection-poll", "projection-feed"] =
       runProjectionClients (read portArg) (read clientsArg) (read secondsArg) (mode == "projection-feed")
 runClients [portArg, clientsArg, _, secondsArg, mode]
@@ -214,3 +217,56 @@ runProjectionClients port clients seconds feed = do
   good <- readIORef successes
   unless (if feed then good >= clients else good == clients * seconds) (fail "lost projection clients")
   Char8.putStrLn (encode (good, 0 :: Int))
+
+-- Fixed one-second ticks; all eight clients start aligned to exercise admission.
+-- Keep raw outcomes on stderr in the controller's retained leg log.
+runCountClients :: Int -> Int -> Int -> IO ()
+runCountClients port clients seconds =
+  bracket (HTTP.newManager HTTP.defaultManagerSettings {HTTP.managerConnCount = clients}) HTTP.closeManager $ \manager -> do
+    counters <- newIORef Map.empty
+    go <- newEmptyMVar
+    let count key = atomicModifyIORef' counters (\m -> (Map.insertWith (+) key (1 :: Int) m, ()))
+        names = ["", "?workflow_name=seed-common", "?workflow_name=seed-rare", "?workflow_name=absent"]
+        fetch index = do
+          request <- HTTP.parseRequest ("http://127.0.0.1:" <> show port <> "/keiro/wf/inspect/counts" <> if clients == 1 then "" else names !! (index `mod` 4))
+          result <- try (HTTP.httpLbs request manager) :: IO (Either HTTP.HttpException (HTTP.Response Lazy.ByteString))
+          case result of
+            Left err -> count ("exception:" <> show err)
+            Right response -> do
+              let code = statusCode (HTTP.responseStatus response)
+              count ("http_" <> show code)
+              whenSuccess code (HTTP.responseBody response)
+        whenSuccess code raw =
+          if code /= 200
+            then pure ()
+            else case Aeson.eitherDecode raw of
+              Right (Object fields)
+                | Just (Object counts) <- KeyMap.lookup "counts" fields,
+                  Just (String _) <- KeyMap.lookup "observed_at" fields,
+                  KeyMap.size counts == 7,
+                  all (\key -> case KeyMap.lookup key counts of Just (Number n) -> n >= 0 && fromInteger (round n) == n; _ -> False) ["running", "retrying", "sleeping", "awaiting", "completed", "cancelled", "failed"] ->
+                    pure ()
+              _ -> fail "invalid workflow counts response"
+        worker index = do
+          readMVar go
+          forM_ [1 .. seconds] $ \second -> withAsync (threadDelay 1000000) $ \tick -> do
+            fetch index
+            unless (second == seconds) (wait tick)
+    bracket (forM [0 .. clients - 1] (async . worker)) (mapM_ cancel) $ \tasks -> do
+      putStrLn "ready"
+      hFlush stdout
+      instruction <- getLine
+      unless (instruction == "go") (fail "missing measurement control")
+      putMVar go ()
+      finished <- timeout ((seconds + 5) * 1000000) (mapConcurrently_ wait tasks)
+      unless (finished == Just ()) (fail "lost count polling schedule")
+    recovery <- HTTP.parseRequest ("http://127.0.0.1:" <> show port <> "/keiro/wf/inspect/counts") >>= (\request -> HTTP.httpLbs request manager)
+    unless (statusCode (HTTP.responseStatus recovery) == 200) (fail "count admission did not recover")
+    outcomes <- readIORef counters
+    hPutStrLn stderr ("workflow count outcomes: " <> show outcomes)
+    let good = Map.findWithDefault 0 "http_200" outcomes
+        bad = sum (Map.elems outcomes) - good
+    unless (good > 0 && good + bad == clients * seconds) (fail "count workload disappeared")
+    unless (clients /= 1 || bad == 0) (fail "single count client failed")
+    unless (all (\key -> key `elem` ["http_200", "http_503"]) (Map.keys outcomes)) (fail "unexpected count failure")
+    Char8.putStrLn (encode (good, bad))

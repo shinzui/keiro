@@ -1,7 +1,10 @@
 # Keiro User Documentation Log
 
+## 2026-11-05
+* **Update**: Durable Workflows: exact status counts, snapshot and timeout semantics, no schema or writer maintenance (plan 325).
+
 ## 2026-11-04
-* **Update**: DOC-15 and DOC-19: document feeding_subscriptions beside frozen projection status rows (plan 327).
+* **Update**: DOC-15 and DOC-19: document feeding\_subscriptions beside frozen projection status rows (plan 327).
 
 ## 2026-10-27
 * **Update**: Align getting started, package availability, core concepts, production status, and the roadmap with the eight-package 0.22.0.0 release and current pre-1.0 language policy.

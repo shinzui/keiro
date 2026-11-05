@@ -1,10 +1,12 @@
 # Workflow count feasibility — plan 325
 
-The read-only prototype returns exact counts within the 2,000 ms statement
-limit, but **M1 fails the index-backed criterion**. Neither proposed SQL shape
-qualifies across the required million-row distributions. No CLI/HTTP count
-endpoint, schema change, writer maintenance, or runtime-isolation claim is
-included in this checkpoint.
+The exact read fits the 2,000 ms statement limit. The original index-backed
+criterion failed for both shapes. After reviewing these measurements, the user
+approved normal planner-selected scans conditional on **no schema changes**.
+M1 is accepted under that decision, and the simpler single-scan query is selected.
+The library, CLI and HTTP contract now pass focused tests and read-only Jitsurei
+comparisons. Matched runtime acceptance is still pending; no runtime-isolation
+claim is made from the query measurements alone.
 
 The clean starting revision is `9a54e48030ed3080f79a84d3364ea2dd74d0ab39`.
 [manifest.json](manifest.json) records the command, source hashes, build-plan
@@ -53,9 +55,9 @@ this is not a claim about PostgreSQL's default cost setting of 4.
 
 The concrete alternative is the simpler single-scan owner read already in the
 prototype: exact, bounded by the existing timeout, and without schema changes.
-Accepting planner-selected sequential scans requires an explicit change to
-plan 325/IR-58's index-backed acceptance. It would still require the M2 transport
-checks and M3 matched runtime measurements before delivery. Adding an index or
+The user approved planner-selected sequential scans and plan 325/IR-58 now
+record that change. M2 transport checks pass; M3 matched runtime measurements
+remain required before completion. Adding an index or
 writer-maintained summary has not been authorized or attempted.
 
 ## Workload and reproducibility
@@ -69,8 +71,9 @@ nix develop -c cabal build keiro keiro-test-support --enable-tests --enable-benc
 nix develop -c cabal exec -- runghc -XGHC2024 -package=keiro -package=keiro-test-support scripts/workflow-counts-query-evidence.hs keiro/bench/results/workflow-counts/query-new
 ```
 
-Expected exit is 1 when both shapes contain a sequential scan in any required
-million-row case. A correctness or timeout error fails immediately. Optional
+The original cohort exited 1 when both shapes contained a sequential scan in a
+required million-row case. That original index diagnostic is retained; the
+current driver accepts those scans under the recorded user scope decision. A correctness or timeout error fails immediately. Optional
 numeric sizes after the output path support a small smoke test, explicitly
 labelled incomplete when it omits one million rows.
 
@@ -118,5 +121,11 @@ Result: 19 examples, zero failures, including empty/unknown names, all seven
 classes beyond a first page, negative retry attempts, exact special names,
 ignored lease/retry clocks and changed classes after updates. DSL conformance
 and the combined release gate were excluded per the user's requested scope.
-The M3 harness and frozen binaries are deferred until the M1 design gate is
-resolved; the original clean source revision is retained for that baseline.
+M2 validation subsequently passed 20 owner, 58 ops and 58 HTTP examples.
+[jitsurei.txt](jitsurei.txt) retains exact full-paging comparisons on the existing
+quiescent demo database: all names (two completed), order-fulfillment (one
+completed), and an absent name (seven zeroes). No demo data or schema was changed.
+The M3 harness is the same in the recorded original baseline and candidate source
+trees; frozen binaries are outside the checkout and their hashes/build identities
+are retained in `binaries/`. The overload smoke test completed eight successful
+count reads and eight admission refusals, followed by successful recovery.

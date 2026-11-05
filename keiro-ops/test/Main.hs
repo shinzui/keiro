@@ -61,6 +61,7 @@ import Keiro.Timer qualified as Timer
 import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowJournalEvent (..), WorkflowName (..), appendJournalEntry)
 import Keiro.Workflow.Awakeable (AwakeableId (..))
 import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
+import Keiro.Workflow.Inspection qualified as Inspection
 import Keiro.Workflow.Instance qualified as Instance
 import Keiro.Workflow.Resume (WorkflowDef (..), defaultWorkflowResumeOptions)
 import Keiro.Workflow.Sleep (sleepNamed)
@@ -204,6 +205,25 @@ spec fixture = do
           workflow generation = ["wf", "steps", "orders", "1", "--generation", generation]
       mapM_ (\args -> isParseFailure (parseOps embeddedHooks args) `shouldBe` True) [rebuild "-1", snapshot "-1", stream "-1", workflow "-1"]
       mapM_ (\args -> isParseSuccess (parseOps embeddedHooks args) `shouldBe` True) [rebuild "0", snapshot "0", stream "0", workflow "0"]
+
+  describe "workflow counts command" $ around (withFreshStore fixture) $ do
+    it "parses only the exact-name filter and remains read-only" $ \_ -> do
+      forM_ [["wf", "inspect", "counts"], ["wf", "inspect", "counts", "--workflow-name", "支払_%'\\ λ"]] $ \args ->
+        isParseSuccess (parseOps Ops.emptyAppHooks args) `shouldBe` True
+      forM_ ["--limit=1", "--after=cursor", "--status-class=running"] $ \option ->
+        isParseFailure (parseOps Ops.emptyAppHooks ["wf", "inspect", "counts", option]) `shouldBe` True
+      let command = OpsWorkflow.Inspect (OpsWorkflow.InspectCounts (Inspection.WorkflowCountsQuery Nothing))
+      OpsWorkflow.isMutation command `shouldBe` False
+      OpsWorkflow.validateCommand command `shouldBe` Right ()
+    it "renders the owning library JSON in the command result" $ \store -> do
+      let query = Inspection.WorkflowCountsQuery (Just "missing")
+      expected <- runStoreIO store (Inspection.countWorkflowInstancesByStatus query) >>= either (fail . show) pure
+      outcome <- OpsWorkflow.runCommand (opsEnv False store) (OpsWorkflow.Inspect (OpsWorkflow.InspectCounts query))
+      case outcome of
+        Succeeded result -> case result.jsonValue of
+          Aeson.Object fields -> KeyMap.lookup "counts" fields `shouldBe` Just (Aeson.toJSON expected.counts)
+          other -> expectationFailure (show other)
+        other -> expectationFailure (show other)
 
   describe "targeted stream repair command" $
     around (withFreshStore fixture) $ do

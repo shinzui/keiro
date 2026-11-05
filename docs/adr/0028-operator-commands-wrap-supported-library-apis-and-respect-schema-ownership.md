@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Operator commands wrap supported library APIs and respect schema ownership
 description: Keiro operator commands preserve library invariants, schema ownership, destructive previews, and the standalone-versus-embedded capability boundary.
-timestamp: 2026-10-25T04:48:05Z
+timestamp: 2026-11-05T13:08:06Z
 docId: ADR-28
 status: Accepted
 date: 2026-08-08
@@ -180,6 +180,15 @@ inspection continuation. Folded state carries its own version; the separately
 observed stream head and snapshot clock are not an atomic-view promise. Stream
 listing consumes one public Kiroku raw page and advances from the last examined
 raw row even when every display item is rejected. Raw history remains Kiroku's.
+
+Exact workflow status-class counts are an owning-library read:
+`Keiro.Workflow.Inspection.countWorkflowInstancesByStatus`. CLI `wf inspect
+counts` and HTTP `GET /wf/inspect/counts` render its canonical seven-count JSON
+with optional exact workflow-name equality. One statement counts only current
+headers (including retained terminal rows) and returns the transaction clock;
+it neither replays history nor shares a snapshot with later list pages. Empty
+selections return all seven zeroes. Counts use 64-bit integers, and storage
+failures remain failures rather than partial or zero-valued success.
 
 ## Consequences
 

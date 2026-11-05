@@ -1,7 +1,10 @@
 # Keiro Guides Log
 
+## 2026-11-05
+* **Update**: Serve Keiro Ops Over HTTP: counts grammar and shared admission/statement limits (plan 325).
+
 ## 2026-11-04
-* **Update**: DOC-31: projection_groups feed items include feeding_subscriptions (plan 327).
+* **Update**: DOC-31: projection\_groups feed items include feeding\_subscriptions (plan 327).
 * **Update**: DOC-22 and DOC-30: document the credit-limit register demo, current and stored versions, existing read routes, codec contracts and initialized slots (Plan 329).
 * **Update**: DOC-30, DOC-22: document jitsurei-ops-http and the shared application host (Plan 328).
 

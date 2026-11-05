@@ -7,7 +7,7 @@ tags: [keiro, workflows, durability, reference]
 generated:
   by: human:nadeem
   at: 2026-08-14T15:06:34Z
-timestamp: 2026-10-27T21:15:00Z
+timestamp: 2026-11-05T13:07:18Z
 ---
 
 # Durable Workflows
@@ -273,7 +273,7 @@ because step names are dynamic.
 
 `Keiro.Workflow.Inspection` supplies bounded observations for tools. Status
 classes partition stored rows without a clock: `running` means running with
-zero attempts; `retrying` means running with positive attempts; `sleeping`
+zero attempts; `retrying` means running with nonzero attempts; `sleeping`
 means suspended with `wake_after`; `awaiting` means suspended without it.
 `completed`, `cancelled`, and `failed` are the terminal stored statuses. A
 failed row remains discoverable even if it retains a lease.
@@ -341,3 +341,33 @@ compatibility commands can drain many pages. Browser tools should use the
 bounded subtree: header inspection reads only the instance row. The
 [HTTP runbook](../guides/serve-keiro-ops-over-http.md) documents deadlines,
 byte caps, and host policy.
+
+### Exact status counts
+
+`countWorkflowInstancesByStatus (WorkflowCountsQuery Nothing)` returns exact
+current-header counts for all seven status classes in one database statement.
+Use `WorkflowCountsQuery (Just name)` for exact workflow-name equality, including
+Unicode and literal wildcard characters. All seven fields are present, including
+zeroes for an empty table or unknown name. Retained terminal rows count; journal
+history and previous generations do not add instances. Storage failures and
+statement cancellation propagate; they never become zeroes or partial counts.
+
+```bash
+keiro-ops wf inspect counts --json
+keiro-ops wf inspect counts --workflow-name order-fulfillment --json
+```
+
+The response is `{observed_at, counts: {running, retrying, sleeping, awaiting,
+completed, cancelled, failed}}`. Counts are 64-bit integers. `observed_at` is the
+database transaction observation clock, not a historical as-of token or a shared
+snapshot across requests. Comparing against multiple list pages requires a
+quiescent database.
+
+An exact count scans the selected population; a small response does not imply
+constant-time work. The normal planner may choose a sequential scan. No schema,
+index, trigger, summary table, refresh job or writer-side counter is added.
+Direct library and CLI callers must configure connection/statement deadlines;
+the read does not alter a shared runtime connection's settings. HTTP uses the
+existing admission budget, two-second SQL timeout and five-second read deadline.
+[Plan 325 evidence](../../keiro/bench/results/workflow-counts/README.md) records
+query costs at up to one million rows and the runtime measurement status.

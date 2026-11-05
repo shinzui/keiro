@@ -2,7 +2,7 @@
 type: Runbook
 title: Serve Keiro Ops Over HTTP
 description: Mount bounded HTTP inspection and explicitly confirmed operator actions using the supported Keiro command tree.
-timestamp: 2026-11-04T15:14:30Z
+timestamp: 2026-11-05T13:07:18Z
 docId: DOC-30
 tags: [keiro, operations, http, inspection]
 generated:
@@ -269,6 +269,34 @@ to get the standalone host's flags, schema verification, origin policy,
 mutation gate, and WebSocket feeds. `Keiro.Ops.Http.Host.withHost` exposes the
 same lifecycle with explicit options and a continuation receiving the bound
 port; it releases the listener, feeds, and inspection connections on return.
+
+## Workflow counts
+
+```bash
+curl -fsS http://127.0.0.1:9092/wf/inspect/counts
+curl -fsS --get --data-urlencode workflow_name=order-fulfillment http://127.0.0.1:9092/wf/inspect/counts
+```
+
+This read wraps `countWorkflowInstancesByStatus` and shares `keiro-ops wf inspect
+counts` grammar and JSON. Its only domain option is `workflow_name`, matched by
+exact equality. Pagination and status filters are rejected. Every response has
+`observed_at` and all seven integer fields under `counts`, including zeroes for
+empty selections. Counts describe retained current instance headers in one
+statement snapshot; the database transaction clock does not make later pages
+share that snapshot. Comparing with full list paging requires a quiescent database.
+
+The count read shares live schema verification and the four-slot inspection
+budget, two-second statement timeout, five-second read deadline and response cap.
+Admission refusal is HTTP 503 `inspection_busy`; handler deadline expiry is HTTP
+504 `inspection_timeout`. SQL cancellation follows the ordinary failed-command
+path (HTTP 422 `command_failed`), releases resources and returns no partial totals.
+A later request can retry. Direct CLI/library callers supply their own statement
+deadline policy.
+
+The normal planner may use a sequential scan; exact counting has population-sized
+work even for an absent name. No schema or runtime-write changes support this
+read. Consult [the retained query and runtime evidence](../../keiro/bench/results/workflow-counts/README.md)
+for the measured population and polling envelope before enabling automatic polling.
 
 ## Schema agreement and errors
 

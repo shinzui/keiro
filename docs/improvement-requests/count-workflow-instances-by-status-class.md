@@ -5,7 +5,7 @@ description: >-
   `/wf/inspect/list` pages instances but nothing counts them, so a dashboard can only sample a
   page and mark counts as lower bounds. Add a bounded read returning the instance count per
   status class, optionally filtered by workflow name.
-timestamp: 2026-11-05T12:50:37Z
+timestamp: 2026-11-05T13:07:18Z
 requestId: IR-58
 status: in-progress
 origin: mori://shinzui/keiro-ui
@@ -33,10 +33,10 @@ reviews:
 
 Implementation started under
 [ExecPlan 325](../plans/325-count-workflow-instances-by-status-class-without-runtime-performance-regressions.md).
-The read-only owner prototype and million-instance query experiment are retained in
-`keiro/bench/results/workflow-counts/`. All three milestones remain open: the
-index-backed query criterion, library/CLI/HTTP integration, and matched runtime
-performance acceptance. No CLI or HTTP counting endpoint has been delivered yet.
+The exact library read, CLI command and HTTP endpoint are implemented and pass
+focused tests and read-only Jitsurei paging comparisons. Million-instance query
+evidence is retained in `keiro/bench/results/workflow-counts/`. Matched runtime
+performance acceptance remains open.
 
 Originally proposed by the keiro runtime console initiative
 (`mori://shinzui/keiro-ui/masterplans/2-build-the-keiro-runtime-console`), filed from
@@ -71,4 +71,6 @@ With this read, the card would show exact counts.
 1. On the jitsurei database the counts equal the class totals of a full paging of
    `/wf/inspect/list`.
 2. The read stays within the inspection statement timeout on a table of a million instances
-   (an index-backed aggregate, documented in the guide).
+   (normal planner access paths, including sequential scans, documented in the guide).
+   On 2026-11-05 the user approved planner-selected scans conditional on no schema
+   changes after reviewing the retained million-row feasibility evidence.

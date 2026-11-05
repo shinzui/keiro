@@ -4,6 +4,7 @@ module WorkflowInspectionSpec (spec) where
 
 import Control.Monad (forM, forM_)
 import Data.Aeson (Value (..))
+import Data.Aeson qualified as Aeson
 import Data.List (nub, sort)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
@@ -45,18 +46,21 @@ spec fixture = describe "Keiro.Workflow.Inspection" $ do
       forM_ ["not-a-cursor", "", Text.replicate 4097 "a", "===="] $ \bad ->
         (decodeCursor "wf-key2" (InspectionCursor bad) :: Either CursorError Value) `shouldSatisfy` (\case Left (MalformedCursor _) -> True; _ -> False)
   around (withFreshStore fixture) $ do
+    it "encodes every count as a JSON integer beyond 32 bits" $ \_ -> do
+      let counts = WorkflowStatusCounts 4294967296 0 0 0 0 0 0
+      Aeson.toJSON counts `shouldBe` Aeson.object ["running" Aeson..= (4294967296 :: Integer), "retrying" Aeson..= (0 :: Int), "sleeping" Aeson..= (0 :: Int), "awaiting" Aeson..= (0 :: Int), "completed" Aeson..= (0 :: Int), "cancelled" Aeson..= (0 :: Int), "failed" Aeson..= (0 :: Int)]
     it "counts empty selections and exact names with one database observation" $ \store -> do
-      empty <- expectStore store (Instance.inspectionInstanceCounts (WorkflowCountsQuery Nothing))
+      empty <- expectStore store (countWorkflowInstancesByStatus (WorkflowCountsQuery Nothing))
       empty.counts `shouldBe` WorkflowStatusCounts 0 0 0 0 0 0 0
       empty.observedAt `shouldSatisfy` (> read "2026-01-01 00:00:00 UTC")
       sql store "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) VALUES ('one','支払_%''\\ λ','running'),('two','支払_other','failed')"
-      exact <- expectStore store (Instance.inspectionInstanceCounts (WorkflowCountsQuery (Just "支払_%'\\ λ")))
+      exact <- expectStore store (countWorkflowInstancesByStatus (WorkflowCountsQuery (Just "支払_%'\\ λ")))
       exact.counts `shouldBe` WorkflowStatusCounts 1 0 0 0 0 0 0
-      absent <- expectStore store (Instance.inspectionInstanceCounts (WorkflowCountsQuery (Just "absent")))
+      absent <- expectStore store (countWorkflowInstancesByStatus (WorkflowCountsQuery (Just "absent")))
       absent.counts `shouldBe` empty.counts
     it "counts every class beyond one list page and ignores lease and retry clocks" $ \store -> do
       sql store "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status,attempts,wake_after,next_attempt_at,leased_by,lease_expires_at,generation) SELECT 'counts-'||lpad(n::text,4,'0'),'counts',CASE n%7 WHEN 0 THEN 'running' WHEN 1 THEN 'running' WHEN 2 THEN 'suspended' WHEN 3 THEN 'suspended' WHEN 4 THEN 'completed' WHEN 5 THEN 'cancelled' ELSE 'failed' END,CASE WHEN n%7=1 THEN -1 ELSE 0 END,CASE WHEN n%7=2 THEN '2020-01-01+00'::timestamptz END,'2099-01-01+00'::timestamptz,'worker','2099-01-01+00'::timestamptz,5 FROM generate_series(1,700) n"
-      result <- expectStore store (Instance.inspectionInstanceCounts (WorkflowCountsQuery Nothing))
+      result <- expectStore store (countWorkflowInstancesByStatus (WorkflowCountsQuery Nothing))
       result.counts `shouldBe` WorkflowStatusCounts 100 100 100 100 100 100 100
       pages <- drain store defaultWorkflowListQuery {pageSize = 500}
       let rows = concatMap (.items) pages
@@ -64,7 +68,7 @@ spec fixture = describe "Keiro.Workflow.Inspection" $ do
       forM_ [minBound .. maxBound] $ \cls ->
         length (filter ((== cls) . statusClassOf) rows) `shouldBe` 100
       sql store "UPDATE keiro.keiro_workflows SET attempts=0 WHERE status='running'; UPDATE keiro.keiro_workflows SET wake_after=NULL WHERE status='suspended'"
-      transitioned <- expectStore store (Instance.inspectionInstanceCounts (WorkflowCountsQuery Nothing))
+      transitioned <- expectStore store (countWorkflowInstancesByStatus (WorkflowCountsQuery Nothing))
       transitioned.counts `shouldBe` WorkflowStatusCounts 200 0 0 200 100 100 100
     it "rechecks every header field against its exact image, including old and far-future dates" $ \store -> do
       let fields =
@@ -234,7 +238,10 @@ spec fixture = describe "Keiro.Workflow.Inspection" $ do
       length steps.items `shouldBe` 2
       other <- expectStore store (loadStepIndexPage (WorkflowName "test") (WorkflowId "different") (DetailPageQuery Nothing 2 steps.nextCursor))
       other `shouldSatisfy` (\case Left (InvalidCursor _) -> True; _ -> False)
+      beforeRotation <- expectStore store (countWorkflowInstancesByStatus (WorkflowCountsQuery Nothing))
       _ <- expectStore store (runWorkflow (WorkflowName "test") (WorkflowId "owner") (continueAsNew () >> pure ()))
+      afterRotation <- expectStore store (countWorkflowInstancesByStatus (WorkflowCountsQuery Nothing))
+      afterRotation.counts `shouldBe` beforeRotation.counts
       rotated <- expectStore store (loadStepIndexPage (WorkflowName "test") (WorkflowId "owner") (DetailPageQuery Nothing 2 steps.nextCursor))
       rotated `shouldBe` Left (CursorGenerationMismatch 1 0)
     it "pages children and directly allocated awakeables through their owning tables" $ \store -> do

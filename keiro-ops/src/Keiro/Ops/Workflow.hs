@@ -122,6 +122,7 @@ data Command
 
 data InspectionCommand
   = InspectList !Inspection.WorkflowListQuery
+  | InspectCounts !Inspection.WorkflowCountsQuery
   | InspectHeader !WorkflowRef
   | InspectJournal !WorkflowRef !Inspection.DetailPageQuery
   | InspectSteps !WorkflowRef !Inspection.DetailPageQuery
@@ -184,6 +185,7 @@ inspectionParser :: Parser InspectionCommand
 inspectionParser =
   hsubparser
     ( command "list" (info (InspectList <$> listQuery) (progDesc "Page workflow instances"))
+        <> command "counts" (info (InspectCounts . Inspection.WorkflowCountsQuery <$> optional (Text.pack <$> strOption (long "workflow-name" <> metavar "NAME"))) (progDesc "Count current instances by status class"))
         <> command "header" (info (InspectHeader <$> workflowRefParser) (progDesc "Read only the instance header"))
         <> command "journal" (info (InspectJournal <$> workflowRefParser <*> detailQuery) (progDesc "Page one journal generation"))
         <> command "steps" (info (InspectSteps <$> workflowRefParser <*> detailQuery) (progDesc "Page one generation's step index"))
@@ -313,6 +315,7 @@ runCommandWithResume resumeHook env = \case
 runInspection :: OpsEnv -> InspectionCommand -> IO OpsOutcome
 runInspection env = \case
   InspectList query -> page (Inspection.listWorkflowInstancesPage query)
+  InspectCounts query -> runAction env (Inspection.countWorkflowInstancesByStatus query) (Succeeded . jsonResult . Aeson.toJSON)
   InspectHeader ref -> runAction env (Instance.lookupInstance (refName ref) (refId ref)) (headerOutcome ref)
   InspectJournal ref query -> page (Inspection.readWorkflowJournalPage (refName ref) (refId ref) query)
   InspectSteps ref query -> page (Inspection.loadStepIndexPage (refName ref) (refId ref) query)
@@ -350,6 +353,7 @@ inspectionError err = (code, message)
 validateCommand :: Command -> Either (Text, Text) ()
 validateCommand (Inspect command) = either (Left . inspectionError) Right $ case command of
   InspectList query -> Inspection.validateWorkflowListQuery query
+  InspectCounts _ -> Right ()
   InspectHeader _ -> Right ()
   InspectJournal ref query -> Inspection.validateJournalQuery (refName ref) (refId ref) query
   InspectSteps ref query -> Inspection.validateStepQuery (refName ref) (refId ref) query

@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-05
+* **Update**: ADR-28 and ADR-40: owning exact count API, planner-selected scans, unchanged schema and measured runtime isolation requirement (plan 325).
+
 ## 2026-11-04
 * **Update**: ADR-35: use a conditional scalar probe to avoid an added join per projection status row (plan 327).
 * **Update**: ADR-35: skip subscription probes when the frozen basis and existing constraint prove the array empty (plan 327).

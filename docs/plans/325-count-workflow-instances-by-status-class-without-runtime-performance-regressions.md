@@ -50,10 +50,10 @@ fields, including zero-valued fields.
 
 The user's additional requirement is to introduce no performance regressions.
 Delivering the endpoint is conditional on measured read cost and ordinary runtime
-isolation. First prove the requested index-backed aggregate can finish on one
+isolation. First prove the exact aggregate can finish on one
 million instances within the existing 2,000 ms statement timeout. Do not solve
 that requirement by silently taxing workflow writes, increasing timeouts, serving
-estimates, or weakening the acceptance criteria. A bounded feasibility milestone
+estimates, or weakening the timeout or runtime-isolation acceptance. A bounded feasibility milestone
 comes before transport work because the present schema does not have a covering
 index for this query.
 
@@ -61,9 +61,9 @@ index for this query.
 ## Progress
 
 
-- [ ] M1: Prototype and correctness/timeout evidence retained on 2026-11-05: 648 cases match a complete list drain, million-row reads peak at 130.473 ms, and 19 focused tests pass. The index-backed criterion fails for both shapes; a scope decision is pending. See [evidence](../../keiro/bench/results/workflow-counts/README.md).
-- [ ] M2: The supported library API, CLI command, and mechanically derived HTTP route agree on all seven counts, filtering, observation semantics, and existing resource limits.
-- [ ] M3: Matched capacity and active-polling measurements establish no attributable runtime regression; the final candidate passes the existing release gate and documents the measured operating envelope.
+- [x] M1 (2026-11-05): 648 cases match a complete list drain, million-row reads peak at 130.473 ms, 19 focused tests pass, and 68 list statements remain byte-identical. The user approved planner-selected scans on condition that the schema remains unchanged; select the simpler single-scan owner read. See [evidence](../../keiro/bench/results/workflow-counts/README.md).
+- [x] M2 (2026-11-05): Public owner API, CLI and mechanically derived HTTP route pass 20 owner, 58 ops and 58 HTTP examples, including cancellation/admission recovery and 64-bit JSON. Read-only Jitsurei checks match full paging for all names (2 completed), order-fulfillment (1 completed), and an absent name (zero); see `keiro/bench/results/workflow-counts/jitsurei.txt`.
+- [ ] M3: Matched capacity and active-polling measurements establish no attributable runtime regression; the final candidate passes focused correctness and the six existing benchmark guards (DSL conformance excluded) and documents the measured operating envelope.
 
 
 ## Surprises & Discoveries
@@ -77,7 +77,7 @@ The single-scan candidate uses a sequential scan in 72 of 108 cases. The selecti
 prototype does so in six: unfiltered 99%-active, maintained and recently updated,
 in automatic/custom/generic plan modes. Its running/retrying branch scans the
 heap; other branches and the measured name-filtered cases use existing indexes.
-Thus neither qualifies under the accepted index-backed criterion. Full artifacts,
+Thus neither qualified under the original index-backed criterion. The user subsequently approved planner-selected scans with no schema changes. Full artifacts,
 settings, actual prepared SQL, row/buffer/heap/spill observations and the failing
 index check are retained in [workflow-counts](../../keiro/bench/results/workflow-counts/README.md).
 The fixture's existing `random_page_cost=1` is retained in EXPLAIN SETTINGS;
@@ -106,6 +106,16 @@ this plan in the starting tree; its status now records implementation in progres
   Rationale: The user explicitly requested simple performance work and excluded DSL conformance. The unchanged baseline source is retained by commit identity, so deferring the unused runtime harness preserves the matched-baseline requirement without building infrastructure before feasibility is known.
   Date: 2026-11-05
 
+- Decision: Accept planner-selected sequential scans, retain the schema unchanged, and promote the simpler single-scan owner query.
+  Rationale: After reviewing the retained exact-count and 130.473 ms worst observed million-row evidence, the user explicitly approved proceeding "as long as we don't change the schema". Existing statement deadlines, exactness and matched runtime-isolation acceptance remain mandatory.
+  Date: 2026-11-05
+
+Revision note (2026-11-05, scope approval): The user approved planner-selected
+scans conditional on no schema changes. This supersedes the original index-backed
+criterion in M1 and IR-58; retained index failures remain useful diagnostics.
+The selected production query and timeout are unchanged. All remaining correctness
+and runtime measurements still apply.
+
 Revision note (2026-11-05): Reordered read-only feasibility ahead of the runtime
 harness; the original clean source revision remains the baseline. DSL conformance
 is excluded by the implementation request, so a full release-gate pass will not
@@ -129,14 +139,11 @@ Feasibility checkpoint, 2026-11-05: the owner prototype and two-shape query driv
 are implemented and tested without any schema, migration, lifecycle-write or
 list-SQL changes. The measured concrete alternative is the simpler single-scan
 query, which fits comfortably inside the existing timeout on this machine.
-Changing the index criterion requires a scope decision before M2/M3; the user
-has been asked whether to accept planner-selected scans while keeping the schema
-unchanged and runtime-isolation measurements mandatory. No transport endpoint
-or no-regression claim is delivered yet. All milestone checkboxes stay open.
-The M3 controller/frozen binaries are deferred until this decision, avoiding
-unused measurement infrastructure. Existing ADR-40 already requires measured
-runtime isolation and writer evidence for index changes; no new durable decision
-has been accepted at this checkpoint, so no ADR is changed.
+The user approved planner-selected scans conditional on no schema changes.
+M1 is complete under that explicit scope decision. M2 now passes its focused tests and Jitsurei checks; M3 is in progress;
+no runtime no-regression claim has yet been made. The read SQL remains unchanged,
+so the retained feasibility measurements apply. The original clean source
+revision remains the baseline for the matched runtime harness.
 
 ## Context and Orientation
 
@@ -308,21 +315,19 @@ its dedicated fixture connection, and retain at least five timed repetitions
 per million-row case separately from EXPLAIN overhead.
 
 M1 passes when the prototype's counts equal a complete list drain on unchanged
-fixtures and the required million-row cases complete within the timeout with
-normal-planner evidence supporting the request's index-backed aggregate. Do not
+fixtures and the required million-row cases complete within the timeout, with
+normal-planner evidence recording the selected access paths. The user has
+approved sequential scans conditional on no schema changes. Do not
 force index selection by disabling sequential scans. If the planner instead
-chooses table scans, report precisely which cases do so; fast table scans alone
-do not discharge the index-backed criterion. Expect that outcome for the
+chooses table scans, report precisely which cases do so; fast table scans now qualify under the explicit user scope decision; their runtime interference still needs M3 evidence. Expect that outcome for the
 running/retrying split and for every name filter: `attempts` and `workflow_name`
 are in no index, so those populations need heap access per row, and a 99%-active
 million-row fixture gives the planner little reason to prefer
 `keiro_workflows_active_idx` over a sequential scan. Record the measured timings
 for exactly those cases so the decision below can weigh an exact count within the
 timeout against the schema change this plan does not authorize. Select the
-simplest qualifying shape and discard the other prototype. If neither qualifies, retain both
-correctness/cost results and leave M1 incomplete. Present a concrete measured
-alternative before seeking a decision about the index requirement or a schema
-change. No index, generated column, trigger, summary table, periodic refresh, or
+simplest qualifying shape and discard the other prototype. Retain both prototype correctness/cost results. The original index gate failed;
+the user accepted the measured single-scan alternative with no schema changes. No index, generated column, trigger, summary table, periodic refresh, or
 writer-side counter is pre-authorized by this plan.
 
 ### M2 — Deliver the library, CLI, and HTTP contract
@@ -455,7 +460,7 @@ timestamp. Close IR-58 as the bundle precedent does: `status: completed`,
 `completedAt` equal to the actual completion time, a `resolution` naming the
 evidence, and a `Completion` log entry; if any acceptance item remains open,
 leave it `in-progress` without a completion timestamp. Only mark M3 complete
-after final-source evidence and `just release-gate` pass. The gate requires a
+after final-source evidence and focused correctness plus `just bench-regression` pass. The gate requires a
 clean tree apart from retained evidence and plan documents and reuses stage
 receipts only for an identical source identity, so commit the final source first.
 
@@ -579,7 +584,7 @@ python3 scripts/analyze-workflow-counts.py keiro/bench/results/workflow-counts/r
 just user-documentation-validate
 just adr-validate
 okf validate docs/improvement-requests --strict --profile mori/improvement-requests-profile.dhall --profile-enforce --log-enforce
-just release-gate
+just bench-regression
 git diff --check
 ```
 
@@ -606,10 +611,10 @@ use the owning library's representation.
 Boundedness requires shared schema verification/admission, existing statement
 and handler deadlines, successful cancellation recovery, no partial count
 success, and a fixed-size result. The million-row test is about database work,
-not just the size of the result. Required index-backed evidence uses the actual
-prepared owner query and the normal planner. Record filtered-query costs too;
+not just the size of the result. Required access-path evidence uses the actual
+prepared owner query and the normal planner; sequential scans are authorized. Record filtered-query costs too;
 there is no existing leading workflow-name index to assume away an absent-name
-scan. Failure to meet either IR-58 criterion leaves the plan incomplete.
+scan. Exactness and the million-row timeout remain mandatory; the original IR-58 index-backed wording is superseded by the recorded user approval.
 
 Performance requires M3's final-source matched capacity and interference evidence
 with real successful poll traffic, no added work on default runtime paths,

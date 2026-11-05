@@ -1,0 +1,10 @@
+{
+  "binary": "/Users/shinzui/.cache/keiro/workflow-counts-20261105/baseline",
+  "source_revision": "9a54e48030ed3080f79a84d3364ea2dd74d0ab39",
+  "harness_source_patch": "baseline-source.patch",
+  "build_command": "nix develop /Users/shinzui/Keikaku/bokuno/keiro -c cabal build keiro-ops-http:bench:inspection-interference --enable-benchmarks",
+  "working_directory": "/tmp/keiro-325-baseline-9a54",
+  "compiler": "ghc-9.12.4",
+  "optimization": "O1",
+  "patch_format": "git diff --binary --unified=0; apply with git apply --unidiff-zero"
+}

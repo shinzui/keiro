@@ -17,6 +17,7 @@ module Keiro.Workflow.Inspection
     WorkflowCountsQuery (..),
     WorkflowStatusCounts (..),
     WorkflowCounts (..),
+    countWorkflowInstancesByStatus,
     WorkflowListPage (..),
     listWorkflowInstancesPage,
     DetailPageQuery (..),
@@ -73,6 +74,18 @@ import Kiroku.Store.Types
 
 maxInspectionPageSize :: Int
 maxInspectionPageSize = 500
+
+-- | Exact counts of current instance headers, including retained terminal rows.
+-- This scans the selected population in one database snapshot. Direct callers
+-- must configure their own statement deadline; the read changes no settings.
+countWorkflowInstancesByStatus :: (Store :> es) => WorkflowCountsQuery -> Eff es WorkflowCounts
+countWorkflowInstancesByStatus = Instance.inspectionInstanceCounts
+
+instance ToJSON WorkflowStatusCounts where
+  toJSON c = object ["running" .= c.running, "retrying" .= c.retrying, "sleeping" .= c.sleeping, "awaiting" .= c.awaiting, "completed" .= c.completed, "cancelled" .= c.cancelled, "failed" .= c.failed]
+
+instance ToJSON WorkflowCounts where
+  toJSON result = object ["observed_at" .= result.observedAt, "counts" .= result.counts]
 
 data InspectionError = InvalidPageSize !Int | InvalidCursor !CursorError | CursorGenerationMismatch !Int !Int | CursorResultTooLarge
   deriving stock (Eq, Show, Generic)

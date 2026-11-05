@@ -51,6 +51,7 @@ import Keiro.Snapshot.Schema qualified as Snapshot
 import Keiro.Test.Postgres
 import Keiro.Timer qualified as Timer
 import Keiro.Workflow (WorkflowId (..), WorkflowJournalEvent (..), WorkflowName (..), appendJournalEntry, continueAsNew, runWorkflow)
+import Keiro.Workflow.Inspection qualified as Inspection
 import Keiro.Workflow.Resume (defaultWorkflowResumeOptions)
 import Kiroku.Store.Append (appendToStream)
 import Kiroku.Store.Connection
@@ -242,6 +243,38 @@ spec fixture = do
         Right () <- Pool.use store.pool (Session.script "ALTER TABLE keiro.keiro_timers ADD COLUMN pm_types_drift text")
         response <- call app methodGet "/pm/types" ""
         assertError response status409 "schema_drift"
+    describe "workflow counts routes" $ do
+      it "agrees with the owner read, translates exact names, and returns zeroes" $ \store -> do
+        seedInspection store
+        Right () <- Pool.use store.pool (Session.script "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) VALUES ('special','支払_%''\\ λ','failed')")
+        app <- opsApplication defaultOpsHttpConfig hooks store
+        forM_ [Nothing, Just "approval", Just "missing", Just "支払_%'\\ λ"] $ \name -> do
+          expected <- runStoreIO store (Inspection.countWorkflowInstancesByStatus (Inspection.WorkflowCountsQuery name)) >>= either (fail . show) pure
+          let query = maybe "" (\n -> "?workflow_name=" <> Text.decodeUtf8 (urlEncode True (Text.encodeUtf8 n))) name
+          response <- call app methodGet ("/wf/inspect/counts" <> query) ""
+          simpleStatus response `shouldBe` status200
+          field "counts" (body response) `shouldBe` Just (Aeson.toJSON expected.counts)
+          field "observed_at" (body response) `shouldSatisfy` maybe False (\case String _ -> True; _ -> False)
+        rejected <- call app methodGet "/wf/inspect/counts?limit=1" ""
+        assertError rejected status400 "invalid_request"
+        Right () <- Pool.use store.pool (Session.script "ALTER TABLE keiro.keiro_timers ADD COLUMN counts_drift text")
+        drift <- call app methodGet "/wf/inspect/counts" ""
+        assertError drift status409 "schema_drift"
+      it "shares admission and returns its permit after a deadline" $ \store -> do
+        entered <- newEmptyMVar
+        let config = defaultOpsHttpConfig {inspectionLimits = defaultInspectionLimits {maxConcurrentReads = 1, readDeadlineSeconds = 1}}
+            operations = OpsHttpOperations (putMVar entered () >> threadDelay 3000000 >> pure (Right [])) (\_ _ -> pure (Succeeded emptyResult))
+        budget <- newInspectionBudget config.inspectionLimits
+        app <- opsApplicationWithOperations config budget Ops.emptyAppHooks store operations
+        withAsync (call app methodGet "/wf/inspect/counts" "") $ \job -> do
+          takeMVar entered
+          refused <- call app methodGet "/wf/inspect/counts" ""
+          assertError refused status503 "inspection_busy"
+          expired <- wait job
+          assertError expired status504 "inspection_timeout"
+        healthy <- opsApplicationWithBudget config budget Ops.emptyAppHooks store
+        recovered <- call healthy methodGet "/wf/inspect/counts" ""
+        simpleStatus recovered `shouldBe` status200
     describe "workflow page routes" $ do
       it "rejects an unrepresentable outgoing cursor instead of returning an unusable token" $ \store -> do
         result <- Pool.use store.pool (Session.script "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) VALUES ('a',repeat('界',2000),'running'),('b',repeat('界',2000),'running')")
@@ -684,6 +717,21 @@ spec fixture = do
             -- One schema-verification session and one instance-read session.
             readIORef calls `shouldReturn` 2
     describe "schema handshake" $ do
+      it "cancels a blocked count statement and recovers the pool and admission permit" $ \url ->
+        withStore (defaultConnectionSettings url) $ \store -> do
+          let limits = defaultInspectionLimits {statementTimeoutMillis = 100, maxConcurrentReads = 1}
+              config = defaultOpsHttpConfig {inspectionLimits = limits}
+          withOpsInspectionPool limits (defaultConnectionSettings url) $ \pool -> do
+            app <- opsApplication config hooks store {pool}
+            bracket (Connection.acquire (Settings.connectionString url) >>= either (fail . show) pure) Connection.release $ \control -> do
+              Right () <- Connection.use control (Session.script "BEGIN; LOCK TABLE keiro.keiro_workflows IN ACCESS EXCLUSIVE MODE")
+              expired <- call app methodGet "/wf/inspect/counts" ""
+              simpleStatus expired `shouldSatisfy` (\status -> status /= status200)
+              field "counts" (body expired) `shouldBe` Nothing
+              Right () <- Connection.use control (Session.script "ROLLBACK")
+              recovered <- call app methodGet "/wf/inspect/counts" ""
+              simpleStatus recovered `shouldBe` status200
+
       it "bounds SQL on every inspection connection and releases pool capacity on cancellation" $ \url -> do
         let limits = defaultInspectionLimits {statementTimeoutMillis = 100, maxConcurrentReads = 1}
         withOpsInspectionPool limits (defaultConnectionSettings url) $ \pool -> do
@@ -767,7 +815,9 @@ commandPairs =
 
 cliReads :: [(Text, [String])]
 cliReads =
-  [ ("/wf/list", ["wf", "list"]),
+  [ ("/wf/inspect/counts", ["wf", "inspect", "counts"]),
+    ("/wf/inspect/counts?workflow_name=approval", ["wf", "inspect", "counts", "--workflow-name", "approval"]),
+    ("/wf/list", ["wf", "list"]),
     ("/timer/pending/list?limit=1", ["timer", "pending", "list", "--limit", "1"]),
     ("/shard/list", ["shard", "list"]),
     ("/timer/stuck/list?min_age=0s", ["timer", "stuck", "list", "--min-age", "0s"]),

@@ -1,0 +1,158 @@
+diff --git a/keiro-ops-http/bench/InspectionClients.hs b/keiro-ops-http/bench/InspectionClients.hs
+index b7a94cb4..822d57ce 100644
+--- a/keiro-ops-http/bench/InspectionClients.hs
++++ b/keiro-ops-http/bench/InspectionClients.hs
+@@ -25,0 +26,3 @@ runClients :: [String] -> IO ()
++runClients [portArg, clientsArg, _, secondsArg, mode]
++  | mode `elem` ["wf-counts", "wf-counts-many"] =
++      runCountClients (read portArg) (read clientsArg) (read secondsArg)
+@@ -216,0 +220,53 @@ runProjectionClients port clients seconds feed = do
++
++-- Fixed one-second ticks; all eight clients start aligned to exercise admission.
++-- Keep raw outcomes on stderr in the controller's retained leg log.
++runCountClients :: Int -> Int -> Int -> IO ()
++runCountClients port clients seconds =
++  bracket (HTTP.newManager HTTP.defaultManagerSettings {HTTP.managerConnCount = clients}) HTTP.closeManager $ \manager -> do
++    counters <- newIORef Map.empty
++    go <- newEmptyMVar
++    let count key = atomicModifyIORef' counters (\m -> (Map.insertWith (+) key (1 :: Int) m, ()))
++        names = ["", "?workflow_name=seed-common", "?workflow_name=seed-rare", "?workflow_name=absent"]
++        fetch index = do
++          request <- HTTP.parseRequest ("http://127.0.0.1:" <> show port <> "/keiro/wf/inspect/counts" <> if clients == 1 then "" else names !! (index `mod` 4))
++          result <- try (HTTP.httpLbs request manager) :: IO (Either HTTP.HttpException (HTTP.Response Lazy.ByteString))
++          case result of
++            Left err -> count ("exception:" <> show err)
++            Right response -> do
++              let code = statusCode (HTTP.responseStatus response)
++              count ("http_" <> show code)
++              whenSuccess code (HTTP.responseBody response)
++        whenSuccess code raw =
++          if code /= 200
++            then pure ()
++            else case Aeson.eitherDecode raw of
++              Right (Object fields)
++                | Just (Object counts) <- KeyMap.lookup "counts" fields,
++                  Just (String _) <- KeyMap.lookup "observed_at" fields,
++                  KeyMap.size counts == 7,
++                  all (\key -> case KeyMap.lookup key counts of Just (Number n) -> n >= 0 && fromInteger (round n) == n; _ -> False) ["running", "retrying", "sleeping", "awaiting", "completed", "cancelled", "failed"] ->
++                    pure ()
++              _ -> fail "invalid workflow counts response"
++        worker index = do
++          readMVar go
++          forM_ [1 .. seconds] $ \second -> withAsync (threadDelay 1000000) $ \tick -> do
++            fetch index
++            unless (second == seconds) (wait tick)
++    bracket (forM [0 .. clients - 1] (async . worker)) (mapM_ cancel) $ \tasks -> do
++      putStrLn "ready"
++      hFlush stdout
++      instruction <- getLine
++      unless (instruction == "go") (fail "missing measurement control")
++      putMVar go ()
++      finished <- timeout ((seconds + 5) * 1000000) (mapConcurrently_ wait tasks)
++      unless (finished == Just ()) (fail "lost count polling schedule")
++    recovery <- HTTP.parseRequest ("http://127.0.0.1:" <> show port <> "/keiro/wf/inspect/counts") >>= (\request -> HTTP.httpLbs request manager)
++    unless (statusCode (HTTP.responseStatus recovery) == 200) (fail "count admission did not recover")
++    outcomes <- readIORef counters
++    hPutStrLn stderr ("workflow count outcomes: " <> show outcomes)
++    let good = Map.findWithDefault 0 "http_200" outcomes
++        bad = sum (Map.elems outcomes) - good
++    unless (good > 0 && good + bad == clients * seconds) (fail "count workload disappeared")
++    unless (clients /= 1 || bad == 0) (fail "single count client failed")
++    unless (all (\key -> key `elem` ["http_200", "http_503"]) (Map.keys outcomes)) (fail "unexpected count failure")
++    Char8.putStrLn (encode (good, bad))
+diff --git a/keiro-ops-http/bench/InspectionInterference.hs b/keiro-ops-http/bench/InspectionInterference.hs
+index 2df0562c..03045856 100644
+--- a/keiro-ops-http/bench/InspectionInterference.hs
++++ b/keiro-ops-http/bench/InspectionInterference.hs
+@@ -118,0 +119,3 @@ benchmark = do
++  workflowRows <- maybe 100000 read <$> lookupEnv "KEIRO_INSPECTION_WORKFLOW_ROWS"
++  countsWorkload <- (== Just "1") <$> lookupEnv "KEIRO_COUNTS_WORKLOAD"
++  unless (workflowRows > 0 && duration > 0) (fail "positive fixture size and duration required")
+@@ -125 +128,6 @@ benchmark = do
+-        execute url "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) SELECT 'seed-'||n,'seed-'||(n%31),'running' FROM generate_series(1,100000) n; ANALYZE keiro.keiro_workflows"
++        execute
++          url
++          ( if countsWorkload
++              then "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status,attempts,wake_after,completed_at) SELECT 'seed-'||n,CASE WHEN n%997=0 THEN 'seed-rare' WHEN n%10<>0 THEN 'seed-common' ELSE 'seed-'||(n%31) END,CASE n%7 WHEN 0 THEN 'running' WHEN 1 THEN 'running' WHEN 2 THEN 'suspended' WHEN 3 THEN 'suspended' WHEN 4 THEN 'completed' WHEN 5 THEN 'cancelled' ELSE 'failed' END,CASE WHEN n%7=1 THEN 2 ELSE 0 END,CASE WHEN n%7=2 THEN '2100-01-01'::timestamptz END,CASE WHEN n%7>=4 THEN now() END FROM generate_series(1," <> number workflowRows <> ") n; ANALYZE keiro.keiro_workflows"
++              else "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) SELECT 'seed-'||n,'seed-'||(n%31),'running' FROM generate_series(1," <> number workflowRows <> ") n; ANALYZE keiro.keiro_workflows"
++          )
+@@ -141 +149 @@ benchmark = do
+-          forM_ [1 .. 50] $ \n -> operation store ("warm-" <> number n) >> pure ()
++          forM_ [1 .. 50] $ \n -> operation countsWorkload store ("warm-" <> number n) >> pure ()
+@@ -158 +166 @@ benchmark = do
+-                  (schedule, claim, resume, timer, allocation) <- operation store ("measured-" <> Text.justifyRight 9 '0' (number (sampleCount - n)))
++                  (schedule, claim, resume, timer, allocation) <- operation countsWorkload store ("measured-" <> Text.justifyRight 9 '0' (number n))
+@@ -162 +170,9 @@ benchmark = do
+-              Nothing -> forM [1 .. sampleCount] measured
++              Nothing -> case offeredRate of
++                Just _ -> forM [1 .. sampleCount] measured
++                Nothing -> do
++                  let loop n acc = do
++                        now <- getMonotonicTimeNSec
++                        if now >= started + fromIntegral duration * 1000000000
++                          then pure (reverse acc)
++                          else do sample <- measured n; loop (n + 1) (sample : acc)
++                  loop 1 []
+@@ -198 +214,2 @@ benchmark = do
+-              percentile p = if null durations then Nothing else Just (sort durations !! min (sampleCount - 1) (floor (p * fromIntegral sampleCount)))
++              completedCount = if retentionSeconds == Nothing then length samples else sampleCount
++              percentile p = if null durations then Nothing else Just (sort durations !! min (completedCount - 1) (floor (p * fromIntegral completedCount)))
+@@ -200 +217 @@ benchmark = do
+-              artifact = object ["resources_after_clients" .= resourcesAfter, "trial" .= trial, "retention_seconds" .= retentionSeconds, "lifecycle_before" .= lifecycleBefore, "lifecycle_after" .= lifecycleAfter, "mode" .= mode, "views" .= views, "clients" .= clients, "poll_success" .= pollSuccess, "poll_failure" .= pollFailure, "writer_thread_allocated_bytes_per_operation" .= (if null samples then Nothing else Just (sum [allocated | (_, _, _, _, _, allocated) <- samples] / fromIntegral sampleCount)), "allocated_bytes" .= (statsAfter.allocated_bytes - statsBefore.allocated_bytes), "cpu_ns" .= (statsAfter.cpu_ns - statsBefore.cpu_ns), "settings" .= (settings :: Value), "offered_ops_per_second" .= offeredRate, "elapsed_seconds" .= elapsed, "client_cleanup_seconds" .= cleanupSeconds, "minor_and_major_gcs" .= (statsAfter.gcs - statsBefore.gcs), "major_gcs" .= (statsAfter.major_gcs - statsBefore.major_gcs), "gc_cpu_ns" .= (statsAfter.gc_cpu_ns - statsBefore.gc_cpu_ns), "gc_elapsed_ns" .= (statsAfter.gc_elapsed_ns - statsBefore.gc_elapsed_ns), "throughput" .= (fromIntegral sampleCount / elapsed), "p50_us" .= percentile 0.5, "p95_us" .= percentile 0.95, "p99_us" .= percentile 0.99, "before" .= before, "after" .= after, "samples_wait_schedule_claim_resume_timer_us_writer_bytes" .= samples]
++              artifact = object ["workflow_rows" .= workflowRows, "counts_workload" .= countsWorkload, "measurement_seconds" .= duration, "completed_operations" .= completedCount, "resources_after_clients" .= resourcesAfter, "trial" .= trial, "retention_seconds" .= retentionSeconds, "lifecycle_before" .= lifecycleBefore, "lifecycle_after" .= lifecycleAfter, "mode" .= mode, "views" .= views, "clients" .= clients, "poll_success" .= pollSuccess, "poll_failure" .= pollFailure, "writer_thread_allocated_bytes_per_operation" .= (if null samples then Nothing else Just (sum [allocated | (_, _, _, _, _, allocated) <- samples] / fromIntegral completedCount)), "allocated_bytes" .= (statsAfter.allocated_bytes - statsBefore.allocated_bytes), "cpu_ns" .= (statsAfter.cpu_ns - statsBefore.cpu_ns), "settings" .= (settings :: Value), "offered_ops_per_second" .= offeredRate, "elapsed_seconds" .= elapsed, "client_cleanup_seconds" .= cleanupSeconds, "minor_and_major_gcs" .= (statsAfter.gcs - statsBefore.gcs), "major_gcs" .= (statsAfter.major_gcs - statsBefore.major_gcs), "gc_cpu_ns" .= (statsAfter.gc_cpu_ns - statsBefore.gc_cpu_ns), "gc_elapsed_ns" .= (statsAfter.gc_elapsed_ns - statsBefore.gc_elapsed_ns), "throughput" .= (fromIntegral completedCount / elapsed), "p50_us" .= percentile 0.5, "p95_us" .= percentile 0.95, "p99_us" .= percentile 0.99, "before" .= before, "after" .= after, "samples_wait_schedule_claim_resume_timer_us_writer_bytes" .= samples]
+@@ -219,2 +236,2 @@ heapSample phase completed = do
+-operation :: KirokuStore -> Text -> IO (Double, Double, Double, Double, Double)
+-operation store wid = do
++operation :: Bool -> KirokuStore -> Text -> IO (Double, Double, Double, Double, Double)
++operation countsWorkload store wid = do
+@@ -227,0 +245,6 @@ operation store wid = do
++  when countsWorkload $ do
++    crash <- checked (runTransaction (Instance.recordCrashTx wid "index-evidence" "benchmark retry"))
++    unless (crash == Just 1) (fail "missing retry transition")
++    checked (Instance.resetInstanceAttempts name identity)
++    checked (Instance.markInstanceSuspendedAwaiting name identity 0 "benchmark-await")
++    checked (runTransaction (Instance.upsertInstanceTx wid "index-evidence" 0 Instance.WfRunning Nothing))
+@@ -333 +356 @@ inspectionModes :: [Text]
+-inspectionModes = ["disabled", "idle", "active-shared", "active-distinct", "slow-reader", "churn", "pm-types-idle", "pm-types", "pm-types-many-idle", "pm-types-many", "projection-idle", "projection-poll", "projection-feed"]
++inspectionModes = ["disabled", "idle", "active-shared", "active-distinct", "slow-reader", "churn", "pm-types-idle", "pm-types", "pm-types-many-idle", "pm-types-many", "projection-idle", "projection-poll", "projection-feed", "wf-counts", "wf-counts-many"]
+@@ -340,0 +364,2 @@ pollingShape = \case
++  "wf-counts" -> (0, 1)
++  "wf-counts-many" -> (0, 8)
+diff --git a/keiro-ops/src/Keiro/Ops/Workflow.hs b/keiro-ops/src/Keiro/Ops/Workflow.hs
+index c496e5b8..37cefef2 100644
+--- a/keiro-ops/src/Keiro/Ops/Workflow.hs
++++ b/keiro-ops/src/Keiro/Ops/Workflow.hs
+@@ -124,0 +125 @@ data InspectionCommand
++  | InspectCounts !Inspection.WorkflowCountsQuery
+@@ -186,0 +188 @@ inspectionParser =
++        <> command "counts" (info (InspectCounts . Inspection.WorkflowCountsQuery <$> optional (Text.pack <$> strOption (long "workflow-name" <> metavar "NAME"))) (progDesc "Count current instances by status class"))
+@@ -315,0 +318 @@ runInspection env = \case
++  InspectCounts query -> runAction env (Inspection.countWorkflowInstancesByStatus query) (Succeeded . jsonResult . Aeson.toJSON)
+@@ -352,0 +356 @@ validateCommand (Inspect command) = either (Left . inspectionError) Right $ case
++  InspectCounts _ -> Right ()
+diff --git a/keiro/src/Keiro/Workflow/Inspection.hs b/keiro/src/Keiro/Workflow/Inspection.hs
+index 81faa86b..f94a06d6 100644
+--- a/keiro/src/Keiro/Workflow/Inspection.hs
++++ b/keiro/src/Keiro/Workflow/Inspection.hs
+@@ -19,0 +20 @@ module Keiro.Workflow.Inspection
++    countWorkflowInstancesByStatus,
+@@ -76,0 +78,12 @@ maxInspectionPageSize = 500
++-- | Exact counts of current instance headers, including retained terminal rows.
++-- This scans the selected population in one database snapshot. Direct callers
++-- must configure their own statement deadline; the read changes no settings.
++countWorkflowInstancesByStatus :: (Store :> es) => WorkflowCountsQuery -> Eff es WorkflowCounts
++countWorkflowInstancesByStatus = Instance.inspectionInstanceCounts
++
++instance ToJSON WorkflowStatusCounts where
++  toJSON c = object ["running" .= c.running, "retrying" .= c.retrying, "sleeping" .= c.sleeping, "awaiting" .= c.awaiting, "completed" .= c.completed, "cancelled" .= c.cancelled, "failed" .= c.failed]
++
++instance ToJSON WorkflowCounts where
++  toJSON result = object ["observed_at" .= result.observedAt, "counts" .= result.counts]
++
+diff --git a/keiro/src/Keiro/Workflow/Instance.hs b/keiro/src/Keiro/Workflow/Instance.hs
+index 0a3bad4b..28f50bf7 100644
+--- a/keiro/src/Keiro/Workflow/Instance.hs
++++ b/keiro/src/Keiro/Workflow/Instance.hs
+@@ -925 +925 @@ classPredicate = \case
+--- | Prototype exact current-header counts in a single snapshot. The caller
++-- | Exact current-header counts in a single snapshot. The caller

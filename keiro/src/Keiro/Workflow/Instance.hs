@@ -922,7 +922,7 @@ classPredicate = \case
   ClassCancelled -> "status = 'cancelled'"
   ClassFailed -> "status = 'failed'"
 
--- | Prototype exact current-header counts in a single snapshot. The caller
+-- | Exact current-header counts in a single snapshot. The caller
 -- owns statement/deadline policy, as with other direct inspection reads.
 inspectionInstanceCounts :: (Store :> es) => WorkflowCountsQuery -> Eff es WorkflowCounts
 inspectionInstanceCounts query = runTransaction (Tx.statement () statement)

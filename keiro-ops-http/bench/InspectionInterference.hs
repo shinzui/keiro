@@ -116,13 +116,21 @@ benchmark = do
   let duration = maybe (maybe 20 id (configuredSeconds >>= readMaybe)) id retentionSeconds
       sampleCount = maybe 1000 (* duration) offeredRate
       modes = maybe ["disabled"] (const selectedModes) offeredRate
+  workflowRows <- maybe 100000 read <$> lookupEnv "KEIRO_INSPECTION_WORKFLOW_ROWS"
+  countsWorkload <- (== Just "1") <$> lookupEnv "KEIRO_COUNTS_WORKLOAD"
+  unless (workflowRows > 0 && duration > 0) (fail "positive fixture size and duration required")
   enabled <- getRTSStatsEnabled
   unless enabled (fail "run with +RTS -T")
   createDirectoryIfMissing True output
   withMigratedBenchmarkSuite $ \fixture ->
     forM_ [1 .. trialCount] $ \trial ->
       forM_ modes $ \mode -> withFreshDatabase fixture $ \url -> do
-        execute url "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) SELECT 'seed-'||n,'seed-'||(n%31),'running' FROM generate_series(1,100000) n; ANALYZE keiro.keiro_workflows"
+        execute
+          url
+          ( if countsWorkload
+              then "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status,attempts,wake_after,completed_at) SELECT 'seed-'||n,CASE WHEN n%997=0 THEN 'seed-rare' WHEN n%10<>0 THEN 'seed-common' ELSE 'seed-'||(n%31) END,CASE n%7 WHEN 0 THEN 'running' WHEN 1 THEN 'running' WHEN 2 THEN 'suspended' WHEN 3 THEN 'suspended' WHEN 4 THEN 'completed' WHEN 5 THEN 'cancelled' ELSE 'failed' END,CASE WHEN n%7=1 THEN 2 ELSE 0 END,CASE WHEN n%7=2 THEN '2100-01-01'::timestamptz END,CASE WHEN n%7>=4 THEN now() END FROM generate_series(1," <> number workflowRows <> ") n; ANALYZE keiro.keiro_workflows"
+              else "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) SELECT 'seed-'||n,'seed-'||(n%31),'running' FROM generate_series(1," <> number workflowRows <> ") n; ANALYZE keiro.keiro_workflows"
+          )
         execute url "UPDATE keiro.keiro_workflows SET last_error=repeat('x',65536) WHERE workflow_id=(SELECT workflow_id FROM keiro.keiro_workflows WHERE workflow_name='seed-0' ORDER BY workflow_id LIMIT 1)"
         execute url "INSERT INTO keiro.keiro_timers(timer_id,process_manager_name,correlation_id,fire_at,payload,status) SELECT ('00000000-0000-0000-0000-'||lpad(n::text,12,'0'))::uuid,'seed-timer','corr-'||(n%100),'2100-01-01'::timestamptz+n*interval '1 second',CASE WHEN n=2 THEN to_jsonb(repeat('x',65536)) ELSE jsonb_build_object('n',n) END,CASE WHEN n%4=0 THEN 'fired' WHEN n%8=1 THEN 'firing' ELSE 'scheduled' END FROM generate_series(1,100000) n; ANALYZE keiro.keiro_timers"
         when ("projection-" `Text.isPrefixOf` mode) $ do
@@ -138,7 +146,7 @@ benchmark = do
           -- Both package sets execute this same explicit checkpoint; normal
           -- durable settings and autovacuum stay enabled during measurement.
           use store (Session.script "CHECKPOINT")
-          forM_ [1 .. 50] $ \n -> operation store ("warm-" <> number n) >> pure ()
+          forM_ [1 .. 50] $ \n -> operation countsWorkload store ("warm-" <> number n) >> pure ()
           lifecycleBefore <- if retentionSeconds /= Nothing then Just <$> heapSample "mounted-before-pollers" 0 else pure Nothing
           ((samples, statsBefore, started, before, writerFinished), pollSuccess, pollFailure) <- withPollers app mode duration $ \startPolling -> do
             -- Let warm writer notifications settle in every mode, including
@@ -155,11 +163,19 @@ benchmark = do
                   let due = maybe now (\rate -> started + fromIntegral (n - 1) * div 1000000000 (fromIntegral rate)) offeredRate
                   when (due > now) (threadDelay (fromIntegral (div (due - now) 1000)))
                   admitted <- getMonotonicTimeNSec
-                  (schedule, claim, resume, timer, allocation) <- operation store ("measured-" <> Text.justifyRight 9 '0' (number (sampleCount - n)))
+                  (schedule, claim, resume, timer, allocation) <- operation countsWorkload store ("measured-" <> Text.justifyRight 9 '0' (number n))
                   let waiting = if offeredRate /= Nothing && admitted > due then fromIntegral (admitted - due) / 1000 else 0
                   pure (waiting, schedule, claim, resume, timer, allocation)
             samples <- case retentionSeconds of
-              Nothing -> forM [1 .. sampleCount] measured
+              Nothing -> case offeredRate of
+                Just _ -> forM [1 .. sampleCount] measured
+                Nothing -> do
+                  let loop n acc = do
+                        now <- getMonotonicTimeNSec
+                        if now >= started + fromIntegral duration * 1000000000
+                          then pure (reverse acc)
+                          else do sample <- measured n; loop (n + 1) (sample : acc)
+                  loop 1 []
               Just _ -> withFile (output </> (show trial <> "-" <> Text.unpack mode <> "-heap.jsonl")) WriteMode $ \handle -> do
                 let emit phase n = do
                       value <- heapSample phase n
@@ -195,9 +211,10 @@ benchmark = do
           let elapsed = fromIntegral (writerFinished - started) / 1e9 :: Double
               cleanupSeconds = fromIntegral (finished - writerFinished) / 1e9 :: Double
               durations = map (\(q, a, b, c, d, _) -> q + a + b + c + d) samples
-              percentile p = if null durations then Nothing else Just (sort durations !! min (sampleCount - 1) (floor (p * fromIntegral sampleCount)))
+              completedCount = if retentionSeconds == Nothing then length samples else sampleCount
+              percentile p = if null durations then Nothing else Just (sort durations !! min (completedCount - 1) (floor (p * fromIntegral completedCount)))
               (views, clients) = pollingShape mode
-              artifact = object ["resources_after_clients" .= resourcesAfter, "trial" .= trial, "retention_seconds" .= retentionSeconds, "lifecycle_before" .= lifecycleBefore, "lifecycle_after" .= lifecycleAfter, "mode" .= mode, "views" .= views, "clients" .= clients, "poll_success" .= pollSuccess, "poll_failure" .= pollFailure, "writer_thread_allocated_bytes_per_operation" .= (if null samples then Nothing else Just (sum [allocated | (_, _, _, _, _, allocated) <- samples] / fromIntegral sampleCount)), "allocated_bytes" .= (statsAfter.allocated_bytes - statsBefore.allocated_bytes), "cpu_ns" .= (statsAfter.cpu_ns - statsBefore.cpu_ns), "settings" .= (settings :: Value), "offered_ops_per_second" .= offeredRate, "elapsed_seconds" .= elapsed, "client_cleanup_seconds" .= cleanupSeconds, "minor_and_major_gcs" .= (statsAfter.gcs - statsBefore.gcs), "major_gcs" .= (statsAfter.major_gcs - statsBefore.major_gcs), "gc_cpu_ns" .= (statsAfter.gc_cpu_ns - statsBefore.gc_cpu_ns), "gc_elapsed_ns" .= (statsAfter.gc_elapsed_ns - statsBefore.gc_elapsed_ns), "throughput" .= (fromIntegral sampleCount / elapsed), "p50_us" .= percentile 0.5, "p95_us" .= percentile 0.95, "p99_us" .= percentile 0.99, "before" .= before, "after" .= after, "samples_wait_schedule_claim_resume_timer_us_writer_bytes" .= samples]
+              artifact = object ["workflow_rows" .= workflowRows, "counts_workload" .= countsWorkload, "measurement_seconds" .= duration, "completed_operations" .= completedCount, "resources_after_clients" .= resourcesAfter, "trial" .= trial, "retention_seconds" .= retentionSeconds, "lifecycle_before" .= lifecycleBefore, "lifecycle_after" .= lifecycleAfter, "mode" .= mode, "views" .= views, "clients" .= clients, "poll_success" .= pollSuccess, "poll_failure" .= pollFailure, "writer_thread_allocated_bytes_per_operation" .= (if null samples then Nothing else Just (sum [allocated | (_, _, _, _, _, allocated) <- samples] / fromIntegral completedCount)), "allocated_bytes" .= (statsAfter.allocated_bytes - statsBefore.allocated_bytes), "cpu_ns" .= (statsAfter.cpu_ns - statsBefore.cpu_ns), "settings" .= (settings :: Value), "offered_ops_per_second" .= offeredRate, "elapsed_seconds" .= elapsed, "client_cleanup_seconds" .= cleanupSeconds, "minor_and_major_gcs" .= (statsAfter.gcs - statsBefore.gcs), "major_gcs" .= (statsAfter.major_gcs - statsBefore.major_gcs), "gc_cpu_ns" .= (statsAfter.gc_cpu_ns - statsBefore.gc_cpu_ns), "gc_elapsed_ns" .= (statsAfter.gc_elapsed_ns - statsBefore.gc_elapsed_ns), "throughput" .= (fromIntegral completedCount / elapsed), "p50_us" .= percentile 0.5, "p95_us" .= percentile 0.95, "p99_us" .= percentile 0.99, "before" .= before, "after" .= after, "samples_wait_schedule_claim_resume_timer_us_writer_bytes" .= samples]
               path = output </> (show trial <> "-" <> Text.unpack mode <> ".json")
           Lazy.writeFile path (Aeson.encode artifact)
           putStrLn path
@@ -216,8 +233,8 @@ heapSample phase completed = do
 
 -- Returns schedule/claim/resume phase durations. The resume performs a real
 -- named step and completion, then releases its advance lease.
-operation :: KirokuStore -> Text -> IO (Double, Double, Double, Double, Double)
-operation store wid = do
+operation :: Bool -> KirokuStore -> Text -> IO (Double, Double, Double, Double, Double)
+operation countsWorkload store wid = do
   let name = WorkflowName "index-evidence"
       identity = WorkflowId wid
       checked :: Eff '[Store, Error StoreError, IOE] a -> IO a
@@ -225,6 +242,12 @@ operation store wid = do
   allocationBefore <- getAllocationCounter
   a <- getMonotonicTimeNSec
   checked (runTransaction (Instance.upsertInstanceTx wid "index-evidence" 0 Instance.WfRunning Nothing))
+  when countsWorkload $ do
+    crash <- checked (runTransaction (Instance.recordCrashTx wid "index-evidence" "benchmark retry"))
+    unless (crash == Just 1) (fail "missing retry transition")
+    checked (Instance.resetInstanceAttempts name identity)
+    checked (Instance.markInstanceSuspendedAwaiting name identity 0 "benchmark-await")
+    checked (runTransaction (Instance.upsertInstanceTx wid "index-evidence" 0 Instance.WfRunning Nothing))
   b <- getMonotonicTimeNSec
   claim <- checked (Instance.claimInstance "index-evidence" 30 name identity)
   unless (claim == Instance.ClaimAcquired) (fail (show claim))
@@ -330,7 +353,7 @@ withPollers mount mode seconds action = case mount of
     (views, clients) = pollingShape mode
 
 inspectionModes :: [Text]
-inspectionModes = ["disabled", "idle", "active-shared", "active-distinct", "slow-reader", "churn", "pm-types-idle", "pm-types", "pm-types-many-idle", "pm-types-many", "projection-idle", "projection-poll", "projection-feed"]
+inspectionModes = ["disabled", "idle", "active-shared", "active-distinct", "slow-reader", "churn", "pm-types-idle", "pm-types", "pm-types-many-idle", "pm-types-many", "projection-idle", "projection-poll", "projection-feed", "wf-counts", "wf-counts-many"]
 
 #endif
 
@@ -338,6 +361,8 @@ inspectionModes = ["disabled", "idle", "active-shared", "active-distinct", "slow
 -- poll all views, while many clients can share one view's authoritative route.
 pollingShape :: Text -> (Int, Int)
 pollingShape = \case
+  "wf-counts" -> (0, 1)
+  "wf-counts-many" -> (0, 8)
   "projection-poll" -> (0, 4)
   "projection-feed" -> (1, 4)
   "pm-types" -> (0, 4)

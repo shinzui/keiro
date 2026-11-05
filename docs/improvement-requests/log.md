@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-05
+* **Update**: IR-58: user approved planner-selected scans with no schema changes; library/CLI/HTTP and Jitsurei parity pass, runtime evidence pending (plan 325).
 * **Update**: IR-58 implementation started under ExecPlan 325: retain exact-count prototype and million-row feasibility evidence; index-backed acceptance and transport/runtime measurements remain open.
 * **Completion**: IR-57 completed under ExecPlan 327: feeding\_subscriptions beside the frozen status row, with paired SQL and fifty-trial writer evidence including fixed idle replication and reported uncertainty.
 

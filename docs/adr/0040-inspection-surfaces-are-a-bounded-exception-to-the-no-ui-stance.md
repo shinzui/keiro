@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Inspection surfaces are a bounded exception to the no-UI stance
 description: Keiro sanctions state browsing and safe operator actions over supported library APIs in opt-in sister packages, while metrics and traces stay in OpenTelemetry and no keiro package grows a dashboard, a server process, or a parallel observability stack.
-timestamp: 2026-10-25T04:48:05Z
+timestamp: 2026-11-05T13:08:06Z
 docId: ADR-40
 status: Accepted
 date: 2026-09-10
@@ -167,6 +167,16 @@ writer index is authorized by that design decision. The implemented query and cu
 Both first and deep unfiltered pages examine 21 candidates for a 20-row page.
 The corresponding sparse/absent-filter captures show why this guarantee cannot
 be extended to arbitrary filters.
+
+Exact workflow counts may use normal planner-selected sequential scans.
+The user-approved design preserves the existing schema and ordinary writer paths;
+it adds no counting index, generated column, trigger, counter, cache or refresh
+job. Output size does not bound database work: an absent-name read can still
+scan the population. The shared admission and SQL/handler deadlines apply, and
+direct library/CLI callers own their deadline policy. Query timing alone does not
+establish runtime isolation; matched unpaced capacity and active HTTP polling
+measurements remain required. [Plan 325](../plans/325-count-workflow-instances-by-status-class-without-runtime-performance-regressions.md)
+retains the query and runtime evidence and records its supported envelope.
 
 ## Consequences
 

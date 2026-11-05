@@ -6,6 +6,10 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+### New Features
+
+- Add `countWorkflowInstancesByStatus` with exact seven-class current-header counts, optional exact-name filtering and canonical 64-bit JSON, without schema or writer changes.
+
 ### Breaking Changes
 
 - `ProjectionStatusPage.items` now contains `ProjectionGroupStatusRow`; access the

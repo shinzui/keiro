@@ -1,0 +1,9 @@
+Read-only comparison against quiescent existing jitsurei; two headers and no other sessions before comparison.
+keiro-ops-http: listening on 127.0.0.1:19092 (mutations disabled)
+['python3', 'scripts/check-workflow-counts.py', 'http://127.0.0.1:19092']
+PASS: counts equal all listed instances {"awaiting": 0, "cancelled": 0, "completed": 2, "failed": 0, "retrying": 0, "running": 0, "sleeping": 0}
+['python3', 'scripts/check-workflow-counts.py', 'http://127.0.0.1:19092', '--workflow-name', 'order-fulfillment']
+PASS: counts equal all listed instances {"awaiting": 0, "cancelled": 0, "completed": 1, "failed": 0, "retrying": 0, "running": 0, "sleeping": 0}
+['python3', 'scripts/check-workflow-counts.py', 'http://127.0.0.1:19092', '--workflow-name', 'absent-workflow']
+PASS: counts equal all listed instances {"awaiting": 0, "cancelled": 0, "completed": 0, "failed": 0, "retrying": 0, "running": 0, "sleeping": 0}
+{"counts":{"awaiting":0,"cancelled":0,"completed":2,"failed":0,"retrying":0,"running":0,"sleeping":0},"observed_at":"2026-11-05T13:06:23.983813Z"}
