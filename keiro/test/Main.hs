@@ -6,6 +6,7 @@ where
 import CatalogEvolutionSpec qualified
 import CatalogOperationsSpec qualified
 import CatalogSpec qualified
+import ConsumerInspectionSpec qualified
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5, contrazip6)
 import Control.Concurrent (forkIO, killThread, threadDelay)
 import Control.Concurrent.MVar (MVar, modifyMVar, newEmptyMVar, newMVar, putMVar, readMVar, takeMVar, tryPutMVar)
@@ -454,6 +455,7 @@ import "hasql-transaction" Hasql.Transaction qualified as Tx
 main :: IO ()
 main = withMigratedSuite $ \fixture -> hspec $ do
   WorkflowInspectionSpec.spec fixture
+  ConsumerInspectionSpec.spec
   CatalogSpec.spec
   PreimageSpec.spec
   CatalogEvolutionSpec.spec fixture

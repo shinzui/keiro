@@ -68,7 +68,8 @@ import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Types
-  ( EventId (..),
+  ( CategoryName (..),
+    EventId (..),
     GlobalPosition (..),
     RecordedEvent (..),
     StreamId (..),
@@ -328,6 +329,13 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
       [wid | (wid, _) <- unfinished, wid `elem` ourIds] `shouldBe` []
 
   describe "Jitsurei read model" $ around (withFreshResourceStoreWith fixture (withProjectionSchema jitsureiProjectionSchema)) $ do
+    it "derives category consumers from the real catalog" $ \_ -> do
+      let groups = CatalogOperations.projectionConsumers orderCatalogOperations (CategoryName "order")
+      map (.groupId) groups `shouldBe` [orderReportingGroupId]
+      map (map (.handlerName) . (.bindings)) groups
+        `shouldBe` [["jitsurei-order-audit-async", "jitsurei-order-summary-inline"]]
+      CatalogOperations.projectionConsumers orderCatalogOperations (CategoryName "creditLimit") `shouldBe` []
+
     it "names the durable subscriptions feeding the reporting group" $ \(_store, StoreRunner runner) -> do
       Right () <- runner initializeJitsureiTables
       Right (Right page) <- runner (listProjectionGroupStatusesPage (ProjectionStatusPageRequest 100 Nothing))

@@ -71,6 +71,7 @@ library
     Keiro.Inbox.Schema
     Keiro.Inbox.Types
     Keiro.Inspection.Aggregate
+    Keiro.Inspection.Consumers
     Keiro.Inspection.Cursor
     Keiro.Outbox
     Keiro.Outbox.Identity
@@ -203,6 +204,7 @@ test-suite keiro-test
     CatalogOperationsSpec
     CatalogSpec
     Compatibility.ReadModel011
+    ConsumerInspectionSpec
     ExternalReadSpec
     GroupRebuildSpec
     GuardedCatalogExample

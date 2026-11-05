@@ -7,7 +7,7 @@ tags: [keiro, read-models, projections, reference]
 generated:
   by: process:codex-cli
   at: 2026-10-11T21:11:39Z
-timestamp: 2026-11-04T18:20:00Z
+timestamp: 2026-11-05T15:15:59Z
 ---
 
 # Read Models And Projections
@@ -734,6 +734,21 @@ destructive status without touching PostgreSQL. `previewRegisteredGroupRebuild`
 adds a read-only lifecycle lookup and an explicit
 `registeredSliceMatches` result but does not acquire a fence or create a run.
 Run inspection rejects a run recorded for a different current group slice.
+
+`projectionConsumers operations (CategoryName "order")` is also pure. It joins actual
+projection handlers to source declarations and subscription metadata, grouping only matching
+bindings by rebuild-group identity. Inline bindings carry no subscription; all-stream
+bindings match every category. Unused sources/subscriptions create no consumers. The
+lookup changes no catalog fingerprint, validation, registration, or event path.
+
+Embedded hosts expose this through `projection consumers --category order` and
+`GET /projection/consumers?category=order`; Jitsurei reports `jitsurei-order-reporting`.
+A valid unmatched category returns an empty list within the reported coverage. Other
+durable consumers require the explicit `AppHooks.durableConsumers` registry, constructed
+from actual input configuration rather than manager journal categories. Join `group_id`
+to existing projection status, and subscription names to position reads. Discovery alone
+does not establish availability or progress. See [Category consumers](operations.md#category-consumers)
+for paging, source scopes, coverage flags, and the HTTP budgets.
 
 The effectful actions include `previewCatalogAdoption`, `adoptCatalogGroups`,
 `startGroupRebuild`, `inspectGroupRebuild`, `resumeGroupRebuild`, and

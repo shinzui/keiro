@@ -130,7 +130,7 @@ commandParser hooks =
           (info (Pgmq <$> Pgmq.commandParser) (progDesc "Inspect and operate Keiro PGMQ queues"))
         <> command
           "projection"
-          (info (Projection <$> Projection.commandParser) (progDesc "Inspect and operate projection dedup state"))
+          (info (Projection <$> Projection.commandParserWithConsumers (isJust hooks.projectionCatalog || isJust hooks.durableConsumers)) (progDesc "Inspect and operate projection dedup state"))
         <> command
           "shard"
           (info (Shard <$> Shard.commandParser) (progDesc "Inspect and operate sharded-subscription ownership"))
@@ -240,6 +240,13 @@ runCommandWithReadEncoding encode cache hooks env command = case command of
     pure $ case encoded of
       Nothing -> (InspectionFailed "inspection_result_too_large" "encoded result exceeds the host limit; narrow the read", Nothing)
       Just body -> (Succeeded result, Just body)
+  Projection (Projection.Consumers options) -> case Projection.prepareConsumers hooks.projectionCatalog hooks.durableConsumers options of
+    Left (code, detail) -> pure (InspectionFailed code detail, Nothing)
+    Right (result, encoding) -> do
+      encoded <- encode encoding
+      pure $ case encoded of
+        Nothing -> (InspectionFailed "inspection_result_too_large" "encoded result exceeds the host limit; narrow the read", Nothing)
+        Just body -> (Succeeded result, Just body)
   _ -> runCommandWithHeaderCache cache hooks env command
 
 -- | Execute a parsed command after schema verification. Front ends must use
@@ -253,7 +260,7 @@ runCommand hooks env = \case
   Outbox outboxCommand -> Outbox.runCommand env outboxCommand
   Inbox inboxCommand -> Inbox.runCommand env inboxCommand
   Pgmq pgmqCommand -> Pgmq.runCommand env pgmqCommand
-  Projection projectionCommand -> Projection.runCommand env projectionCommand
+  Projection projectionCommand -> Projection.runCommandWithConsumers hooks.projectionCatalog hooks.durableConsumers env projectionCommand
   Shard shardCommand -> Shard.runCommand env shardCommand
   Snapshot snapshotCommand -> Snapshot.runCommand env snapshotCommand
   Stream streamCommand -> Stream.runCommand env streamCommand

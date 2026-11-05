@@ -2,6 +2,7 @@
 
 module Main (main) where
 
+import CategoryConsumersSpec qualified
 import Control.Exception (bracket)
 import Control.Monad (forM_)
 import Data.Aeson (object, (.=))
@@ -95,6 +96,7 @@ embeddedHooks =
       replayAudit = Just (OpsReplayAudit.OpsAuditConfig []),
       projectionCatalog = Just emptyCatalogOperations,
       aggregates = Just Map.empty,
+      durableConsumers = Nothing,
       processManagers = Just Map.empty
     }
 
@@ -117,6 +119,7 @@ isParseFailure _ = False
 
 spec :: Fixture -> Spec
 spec fixture = do
+  CategoryConsumersSpec.spec fixture
   ReactionInspectionSpec.spec fixture
   describe "embedded command tree" do
     it "omits code-dependent commands from the standalone tree" do

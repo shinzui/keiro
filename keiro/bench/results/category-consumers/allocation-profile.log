@@ -1,0 +1,4 @@
+registry: 1000 consumers, 2000 bindings; construction_allocated=8471608
+maximum_page: 500 items, 1000 bindings; encoded_bytes=222221; direct_path_allocated=6515320
+canonical_value_and_generic_encoding_allocated=8996336
+direct/canonical parity: passed

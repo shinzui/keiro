@@ -29,6 +29,8 @@ import Hasql.Pool.Observation qualified as Observation
 import Hasql.Session qualified as Session
 import Hasql.Statement qualified as Statement
 import Jitsurei.Inspection (jitsureiProcessManagerInspectors)
+import Jitsurei.ReadModels (orderCatalogOperations)
+import Keiro.Inspection.Consumers qualified as Consumers
 import Keiro.Ops qualified as Ops
 import Keiro.Ops.Env
 import Keiro.Ops.Http
@@ -205,6 +207,103 @@ spec fixture = do
         runStoreIO store (Snapshot.lookupSnapshotRow appended.streamId) `shouldReturn` Right before
         runStoreIO store (getStream (StreamName "snapshot-large")) `shouldReturn` Right streamBefore
 
+    describe "category consumers HTTP" $ do
+      it "serves the real catalog before checkpoints and agrees with the CLI" $ \store -> do
+        let mounted = Ops.emptyAppHooks {Ops.projectionCatalog = Just orderCatalogOperations}
+        app <- opsApplication defaultOpsHttpConfig mounted store
+        forM_ ["order", "creditLimit", "ir59-unused-category"] $ \category -> do
+          response <- call app methodGet ("/projection/consumers?category=" <> category) ""
+          simpleStatus response `shouldBe` status200
+          case parseArguments mounted ["projection", "consumers", "--category", category] of
+            Parsed command -> do
+              Succeeded result <- Ops.runCommand mounted (OpsEnv store Json False [] False) command
+              body response `shouldBe` result.jsonValue
+            _ -> expectationFailure "CLI consumers did not parse"
+          field "coverage" (body response) `shouldBe` Just (object ["projection_catalog" .= True, "durable_subscribers" .= False])
+        matching <- call app methodGet "/projection/consumers?category=order" ""
+        let source = object ["kind" .= ("category" :: Text), "category" .= ("order" :: Text)]
+            binding projection handler subscription =
+              object
+                [ "projection_id" .= (projection :: Text),
+                  "handler_name" .= (handler :: Text),
+                  "delivery" .= (if isJust subscription then "subscription" else "inline" :: Text),
+                  "subscription_id" .= subscription,
+                  "subscription_name" .= (subscription :: Maybe Text),
+                  "source" .= source
+                ]
+            expectedGroup =
+              object
+                [ "kind" .= ("projection_group" :: Text),
+                  "name" .= ("jitsurei-order-reporting" :: Text),
+                  "group_id" .= ("jitsurei-order-reporting" :: Text),
+                  "bindings" .= [binding "jitsurei-order-audit" "jitsurei-order-audit-async" (Just "jitsurei-order-audit-subscription"), binding "jitsurei-order-summary" "jitsurei-order-summary-inline" Nothing]
+                ]
+        field "items" (body matching) `shouldBe` Just (Aeson.toJSON [expectedGroup])
+        empty <- call app methodGet "/projection/consumers?category=creditLimit" ""
+        field "items" (body empty) `shouldBe` Just (Aeson.toJSON ([] :: [Value]))
+        post <- call app methodPost "/projection/consumers?category=order" ""
+        assertError post status405 "method_not_allowed"
+      it "validates categories, limits and cursors and distinguishes absent and empty hooks" $ \store -> do
+        absent <- opsApplication defaultOpsHttpConfig Ops.emptyAppHooks store
+        refused <- call absent methodGet "/projection/consumers?category=order" ""
+        assertError refused status400 "invalid_request"
+        Right registry <- pure (Consumers.durableConsumerRegistry [])
+        app <- opsApplication defaultOpsHttpConfig Ops.emptyAppHooks {Ops.durableConsumers = Just registry} store
+        empty <- call app methodGet "/projection/consumers?category=order" ""
+        simpleStatus empty `shouldBe` status200
+        field "items" (body empty) `shouldBe` Just (Aeson.toJSON ([] :: [Value]))
+        forM_ [("category=", "invalid_category"), ("category=%20order", "invalid_category"), ("category=order&limit=501", "invalid_page_size"), ("category=order&after=bad", "invalid_cursor")] $ \(query, code) -> do
+          invalid <- call app methodGet ("/projection/consumers?" <> query) ""
+          assertError invalid status400 code
+        oversizedCursor <- call app methodGet ("/projection/consumers?category=order&after=" <> Text.replicate 4097 "a") ""
+        simpleStatus oversizedCursor `shouldBe` status400
+        zero <- call app methodGet "/projection/consumers?category=order&limit=0" ""
+        simpleStatus zero `shouldBe` status400
+      it "pages durable bindings through HTTP and rejects cross-category or stale continuations" $ \store -> do
+        let description name = Consumers.DurableConsumerDescription Consumers.DurableSubscriber name ("sub-" <> name) Consumers.AllCategories
+        Right registry <- pure (Consumers.durableConsumerRegistry (map description ["a", "b", "c"]))
+        let mounted = Ops.emptyAppHooks {Ops.durableConsumers = Just registry}
+        app <- opsApplication defaultOpsHttpConfig mounted store
+        first <- call app methodGet "/projection/consumers?category=order&limit=1" ""
+        simpleStatus first `shouldBe` status200
+        Just (String cursor) <- pure (field "next_cursor" (body first))
+        second <- call app methodGet ("/projection/consumers?category=order&limit=1&after=" <> cursor) ""
+        simpleStatus second `shouldBe` status200
+        body second `shouldNotBe` body first
+        wrong <- call app methodGet ("/projection/consumers?category=invoice&after=" <> cursor) ""
+        assertError wrong status400 "invalid_cursor"
+        Right changed <- pure (Consumers.durableConsumerRegistry [description "changed"])
+        changedApp <- opsApplication defaultOpsHttpConfig mounted {Ops.durableConsumers = Just changed} store
+        stale <- call changedApp methodGet ("/projection/consumers?category=order&after=" <> cursor) ""
+        assertError stale status400 "invalid_cursor"
+      it "orders combined sources and paginates across the source boundary" $ \store -> do
+        Right registry <-
+          pure
+            ( Consumers.durableConsumerRegistry
+                [ Consumers.DurableConsumerDescription Consumers.ProcessManagerConsumer "fulfillment" "orders" (Consumers.ExactCategory "order"),
+                  Consumers.DurableConsumerDescription Consumers.DurableSubscriber "audit" "auditor" Consumers.AllCategories
+                ]
+            )
+        let mounted = Ops.emptyAppHooks {Ops.durableConsumers = Just registry, Ops.projectionCatalog = Just orderCatalogOperations}
+        app <- opsApplication defaultOpsHttpConfig mounted store
+        first <- call app methodGet "/projection/consumers?category=order&limit=2" ""
+        simpleStatus first `shouldBe` status200
+        Just (Array items) <- pure (field "items" (body first))
+        map (field "kind") (foldr (:) [] items) `shouldBe` [Just (String "durable_subscriber"), Just (String "process_manager")]
+        Just (String cursor) <- pure (field "next_cursor" (body first))
+        last <- call app methodGet ("/projection/consumers?category=order&limit=2&after=" <> cursor) ""
+        Just (Array rest) <- pure (field "items" (body last))
+        map (field "kind") (foldr (:) [] rest) `shouldBe` [Just (String "projection_group")]
+        field "next_cursor" (body last) `shouldBe` Nothing
+      it "bounds an oversized single item without truncating bindings and keeps schema refusal" $ \store -> do
+        let description = Consumers.DurableConsumerDescription Consumers.DurableSubscriber "large" (Text.replicate 1100000 "s") (Consumers.ExactCategory "order")
+        Right registry <- pure (Consumers.durableConsumerRegistry [description])
+        app <- opsApplication defaultOpsHttpConfig Ops.emptyAppHooks {Ops.durableConsumers = Just registry} store
+        oversized <- call app methodGet "/projection/consumers?category=order&limit=1" ""
+        assertError oversized status413 "inspection_result_too_large"
+        Right () <- Pool.use store.pool (Session.script "ALTER TABLE keiro.keiro_timers ADD COLUMN consumers_drift text")
+        drift <- call app methodGet "/projection/consumers?category=order" ""
+        assertError drift status409 "schema_drift"
     describe "mounted process-manager discovery" $ do
       it "serves Jitsurei metadata without journal instances and agrees with the parsed CLI" $ \store -> do
         let mounted = Ops.emptyAppHooks {Ops.processManagers = Just jitsureiProcessManagerInspectors}
@@ -675,6 +774,30 @@ spec fixture = do
                 Just (Right bytes) | Char8.null bytes -> pure ()
                 _ -> expectationFailure ("stopped runner retained an idle connection on iteration " <> show iteration)
   around (withFreshDatabase fixture) $ do
+    describe "category consumers database boundary" $ do
+      it "rejects invalid input before borrowing and uses only ordinary schema verification" $ \url ->
+        withStore (defaultConnectionSettings url) $ \store -> do
+          calls <- newIORef (0 :: Int)
+          let observe = \case Observation.ConnectionObservation _ Observation.InUseConnectionStatus -> atomicModifyIORef' calls (\n -> (n + 1, ())); _ -> pure ()
+              settings = (defaultConnectionSettings url) {observationHandler = Just observe}
+              mounted = Ops.emptyAppHooks {Ops.projectionCatalog = Just orderCatalogOperations, Ops.aggregates = Just Map.empty}
+          withOpsInspectionPool defaultInspectionLimits settings $ \pool -> do
+            app <- opsApplication defaultOpsHttpConfig mounted store {pool}
+            before <- readIORef calls
+            invalid <- call app methodGet "/projection/consumers?category=order&after=bad" ""
+            assertError invalid status400 "invalid_cursor"
+            readIORef calls `shouldReturn` before
+            aggregate <- call app methodGet "/aggregate/types" ""
+            simpleStatus aggregate `shouldBe` status200
+            afterAggregate <- readIORef calls
+            consumers <- call app methodGet "/projection/consumers?category=order" ""
+            simpleStatus consumers `shouldBe` status200
+            afterConsumers <- readIORef calls
+            afterConsumers - afterAggregate `shouldBe` afterAggregate - before
+            afterAggregate - before `shouldBe` 1
+            repeated <- call app methodGet "/projection/consumers?category=order" ""
+            body repeated `shouldBe` body consumers
+            readIORef calls `shouldReturn` (afterConsumers + 1)
     describe "process-manager discovery database boundary" $ do
       it "performs only aggregate-types verifier work and rejects parsing before borrowing" $ \url ->
         withStore (defaultConnectionSettings url) $ \store -> do

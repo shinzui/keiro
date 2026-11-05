@@ -2,7 +2,7 @@
 type: Runbook
 title: Serve Keiro Ops Over HTTP
 description: Mount bounded HTTP inspection and explicitly confirmed operator actions using the supported Keiro command tree.
-timestamp: 2026-11-05T14:17:25Z
+timestamp: 2026-11-05T15:15:59Z
 docId: DOC-30
 tags: [keiro, operations, http, inspection]
 generated:
@@ -169,7 +169,18 @@ In a second terminal, request the catalogs and fulfillment instances:
 ```bash
 curl -fsS http://127.0.0.1:9092/aggregate/types
 curl -fsS 'http://127.0.0.1:9092/pm/list?name=jitsurei-fulfillment&limit=5'
+curl -fsS 'http://127.0.0.1:9092/projection/consumers?category=order'
+curl -fsS 'http://127.0.0.1:9092/projection/consumers?category=creditLimit'
 ```
+
+The category lookup reports `jitsurei-order-reporting` for `order` and an empty array
+for `creditLimit`, even before checkpoints exist. It reports mounted configuration,
+with projection coverage available and durable-input coverage unavailable. The default
+page size is 100 (1..500); echo `next_cursor` as `after` for the same category and inventory.
+Each request retains ordinary admission, schema verification, deadline, and byte limits.
+The standalone server has no catalog/input hooks and omits this route. See
+[Category consumers](../user/operations.md#category-consumers) for source scopes,
+coverage, explicit durable declarations, status joining, and measurement limits.
 
 The aggregate `items` are named `credit-limit`, `incident`, and `order`. The process-manager
 `items` include a `correlation_id` beginning with `demo-`. Run `read -r ID`,

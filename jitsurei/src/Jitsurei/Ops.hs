@@ -26,6 +26,7 @@ jitsureiOpsHooks metrics =
       replayAudit = Just (Ops.OpsAuditConfig replayAuditTargets),
       projectionCatalog = Just orderCatalogOperations,
       aggregates = Just jitsureiAggregateInspectors,
+      durableConsumers = Nothing,
       processManagers = Just jitsureiProcessManagerInspectors
     }
 

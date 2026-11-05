@@ -13,6 +13,7 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### New Features
 
+- Add pure `projectionConsumers` and validated `Keiro.Inspection.Consumers` durable-input metadata with exact, all-category and namespace scopes.
 - Add `countWorkflowInstancesByStatus` with exact seven-class current-header counts, optional exact-name filtering and canonical 64-bit JSON, without schema or writer changes.
 - Bounded projection status items carry registered `feedingSubscriptions` beside the
   unchanged v1 row; complete-list and lookup APIs retain their contracts.

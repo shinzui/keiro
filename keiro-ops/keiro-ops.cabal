@@ -110,7 +110,10 @@ test-suite keiro-ops-test
     -rtsopts
     -with-rtsopts=-N
 
-  other-modules: ReactionInspectionSpec
+  other-modules:
+    CategoryConsumersSpec
+    ReactionInspectionSpec
+
   build-tool-depends: keiro-ops:keiro-ops
   build-depends:
     aeson >=2.2 && <2.3,

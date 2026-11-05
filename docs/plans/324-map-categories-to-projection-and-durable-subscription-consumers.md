@@ -21,6 +21,11 @@ provenance:
       at: 2026-11-05T04:50:49Z
       mode: "update"
       note: "Performance review: additive library scope, provisional limit ceiling set by an allocation profile, stricter Milestone 4 rule and comparisons, three code-fact corrections"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-05T15:06:36Z
+      mode: "implement"
+      note: "Implement category consumers with focused performance verification and no DSL conformance, per user scope"
 ---
 
 # Map categories to projection and durable subscription consumers
@@ -61,18 +66,27 @@ and `jitsurei-ops-http`.
 ## Progress
 
 
-- [ ] Milestone 1: A pure library lookup derives accurate projection-group consumers from the validated catalog, including Jitsurei's order group and empty results.
-- [ ] Milestone 2: Explicit durable subscriber descriptions support process-manager and other subscriber inputs without inferring journal categories or changing worker execution.
-- [ ] Milestone 3: Embedded CLI and HTTP expose the same bounded lookup, with Jitsurei, coverage, cursor, and missing-hook behavior verified.
-- [ ] Milestone 4: Document the interface, verify runtime isolation and repository checks, and distill the durable architecture decision.
+- [x] (2026-11-05) Milestone 1: Pure catalog lookup returns Jitsurei's reporting group and empty unmatched results; core tests cover exact/all sources, mixed delivery, fan-in, unused declarations and deterministic ordering.
+- [x] (2026-11-05) Milestone 2: Validated immutable durable-input registry and optional hook support exact/all/namespace scopes, conflicts, duplicates and shared subscriptions; all four pure registry examples pass.
+- [x] (2026-11-05) Milestone 3: Embedded CLI and HTTP share the bounded lookup and direct encoding. Full ops (61), HTTP (64), Jitsurei (29), and listening-host (5) suites pass, including coverage, continuation, schema-only SQL, oversized items and real-catalog parity.
+- [x] (2026-11-05) Milestone 4: Documented the interface and explicit-input configuration; 956 relevant examples and four executable builds pass in Nix. Focused allocation/parity evidence, additive library diff, strict ADR/docs validation and repository policies pass. ADR-28 and ADR-53 retain the architecture; DSL conformance and statistical interference testing were excluded by user scope.
 
-No implementation has started. The plan was revalidated on 2026-11-04 against
+Implementation baseline: `5897f222` (2026-11-05), clean working tree. The plan was revalidated on 2026-11-04 against
 `9da47eb7b4bcfcc1a98fc25a6b2b14aabb797a77`; the Revision Notes at the end list what changed.
 A performance review the same day, against the same commit, tightened the design
 constraints and Milestone 4's measurement; the second Revision Note lists those changes.
 
 
 ## Surprises & Discoveries
+
+2026-11-05: The focused store-free maximum page contains 500 items and 1,000
+bindings: 222,221 encoded bytes, 6,515,320 direct-path allocated bytes. Forcing the
+unused canonical JSON and generic encoding afterward allocates another 8,996,336
+bytes. The canonical envelope remains deferred on the direct path. These measurements
+confirm that item count alone does not describe response cost; the HTTP byte cap remains
+necessary for an item with many bindings. This is allocation evidence, not a writer
+interference result. Source, command and raw output are retained in
+`keiro/bench/results/category-consumers/`.
 
 
 2026-11-04 (revalidation): Plan 323 showed that a metadata-only read is not free once it is
@@ -142,6 +156,16 @@ allocating the item array on the HTTP path only because it builds that object la
 
 
 ## Decision Log
+
+2026-11-05: Retain the standard 1..500 item range. The focused maximum-page probe
+encodes 500 consumers with 1,000 bindings to 222,221 bytes and allocates 6,515,320
+bytes on the direct path. The HTTP byte cap remains authoritative for large bindings;
+no polling-rate or writer-isolation claim follows from this store-free measurement.
+This supersedes the historical 2.78 MB tuning/cohort decision under the user's scope.
+
+2026-11-05: The user explicitly requested focused performance testing and no DSL
+conformance. Milestone 4 and its commands/acceptance now use a store-free probe and
+relevant functional/policy checks, without claiming statistical writer isolation.
 
 
 2026-10-26: Choose the request's reverse-lookup alternative, backed by the mounted catalog.
@@ -242,6 +266,43 @@ list adds mount-only and total-effect comparisons, computed from the same trials
 ## Outcomes & Retrospective
 
 
+Completed 2026-11-05 under the user's revised verification scope. The real Jitsurei
+catalog reports `jitsurei-order-reporting` for `order` through the pure library,
+embedded CLI runner, actual WAI application and listening HTTP host. `creditLimit`
+and unmatched categories return successful empty arrays within declared coverage.
+Explicit durable descriptions support exact categories, all categories and literal
+namespace scopes without changing workers or inferring journal inputs. Continuations
+bind category and inventory; missing hooks and explicitly empty sources remain distinct.
+
+The final Nix-shell command passed every relevant suite:
+
+```bash
+nix develop -c cabal test keiro-test keiro-ops-test keiro-ops-http-test jitsurei-test jitsurei-ops-http-test --test-show-details=direct
+```
+
+Results: core 797, ops 61, HTTP 64, Jitsurei 29 and listening host 5 examples; 956
+examples total, zero failures. The four affected executables also build:
+
+```bash
+nix develop -c cabal build keiro-ops:exe:keiro-ops keiro-ops-http:exe:keiro-ops-http jitsurei:exe:jitsurei-demo jitsurei-ops-http:exe:jitsurei-ops-http
+```
+
+Strict ADR, user documentation, guide and improvement-request validation pass.
+Terminology, record migration, extension and Keiro re-export policies pass, as do
+formatting and whitespace checks. No DSL conformance or combined `just verify`
+was run, as requested. Test fixtures prove no handler store access and one ordinary
+HTTP schema-verification session, direct/canonical JSON parity, fresh encoding without
+header-cache use, and HTTP refusal of an oversized single item.
+
+[Focused performance evidence](../../keiro/bench/results/category-consumers/README.md)
+retains the reproducible store-free probe and output. The 500-item ceiling is retained;
+no statistical writer-isolation or polling-rate guarantee is claimed. The library diff
+adds only new declarations in Operations.hs and the new Consumers.hs, with no changed
+existing definitions. Catalog validation, fingerprints, event paths, the frozen SQL
+status relation, existing status encoders and production HTTP transport source remain
+unchanged. ADR-28 and ADR-53 now record the compiled-input and transport boundaries,
+completing the durable-context distillation. IR-59 is completed with this resolution.
+
 
 ## Context and Orientation
 
@@ -267,7 +328,7 @@ is complete: it moved Jitsurei's hook record into the library and added the runn
 [Plan 329](329-expose-keiki-register-values-through-the-existing-inspection-apis.md) is
 complete: it mounted a `credit-limit` aggregate whose stream category is `creditLimit`.
 [Plan 325](325-count-workflow-instances-by-status-class-without-runtime-performance-regressions.md)
-is planned and unimplemented; it will measure with the same benchmark harness.
+has since completed at implementation baseline `5897f222`, including exact workflow counts and dedicated inspection-pool parallelism limits. That work does not change this lookup's metadata boundary.
 
 `keiro/src/Keiro/Projection/Catalog.hs` owns the validated, typed configuration. Its
 `CatalogInventory` contains `InventoryProjection` records with a group ID, source ID, and
@@ -500,9 +561,7 @@ Do not add a fictional durable worker to Jitsurei just to populate its example.
 
 In `keiro-ops/src/Keiro/Ops/Projection.hs`, add a `Consumers` command accepting required
 `--category`, optional `--limit` (default 100, range 1 through 500), and optional `--after`.
-The ceiling of 500 is provisional: Milestone 4's profile may lower it before the paired
-measurement, and whatever value ships is the one the parser, the validation, the tests, and
-the documentation all state.
+The shipped ceiling is 500, consistent in parser validation, tests and documentation. The user-scoped focused profile checks the maximum page without a paired measurement campaign.
 Validate nonempty category text without trimming/case folding, and reject surrounding
 whitespace. Classify it read-only. Preserve the current exported parser and runner as
 no-hook wrappers if adding hook-aware variants is needed, so existing direct callers of
@@ -634,148 +693,23 @@ metadata/log conventions when changing those files. Add `[Unreleased]` entries t
 `AppHooks` field breaks applications that construct the record directly instead of updating
 `emptyAppHooks`; record it under Breaking Changes in the `keiro-ops` changelog.
 
-Measure the new route with the existing harness
-`keiro-ops-http/bench/InspectionInterference.hs` and its client module
-`keiro-ops-http/bench/InspectionClients.hs`. The harness now has thirteen modes: `disabled`,
-`idle`, `active-shared`, `active-distinct`, `slow-reader`, `churn`, `pm-types-idle`,
-`pm-types`, `pm-types-many-idle`, `pm-types-many`, `projection-idle`, `projection-poll`, and
-`projection-feed`. Preserve every existing meaning, and do not change the writer loop or its
-clocks. Add four modes. `consumers-idle` and `consumers` mount the Jitsurei catalog plus a
-small durable registry; `consumers-many-idle` and `consumers-many` mount the Jitsurei
-catalog plus a deterministic large registry. The large registry has at least 1,000
-consumers that all declare one shared category, each through two subscriptions so that
-every item carries two bindings, plus consumers in distinct categories, one namespace
-scope, and one all-categories scope. A request for the shared category at the limit ceiling
-therefore returns a full page, and so does its continuation. Each idle mode mounts
-the same hooks with no polling, so each active mode has a matched control. Never begin a
-mode name with `projection-`, because the harness seeds 10,000 projection groups for that
-prefix. Extend `withMount`, `inspectionModes`, and `pollingShape` in the harness, and add an
-HTTP-only client branch, with no WebSocket startup, that warms the route and then polls
-from four staggered clients at one request per second each. The client validates item
-counts and fields, counts successes separately from refusals, and fails if the intended
-load disappears.
+The user's 2026-11-05 implementation instruction supersedes the earlier performance
+campaign: do not overengineer performance testing and skip DSL conformance. Keep direct
+encoding, one lookup per request, page-before-rendering, and additive runtime library changes.
+Use a small store-free allocation check with a deterministic 1,000-consumer registry,
+including two bindings per consumer, to check the maximum page and direct/canonical parity.
+Retain its command and results, and document its limits without claiming writer-isolation
+statistics. No detached baseline, harness modes, pairing scripts, bootstrap analysis, or
+retention campaign is required. Keep the 500-item ceiling unless this focused check shows
+an actionable problem. Existing HTTP admission, schema, deadline, and byte-cap tests remain
+required; include an oversized single binding response.
 
-Fix the request mix before sampling. In `consumers`, the clients rotate through a matching
-category, an absent category, and a `limit=1` first page followed by its continuation. In
-`consumers-many`, every request returns a full page at the ceiling: the clients alternate
-between the shared category's first page and its continuation. That puts the heaviest
-response the fixture can produce on every poll, as plan 323 polled its whole list. Both
-mixes use fewer than 64 distinct request targets, so parsing is served from the parse cache
-after warm-up. Say so in the evidence: a client that cycles through more targets than that
-pays one command parse per request, which this cohort does not measure.
+Run the focused core, ops, HTTP, Jitsurei, and listening-host suites in Nix, build their
+components, and run relevant repository policy and documentation checks. Do not run
+`just verify` or all-component builds that pull in DSL conformance. The library diff must
+remain additive in Operations.hs plus the new Consumers.hs; existing event paths gain no
+work. This focused verification completes this milestone under the user's revised scope.
 
-Measure in two steps. A store-free allocation profile comes first, because it is cheap and
-decides the limit ceiling. The paired writer cohort comes second and decides acceptance.
-The profile matters because response size sets the cost of a polled read (see Surprises &
-Discoveries): plan 323 polled 2.78 MB of allocation per response without a supported
-regression and 4.72 MB with one, and the lookup and paging are small beside the encoding.
-
-Add the profile to the harness executable as a leading `--profile-consumers` argument,
-dispatched in `main` beside `--clients` and inside the same
-`#ifndef KEIRO_INSPECTION_BASELINE` guard. Implement it in a new module
-`keiro-ops-http/bench/ConsumersProfile.hs`, listed under the benchmark's `other-modules` in
-`keiro-ops-http/keiro-ops-http.cabal`. It opens no database and reuses the hooks the four
-modes mount, so it measures the same fixture the cohort polls. For each request the clients
-send, it prints the encoded byte count and the bytes allocated (read from
-`getAllocationCounter` after `performMajorGC`, as
-`keiro/bench/results/pm-types/ProfileAllocation.hs` does) by four pieces of work: the
-lookup and paging alone; the direct encoding; the complete direct path, which is the
-prepare function from Milestone 3 followed by `encodeBoundedEncoding` at the default
-1,048,576-byte cap; and, for contrast, the fully forced canonical value with generic
-encoding. It also prints what constructing the large registry allocates and the
-post-major-collection live bytes the registry retains, which together are the mount cost.
-It exits nonzero if the direct bytes do not decode to the canonical value. If a generated
-multi-group catalog is practical, add it here, where it needs no database; the cohort does
-not require one.
-
-Read three things from the profile, and record its output under
-`keiro/bench/results/category-consumers/`. The complete direct path should allocate about
-what the lookup and the direct encoding allocate together; a visible excess means the
-canonical value is being built on the HTTP path, which Milestone 3 forbids. The lookup and
-paging should be a small share of the complete path; if they are not, hoist the
-category-independent work to construction as the Decision Log allows. And the heaviest
-request, the full page at the ceiling in `consumers-many`, must allocate no more than
-2.78 MB on the complete direct path. If it allocates more, lower the `--limit` ceiling
-until it does not, record the chosen ceiling and the profile in the Decision Log, and only
-then start the cohort. This chooses a design parameter; it is not acceptance.
-
-Before editing runtime code, preserve the implementation baseline in its own detached
-worktree and build its harness binary. The baseline has no successful
-`/projection/consumers` route, so never compare its error responses with candidate
-successes as equivalent work. Choose one fixed offered writer rate from a measured
-saturation control and keep it for every comparison. Run at least five alternating pairs,
-twenty seconds per trial, with `+RTS -N2 -T -RTS`. Drive the pairs with a new script
-`scripts/measure-category-consumers.sh`, modeled on `scripts/measure-pm-types.sh`, and
-analyze them with a new `scripts/analyze-category-consumers.py`, modeled on
-`scripts/analyze-pm-types.py` with its own fixed seed. The analyzer reports each metric's
-paired median ratio and a fixed-seed 95% percentile bootstrap interval over whole trial
-pairs, never over individual writer operations.
-
-Each pair runs twelve trials and yields ten comparisons. `disabled` and `capacity` compare
-the baseline with the candidate with nothing mounted, paced and at saturation, and `idle`
-compares them with empty hooks mounted; these three isolate the code change. `same-source`
-runs the baseline's idle mode twice and characterizes noise. `mount` and `mount-many`
-compare the baseline's idle mode with `consumers-idle` and `consumers-many-idle`; they
-isolate what mounting the catalog and the registry costs when nothing is requested.
-`polling` and `polling-many` compare each idle mode with its active mode and isolate
-successful polling. `versus-prechange` and `many-versus-prechange` compare the baseline's
-idle mode with each active mode and give the total effect. Record the fixture cardinality,
-response sizes, request mix, polling cadence, exact source revisions, binary hashes,
-compiler/options, writer rate, and raw results under
-`keiro/bench/results/category-consumers/`. Measure writer-thread allocation per operation,
-throughput, p95/p99 latency, and retained heap after clients stop; do not divide
-combined-process allocation by writer completions and call it writer cost.
-
-The acceptance rule is fixed here, before sampling. For every comparison and each of the
-four writer metrics, a ratio above one means worse (throughput is inverted). An interval
-wholly above one is a supported regression and blocks completion, however small. An
-interval whose upper endpoint is at or above 1.01 cannot exclude a 1% loss: it is
-inconclusive, and it does not complete this milestone either. Only an interval that
-includes or lies below one and ends below 1.01 passes, and the same-source control must
-itself resolve 1% or the cohort resolves nothing. The 1% is a resolution requirement,
-never an allowance. Five pairs is a minimum: at five pairs the bootstrap supports a
-regression only when all five ratios are adverse. When any comparison is inconclusive, run
-a fresh ten-pair cohort on the same binaries at the same rate, keep the first cohort as
-evidence, and decide on the ten-pair cohort alone. If that is still inconclusive, record
-the resolution it achieved beside the same-source spread, stop, and ask the user whether to
-accept at that resolution. If a supported regression survives investigation, remove its
-cause (for a page-size effect, lower the `--limit` ceiling, then repeat the profile and the
-cohort) or stop and ask the user. Do not waive it, and do not complete the milestone on an
-inconclusive interval without the user's decision.
-
-Add a retention run of at least 60 seconds for each active mode. Post-major-collection
-live bytes must level off instead of growing with completed operations, and active threads
-and feed resources must return to their mounted-idle values after the clients leave. The
-parse cache holds at most 64 argument lists, so the expected shape is a plateau reached
-within the run, not zero growth from the first request.
-
-Preserve every trial; failed requests or missed offered load invalidate a comparison. A
-cohort sampled while other builds, tests, or benchmarks were running is diagnostic only:
-plan 327 had to set aside cohorts for that reason, so record what else was running and
-repeat on a quiet machine. Investigate failures instead of declaring a read-only
-implementation isolated. Run benchmarks serially after compilation, and coordinate with
-plan 327's pending quiet-machine repeat and any plan 325 measurements.
-
-The harness cannot observe library paths, because its writer runs workflow and timer
-operations and no projection code. Those paths are protected by scope and checked by diff.
-At completion, `git diff --stat` from the implementation baseline over `keiro/src` must
-list only `keiro/src/Keiro/Projection/Catalog/Operations.hs` and the new
-`keiro/src/Keiro/Inspection/Consumers.hs`, and the `Operations.hs` diff must remove nothing
-outside its import and export lists. If an existing definition had to change, run
-`just bench-regression projection read-model` on a quiet machine in the baseline worktree
-and on the candidate, and record both logs. Those two guards exercise projection
-application and read-model paths against committed baselines with a 25% ceiling, which is
-coarse, so also record why the changed definition is not on a per-event path. The other
-four guards (`producer-identity`, `outbox`, `inbox`, `command`) and `just release-gate`
-measure paths this plan does not touch. A passing gate is never isolation evidence for
-this route.
-
-Acceptance for this milestone is therefore five things, all on the final candidate: the
-profile's three readings hold; no comparison is a supported regression; every comparison
-passes or the user has accepted its recorded resolution; both retention runs level off and
-clean up; and the diff-scope check passes or the two guards were run and recorded.
-
-Run the focused suites, build all components, and pass `just verify` in the Nix shell.
 At completion, follow `agents/skills/exec-plan/ADR.md`: inspect `mori show --full` and the
 profile-governed ADR bundle before writing. Update ADR-28 with the `durableConsumers` hook
 and the compiled consumer-metadata boundary (its closing section records the
@@ -784,11 +718,10 @@ read beside `pm types`, and reference the preserved ADR-35 contract. If a separa
 record is needed, allocate its ID through OKF, never filename counting. Update bundle logs
 and run strict ADR validation.
 
-IR-59 is `proposed` and already links this plan. Following the bundle's current practice
+IR-59 began as `proposed` and already linked this plan. Following the bundle's current practice
 (IR-57 under plan 327 and IR-55 under plan 328), mark it `accepted` with a bundle-log entry
 when implementation begins. Mark it `completed`, with a resolution, only after every
-acceptance in this plan has passed, including measured isolation; functional tests alone do
-not complete it.
+acceptance in this plan has passed, including the user-scoped verification above.
 
 
 ## Concrete Steps
@@ -798,43 +731,17 @@ Run all verification from `/Users/shinzui/Keikaku/bokuno/keiro` through the Nix 
 shell. Always enter the shell from the repository root: its hook places the PostgreSQL data
 directory under the current directory, so entering from a package directory initializes a
 stray cluster there. The focused PostgreSQL suites use repository test-support fixtures, not
-a production database. Establish the baseline and check solver availability before broad DSL
-verification:
+a production database. Establish the baseline and run focused verification:
 
 ```bash
 cd /Users/shinzui/Keikaku/bokuno/keiro
 git status --short
 git rev-parse HEAD
-nix develop -c z3 --version
 nix develop -c cabal test keiro-test keiro-ops-test keiro-ops-http-test jitsurei-test jitsurei-ops-http-test --test-show-details=direct
 ```
 
-Before editing any runtime source, preserve that commit for Milestone 4's controls in a
-detached worktree of its own, and build its harness binary:
-
-```bash
-cd /Users/shinzui/Keikaku/bokuno/keiro
-git worktree add --detach ../keiro-category-consumers-baseline "$(git rev-parse HEAD)"
-cd ../keiro-category-consumers-baseline
-nix develop -c cabal build bench:inspection-interference --enable-benchmarks
-nix develop -c cabal list-bin bench:inspection-interference
-cd ../keiro
-```
-
-Save the printed path. If the worktree already exists, verify its commit and reuse it; never
-reset it. The sibling worktrees `../keiro-pm-types-baseline` and
-`../keiro-feeding-subscriptions-baseline` belong to plans 323 and 327; do not reuse, reset, or
-remove them.
-
-After each corresponding milestone, run the focused suites above. Expect all examples to
-pass, including the newly named `category consumers` groups in the core, ops, HTTP, host, and
-Jitsurei suites. Before final acceptance run:
-
-```bash
-nix develop -c cabal build all --enable-tests --enable-benchmarks
-nix develop -c just verify
-nix develop -c git diff --check
-```
+After implementation, run the focused suites above and relevant repository checks in
+Nix. DSL conformance and `just verify` are excluded by the user's scope.
 
 For a manual check against a disposable local Jitsurei database, initialize the example
 schema with the existing recipe and invoke its already-mounted catalog:
@@ -903,62 +810,8 @@ Both return HTTP 200 with the objects above. The stock database-only `keiro-ops-
 executable intentionally cannot run this lookup: it mounts no application hooks, so the
 route does not exist there.
 
-Run the store-free profile first. It needs no database, and its result fixes the `--limit`
-ceiling before any paired sampling:
-
-```bash
-cd /Users/shinzui/Keikaku/bokuno/keiro
-mkdir -p keiro/bench/results/category-consumers
-nix develop -c cabal build bench:inspection-interference --enable-benchmarks
-candidate_binary="$(nix develop -c cabal list-bin bench:inspection-interference)"
-"$candidate_binary" --profile-consumers +RTS -N2 -T -RTS | tee keiro/bench/results/category-consumers/allocation-profile.log
-```
-
-Expect one line per request shape and piece of work, giving encoded bytes and allocated
-bytes, then the registry's construction allocation and retained live bytes, and a final
-line stating that the direct encoding matches the canonical value. Apply Milestone 4's
-three readings to it. If the full page at the ceiling allocates more than 2.78 MB on the
-complete direct path, lower the ceiling, rebuild, and rerun into a new log file, keeping
-the earlier one.
-
-The added benchmark modes accept the harness's existing named arguments. The harness exits
-with `run with +RTS -T` unless RTS statistics are enabled. These are individual diagnostic
-invocations; final acceptance uses the alternating-pair script, not sequential cohorts:
-
-```bash
-nix develop -c cabal bench inspection-interference --benchmark-options='--output /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/category-consumers/capacity --rate saturation --trials 5 --mode disabled +RTS -N2 -T -RTS'
-nix develop -c cabal bench inspection-interference --benchmark-options='--output /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/category-consumers/idle --rate 100 --trials 1 --mode consumers-idle +RTS -N2 -T -RTS'
-nix develop -c cabal bench inspection-interference --benchmark-options='--output /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/category-consumers/active --rate 100 --trials 1 --mode consumers +RTS -N2 -T -RTS'
-nix develop -c cabal bench inspection-interference --benchmark-options='--output /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/category-consumers/many --rate 100 --trials 1 --mode consumers-many +RTS -N2 -T -RTS'
-nix develop -c env KEIRO_INSPECTION_RETENTION_SECONDS=60 cabal bench inspection-interference --benchmark-options='--output /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/category-consumers/retention --rate 100 --trials 1 --mode consumers +RTS -N2 -T -RTS'
-nix develop -c cabal list-bin bench:inspection-interference
-```
-
-The rate `100` is an initial calibration value, not an acceptance claim; plan 323 fixed 50
-and plan 327 fixed 100 operations per second. Establish a sustainable fixed
-rate from the saturation control, record the chosen value, and use it consistently. The
-absolute artifact path avoids Cabal's package-directory working-directory difference; adjust
-it when using another checkout. Repeat the retention run for `consumers-many`. Then pass the
-baseline and candidate binary paths, a fresh output directory, and the fixed rate to the new
-pairing script, and record its exact invocation and evidence in this plan. Substitute the
-two paths printed by `cabal list-bin` in each checkout and the rate chosen above:
-
-```bash
-cd /Users/shinzui/Keikaku/bokuno/keiro
-nix develop -c scripts/measure-category-consumers.sh BASELINE_BINARY CANDIDATE_BINARY keiro/bench/results/category-consumers/matched-v1 RATE
-```
-
-The script prints one line per comparison and metric with the median ratio, the interval,
-and `passed`, `inconclusive`, or `regression`, and exits nonzero unless every line passed.
-If any line is inconclusive, run the ten-pair cohort into a fresh directory and decide on
-it alone:
-
-```bash
-nix develop -c env CATEGORY_CONSUMERS_PAIRS=10 scripts/measure-category-consumers.sh BASELINE_BINARY CANDIDATE_BINARY keiro/bench/results/category-consumers/matched-v2 RATE
-```
-
-The output must contain successful polls and complete writer samples for all trials; timing
-evidence is absent at this revision.
+Run the focused store-free profile recorded in Outcomes & Retrospective; it measures
+metadata lookup and bounded encoding only, without a database or writer workload.
 
 Finally, check that the library change is additive. Use the implementation baseline commit
 recorded at the start:
@@ -1010,19 +863,12 @@ an oversized response, through both the HTTP application and the CLI runner. Exi
 projection status SQL schema, status JSON including `feeding_subscriptions`, catalog
 fingerprint, and mutation classification tests must continue to pass. The HTTP body, produced by direct encoding, must
 decode to the same JSON as the runner's canonical result. The new library and ops lookup
-need no store queries; HTTP still performs its established schema verification. Functional
-tests alone do not satisfy Milestone 4's measured isolation, and neither does a passing
-`just verify` or release gate: Milestone 4 states the measurement rule that does.
+need no store queries; HTTP still performs its established schema verification. Milestone 4 records the focused performance verification requested by the user.
 
-Performance acceptance has one check per path the change could affect. For applications
-that never run the lookup, the diff shows the library change is additive, so no existing
-code path gained work. For the HTTP route, the store-free profile shows what one response
-allocates and fixes the limit ceiling, and the paired cohort shows no supported writer
-regression in throughput, p95, p99, or writer-thread allocation for mounting alone, for
-polling, and for both together. An inconclusive interval is not a pass; it needs the
-ten-pair cohort and, failing that, the user's decision. For retained memory, both retention
-runs level off and release their resources. The documented operating envelope is exactly
-what was measured: the response size and polling rate of the heaviest mode.
+Performance verification follows the user-scoped Milestone 4: additive library diff,
+page-before-rendering, direct/canonical parity, and one focused store-free allocation check.
+This is not a statistical writer-isolation guarantee. Earlier paired-cohort requirements
+and DSL checks are superseded by the 2026-11-05 instruction.
 
 
 ## Idempotence and Recovery
@@ -1034,17 +880,13 @@ the current configuration. Querying a nonexistent category does not create data.
 the new hook configuration disables discovery without changing workers or stored state.
 
 Do not reset or clean the shared working tree. Tests use disposable fixtures; manual example
-setup uses only a local development database. The detached baseline worktree and its build
-outputs are measurement artifacts: reuse the worktree if it already exists at the recorded
-commit, and remove it only after the evidence is committed. Use a fresh output directory for
-every benchmark run and keep failing evidence beside successful reruns. A source change
-after measurement invalidates the affected evidence and requires a rerun on the final
-candidate. Lowering the `--limit` ceiling is such a change: repeat the profile and the
-cohort afterward, and keep the earlier logs. If a required check fails, record the failure
-and investigate it within the relevant milestone. Do not change schema-drift policy, weaken
-resource limits, or select dependency bounds merely to make the lookup tests pass. Check Z3
-inside Nix before diagnosing symbolic tests. Commit cohesive implementation changes on the
-current branch with both `ExecPlan:` and `Intention:` trailers from this document.
+setup uses only a local development database. The focused profile is store-free and retained
+beside its source and reproduction command. Source changes affecting its result require a
+new run; keep the scope of its claims limited to allocation and encoding parity. If a
+required check fails, investigate it within the relevant milestone. Do not change schema
+drift policy, weaken resource limits, or alter dependency bounds to pass these tests.
+DSL conformance is excluded by the user's instruction. Commit cohesive implementation
+changes on the current branch with both `ExecPlan:` and `Intention:` trailers.
 
 
 ## Interfaces and Dependencies
@@ -1074,10 +916,8 @@ direction from ops to runtime, never runtime to ops or HTTP.
 
 Some things stay exactly as they are. `keiro/src/Keiro/Projection/Catalog.hs`,
 `ValidatedProjectionCatalog`, `validateProjectionCatalog`, and every existing definition in
-`Operations.hs` are untouched, and `keiro-ops-http/src` needs no edit. The measurement adds
-one benchmark module, `keiro-ops-http/bench/ConsumersProfile.hs`, and two scripts,
-`scripts/measure-category-consumers.sh` and `scripts/analyze-category-consumers.py`; the
-existing harness modules gain modes and a client branch but keep their writer loop.
+`Operations.hs` are untouched, and `keiro-ops-http/src` needs no edit. Focused measurement uses a small store-free probe rather than extending the HTTP
+interference harness or adding cohort orchestration scripts.
 
 The existing local `keiro`, `keiro-ops`, `keiro-ops-http`, and `jitsurei` packages provide the
 necessary boundaries. Existing Aeson, text, and containers support data representation; use
@@ -1125,3 +965,5 @@ names the two scripts and the profile module, and states which gate covers which
 Three inaccurate statements were corrected: the lookup is a join over sorted lists, the CLI
 does not call `Ops.validateCommand`, and the canonical value must be built lazily to stay
 off the HTTP path. Milestone scope is unchanged; the acceptance for Milestone 4 is stricter.
+
+2026-11-05: User-directed implementation scope replaces the statistical performance campaign with a focused store-free probe and additive diff review, and excludes DSL conformance and aggregate verification commands that invoke it. Historical performance-review decisions above remain as context and are superseded where inconsistent.

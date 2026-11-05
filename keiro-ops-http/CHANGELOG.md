@@ -4,6 +4,7 @@
 
 ### New Features
 
+- Expose embedded `GET /projection/consumers?category=NAME` through the shared grammar and existing HTTP budgets.
 - Bound dedicated inspection reads to one PostgreSQL backend per query, preserving
   admission/deadline limits and ordinary writer settings.
 - Expose `GET /wf/inspect/counts` through the shared command grammar, schema checks and inspection limits.

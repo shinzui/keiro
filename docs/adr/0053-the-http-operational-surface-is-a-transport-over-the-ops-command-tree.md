@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: The HTTP operational surface is a transport over the ops command tree
 description: HTTP reuses the supported command grammar and handlers with bounded inspection work, schema agreement, and explicit mutation confirmation.
-timestamp: 2026-11-04T14:59:56Z
+timestamp: 2026-11-05T15:15:59Z
 docId: ADR-53
 status: Accepted
 date: 2026-10-20
@@ -151,14 +151,24 @@ runtime isolation evidence are tracked in
 An owning read may supply equivalent canonical JSON and direct Aeson encoding
 through `runCommandWithReadEncoding`. The transport supplies the encoder and owns
 its byte/deadline budget; `encodeBoundedEncoding` uses the same prefix bound and
-strict-body delivery as value encoding. Manager types prepares both forms from
-one on-demand summary list and defers the unused canonical array on the direct
+strict-body delivery as value encoding. Manager types and category consumers prepare both forms from
+one on-demand filtered page/list and defer the unused canonical array on the direct
 path. Every request verifies schema and invokes the bounded encoder again. No
 metadata response or descriptor is inserted into the workflow header cache.
 Other commands retain their existing runner and header-cache behavior. Plan 323's
 first large-catalog cohort measured writer interference from generic JSON-tree
 construction/serialization, so this is a cost reduction within the existing
 resource policy, not an exemption from measured runtime isolation.
+
+Category consumers is a hook-gated metadata read derived from the same CLI grammar,
+including mounts with only durable input metadata and explicitly empty mounts. It performs no handler SQL and
+still pays fresh HTTP schema verification. It uses direct encoding per request, renders
+only the requested page, and does not cache responses. Its response-byte cap also bounds
+single items with many bindings; oversized items fail rather than dropping bindings.
+[Plan 324](../plans/324-map-categories-to-projection-and-durable-subscription-consumers.md)
+records the user's focused performance-verification scope; its store-free measurement
+does not claim a statistical writer-isolation or polling-rate guarantee.
+
 
 ## References
 

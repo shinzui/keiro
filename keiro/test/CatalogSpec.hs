@@ -2,6 +2,7 @@ module CatalogSpec
   ( spec,
     CatalogEvent (..),
     validCatalog,
+    twoSourceCatalog,
     bridgeCatalog,
     bridgeRevisionV1,
     bridgeRevisionV2,

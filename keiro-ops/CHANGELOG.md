@@ -6,8 +6,13 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- `AppHooks` gains `durableConsumers`; direct record constructors must supply it. Updating `emptyAppHooks` remains the preferred embedding pattern.
+
 ### New Features
 
+- Add embedded read-only `projection consumers --category` with coverage flags, matching bindings, bounded inventory-bound pagination and direct encoding.
 - Add read-only `wf inspect counts [--workflow-name NAME]` with the owning library JSON.
 - `projection status --json` items include sorted `feeding_subscriptions` from
   registration metadata, empty for inline-only and unmanaged groups.

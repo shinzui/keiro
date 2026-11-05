@@ -18,6 +18,7 @@ import Keiro.Ops.Aggregate qualified as Aggregate
 import Keiro.Ops.Env qualified as Env
 import Keiro.Ops.Http
 import Keiro.Ops.ProcessManager qualified as PM
+import Keiro.Ops.Projection qualified as Projection
 import Keiro.Ops.Render qualified as Render
 import Keiro.Ops.Snapshot qualified as Snapshot
 import Keiro.Test.Postgres
@@ -60,6 +61,16 @@ main = do
             forM_ ["state", "last_reaction", "waiting_for"] $ \key ->
               field key actualPM `shouldBe` field key (Render.jsonValue shown)
             field "items" (field "pending_timers" actualPM) `shouldBe` Aeson.toJSON ([] :: [Aeson.Value])
+
+        it "serves category consumers from the shared hooks on the listening host" $ \(url, (store, _)) -> do
+          let hooks = jitsureiOpsHooks Nothing
+              env = Env.OpsEnv store Env.Json False [] False
+          withHost (options url defaultOpsHttpConfig) hooks $ \host -> do
+            manager <- Client.newManager Client.defaultManagerSettings
+            forM_ ["order", "creditLimit"] $ \category -> do
+              actual <- requestJson manager host methodGet ("/projection/consumers?category=" <> category) [] status200
+              Render.Succeeded expected <- Ops.runCommand hooks env (Ops.Projection (Projection.Consumers (Projection.ConsumersOptions (TextEncoding.decodeUtf8 (Char8.pack category)) 100 Nothing)))
+              actual `shouldBe` expected.jsonValue
 
         it "serves current registers, snapshot health and raw stored values from the listening host" $ \(url, (store, StoreRunner runner)) -> do
           Right (Right _) <- runner (Command.runCommand defaultRunCommandOptions creditLimitEventStream (creditLimitStream "registers-100") (AdjustCredit (AdjustCreditData 25)))

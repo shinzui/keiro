@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Operator commands wrap supported library APIs and respect schema ownership
 description: Keiro operator commands preserve library invariants, schema ownership, destructive previews, and the standalone-versus-embedded capability boundary.
-timestamp: 2026-11-05T13:08:06Z
+timestamp: 2026-11-05T15:15:59Z
 docId: ADR-28
 status: Accepted
 date: 2026-08-08
@@ -260,3 +260,20 @@ uses the same grammar and encoders. No adapter adds SQL or derives event-store
 identity from private tables. Adding the hook requires applications that build
 AppHooks records directly to supply the optional field; `emptyAppHooks` leaves
 it unmounted.
+
+## Declared category consumers (2026-11-05)
+
+`AppHooks.durableConsumers` optionally mounts a validated, immutable registry of actual
+input subscription descriptions. `projection consumers` is available when this or the
+projection catalog is mounted. The library derives projection bindings from validated
+handler/source/subscription metadata; hosts supply other durable inputs from the same
+configuration used to build their workers. Manager journal categories, checkpoints and
+inspection descriptors cannot establish input scope. Missing sources are unavailable
+coverage, while explicitly empty sources describe an empty set. Namespace matches are
+literal and colon bounded; decoder and worker behavior remain opaque.
+
+Discovery is pure, before registration or events, and never reconciles compiled declarations
+with database cursor authority. Clients join group IDs to existing status and subscription
+names to positions. ADR-35's frozen status relation and `feeding_subscriptions` remain
+unchanged. Bounded continuations bind category and immutable inventory identity. This read
+adds no event-path or catalog-validation work; see [Plan 324](../plans/324-map-categories-to-projection-and-durable-subscription-consumers.md).

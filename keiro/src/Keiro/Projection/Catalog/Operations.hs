@@ -1,9 +1,15 @@
+{-# LANGUAGE OverloadedRecordDot #-}
+
 -- | Operator-neutral inventory and rebuild actions derived from one validated
 -- projection catalog. This module deliberately contains no command parser,
 -- renderer, confirmation policy, or database connection details.
 module Keiro.Projection.Catalog.Operations
   ( ProjectionCatalogOperations,
     projectionCatalogOperations,
+    ProjectionConsumerGroup (..),
+    ProjectionConsumerBinding (..),
+    projectionConsumers,
+    projectionConsumerInventoryIdentity,
     CatalogInventoryReport (..),
     RebuildPreview (..),
     RegisteredRebuildPreview (..),
@@ -56,6 +62,7 @@ import Data.Text qualified as Text
 import Data.Time (DiffTime)
 import Data.UUID qualified as UUID
 import Effectful (Eff, IOE, (:>))
+import Keiro.Inspection.Consumers (ConsumerSource (..), consumerSourceMatches)
 import Keiro.Prelude
 import Keiro.Projection.Catalog
 import Keiro.ReadModel (HeadScope (..))
@@ -122,6 +129,56 @@ newtype ProjectionCatalogOperations = ProjectionCatalogOperations ValidatedProje
 
 projectionCatalogOperations :: ValidatedProjectionCatalog -> ProjectionCatalogOperations
 projectionCatalogOperations = ProjectionCatalogOperations
+
+-- | Matching declarations, grouped by the shared rebuild lifecycle. These
+-- describe source selection, never decoder/handler relevance or worker liveness.
+data ProjectionConsumerGroup = ProjectionConsumerGroup
+  { groupId :: !RebuildGroupId,
+    bindings :: ![ProjectionConsumerBinding]
+  }
+  deriving stock (Eq, Show, Generic)
+
+data ProjectionConsumerBinding = ProjectionConsumerBinding
+  { projectionId :: !ProjectionId,
+    handlerName :: !Text,
+    subscriptionId :: !(Maybe SubscriptionId),
+    subscriptionName :: !(Maybe Text),
+    source :: !ConsumerSource
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+
+projectionConsumerInventoryIdentity :: ProjectionCatalogOperations -> Text
+projectionConsumerInventoryIdentity (ProjectionCatalogOperations catalog) =
+  catalogFingerprintText (Keiro.Projection.Catalog.catalogFingerprint catalog)
+
+projectionConsumers :: ProjectionCatalogOperations -> CategoryName -> [ProjectionConsumerGroup]
+projectionConsumers (ProjectionCatalogOperations catalog) category =
+  [ ProjectionConsumerGroup groupId (Set.toAscList bindings)
+  | (groupId, bindings) <- Map.toAscList grouped
+  ]
+  where
+    inventory = catalogInventory catalog
+    sources = Map.fromList [(source.sourceId, scope source.sourceScope) | source <- inventory.inventorySources]
+    subscriptions = Map.fromList [(subscription.subscriptionId, subscription) | subscription <- inventory.inventorySubscriptions]
+    scope AllStreams = AllCategories
+    scope (CategorySource (CategoryName value)) = ExactCategory value
+    grouped =
+      Map.fromListWith
+        Set.union
+        [ (projection.rebuildGroupId, Set.singleton binding)
+        | projection <- inventory.inventoryProjections,
+          handler <- projection.handlers,
+          Just binding <- [bindingFor projection handler],
+          consumerSourceMatches category binding.source
+        ]
+    bindingFor projection = \case
+      InventoryInlineHandler name -> do
+        source <- Map.lookup projection.sourceId sources
+        pure (ProjectionConsumerBinding projection.projectionId name Nothing Nothing source)
+      InventoryAsyncHandler name subscriptionId _ -> do
+        subscription <- Map.lookup subscriptionId subscriptions
+        source <- Map.lookup subscription.sourceId sources
+        pure (ProjectionConsumerBinding projection.projectionId name (Just subscriptionId) (Just subscription.subscriptionName) source)
 
 -- | Stable, JSON-friendly envelope for the complete heterogeneous inventory.
 data CatalogInventoryReport = CatalogInventoryReport

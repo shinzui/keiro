@@ -15,6 +15,7 @@ import Data.Text qualified as Text
 import Data.Vector qualified as Vector
 import Effectful (Eff, IOE)
 import Effectful.Error.Static (Error)
+import Keiro.Inspection.Consumers (ConsumerSource (..))
 import Keiro.Prelude
 import Keiro.Projection.Catalog
 import Keiro.Projection.Catalog.Operations qualified as Operations
@@ -23,12 +24,58 @@ import Keiro.Test.Postgres (Fixture, withFreshStore)
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
-import Kiroku.Store.Types (GlobalPosition (..))
+import Kiroku.Store.Types (CategoryName (..), GlobalPosition (..))
 import Test.Hspec
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 spec :: Fixture -> Spec
 spec fixture = do
+  describe "category consumers projection metadata" $ do
+    it "returns all-stream and exact groups with only matching bindings in stable order" $ do
+      let allCatalog = Catalog.additiveCatalog & #sources . ix 0 . #sourceScope .~ AllStreams
+      validated <- expectValid allCatalog
+      let operations = Operations.projectionCatalogOperations validated
+          unmatched = Operations.projectionConsumers operations (CategoryName "unknown")
+          matched = Operations.projectionConsumers operations (CategoryName "catalog-additive")
+      map (^. #groupId) unmatched `shouldBe` [Catalog.mainGroupId]
+      map (^. #source) (concatMap (^. #bindings) unmatched) `shouldBe` [AllCategories, AllCategories]
+      map (^. #groupId) matched `shouldBe` [Catalog.additiveGroupId, Catalog.mainGroupId]
+      let first = head (unmatched ^.. traverse . #bindings . traverse)
+      first ^. #subscriptionName `shouldBe` Just "catalog-async-subscription"
+      let reordered =
+            allCatalog
+              & #sources
+              %~ reverse
+              & #subscriptions
+              %~ reverse
+              & #projectionSets
+              %~ reverse
+      again <- expectValid reordered
+      Operations.projectionConsumers (Operations.projectionCatalogOperations again) (CategoryName "catalog-additive") `shouldBe` matched
+    it "keeps only the matching binding when sources share a lifecycle group" $ do
+      let input = Catalog.twoSourceCatalog (CategorySource (CategoryName "order")) (CategorySource (CategoryName "invoice")) (identityOrError mkSourceId "invoice-source")
+      validated <- expectValid input
+      let lookup category = Operations.projectionConsumers (Operations.projectionCatalogOperations validated) (CategoryName category)
+      map (^. #groupId) (lookup "order") `shouldBe` [Catalog.mainGroupId]
+      map (^. #handlerName) (concatMap (^. #bindings) (lookup "order")) `shouldBe` ["catalog-inline"]
+      map (^. #handlerName) (concatMap (^. #bindings) (lookup "invoice")) `shouldBe` ["catalog-async"]
+    it "ignores unused sources and subscriptions and returns successful empty exact matches" $ do
+      let source = head (Catalog.validCatalog ^. #sources)
+          subscription = head (Catalog.validCatalog ^. #subscriptions)
+          unusedId = identityOrError mkSourceId "unused-source"
+          exact =
+            Catalog.validCatalog
+              & #sources
+              .~ [source & #sourceScope .~ CategorySource (CategoryName "order"), source & #sourceId .~ unusedId & #sourceScope .~ AllStreams]
+              & #subscriptions
+              .~ [subscription, subscription & #subscriptionId .~ identityOrError mkSubscriptionId "unused-subscription" & #subscriptionName .~ "unused" & #subscriptionSource .~ unusedId]
+      validated <- expectValid exact
+      let operations = Operations.projectionCatalogOperations validated
+      Operations.projectionConsumers operations (CategoryName "Order") `shouldBe` []
+      Operations.projectionConsumers operations (CategoryName "unknown") `shouldBe` []
+      let bindings = concatMap (^. #bindings) (Operations.projectionConsumers operations (CategoryName "order"))
+      map (^. #subscriptionName) bindings `shouldBe` [Just "catalog-async-subscription", Nothing]
+      map (^. #source) bindings `shouldBe` [ExactCategory "order", ExactCategory "order"]
   describe "projection catalog operations reports" $ do
     it "derives complete versioned inventory and destructive preview from one catalog" $ do
       validated <- expectValid (operationsCatalog passingVerification)

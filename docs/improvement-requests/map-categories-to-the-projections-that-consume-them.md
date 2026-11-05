@@ -5,9 +5,18 @@ description: >-
   Nothing in the ops surface says which projection groups consume a stream category, so an
   aggregate browser cannot show which read models an aggregate's events feed. Expose, per
   projection group, the categories its subscription reads (or a reverse lookup by category).
-timestamp: 2026-11-04T05:28:05Z
+timestamp: 2026-11-05T15:25:38Z
 requestId: IR-59
-status: proposed
+status: completed
+completedAt: 2026-11-05T15:25:38Z
+resolution: >-
+  ExecPlan 324 adds pure catalog-derived projection consumers and validated explicit
+  durable input descriptions, exposed through the shared embedded CLI/HTTP grammar
+  with coverage flags and bounded inventory-bound pagination. Jitsurei reports
+  jitsurei-order-reporting for order and empty results for creditLimit. All 956
+  relevant examples and four executable builds pass in Nix. Focused store-free
+  allocation/parity evidence and additive runtime scope satisfy the user's revised
+  verification scope; DSL conformance and the statistical campaign were excluded.
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/324-map-categories-to-projection-and-durable-subscription-consumers.md
 reviews:
@@ -31,11 +40,15 @@ reviews:
 
 ## Status
 
-Proposed, with implementation planned in
+Completed in
 [ExecPlan 324](../plans/324-map-categories-to-projection-and-durable-subscription-consumers.md).
-All four milestones remain open. The plan chooses a pure reverse lookup over mounted
-catalog/subscriber metadata and explicitly retains this request's proposed disposition
-until acceptance; creating the plan did not deliver the lookup.
+The real Jitsurei catalog reports `jitsurei-order-reporting` for `order` through the
+library, embedded CLI and HTTP host; unmatched categories return an empty array.
+Explicit durable descriptions, coverage flags, bounded cursors, schema-only HTTP work
+and direct encoding are verified. All 956 relevant examples and four executable builds
+pass. The retained store-free allocation check follows the user's focused performance
+scope; DSL conformance and the statistical interference campaign were excluded.
+
 
 Proposed by the keiro runtime console initiative
 (`mori://shinzui/keiro-ui/masterplans/2-build-the-keiro-runtime-console`), filed from

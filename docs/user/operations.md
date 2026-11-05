@@ -2,7 +2,7 @@
 type: Runbook
 title: Operations
 description: Deploy and operate Keiro applications, workers, rebuilds, retries, and production checks.
-timestamp: 2026-11-04T18:20:00Z
+timestamp: 2026-11-05T15:15:59Z
 docId: DOC-15
 tags: [keiro, operations, deployment, runbook]
 generated:
@@ -771,6 +771,81 @@ unowned buckets and distinct live owners. Shard status preserves `ownership`
 and `shard_counts`, adding database `observed_at`, each row's `heartbeat_at` and
 `updated_at`, and `lease_age_seconds` (null for unowned rows). Lease expiry uses
 the same strict comparison as the worker; observation does not grant ownership.
+
+### Category consumers
+
+Application hosts with a projection catalog or explicit durable-input metadata expose:
+
+```bash
+jitsurei-demo ops projection consumers --category order --limit 100 --json
+curl -fsS 'http://127.0.0.1:9092/projection/consumers?category=order&limit=100'
+```
+
+Jitsurei returns the `projection_group` named `jitsurei-order-reporting`, with an
+async binding for `jitsurei-order-audit-subscription` and an inline binding without a
+subscription. `--category creditLimit` returns `items: []`. The declaration is visible
+before events, checkpoints, or group registration exist. Standalone database-only
+executables have no compiled metadata hooks and do not mount this command.
+
+The envelope uses `schema: "keiro/category-consumers/v1"`, the exact `category`,
+`scope: "mounted_configuration"`, `coverage`, `items`, and optional `next_cursor`.
+Coverage flags `projection_catalog` and `durable_subscribers` distinguish a described
+source (including an explicitly empty registry) from an unavailable source. Jitsurei
+reports `true` and `false` respectively: its fulfillment demo uses an in-memory adapter,
+so there is no durable input subscription to declare. Empty items mean no match within
+the declared coverage, not proof that the entire application has no consumers.
+
+Items are ordered by `(kind, name)`, with kinds `durable_subscriber`, `process_manager`,
+and `projection_group`. Groups appear once, with only the matching projection/handler
+bindings. Each binding identifies delivery (`inline` or `subscription`), nullable
+projection, handler and subscription identities, and the actual `source`. Sources are
+`{"kind":"category","category":"order"}`, `{"kind":"all"}`, or
+`{"kind":"namespace","namespace":"pm"}`. Exact matches are case sensitive; `all`
+matches every category; namespace `pm` matches `pm` and `pm:orders`, but not `pmm`.
+No wildcard or case normalization is performed. Empty categories and surrounding
+whitespace are invalid. A source match describes input selection; it does not inspect
+opaque decoders or prove handler relevance, worker liveness, or progress.
+
+Join an item's `group_id` to `projection status` to inspect lifecycle and availability.
+Use a binding's `subscription_name` with `projection position --subscription` for global
+position distance. Those are separate observations: `feeding_subscriptions` on status
+items is the registered cursor authority, while discovery reports compiled declarations.
+An unregistered group can have a consumer declaration and no status row.
+
+Page size defaults to 100 and accepts 1..500. Echo `next_cursor` as `--after` or `after`;
+it binds the exact category and mounted inventory. Restart at the first page after
+changing either. Limits bound items, not a group's nested bindings; an oversized item
+returns HTTP 413 `inspection_result_too_large`, without truncating bindings. The lookup
+uses no handler SQL. Every HTTP request still occupies an admission slot, verifies the
+schema, and obeys the normal deadline and response-byte cap. A screen querying many
+categories sends one request per category. The focused store-free measurement retained
+with plan 324 produced a 222,221-byte maximum page from a 1,000-consumer registry
+with two bindings per consumer; it does not establish a writer-latency or polling-rate
+guarantee. Larger responses remain permitted up to the host byte cap.
+
+Hosts can supply process-manager and other durable inputs through
+`Keiro.Inspection.Consumers`. For example, derive the description from the same
+configuration values passed to the worker builder:
+
+```haskell
+import Keiro.Inspection.Consumers
+
+-- These arguments come from the application's worker configuration.
+describeFulfillmentInput consumerName subscriptionName inputCategory =
+  durableConsumerRegistry
+    [ DurableConsumerDescription ProcessManagerConsumer consumerName
+        subscriptionName (ExactCategory inputCategory)
+    ]
+-- After validation, mount: emptyAppHooks { durableConsumers = Just registry }.
+```
+
+Reuse the actual input category and subscription name; a manager's journal category and
+`pm types` describe its own persisted history and cannot supply its input scope. Multiple
+subscriptions per consumer and consumers sharing a subscription are supported. Conflicting
+scopes for one subscription and invalid identities are rejected, and duplicates coalesce.
+Use `Nothing` for unavailable input metadata, `Just` an empty validated registry for an
+explicitly empty set. Omit opaque/custom scopes and document that coverage limitation;
+never approximate them from journal names. Metadata adds no worker registration or execution.
 
 ### Projection status pages
 
