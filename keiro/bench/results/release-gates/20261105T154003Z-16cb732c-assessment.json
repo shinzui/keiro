@@ -1,0 +1,63 @@
+{
+  "accepted": false,
+  "candidate": "e889faa17ff5caea396b5fb79a90b046586f34f8",
+  "competing_load": {
+    "evidence": "keiro/bench/results/release-gates/20261105T154003Z-16cb732c-process-load.jsonl",
+    "observation": "Unrelated test and application processes consumed CPU during measurements. Inbox samples included an unrelated test executable at 268.7% CPU. This is evidence of competing load, not proof that it caused the failed guards.",
+    "sha256": "005d4b9d2094b138fc2fdf32a8e32e9a20fdf8bdddc28ac19ef24c4e510f73b9"
+  },
+  "failure_details": {
+    "command": {
+      "case": "legacy.accepted-1",
+      "failed_cases": 1,
+      "slowdown_percent": 112
+    },
+    "inbox": {
+      "failed_cases": 4,
+      "history_duplicate_slowdown_percent": [
+        41,
+        45,
+        50
+      ],
+      "timeout_cases": 1
+    },
+    "projection": {
+      "failed_cases": 8,
+      "slowdown_percent_range": [
+        26,
+        40
+      ]
+    },
+    "read-model": {
+      "cases": [
+        "repair.100",
+        "guarded.keyed-10000"
+      ],
+      "failed_cases": 2
+    }
+  },
+  "manifest": "keiro/bench/results/release-gates/20261105T154003Z-16cb732c-manifest.json",
+  "next_step": "Investigate failures and rerun release-gate on a quiet machine with existing ceilings and baselines. Matching successful stages may be reused by the release driver; preflight always reruns.",
+  "not_run_after_failure": [
+    "nix flake check",
+    "release-artifacts",
+    "release-consumer staged",
+    "release-ready",
+    "tagging",
+    "push",
+    "Hackage uploads",
+    "release-consumer published",
+    "GitHub release"
+  ],
+  "source_unchanged": true,
+  "stages": {
+    "command": 1,
+    "correctness": 0,
+    "inbox": 1,
+    "outbox": 0,
+    "producer-identity": 0,
+    "projection": 1,
+    "read-model": 1
+  },
+  "version": "0.24.0.0"
+}
