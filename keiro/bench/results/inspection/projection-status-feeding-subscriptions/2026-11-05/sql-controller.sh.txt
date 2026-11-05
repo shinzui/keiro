@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+out=${1:-keiro/bench/results/inspection/projection-status-feeding-subscriptions}
+mkdir -p "$out"
+ps -axo pid,ppid,etime,%cpu,comm > "$out/sql-processes-before.txt"
+for pair in 1 2 3; do
+  if [[ $pair == 2 ]]; then order=(candidate baseline); else order=(baseline candidate); fi
+  for side in "${order[@]}"; do
+    binary=.dev/plan327/"$side"-driver
+    if [[ $side == candidate ]]; then binary=.dev/plan327/candidate-driver-final; fi
+    "$binary" "$out/$side-$pair.json"
+  done
+done
+ps -axo pid,ppid,etime,%cpu,comm > "$out/sql-processes-after.txt"
+python3 keiro/bench/results/inspection/projection-status-feeding-subscriptions/summarize.py "$out" > "$out/summary.json"

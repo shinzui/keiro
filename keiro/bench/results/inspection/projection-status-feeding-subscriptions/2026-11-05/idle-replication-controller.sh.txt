@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+out=.dev/plan327/idle-replication-20261105
+mkdir "$out"
+for pair in 1 2 3 4 5; do
+  if ((pair % 2)); then order=(candidate baseline); else order=(baseline candidate); fi
+  for side in "${order[@]}"; do
+    binary="$PWD/.dev/plan327/baseline-interference"
+    expect_names=0
+    if [[ $side == candidate ]]; then binary="$PWD/.dev/plan327/candidate-interference-final"; expect_names=1; fi
+    KEIRO_PROJECTION_EXPECT_SUBSCRIPTIONS=$expect_names KEIRO_INSPECTION_SECONDS=20 \
+      "$binary" "$out/$side/$pair/projection-idle" 100 1 projection-idle +RTS -N2 -T -RTS \
+      > "$out/$side-$pair.log" 2>&1
+  done
+done

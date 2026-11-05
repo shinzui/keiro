@@ -1,0 +1,13 @@
+{
+  "candidate_source_commit": "00fafcd47798e87d0b9c03a71a0eb385ce058471",
+  "completed_at": "2026-11-05T12:38:17.683126+00:00",
+  "plan": "327",
+  "request": "IR-57",
+  "performance_assessment": "2026-11-05/assessment.json",
+  "measured_acceptance_passed": true,
+  "full_verification": "Reused passing verify.log on identical application source",
+  "redundant_verification_repeat": "Interrupted at user request; exit 130; not a pass",
+  "strict_ir_validation": "OK: 60 concepts",
+  "read_model_guard": "Prior passing ten-case guard; source and CSV unchanged",
+  "qualification": "Finite matched evidence, with uncertainty retained; no zero-loss or 1% equivalence claim"
+}

@@ -6,9 +6,15 @@ description: >-
   that feeds the group, so a UI cannot join a group to its member checkpoints without being told
   the subscription name. Publish the sorted feeding subscription names beside the frozen
   projection_group_status_v1 row on bounded status pages and feeds.
-timestamp: 2026-11-04T18:02:00Z
+timestamp: 2026-11-05T12:24:50Z
 requestId: IR-57
-status: accepted
+status: completed
+completedAt: 2026-11-05T12:24:50Z
+resolution: >-
+  Completed by ExecPlan 327: bounded CLI, HTTP and projection_groups feed items carry
+  sorted feeding_subscriptions beside the frozen v1 relation. Paired SQL and matched
+  writer evidence, including fixed idle replication and reported uncertainty, is retained
+  in keiro/bench/results/inspection/projection-status-feeding-subscriptions/2026-11-05.
 plan: docs/plans/327-name-the-feeding-subscriptions-on-projection-status-pages-without-runtime-performance-regressions.md
 origin: mori://shinzui/keiro-ui
 reviews:
@@ -32,7 +38,11 @@ reviews:
 
 ## Status
 
-Accepted under [ExecPlan 327](../plans/327-name-the-feeding-subscriptions-on-projection-status-pages-without-runtime-performance-regressions.md).
+Completed under [ExecPlan 327](../plans/327-name-the-feeding-subscriptions-on-projection-status-pages-without-runtime-performance-regressions.md).
+
+The library, CLI, HTTP and feed publish the corrected array contract. The frozen v1
+relation, writer paths and benchmark baselines remain unchanged. Paired SQL and runtime
+evidence, including the fixed idle replication, is retained in the plan's evidence folder.
 
 Originally proposed by the keiro runtime console initiative
 (`mori://shinzui/keiro-ui/masterplans/2-build-the-keiro-runtime-console`), filed from

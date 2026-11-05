@@ -1,0 +1,3 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Quiet window unavailable: [{'pid': 3383, 'parent': 3382, 'command': '/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal', 'operation': 'build'}, {'pid': 13275, 'parent': 3383, 'command': '/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped', 'operation': 'build'}, {'pid': 16109, 'parent': 13275, 'command': '/nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/bin/./ghc-9.12.4'}]

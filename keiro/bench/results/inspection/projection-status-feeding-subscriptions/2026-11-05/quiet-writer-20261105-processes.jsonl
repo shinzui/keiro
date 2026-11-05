@@ -1,0 +1,95 @@
+{"at": "2026-11-05T11:57:44.460106+00:00", "busy": []}
+{"at": "2026-11-05T11:57:46.507159+00:00", "busy": []}
+{"at": "2026-11-05T11:57:48.573426+00:00", "busy": []}
+{"at": "2026-11-05T11:57:50.652565+00:00", "busy": []}
+{"at": "2026-11-05T11:57:52.723228+00:00", "busy": []}
+{"at": "2026-11-05T11:57:54.803725+00:00", "busy": []}
+{"at": "2026-11-05T11:57:56.886985+00:00", "busy": []}
+{"at": "2026-11-05T11:57:58.966346+00:00", "busy": []}
+{"at": "2026-11-05T11:58:01.047648+00:00", "busy": []}
+{"at": "2026-11-05T11:58:03.129066+00:00", "busy": []}
+{"at": "2026-11-05T11:58:05.205373+00:00", "busy": []}
+{"at": "2026-11-05T11:58:07.277470+00:00", "busy": []}
+{"at": "2026-11-05T11:58:09.325571+00:00", "busy": []}
+{"at": "2026-11-05T11:58:11.413670+00:00", "busy": []}
+{"at": "2026-11-05T11:58:13.495881+00:00", "busy": []}
+{"at": "2026-11-05T11:58:15.569266+00:00", "busy": []}
+{"at": "2026-11-05T11:58:17.639939+00:00", "busy": []}
+{"at": "2026-11-05T11:58:19.704489+00:00", "busy": []}
+{"at": "2026-11-05T11:58:21.782696+00:00", "busy": []}
+{"at": "2026-11-05T11:58:23.858940+00:00", "busy": []}
+{"at": "2026-11-05T11:58:25.935675+00:00", "busy": []}
+{"at": "2026-11-05T11:58:28.010424+00:00", "busy": []}
+{"at": "2026-11-05T11:58:30.083357+00:00", "busy": []}
+{"at": "2026-11-05T11:58:32.132138+00:00", "busy": []}
+{"at": "2026-11-05T11:58:34.200279+00:00", "busy": []}
+{"at": "2026-11-05T11:58:36.286546+00:00", "busy": []}
+{"at": "2026-11-05T11:58:38.364311+00:00", "busy": []}
+{"at": "2026-11-05T11:58:40.443250+00:00", "busy": [{"pid": 19429, "parent": 19427, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "build"}, {"pid": 19434, "parent": 19429, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "build"}, {"pid": 19436, "parent": 19434, "command": "/nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/bin/./ghc-9.12.4"}]}
+{"at": "2026-11-05T11:58:42.502369+00:00", "busy": [{"pid": 19429, "parent": 19427, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "build"}, {"pid": 19434, "parent": 19429, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "build"}, {"pid": 19456, "parent": 19434, "command": "/nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/bin/./ghc-9.12.4"}]}
+{"at": "2026-11-05T11:58:44.562163+00:00", "busy": [{"pid": 19429, "parent": 19427, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "build"}, {"pid": 19434, "parent": 19429, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "build"}, {"pid": 19456, "parent": 19434, "command": "/nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/bin/./ghc-9.12.4"}]}
+{"at": "2026-11-05T11:58:46.625064+00:00", "busy": [{"pid": 19535, "parent": 19534, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "run"}, {"pid": 19538, "parent": 19535, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "configure"}]}
+{"at": "2026-11-05T11:58:48.678306+00:00", "busy": [{"pid": 19535, "parent": 19534, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "run"}, {"pid": 19538, "parent": 19535, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "configure"}]}
+{"at": "2026-11-05T11:58:50.737160+00:00", "busy": [{"pid": 19535, "parent": 19534, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "run"}, {"pid": 19633, "parent": 19535, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "build"}, {"pid": 19645, "parent": 19633, "command": "/nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/bin/./ghc-9.12.4"}]}
+{"at": "2026-11-05T11:58:52.796717+00:00", "busy": [{"pid": 19535, "parent": 19534, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "run"}, {"pid": 19633, "parent": 19535, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "build"}, {"pid": 19645, "parent": 19633, "command": "/nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/bin/./ghc-9.12.4"}]}
+{"at": "2026-11-05T11:58:54.857441+00:00", "busy": [{"pid": 19535, "parent": 19534, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "run"}]}
+{"at": "2026-11-05T11:58:56.926706+00:00", "busy": []}
+{"at": "2026-11-05T11:58:58.973231+00:00", "busy": []}
+{"at": "2026-11-05T11:59:01.018941+00:00", "busy": []}
+{"at": "2026-11-05T11:59:03.065140+00:00", "busy": [{"pid": 19903, "parent": 19427, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "test"}, {"pid": 19919, "parent": 19903, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "test"}]}
+{"at": "2026-11-05T11:59:05.117540+00:00", "busy": [{"pid": 19903, "parent": 19427, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "test"}, {"pid": 19919, "parent": 19903, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "test"}]}
+{"at": "2026-11-05T11:59:07.173854+00:00", "busy": [{"pid": 19903, "parent": 19427, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "test"}, {"pid": 19919, "parent": 19903, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "test"}, {"pid": 19952, "parent": 19919, "command": "/Users/shinzui/Keikaku/bokuno/rei-project/rei/dist-newstyle/build/aarch64-osx/ghc-9.12.4/rei-api-8.0.0.0/t/rei-cli-api-live-test/build/rei-cli-api-live-test/rei-cli-api-live-test"}]}
+{"at": "2026-11-05T11:59:09.233308+00:00", "busy": [{"pid": 19903, "parent": 19427, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "test"}, {"pid": 19919, "parent": 19903, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "test"}, {"pid": 19952, "parent": 19919, "command": "/Users/shinzui/Keikaku/bokuno/rei-project/rei/dist-newstyle/build/aarch64-osx/ghc-9.12.4/rei-api-8.0.0.0/t/rei-cli-api-live-test/build/rei-cli-api-live-test/rei-cli-api-live-test"}]}
+{"at": "2026-11-05T11:59:11.308068+00:00", "busy": [{"pid": 19903, "parent": 19427, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "test"}, {"pid": 19919, "parent": 19903, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "test"}, {"pid": 19952, "parent": 19919, "command": "/Users/shinzui/Keikaku/bokuno/rei-project/rei/dist-newstyle/build/aarch64-osx/ghc-9.12.4/rei-api-8.0.0.0/t/rei-cli-api-live-test/build/rei-cli-api-live-test/rei-cli-api-live-test"}]}
+{"at": "2026-11-05T11:59:13.373936+00:00", "busy": [{"pid": 19903, "parent": 19427, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "test"}, {"pid": 19919, "parent": 19903, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "test"}, {"pid": 19952, "parent": 19919, "command": "/Users/shinzui/Keikaku/bokuno/rei-project/rei/dist-newstyle/build/aarch64-osx/ghc-9.12.4/rei-api-8.0.0.0/t/rei-cli-api-live-test/build/rei-cli-api-live-test/rei-cli-api-live-test"}]}
+{"at": "2026-11-05T11:59:15.436835+00:00", "busy": []}
+{"at": "2026-11-05T11:59:17.510258+00:00", "busy": []}
+{"at": "2026-11-05T11:59:19.559857+00:00", "busy": []}
+{"at": "2026-11-05T11:59:21.637635+00:00", "busy": []}
+{"at": "2026-11-05T11:59:23.708420+00:00", "busy": []}
+{"at": "2026-11-05T11:59:25.779164+00:00", "busy": []}
+{"at": "2026-11-05T11:59:27.857725+00:00", "busy": []}
+{"at": "2026-11-05T11:59:29.934075+00:00", "busy": []}
+{"at": "2026-11-05T11:59:31.997672+00:00", "busy": []}
+{"at": "2026-11-05T11:59:34.067076+00:00", "busy": []}
+{"at": "2026-11-05T11:59:36.142382+00:00", "busy": []}
+{"at": "2026-11-05T11:59:38.217751+00:00", "busy": []}
+{"at": "2026-11-05T11:59:40.282874+00:00", "busy": []}
+{"at": "2026-11-05T11:59:42.330158+00:00", "busy": []}
+{"at": "2026-11-05T11:59:44.416590+00:00", "busy": []}
+{"at": "2026-11-05T11:59:46.498769+00:00", "busy": []}
+{"at": "2026-11-05T11:59:48.578547+00:00", "busy": []}
+{"at": "2026-11-05T11:59:50.658376+00:00", "busy": []}
+{"at": "2026-11-05T11:59:52.734735+00:00", "busy": []}
+{"at": "2026-11-05T11:59:54.810502+00:00", "busy": []}
+{"at": "2026-11-05T11:59:56.886254+00:00", "busy": []}
+{"at": "2026-11-05T11:59:58.947110+00:00", "busy": []}
+{"at": "2026-11-05T12:00:01.026514+00:00", "busy": []}
+{"at": "2026-11-05T12:00:03.087402+00:00", "busy": []}
+{"at": "2026-11-05T12:00:05.133236+00:00", "busy": []}
+{"at": "2026-11-05T12:00:07.216934+00:00", "busy": []}
+{"at": "2026-11-05T12:00:09.297035+00:00", "busy": []}
+{"at": "2026-11-05T12:00:11.372617+00:00", "busy": []}
+{"at": "2026-11-05T12:00:13.445727+00:00", "busy": []}
+{"at": "2026-11-05T12:00:15.523615+00:00", "busy": []}
+{"at": "2026-11-05T12:00:17.607141+00:00", "busy": []}
+{"at": "2026-11-05T12:00:19.685959+00:00", "busy": []}
+{"at": "2026-11-05T12:00:21.764850+00:00", "busy": []}
+{"at": "2026-11-05T12:00:23.843947+00:00", "busy": []}
+{"at": "2026-11-05T12:00:25.899051+00:00", "busy": []}
+{"at": "2026-11-05T12:00:27.946946+00:00", "busy": []}
+{"at": "2026-11-05T12:00:30.029296+00:00", "busy": []}
+{"at": "2026-11-05T12:00:32.104819+00:00", "busy": []}
+{"at": "2026-11-05T12:00:34.179923+00:00", "busy": []}
+{"at": "2026-11-05T12:00:36.260337+00:00", "busy": [{"pid": 23563, "parent": 23562, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "test"}, {"pid": 23566, "parent": 23563, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "build"}, {"pid": 23568, "parent": 23566, "command": "/nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/bin/./ghc-9.12.4"}]}
+{"at": "2026-11-05T12:00:38.324435+00:00", "busy": [{"pid": 23563, "parent": 23562, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "test"}, {"pid": 23595, "parent": 23563, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "test"}]}
+{"at": "2026-11-05T12:00:40.384997+00:00", "busy": [{"pid": 23563, "parent": 23562, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "test"}, {"pid": 23595, "parent": 23563, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "test"}, {"pid": 23622, "parent": 23595, "command": "/Users/shinzui/Keikaku/bokuno/rei-project/rei/dist-newstyle/build/aarch64-osx/ghc-9.12.4/rei-api-8.0.0.0/t/rei-api-test/build/rei-api-test/rei-api-test"}]}
+{"at": "2026-11-05T12:00:42.447403+00:00", "busy": [{"pid": 23563, "parent": 23562, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "test"}, {"pid": 23595, "parent": 23563, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "test"}, {"pid": 23622, "parent": 23595, "command": "/Users/shinzui/Keikaku/bokuno/rei-project/rei/dist-newstyle/build/aarch64-osx/ghc-9.12.4/rei-api-8.0.0.0/t/rei-api-test/build/rei-api-test/rei-api-test"}]}
+{"at": "2026-11-05T12:00:44.514028+00:00", "busy": [{"pid": 23563, "parent": 23562, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "test"}, {"pid": 23595, "parent": 23563, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "test"}, {"pid": 23622, "parent": 23595, "command": "/Users/shinzui/Keikaku/bokuno/rei-project/rei/dist-newstyle/build/aarch64-osx/ghc-9.12.4/rei-api-8.0.0.0/t/rei-api-test/build/rei-api-test/rei-api-test"}]}
+{"at": "2026-11-05T12:00:46.577888+00:00", "busy": [{"pid": 23563, "parent": 23562, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "test"}, {"pid": 23595, "parent": 23563, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "test"}, {"pid": 23622, "parent": 23595, "command": "/Users/shinzui/Keikaku/bokuno/rei-project/rei/dist-newstyle/build/aarch64-osx/ghc-9.12.4/rei-api-8.0.0.0/t/rei-api-test/build/rei-api-test/rei-api-test"}]}
+{"at": "2026-11-05T12:00:48.635059+00:00", "busy": [{"pid": 23563, "parent": 23562, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "test"}, {"pid": 23595, "parent": 23563, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "test"}, {"pid": 23622, "parent": 23595, "command": "/Users/shinzui/Keikaku/bokuno/rei-project/rei/dist-newstyle/build/aarch64-osx/ghc-9.12.4/rei-api-8.0.0.0/t/rei-api-test/build/rei-api-test/rei-api-test"}]}
+{"at": "2026-11-05T12:00:50.691335+00:00", "busy": [{"pid": 23563, "parent": 23562, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "test"}, {"pid": 23595, "parent": 23563, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "test"}, {"pid": 23622, "parent": 23595, "command": "/Users/shinzui/Keikaku/bokuno/rei-project/rei/dist-newstyle/build/aarch64-osx/ghc-9.12.4/rei-api-8.0.0.0/t/rei-api-test/build/rei-api-test/rei-api-test"}]}
+{"at": "2026-11-05T12:00:52.754277+00:00", "busy": [{"pid": 23563, "parent": 23562, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "test"}, {"pid": 23595, "parent": 23563, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "test"}, {"pid": 23622, "parent": 23595, "command": "/Users/shinzui/Keikaku/bokuno/rei-project/rei/dist-newstyle/build/aarch64-osx/ghc-9.12.4/rei-api-8.0.0.0/t/rei-api-test/build/rei-api-test/rei-api-test"}]}
+{"at": "2026-11-05T12:00:54.814056+00:00", "busy": [{"pid": 23563, "parent": 23562, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "test"}, {"pid": 23595, "parent": 23563, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "test"}, {"pid": 23622, "parent": 23595, "command": "/Users/shinzui/Keikaku/bokuno/rei-project/rei/dist-newstyle/build/aarch64-osx/ghc-9.12.4/rei-api-8.0.0.0/t/rei-api-test/build/rei-api-test/rei-api-test"}]}
+{"at": "2026-11-05T12:00:56.880679+00:00", "busy": [{"pid": 23563, "parent": 23562, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "test"}, {"pid": 23595, "parent": 23563, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "test"}, {"pid": 23622, "parent": 23595, "command": "/Users/shinzui/Keikaku/bokuno/rei-project/rei/dist-newstyle/build/aarch64-osx/ghc-9.12.4/rei-api-8.0.0.0/t/rei-api-test/build/rei-api-test/rei-api-test"}]}
+{"at": "2026-11-05T12:00:58.215898+00:00", "busy": [{"pid": 23563, "parent": 23562, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal", "operation": "test"}, {"pid": 23595, "parent": 23563, "command": "/nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped", "operation": "test"}, {"pid": 23622, "parent": 23595, "command": "/Users/shinzui/Keikaku/bokuno/rei-project/rei/dist-newstyle/build/aarch64-osx/ghc-9.12.4/rei-api-8.0.0.0/t/rei-api-test/build/rei-api-test/rei-api-test"}]}

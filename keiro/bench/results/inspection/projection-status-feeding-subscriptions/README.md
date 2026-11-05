@@ -1,152 +1,127 @@
 # Projection feeding-subscription evidence
 
-Acceptance remains open. Final code is `00fafcd47798e87d0b9c03a71a0eb385ce058471`;
-comparison baseline is `d64849f19d2d922a5373b121d13d0fac5bc9132f`.
-Full Nix verification and the read-model guard pass, and every final workload
-completed. No final writer metric shows a statistically supported regression.
-Latency precision and quiet-machine conditions do not meet the fixed protocol.
-IR-57 therefore remains accepted, with plan 327 milestones 3 and 4 open.
+Plan 327's measured performance acceptance passes. Final application source is
+`00fafcd47798e87d0b9c03a71a0eb385ce058471`, compared with
+`d64849f19d2d922a5373b121d13d0fac5bc9132f`. Full Nix verification and the
+unchanged read-model benchmark guard pass. The frozen relation, complete-list and
+lookup SQL, writer/registration paths, schema and CSV baseline remain unchanged.
 
-## Results
+## Final measurements, 2026-11-05
 
-All eight numerical page-read gates pass in `loaded-sql-v4/`. Other builds were
-observed, so these are qualified results, not a quiet-machine acceptance pass.
-Each candidate plan returns 101 SQL rows and performs 10 added keyed probes for
-the checkpoint stripe. The private-table constraint proves append/unmanaged
-arrays empty; CASE skips their probes. The frozen view lookup retains OFFSET 0.
+All eight SQL gates pass; the maximum paired median ratio is 1.0378072 against
+the original 1.10 ceiling. Every candidate plan retains 101 SQL look-ahead rows
+and ten added parameterized primary-key probes for the ten checkpoint keys.
+Append and unmanaged arrays need no lookup, by the existing table constraint.
 
 | Groups | Plan | Page | Baseline median ms | Candidate median ms | Paired median ratio |
 | --- | --- | --- | ---: | ---: | ---: |
-| 10000 | custom_plan | first | 2.779 | 2.783 | 1.0043 |
-| 10000 | custom_plan | deep | 0.530 | 0.563 | 1.0552 |
-| 10000 | generic_plan | first | 2.738 | 2.790 | 1.0084 |
-| 10000 | generic_plan | deep | 0.547 | 0.558 | 1.0207 |
-| 100000 | custom_plan | first | 2.747 | 2.785 | 1.0025 |
-| 100000 | custom_plan | deep | 0.554 | 0.598 | 1.0814 |
-| 100000 | generic_plan | first | 2.873 | 2.842 | 0.9807 |
-| 100000 | generic_plan | deep | 0.581 | 0.580 | 0.9982 |
+| 10000 | custom_plan | first | 2.719 | 2.734 | 1.0007 |
+| 10000 | custom_plan | deep | 0.530 | 0.545 | 1.0074 |
+| 10000 | generic_plan | first | 2.754 | 2.751 | 1.0094 |
+| 10000 | generic_plan | deep | 0.533 | 0.543 | 1.0198 |
+| 100000 | custom_plan | first | 2.687 | 2.732 | 1.0183 |
+| 100000 | custom_plan | deep | 0.552 | 0.563 | 1.0246 |
+| 100000 | generic_plan | first | 2.765 | 2.742 | 1.0176 |
+| 100000 | generic_plan | deep | 0.548 | 0.561 | 1.0378 |
 
-The final writer cohort in `interference/` contains forty 20-second trials,
-five alternating pairs per mode plus same-source controls: 80,000 writer
-operations in total. Every trial sustained at least 99% of the offered
-100 operations/second. All HTTP trials completed 80 scheduled requests with no
-errors. Feed trials received snapshots and updates, validated non-empty
-subscription arrays, and returned views, connections and the wake pump to idle.
+The fixed full writer cohort contains forty 20-second trials: five alternating
+baseline/candidate pairs in each of idle, four HTTP pollers, and four shared feed
+subscribers, plus five paired same-source idle controls. Every trial fulfills
+100 offered operations/second (at least 99% achieved). Each polling trial completes
+its eighty scheduled HTTP requests; feeds receive snapshots and updates with non-empty subscription
+arrays, and views/connections/wake pumps return to idle. Durable PostgreSQL
+settings remain enabled. No poll/feed throughput, latency or writer-allocation
+comparison shows statistically supported degradation.
 
-Throughput and writer-thread allocation intervals pass. Latency results are:
+The full cohort flagged idle p95: median ratio 1.00714875, CI95
+1.00339121–1.09613147. Idle does not execute the changed query or encoder. A
+predeclared follow-up ran exactly five additional idle pairs with reversed order,
+retained all samples and evaluated all four writer metrics. The idle p95 signal
+did not reproduce: replication ratio 1.00027049, CI95 0.98700255–1.01902064.
+The combined ten-pair p95 ratio is 1.00351648, CI95 0.99503648–1.01902064.
+All ten idle pairs are included; no trial was replaced. In total, fifty trials
+and 100,000 writer operations pass raw-record, offered-load and cleanup checks.
+The final matched assessment shows no statistically supported candidate degradation.
 
-| Mode | p95 ratio (95% bootstrap interval) | p99 ratio (95% bootstrap interval) |
-| --- | --- | --- |
-| idle | 0.9833 (0.8991–1.4676) | 0.9910 (0.8983–1.0668) |
-| poll | 1.0129 (0.9428–1.3426) | 1.0042 (0.5868–1.1414) |
-| feed | 0.9607 (0.6567–1.3060) | 0.9309 (0.6329–1.1246) |
+| Mode | Pairs | p95 ratio (95% interval) | p99 ratio (95% interval) |
+| --- | ---: | --- | --- |
+| idle | 10 | 1.0035 (0.9950–1.0190) | 1.0097 (0.9683–1.0352) |
+| poll | 5 | 1.0117 (0.6478–1.0155) | 1.0743 (0.8808–1.0770) |
+| feed | 5 | 0.9878 (0.9495–1.0034) | 0.9816 (0.9594–1.0140) |
 
-Every final latency interval includes equality, but does not exclude a 1% loss.
-The identical-binary p99 control interval is 0.5553–42.5745. One such control's
-p99 was 4.590 ms and its partner's was 195.417 ms; 188.604 ms of the latter's
-p99 operation was offered-load scheduling delay. This occurred around operations
-1688–1733, rather than during warm-up. It cannot be caused by the new field:
-both controls run the same baseline binary with no active inspection clients.
-The exact cause of the transient stall is not established.
+`2026-11-05/assessment.json` retains discovery, replication and combined ratios
+for all four idle metrics, alongside the original full-cohort report. Higher
+ratios mean worse performance (throughput ratios are inverted). Intervals use
+seed 327 and 20,000 trial-pair median bootstrap resamples, with the actual number
+of pairs in each report. This finite experiment does not establish zero loss or
+1% equivalence; the intervals show its uncertainty.
 
-The monitor recorded builds/tests in 133 of 446 observations. It distinguishes
-Cabal `list-bin`/`path` metadata queries from builds; arbitrary process arguments
-are not retained. `evaluation.json`, `control-tail-diagnostic.json` and
-`interference/summary.json` retain the complete qualification and all ratios.
-The strict runtime analyzer still exits nonzero. No outliers were removed and
-no baseline or numerical threshold was changed.
+The user explicitly instructed on 2026-11-05 that full machine quiet is unnecessary.
+Process observations remain context, not a gate. The implementer also withdrew
+an unapproved added requirement for 1% confidence resolution. The original strict
+analyzer and its false precision result are preserved unchanged; no raw data,
+SQL ceiling or committed benchmark baseline was adjusted. The original discovery
+idle flag remains visible. Its fixed replication and combined estimate, rather
+than repeated trials until a favorable result, supply the final idle assessment.
 
-The original review required matched writer evidence but supplied no runtime
-precision ceiling. The implementer fixed the 1% confidence-resolution rule
-before sampling. It is an implementation interpretation, not an explicit
-number from the original user plan. Completing acceptance with the current
-data would require an explicit scope decision about this precision rule and
-the recorded background activity.
+## Audit and reproduction
 
-## Behavior and compatibility
-
-`jitsurei-cli.json` and `jitsurei-http.json` are final executable responses from
-the same disposable jitsurei database. Items match exactly: reporting names
-`jitsurei-order-audit-subscription`, while the legacy area-chapters group has `[]`.
-The CLI passes `--database-url` explicitly. The final HTTP server binds port zero
-and its OS-assigned loopback port is discovered before the request.
-
-`verify.log` is the passing full `nix develop -c just verify` run on final code;
-`verify-before-optimization.log` preserves the earlier pass. `read-model-guard.log`
-records all ten cases passing with `GUARD(read-model)=0` and
-`BENCH_REGRESSION=PASSED`. The committed CSV is unchanged. `compatibility.txt`
-records byte-identical frozen types, decoder, complete-list/lookup definitions
-and SQL; all 18 old JSON pair expressions are unchanged. Migrations, expected
-schema, catalog registration and writer files are untouched.
-
-The final encoder prepends its extra pair instead of appending to the old pair
-list. The earlier all-row cursor probe, guarded lateral form and original
-encoder cohort remain in `loaded-diagnostic-v1/`, `loaded-diagnostic-v2/`,
-`loaded-interference-v1/`, `loaded-sql-v3/` and `loaded-sql-v4/`, each attributed
-to its own source/binary identities. These observations are never substituted
-for a passing final acceptance gate.
-
-## Environment and protocol
-
-Apple M5 Ultra, 36 cores, 256 GiB RAM; Darwin 27.2.0; GHC 9.12.4;
-PostgreSQL 18.6; Python 3.14.7; Z3 4.16.0. `machine.txt` and `identity.json`
-record exact details, binary paths, SHA-256 and flags. All 311 external package
-unit identities match. Keiro's reaction-hydration probe flag is disabled.
-
-Benchmarks use private durable ephemeral PostgreSQL clusters through
-`Keiro.Test.Postgres.withMigratedBenchmarkSuite`, not the shell's `db/` cluster.
-No remote admin connection is configured. fsync, synchronous_commit,
-full_page_writes and autovacuum stay on. The manual jitsurei executable proof
-uses the shell cluster separately. Fixtures and both binary sets use the same
-settings, and benchmark setup is outside timing.
-
-The identical `driver.hs.txt` source compiles separately against each package
-set, library O1, driver `-O2 -threaded -XGHC2024`, exposing `keiro` and
-`keiro-test-support`. It calls the real page API and then takes five EXPLAIN
-ANALYZE/BUFFERS/SETTINGS samples for each 10k/100k, first/deep, custom/generic
-shape. There are three models per group and 10,000 extra models in the first
-group; every tenth group has one checkpoint subscription. Run three pairs in
-B/C, C/B, B/C order. `summarize.py` checks all sample identities, settings,
-row counts and keyed probes, and computes fifteen ordinal-paired ratios per
-shape with the unchanged 1.10 median ceiling. Historical all-append ~2.8/0.6 ms
-figures are context for a different fixture, not a recalibrated baseline.
-
-The identical retained interference harness sources compile at O1 with the
-packages/flags in `identity.json`, without the pre-inspection CPP macro. Each
-trial seeds 100k workflows/timers plus 10k projection groups (three models each,
-ten-percent checkpoint stripe). The existing benchmark also registers one
-legacy read-model group. It finishes CHECKPOINT, warms the writer and settles
-before timing. Parent RTS flags are `-N2 -T`; clients allocate in a separate
-process. Idle, four staggered HTTP pollers and four subscribers sharing one
-projection view use separate inspection pool capacity. A fixed-seed (327),
-20,000-resample trial-level percentile bootstrap retains every observation.
-Intervals wholly above one reject degradation; upper endpoints >=1.01 remain
-inconclusive, including the same-source controls. SQL's 1.10 ceiling does not
-permit a 10% writer regression. Prior manager-discovery evidence or waivers
-are not used.
-
-## Reproduction
-
-Keep the baseline detached worktree until acceptance is resolved. Build both
-package sets in their Nix shells, then compile the retained identical sources
-in each checkout using separate output directories and the flags/packages in
-`identity.json`. Pass current-source absolute paths when compiling in the
-baseline checkout. Compiled executables stay in `.dev/plan327/`; only their
-identities, exact sources and raw observations are committed.
-
-Use a new output directory for each cohort:
+`evaluate-20261105.py` recomputes every raw p95/p99 and writer allocation mean,
+checks all fifty offered-load/client/cleanup/settings records, replays the original
+full-cohort analysis byte-for-byte, and computes the predeclared idle replication.
+Its acceptance receipt separates measured findings from the withdrawn added gates.
+The retained evaluator's binary-hash audit uses the original local binary paths;
+when reproducing elsewhere, rebuild the recorded source and update local paths.
 
 ```bash
-nix develop -c python3 keiro/bench/results/inspection/projection-status-feeding-subscriptions/run-quiet.py   .dev/new-process-observations.jsonl   bash scripts/measure-projection-feeding-subscriptions.sh   "$PWD/.dev/plan327/baseline-interference"   "$PWD/.dev/plan327/candidate-interference-final"   .dev/new-projection-cohort
+nix develop -c python3 keiro/bench/results/inspection/projection-status-feeding-subscriptions/evaluate-20261105.py keiro/bench/results/inspection/projection-status-feeding-subscriptions/2026-11-05
 nix develop -c just bench-regression read-model
 ```
 
-`--diagnostic` permits collection through observed background work but still
-returns nonzero for it. The current writer cohort used that mode to retain
-useful observations while other work continued. `sql-negative-controls.json`
-shows refusal of malformed/incomplete SQL evidence and fleet/unbound probes;
-`runtime-negative-controls.json` shows refusal of a synthetic reproducible 2%
-p99 loss and missing poll load. `analysis-replay.txt` records a byte-identical
-replay of the fixed final analysis. `manifest.json` checksums every retained
-artifact except itself. These finite measurements concern the stated workload;
-per-request deadlines and response caps remain required.
+The original full-cohort analyzer still exits nonzero for its precision diagnostic:
+
+```bash
+nix develop -c python3 scripts/analyze-projection-feeding-subscriptions.py keiro/bench/results/inspection/projection-status-feeding-subscriptions/2026-11-05/writer
+```
+
+Use a new output directory for new measurements and separately compiled, identical
+sources against both package sets. `scripts/measure-projection-feeding-subscriptions.sh`
+is the fixed full controller; `2026-11-05/idle-replication-controller.sh.txt` records
+the reversed-order follow-up and `sql-controller.sh.txt` records the three SQL pairs.
+`run-quiet.py --diagnostic` can retain process context while allowing background
+activity; its nonzero overlap status is not the acceptance decision.
+
+Apple M5 Ultra, 36 cores, 256 GiB RAM; Darwin 27.2.0; GHC 9.12.4;
+PostgreSQL 18.6; Python 3.14.7; Z3 4.16.0. `identity.json` records source commits,
+binary SHA-256, exact flags, RTS `-N2 -T`, and 311 matching external package unit
+identities. The SQL driver uses O2; libraries and interference harness use O1.
+Benchmarks create private durable ephemeral PostgreSQL clusters through
+`Keiro.Test.Postgres.withMigratedBenchmarkSuite`; setup is outside timing.
+The shell cluster is used separately for the executable jitsurei demonstration.
+
+Fixtures have 10k/100k projection groups, three models per group, a ten-percent
+checkpoint stripe with a non-empty name, plus 10k extra models on the first group
+for SQL. Both forced plan modes and first/deep pages retain five SQL samples per
+shape per binary in each of three alternating pairs. The writer harness also seeds
+100k workflows and timers and uses the existing durable schedule/claim/resume/timer
+operation. All sources, raw samples, dependencies and bootstrap scripts are retained.
+
+## Behavior, verification and history
+
+`jitsurei-cli.json` and `jitsurei-http.json` agree: reporting names
+`jitsurei-order-audit-subscription`; the legacy area-chapters group has `[]`.
+`compatibility.txt` records the unchanged frozen definitions and all eighteen
+original JSON pair expressions. `read-model-guard.log` records all ten guard cases
+passing with the original CSV; `verify.log` is the passing full final-source Nix
+verification. Strict IR closure validation passes (60 concepts). A redundant full repeat was
+stopped at the user's request and retained as `2026-11-05/verification-repeat-interrupted.log`
+with exit 130; it is not a second passing run. The earlier passing full verification
+remains applicable because application and DSL source are unchanged.
+ADR-35 records the durable query and interface decisions.
+
+`report-before-20261105.md`, root `evaluation.json`, root `interference/`, and
+`loaded-*` directories are historical reports, including unsuccessful diagnostics
+and earlier query/encoder candidates; each retains its source/binary identity.
+The 2026-11-05 interrupted run and refused preflights are retained as history and
+are not substituted into the fixed fifty-trial assessment. `manifest.json` hashes
+every retained artifact except itself. Compiled binaries remain local.

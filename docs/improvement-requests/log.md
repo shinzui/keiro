@@ -1,7 +1,10 @@
 # Bundle Update Log
 
+## 2026-11-05
+* **Completion**: IR-57 completed under ExecPlan 327: feeding_subscriptions beside the frozen status row, with paired SQL and fifty-trial writer evidence including fixed idle replication and reported uncertainty.
+
 ## 2026-11-04
-* **Update**: IR-57 accepted under ExecPlan 327: sorted feeding_subscriptions beside the unchanged v1 relation; corrected jitsurei subscription identity.
+* **Update**: IR-57 accepted under ExecPlan 327: sorted feeding\_subscriptions beside the unchanged v1 relation; corrected jitsurei subscription identity.
 * **Completion**: IR-55 completed under ExecPlan 328: jitsurei-ops-http, Jitsurei.Ops, the host recipe, and the HTTP hook-route guide.
 * **Update**: IR-55 accepted under ExecPlan 328: jitsurei-ops-http serves jitsurei's full AppHooks through an exported keiro-ops-http host.
 * **Status audit**: Reconciled all 60 requests against owner plans, the current source,

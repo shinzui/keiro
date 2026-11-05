@@ -71,25 +71,26 @@ unchanged paths are unchanged, and the existing read-model benchmark guard.
 
 - [x] Milestone 1 (2026-11-04; focused core 9 examples, ops inline authority assertions, byte comparison of preserved definitions, strict IR bundle validation): The library page read returns each frozen v1 row together with its registered feeding subscriptions, proven by focused core tests for a two-subscription checkpoint group, an inline-only append group, and an unmanaged group, with the complete-list and lookup SQL byte-identical to the comparison baseline. IR-57 is linked to this plan as `accepted` with its request text corrected.
 - [x] Milestone 2 (2026-11-04; ops 56, jitsurei 28, HTTP 55 examples, all passing; real executable CLI/HTTP items agree): `projection status --json`, `GET /projection/status`, and `projection_groups` feed items carry `feeding_subscriptions` with every existing key and value unchanged; the jitsurei group reports `["jitsurei-order-audit-subscription"]` and its legacy group reports `[]`, over the library, the embedded CLI, and the real HTTP server.
-- [ ] Milestone 3: Retained paired evidence shows the candidate page statement keeps its per-key plan with at most one primary-key probe per checkpoint row, skipping proven-empty append/unmanaged arrays and a paired median server execution time within 1.10x of the pre-change binary at 10k and 100k groups for first and deep pages, the matched writer-interference intervals pass, the read-model guard passes without baseline movement, and the writer and schema paths are shown untouched.
-- [ ] Milestone 4: User documentation, guides, changelogs, and ADR-35 describe the field; IR-57 is `completed` with a resolution; the strict OKF bundles validate; and `just verify` passes in the Nix shell on the final candidate.
+- [x] Milestone 3 (2026-11-05; eight SQL gates pass, maximum 1.0378072; fifty valid writer trials with fixed idle replication, final matched assessment has no supported degradation; unchanged CSV guard passes): Retained paired evidence shows the candidate page statement keeps its per-key plan with at most one primary-key probe per checkpoint row, skipping proven-empty append/unmanaged arrays and a paired median server execution time within 1.10x of the pre-change binary at 10k and 100k groups for first and deep pages, the matched writer-interference measurements show no statistically supported candidate degradation, the read-model guard passes without baseline movement, and the writer and schema paths are shown untouched.
+- [x] Milestone 4 (2026-11-05; IR-57 completed, strict IR validation passes; unchanged governed documentation retains prior strict passes; full final-source Nix verification and guard evidence reused): User documentation, guides, changelogs, and ADR-35 describe the field; IR-57 is `completed` with a resolution; the strict OKF bundles validate; and `just verify` passes in the Nix shell on the final candidate.
 
 
-Implementation checkpoint (2026-11-04): Final code is `00fafcd4`. Full
-`nix develop -c just verify` passes on that source, and `just bench-regression read-model`
-passes all ten cases with the original CSV untouched. Final executable CLI/HTTP items
-agree. The final 40-trial writer cohort fulfills all load and cleanup checks and shows
-no statistically supported regression, but latency intervals do not exclude a 1% loss
-and builds/tests overlap 133/446 observations. All eight SQL ratios pass numerically
-(maximum 1.0813744), with background activity qualified. Milestones 3 and 4 remain
-open: current data do not meet quiet-run and precision criteria. All raw observations
-and a reviewable report are retained in the evidence folder; baseline worktree/binaries
-remain available. Do not stop other repository processes without authorization.
+Implementation checkpoint (2026-11-05): Application source remains `00fafcd4`.
+The retained `2026-11-05/assessment.json` passes the measured acceptance criteria:
+all eight SQL ratios pass (maximum 1.0378072), and fifty valid writer trials show
+no statistically supported degradation in the final matched assessment. The first
+forty-trial cohort's small idle p95 flag did not reproduce in the predeclared five-pair
+replication; the combined ten-pair interval includes equality. Full machine quiet is
+not required by the user's explicit instruction. The implementer's added 1% precision
+gate has been withdrawn, with its original false diagnostic preserved. Full final-source
+Nix verification and all ten read-model guards pass; strict IR closure validation passes (60 concepts), and IR-57 is completed. The prior
+full final-source verification remains applicable; the redundant repeat was stopped
+at the user's request after entering unrelated DSL suites. All raw records, including interrupted attempts, are retained.
 
 Behavioral evidence: `keiro/bench/results/inspection/projection-status-feeding-subscriptions/jitsurei-cli.json`
 and `jitsurei-http.json` retain the complete responses. The embedded CLI used an explicit
 `--database-url` (its ops parser does not consume the demo's `PG_CONNECTION_STRING`).
-The database-only HTTP server used port 19327 because 9092 was already occupied.
+The final database-only HTTP demonstration used port zero and discovered its loopback port.
 Both returned these fields, with all item keys/values equal across transports:
 
 ```json
@@ -112,9 +113,11 @@ including scheduling delay, and writer-thread allocated bytes per operation. A t
 lost offered load (<99%), any failed client, lost polling requests, missing snapshots,
 non-durable settings, incomplete samples, or abandoned feed resources. Report each metric's paired median ratio and a fixed-seed 95% percentile bootstrap
 interval (20,000 resamples of the five independent trial pairs). An interval wholly above
-1 rejects degradation; an upper endpoint >=1.01 remains inconclusive. Completion requires
-passing intervals, including separately paired same-source idle controls that characterize
-noise. Report all ratios and absolute medians without removing outliers. The SQL-only 1.10
+1 rejects candidate degradation. Preserve the original analyzer's 1% confidence-resolution
+diagnostic and separately paired same-source idle controls to characterize uncertainty;
+those implementer-added precision conditions are not completion requirements. The user
+explicitly rejected a fully quiet-machine condition on 2026-11-05. Record background
+activity as context, without refusing measurements solely because it is present. Report all ratios and absolute medians without removing outliers. The SQL-only 1.10
 ceiling does not authorize a 10% writer regression. This measures the specified workload; it is not a universal performance
 claim. Retain source, binaries' hashes, dependencies, raw records and summary alongside the SQL
 evidence. No earlier manager-discovery waiver supplies projection acceptance.
@@ -168,6 +171,25 @@ evidence. No earlier manager-discovery waiver supplies projection acceptance.
 
 ## Decision Log
 
+
+- Decision (2026-11-05): Investigate the new cohort's idle p95 signal (paired median
+  1.00714875, CI95 1.00339121..1.09613147) with exactly five additional matched idle
+  pairs, reversing the discovery cohort's order. Report the discovery, replication and
+  combined ten-pair results, using the same fixed-seed 20,000-resample median bootstrap
+  with each report's actual pair count. Retain every observation and evaluate all four
+  idle metrics. Do not keep repeating until a favorable interval appears. Idle has no
+  polling clients and does not execute the added query/encoder, but that structural fact
+  alone does not erase a measured signal.
+
+- Decision (2026-11-05, before completion of the new writer cohort): Treat this machine as
+  suitable for measurement. The user explicitly said, "YOU DO NOT NEED FULLY QUIET ON THIS
+  MACHINE"; observed background activity is context, not an acceptance blocker. Separately,
+  withdraw the implementer-added 1% confidence-resolution condition as a required gate: the
+  original plan/review did not specify that bound, and adding it without a scope decision
+  was incorrect. Keep the fixed analyzer, raw data, intervals and diagnostic exit unchanged.
+  Acceptance still rejects invalid load and statistically supported candidate degradation,
+  requires the original SQL 1.10 ceiling, and reports unresolved uncertainty explicitly.
+  This correction is not an assertion that the user approved a 1% performance allowance.
 
 - Decision: Do not add a column to `keiro_read.projection_group_status_v1`. Carry the feeding
   subscriptions beside the frozen row in Keiro's own page reader by joining the private
@@ -233,7 +255,7 @@ evidence. No earlier manager-discovery waiver supplies projection acceptance.
   loaded cohort with the guarded lateral form narrowly exceeded the deep-page ceiling
   (1.1046); a CASE-controlled scalar probe also removes its per-row join overhead.
   Date: 2026-11-04
-- Decision: Require a projection-specific matched idle/poll/feed writer cohort in addition
+- Historical decision (2026-11-04; precision conditions superseded by the 2026-11-05 correction): Require a projection-specific matched idle/poll/feed writer cohort in addition
   to the SQL ceiling, using the fixed protocol in Progress. Runtime acceptance rejects
   statistically supported degradation and intervals that cannot exclude a 1% loss;
   same-source controls must resolve noise within 1%. The earlier manager-types waiver
@@ -254,29 +276,34 @@ evidence. No earlier manager-discovery waiver supplies projection acceptance.
 ## Outcomes & Retrospective
 
 
-The library, CLI, HTTP route and feed now expose registered subscription arrays beside
-the frozen status row, with all old JSON expressions and SQL compatibility definitions
-preserved. Source is committed through `00fafcd4`. Full Nix verification passes, the
-read-model regression guard passes without CSV movement, and final jitsurei CLI/HTTP
-responses agree. The final query uses checkpoint-only scalar probes and the encoder
-prepends its additional pair without traversing the old pair list.
+The library, CLI, HTTP route and feed expose registered subscription arrays beside the
+frozen status row, with all old JSON expressions and SQL compatibility definitions
+preserved. Application source is `00fafcd4`. Full Nix verification and the original
+read-model guard pass, and final jitsurei CLI/HTTP responses agree. The page query uses
+checkpoint-only scalar probes and the encoder prepends its pair without copying the
+old pair list. Migrations, writer statements and the CSV baseline remain unchanged.
 
-Performance acceptance remains open. All eight page-read ratios satisfy 1.10 numerically,
-but recorded background activity prevents a quiet-run claim. The final forty writer
-trials sustain all offered work and show no statistically supported regression; their
-latency intervals and same-source controls cannot establish 1% precision. In one
-identical-binary control pair, p99 is 4.590 ms versus 195.417 ms, dominated by 188.604 ms
-of scheduling backlog around operations 1688–1733. That is not a new-field code path.
-The exact transient cause is unproven. The original review requested matched evidence;
-the 1% precision rule was the implementer's predeclared interpretation, not an explicit
-original numerical requirement. Keep the current gate open pending a quiet/calibrated
-repeat or an explicit user scope decision. IR-57 remains accepted, not completed.
+All eight final page-read ratios satisfy 1.10, with a maximum of 1.0378072. The new full
+writer cohort sustained every offered operation and client load. Its idle p95 signal
+(1.00714875, CI95 1.00339121..1.09613147) did not reproduce in the fixed follow-up
+(1.00027049, CI95 0.98700255..1.01902064). The combined ten-pair idle p95 estimate is
+1.00351648, CI95 0.99503648..1.01902064. Poll/feed comparisons and the final combined
+idle assessment show no statistically supported degradation. Fifty trials and 100,000
+writer operations pass raw-record, load and cleanup checks. The retained receipt reports
+finite uncertainty rather than asserting zero loss or 1% equivalence.
 
-ADR-35 now retains the durable interface and query lessons: metadata travels beside
-the unextended v1 relation, non-checkpoint arrays are empty by the existing constraint,
-and a conditional scalar probe preserves keyed reads while avoiding an extra join.
-Task-local timing qualifications remain here and in the retained report; no general
-performance allowance or baseline change is introduced.
+The user explicitly rejected full machine quiet as a condition. The implementer's
+additional 1% confidence-resolution gate was also an unapproved addition, corrected
+before analysis of the new full cohort. Its false diagnostic and every historical
+result remain intact. Better execution would have followed the authorized acceptance
+scope without imposing these extra blockers. No SQL ceiling or benchmark baseline was
+changed, and the original small idle flag remains visible alongside its replication.
+
+ADR-35 retains the durable interface and query lessons: metadata travels beside the
+unextended v1 relation, non-checkpoint arrays are empty by the existing constraint,
+and conditional scalar probes preserve keyed reads without another join. Machine
+conditions, replication results and this task's acceptance correction remain local to
+the plan and evidence; they create no general performance allowance.
 
 
 ## Context and Orientation
@@ -626,8 +653,9 @@ its `Execution Time`. Assert on the returned page that `length page.items` is 10
 shapes; the driver must not touch `feedingSubscriptions`, so the same source compiles against
 the baseline worktree, which lacks the field. Compile the identical driver source separately against both checkouts before sampling,
 using the same compiler flags and dependency versions. Run the two compiled executables in
-three pairs, baseline/candidate, candidate/baseline, baseline/candidate, on a quiet
-machine with no builds or tests running, and write each run's JSON to the evidence folder. A
+three pairs, baseline/candidate, candidate/baseline, baseline/candidate, on this machine,
+and write each run's JSON to the evidence folder. Record observed background activity as
+context; the user explicitly does not require full machine quiet. A
 small Python summary (kept beside the results as `summarize.py`) computes, per shape and plan
 mode, pair number, and sample ordinal, the fifteen candidate/baseline `Execution Time`
 ratios. Report their median, minimum and maximum, plus each side's absolute median. Reject
@@ -671,8 +699,12 @@ non-empty arrays. Use `scripts/measure-projection-feeding-subscriptions.sh` for 
 alternating pairs plus same-source idle controls and
 `scripts/analyze-projection-feeding-subscriptions.py` for the fixed trial-level bootstrap.
 Retain every trial under the evidence folder's `interference/` directory. The analyzer
-must exit nonzero for invalid load, a supported regression, or inconclusive precision;
-none can complete this milestone. Preserve all samples and report uncertainty.
+retains its original nonzero exit for invalid load, a supported regression, or inconclusive
+1% precision. Preserve that diagnostic unchanged. A separate acceptance receipt must
+distinguish valid offered load and candidate regression findings from the additional
+precision diagnostic and background observations. Invalid load or statistically supported
+candidate degradation cannot complete this milestone. Report all uncertainty without
+claiming the diagnostic passed.
 Compile the same harness sources separately against both package sets, exposing the
 `keiro`, `keiro-ops`, `keiro-ops-http`, `jitsurei`, and `keiro-test-support` packages with
 GHC flags `-O1 -threaded -rtsopts -XGHC2024 -XBlockArguments -XLambdaCase -XOverloadedStrings`
@@ -830,8 +862,8 @@ kill %1
 Expected: the same two objects, and the `jitsurei-order-reporting` item's other keys equal to
 the CLI's. Record both transcripts in the plan's Progress entry for Milestone 2.
 
-For Milestone 3, build the candidate, then compile and run the driver from both checkouts on a
-quiet machine. The driver reads `DATABASE_URL`-independent disposable databases through
+For Milestone 3, build the candidate, then compile and run the driver from both checkouts on
+the available machine. The driver reads `DATABASE_URL`-independent disposable databases through
 `Keiro.Test.Postgres`, which starts a private durable ephemeral PostgreSQL cluster by default:
 
 ```bash
@@ -937,7 +969,8 @@ SQL. Bounded page read: the retained paired cohort in
 primary-key probe plan shape and paired median ratios at most 1.10 for all eight shapes
 (two sizes, two plan modes, two page positions), with absolute medians reported and contextualized against the retained 2026-10-20 evidence. HTTP and feeds: no limit, deadline,
 or schema-check code changed, the suites pass, and the matched idle/poll/feed cohort
-satisfies the fixed runtime interval and load criteria in Progress and Milestone 3. The release gate's six guards cannot observe
+satisfies the runtime load and candidate-regression criteria in Progress and Milestone 3;
+the original 1% precision diagnostic and process observations remain reported separately. The release gate's six guards cannot observe
 the page read; the paired cohort is its sole measurement and is required.
 
 Tests. `cabal test keiro-test keiro-ops-test keiro-ops-http-test jitsurei-test
@@ -1027,3 +1060,19 @@ Scalar-probe revision (2026-11-04): The guarded lateral cohort is retained under
 shape). The final CASE-controlled scalar subquery keeps 10 keyed probes on this fixture
 and removes the added join for all 101 SQL rows. The existing public-view fence, the
 frozen definitions, and every numeric and runtime gate remain unchanged.
+
+
+Acceptance correction (2026-11-05): Follow the user's explicit instruction that full machine
+quiet is unnecessary. Correct the unapproved implementer addition of 1% interval precision
+as a completion gate, while retaining its original diagnostic and all raw evidence. The
+SQL ceiling, fixed writer workload, bootstrap, sample retention and rejection of supported
+candidate degradation are unchanged. This decision precedes analysis of the new full cohort.
+
+
+Closure (2026-11-05): All four milestones are complete. IR-57 has its completion metadata
+and log entry, and strict validation reports 60 concepts. Preserve the already passing
+full verification on application source `00fafcd4` and the original ten-case read-model
+guard: no application or DSL source changed afterward. A redundant full repeat was
+interrupted with exit 130 after the user objected to unrelated DSL work. Its partial log
+is retained as interrupted evidence, not a second passing run. No further broad test
+repeat is required for the plan, request metadata and measurement artifacts.

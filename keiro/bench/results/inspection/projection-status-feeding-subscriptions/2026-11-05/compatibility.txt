@@ -1,0 +1,3 @@
+PASS: measured application and harness sources unchanged from 00fafcd4.
+PASS: frozen types, decoder, complete-list and lookup definitions byte-identical to d64849f1.
+PASS: migrations, writer/registration paths, schema and CSV baseline unchanged.
