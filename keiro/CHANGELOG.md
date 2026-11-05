@@ -6,6 +6,8 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+## 0.24.0.0 — 2026-11-05
+
 ### Breaking Changes
 
 - `ProjectionStatusPage.items` now contains `ProjectionGroupStatusRow`; access the

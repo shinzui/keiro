@@ -6,6 +6,8 @@ All notable changes to `keiro-test-support` are recorded here. The format follow
 
 ## [Unreleased]
 
+## 0.24.0.0 — 2026-11-05
+
 ### New Features
 
 - Add `withFreshResourceStoreWithConnection`, supplying a fresh database

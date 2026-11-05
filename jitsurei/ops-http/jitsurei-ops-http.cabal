@@ -56,7 +56,7 @@ executable jitsurei-ops-http
   build-depends:
     base >=4.21 && <5,
     jitsurei,
-    keiro-ops-http ^>=0.23.0.0,
+    keiro-ops-http ^>=0.24.0.0,
 
 test-suite jitsurei-ops-http-test
   import: warnings, shared
@@ -76,10 +76,10 @@ test-suite jitsurei-ops-http-test
     http-client >=0.7 && <0.8,
     http-types >=0.12 && <0.13,
     jitsurei,
-    keiro ^>=0.23.0.0,
-    keiro-ops ^>=0.23.0.0,
-    keiro-ops-http ^>=0.23.0.0,
-    keiro-test-support ^>=0.23.0.0,
+    keiro ^>=0.24.0.0,
+    keiro-ops ^>=0.24.0.0,
+    keiro-ops-http ^>=0.24.0.0,
+    keiro-test-support ^>=0.24.0.0,
     kiroku-store ^>=0.13.0.1,
     pgmq-migration >=0.7.0.0 && <0.8,
     text >=2.1,

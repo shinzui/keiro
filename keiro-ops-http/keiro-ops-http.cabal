@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name: keiro-ops-http
-version: 0.23.0.0
+version: 0.24.0.0
 synopsis:
   Bounded HTTP transport for the Keiro operational command tree
 
@@ -79,9 +79,9 @@ library
     hasql >=1.10 && <1.11,
     hasql-pool >=1.2 && <1.5,
     http-types >=0.12 && <0.13,
-    keiro ^>=0.23.0.0,
-    keiro-migrations ^>=0.23.0.0,
-    keiro-ops ^>=0.23.0.0,
+    keiro ^>=0.24.0.0,
+    keiro-migrations ^>=0.24.0.0,
+    keiro-ops ^>=0.24.0.0,
     kiroku-store ^>=0.13.0.1,
     network >=3.1 && <3.3,
     network-uri >=2.6.4.2 && <2.7,
@@ -106,7 +106,7 @@ executable keiro-ops-http
 
   build-depends:
     base >=4.21 && <5,
-    keiro-ops ^>=0.23.0.0,
+    keiro-ops ^>=0.24.0.0,
     keiro-ops-http,
 
 flag compose-example
@@ -128,7 +128,7 @@ executable keiro-ops-http-compose-example
   build-depends:
     async >=2.2 && <2.3,
     base >=4.21 && <5,
-    keiro-ops ^>=0.23.0.0,
+    keiro-ops ^>=0.24.0.0,
     keiro-ops-http,
     kiroku-metrics ^>=0.4.0.1,
     kiroku-store ^>=0.13.0.1,
@@ -160,10 +160,10 @@ benchmark inspection-interference
     http-client >=0.7 && <0.8,
     http-types >=0.12 && <0.13,
     jitsurei,
-    keiro ^>=0.23.0.0,
-    keiro-ops ^>=0.23.0.0,
+    keiro ^>=0.24.0.0,
+    keiro-ops ^>=0.24.0.0,
     keiro-ops-http,
-    keiro-test-support ^>=0.23.0.0,
+    keiro-test-support ^>=0.24.0.0,
     kiroku-store ^>=0.13.0.1,
     process >=1.6 && <1.7,
     text >=2.1 && <2.2,
@@ -200,12 +200,12 @@ test-suite keiro-ops-http-test
     http-client >=0.7 && <0.8,
     http-types >=0.12 && <0.13,
     jitsurei,
-    keiro ^>=0.23.0.0,
-    keiro-migrations ^>=0.23.0.0,
-    keiro-ops ^>=0.23.0.0,
+    keiro ^>=0.24.0.0,
+    keiro-migrations ^>=0.24.0.0,
+    keiro-ops ^>=0.24.0.0,
     keiro-ops-http,
-    keiro-pgmq ^>=0.23.0.0,
-    keiro-test-support ^>=0.23.0.0,
+    keiro-pgmq ^>=0.24.0.0,
+    keiro-test-support ^>=0.24.0.0,
     kiroku-metrics ^>=0.4.0.1,
     kiroku-store ^>=0.13.0.1,
     network >=3.1 && <3.3,

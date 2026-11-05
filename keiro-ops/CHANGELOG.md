@@ -6,9 +6,14 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.24.0.0 — 2026-11-05
+
 ### Breaking Changes
 
 - `AppHooks` gains `durableConsumers`; direct record constructors must supply it. Updating `emptyAppHooks` remains the preferred embedding pattern.
+
+- Exhaustive matches on `Keiro.Ops.Projection.Command` must handle `Consumers`,
+  and matches on `Keiro.Ops.Workflow.InspectionCommand` must handle `InspectCounts`.
 
 ### New Features
 

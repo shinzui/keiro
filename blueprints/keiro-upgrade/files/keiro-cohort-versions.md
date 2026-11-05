@@ -9,6 +9,7 @@ edit. What to edit is in the edge prompt.
 
 | Keiro | `kiroku-store` | `kiroku-store-migrations` | `keiki` | `shibuya-core` |
 |---|---|---|---|---|
+| 0.24.0.0 | `^>=0.13.0.1` | `^>=0.7.3.0` | `>=0.9 && <0.10` | `^>=0.12.0.0` |
 | 0.23.0.0 | `^>=0.13.0.1` | `^>=0.7.3.0` | `>=0.9 && <0.10` | `^>=0.12.0.0` |
 | 0.22.0.0 | `^>=0.12.0.0` | `^>=0.7.2.0` | `>=0.9 && <0.10` | `^>=0.12.0.0` |
 | 0.21.0.0 | `^>=0.11.0.0` | `^>=0.7.1.0` | `>=0.9 && <0.10` | `^>=0.10.0.1` |
@@ -60,6 +61,11 @@ exhaustive custom interpreters/observers and migration `0017` (store identity
 and compaction ledger). The composed framework plan contains 49 migrations.
 Existing migration payloads and checksums are unchanged. Compaction adoption is
 optional; the Shibuya/PGMQ cohort and DSL language policy remain as in 0.22.0.0.
+
+Keiro 0.24.0.0 retains the 0.23.0.0 upstream cohort and composed migration plan.
+Its edge covers the projection status page wrapper, the new application-hook
+field and exhaustive operational-command matches. No migration ledger edits or
+DSL language changes are required.
 
 From 0.18.0.0, `keiro-test-support` requires `ephemeral-pg >=0.3.1 && <0.4`. That is a test-only
 dependency, but `pg-migrate-test-support 1.1.0.0` still caps it below 0.3, so a build plan holding

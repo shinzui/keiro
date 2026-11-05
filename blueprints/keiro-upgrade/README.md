@@ -6,7 +6,7 @@
 > heard of Kiroku — still crosses Kiroku's edges, exactly once, in the right
 > order.
 
-**Version:** `0.12.0`
+**Version:** `0.13.0`
 
 **Kind:** Blueprint migration (run with `seihou agent migrate`, not
 `seihou agent run` — this blueprint declares no baseline and applies no modules)
@@ -47,6 +47,7 @@ cannot roll them back; version control is the undo.
 | `0.20.0.0` | `0.21.0.0` | — |
 | `0.21.0.0` | `0.22.0.0` | `kiroku-upgrade` `0.11.0.1 -> 0.12.0.0` |
 | `0.22.0.0` | `0.23.0.0` | `kiroku-upgrade` `0.12.0.0 -> 0.13.0.0` |
+| `0.23.0.0` | `0.24.0.0` | — |
 
 Gaps between edges are deliberate and legal: they mean no agent intervention was
 needed in that interval. Edges are append-only — an edge stays correct for as

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## 0.24.0.0 — 2026-11-05
+
 ### New Features
 
 - Expose embedded `GET /projection/consumers?category=NAME` through the shared grammar and existing HTTP budgets.
@@ -10,8 +12,6 @@
 - Expose `GET /wf/inspect/counts` through the shared command grammar, schema checks and inspection limits.
 - `/projection/status` and `projection_groups` feed items include sorted
   `feeding_subscriptions`, shared with the CLI encoder.
-
-### New Features
 
 - Export `Keiro.Ops.Http.Host` (`HostOptions`, `hostOptionsParser`, `withHost`,
   `mainWithHooks`) and re-export it from `Keiro.Ops.Http`. The standalone

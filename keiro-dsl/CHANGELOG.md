@@ -6,6 +6,10 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.24.0.0 — 2026-11-05
+
+No changes this release.
+
 ## 0.23.0.0 — 2026-10-30
 
 ### Other Changes

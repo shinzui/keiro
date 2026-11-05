@@ -6,12 +6,29 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+## 0.24.0.0 — 2026-11-05
+
 ### Breaking Changes
 
 - **keiro**: `ProjectionStatusPage.items` now holds `ProjectionGroupStatusRow`, with
   the frozen v1 row under `status` and registered names under `feedingSubscriptions`.
 
+- **keiro-ops**: `AppHooks` gains `durableConsumers`; direct constructors must
+  supply it. Exhaustive matches must handle `Keiro.Ops.Projection.Consumers` and
+  `Keiro.Ops.Workflow.InspectCounts`.
+
 ### New Features
+
+- **keiro**: Add category-to-projection discovery and validated durable-consumer
+  declarations with exact, all-category and namespace scopes. Embedded CLI and
+  HTTP hosts expose bounded category-consumer discovery with coverage flags.
+- **keiro**: Add exact seven-class workflow-status counts with optional workflow
+  name filtering, shared by `wf inspect counts` and `GET /wf/inspect/counts`.
+  Counts require no schema or writer changes.
+- **keiro-ops-http**: Export the shared host lifecycle through `Keiro.Ops.Http.Host`
+  and `Keiro.Ops.Http`, allowing application hosts to supply their inspection hooks.
+- **keiro-test-support**: Add `withFreshResourceStoreWithConnection` for fixtures
+  needing the database connection string and configurable resource-aware runner.
 
 - Projection status JSON and `projection_groups` feeds carry sorted
   `feeding_subscriptions` beside the unchanged frozen SQL contract.
@@ -24,6 +41,16 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 - **jitsurei**: Add `jitsurei-ops-http` and `just jitsurei-ops-http` to serve
   the example database with aggregate and process-manager inspection. Share the
   complete application hooks with the embedded CLI through `Jitsurei.Ops`.
+
+### Other Changes
+
+- Bound dedicated HTTP inspection queries to one PostgreSQL backend per query,
+  retaining existing admission and deadline limits and ordinary writer settings.
+- Publish the `domain-scalar-identity-decoder-audit` blueprint for consumer audits.
+- Add the 0.23.0.0 → 0.24.0.0 upgrade edge for projection page items, application
+  hooks and exhaustive command matches. The upstream cohort, database migrations
+  and DSL language policy stay unchanged; no service regeneration is required
+  beyond established provenance updates.
 
 ## 0.23.0.0 — 2026-10-30
 
