@@ -45,6 +45,27 @@ spec fixture = describe "Keiro.Workflow.Inspection" $ do
       forM_ ["not-a-cursor", "", Text.replicate 4097 "a", "===="] $ \bad ->
         (decodeCursor "wf-key2" (InspectionCursor bad) :: Either CursorError Value) `shouldSatisfy` (\case Left (MalformedCursor _) -> True; _ -> False)
   around (withFreshStore fixture) $ do
+    it "counts empty selections and exact names with one database observation" $ \store -> do
+      empty <- expectStore store (Instance.inspectionInstanceCounts (WorkflowCountsQuery Nothing))
+      empty.counts `shouldBe` WorkflowStatusCounts 0 0 0 0 0 0 0
+      empty.observedAt `shouldSatisfy` (> read "2026-01-01 00:00:00 UTC")
+      sql store "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) VALUES ('one','支払_%''\\ λ','running'),('two','支払_other','failed')"
+      exact <- expectStore store (Instance.inspectionInstanceCounts (WorkflowCountsQuery (Just "支払_%'\\ λ")))
+      exact.counts `shouldBe` WorkflowStatusCounts 1 0 0 0 0 0 0
+      absent <- expectStore store (Instance.inspectionInstanceCounts (WorkflowCountsQuery (Just "absent")))
+      absent.counts `shouldBe` empty.counts
+    it "counts every class beyond one list page and ignores lease and retry clocks" $ \store -> do
+      sql store "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status,attempts,wake_after,next_attempt_at,leased_by,lease_expires_at,generation) SELECT 'counts-'||lpad(n::text,4,'0'),'counts',CASE n%7 WHEN 0 THEN 'running' WHEN 1 THEN 'running' WHEN 2 THEN 'suspended' WHEN 3 THEN 'suspended' WHEN 4 THEN 'completed' WHEN 5 THEN 'cancelled' ELSE 'failed' END,CASE WHEN n%7=1 THEN -1 ELSE 0 END,CASE WHEN n%7=2 THEN '2020-01-01+00'::timestamptz END,'2099-01-01+00'::timestamptz,'worker','2099-01-01+00'::timestamptz,5 FROM generate_series(1,700) n"
+      result <- expectStore store (Instance.inspectionInstanceCounts (WorkflowCountsQuery Nothing))
+      result.counts `shouldBe` WorkflowStatusCounts 100 100 100 100 100 100 100
+      pages <- drain store defaultWorkflowListQuery {pageSize = 500}
+      let rows = concatMap (.items) pages
+      length rows `shouldBe` 700
+      forM_ [minBound .. maxBound] $ \cls ->
+        length (filter ((== cls) . statusClassOf) rows) `shouldBe` 100
+      sql store "UPDATE keiro.keiro_workflows SET attempts=0 WHERE status='running'; UPDATE keiro.keiro_workflows SET wake_after=NULL WHERE status='suspended'"
+      transitioned <- expectStore store (Instance.inspectionInstanceCounts (WorkflowCountsQuery Nothing))
+      transitioned.counts `shouldBe` WorkflowStatusCounts 200 0 0 200 100 100 100
     it "rechecks every header field against its exact image, including old and far-future dates" $ \store -> do
       let fields =
             [ ("workflow_id", "'two'"),

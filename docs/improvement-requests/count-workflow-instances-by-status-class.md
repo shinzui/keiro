@@ -5,9 +5,9 @@ description: >-
   `/wf/inspect/list` pages instances but nothing counts them, so a dashboard can only sample a
   page and mark counts as lower bounds. Add a bounded read returning the instance count per
   status class, optionally filtered by workflow name.
-timestamp: 2026-11-04T05:28:05Z
+timestamp: 2026-11-05T12:50:37Z
 requestId: IR-58
-status: accepted
+status: in-progress
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/325-count-workflow-instances-by-status-class-without-runtime-performance-regressions.md
 reviews:
@@ -31,11 +31,12 @@ reviews:
 
 ## Status
 
-Accepted for implementation under
+Implementation started under
 [ExecPlan 325](../plans/325-count-workflow-instances-by-status-class-without-runtime-performance-regressions.md).
-All three implementation milestones remain open: the million-instance query proof, the
-library/CLI/HTTP integration, and matched runtime-performance acceptance. No counting API
-has been delivered yet.
+The read-only owner prototype and million-instance query experiment are retained in
+`keiro/bench/results/workflow-counts/`. All three milestones remain open: the
+index-backed query criterion, library/CLI/HTTP integration, and matched runtime
+performance acceptance. No CLI or HTTP counting endpoint has been delivered yet.
 
 Originally proposed by the keiro runtime console initiative
 (`mori://shinzui/keiro-ui/masterplans/2-build-the-keiro-runtime-console`), filed from

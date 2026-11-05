@@ -2,6 +2,7 @@
 -- schema consume them without depending on the rendering/page facade.
 module Keiro.Workflow.Inspection.Query where
 
+import Data.Int (Int64)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
 import Data.Time (UTCTime)
@@ -60,6 +61,25 @@ data WorkflowListQuery = WorkflowListQuery
 
 defaultWorkflowListQuery :: WorkflowListQuery
 defaultWorkflowListQuery = WorkflowListQuery Nothing Nothing Nothing Nothing Nothing Nothing ByKey 100 Nothing
+
+data WorkflowCountsQuery = WorkflowCountsQuery
+  {workflowName :: !(Maybe Text)}
+  deriving stock (Eq, Show, Generic)
+
+data WorkflowStatusCounts = WorkflowStatusCounts
+  { running :: !Int64,
+    retrying :: !Int64,
+    sleeping :: !Int64,
+    awaiting :: !Int64,
+    completed :: !Int64,
+    cancelled :: !Int64,
+    failed :: !Int64
+  }
+  deriving stock (Eq, Show, Generic)
+
+data WorkflowCounts = WorkflowCounts
+  {observedAt :: !UTCTime, counts :: !WorkflowStatusCounts}
+  deriving stock (Eq, Show, Generic)
 
 -- | Validated exclusive database keys, decoded by the inspection facade.
 -- The default key tuple is (workflow_id, workflow_name).

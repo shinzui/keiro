@@ -26,6 +26,7 @@ module Keiro.Workflow.Instance
     lookupInstanceConditionalSession,
     listWorkflowInstances,
     inspectionInstanceRows,
+    inspectionInstanceCounts,
     cancelWorkflow,
     claimInstance,
     renewInstanceLeaseTx,
@@ -896,14 +897,6 @@ inspectionInstanceStatement query position count = preparable sql params decoder
     columns = "workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at"
     -- Classification is inspection-only. Reuse existing status/key access;
     -- no generated column or inspection index adds work to ordinary writes.
-    classPredicate = \case
-      ClassRunning -> "status = 'running' AND attempts = 0"
-      ClassRetrying -> "status = 'running' AND attempts <> 0"
-      ClassSleeping -> "status = 'suspended' AND wake_after IS NOT NULL"
-      ClassAwaiting -> "status = 'suspended' AND wake_after IS NULL"
-      ClassCompleted -> "status = 'completed'"
-      ClassCancelled -> "status = 'cancelled'"
-      ClassFailed -> "status = 'failed'"
     sql =
       "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT "
         <> columns
@@ -917,3 +910,32 @@ inspectionInstanceStatement query position count = preparable sql params decoder
         <> order
     params = filterParams <> (const (fromIntegral count :: Int32) >$< E.param (E.nonNullable E.int4))
     decoder = D.rowList ((,) <$> D.column (D.nonNullable D.timestamptz) <*> getCompose (instanceFields (Compose . D.column . D.nullable) (Compose . fmap Just . D.column . D.nullable)))
+
+-- Shared only by inspection reads; lifecycle writes do no counting work.
+classPredicate :: WorkflowStatusClass -> Text
+classPredicate = \case
+  ClassRunning -> "status = 'running' AND attempts = 0"
+  ClassRetrying -> "status = 'running' AND attempts <> 0"
+  ClassSleeping -> "status = 'suspended' AND wake_after IS NOT NULL"
+  ClassAwaiting -> "status = 'suspended' AND wake_after IS NULL"
+  ClassCompleted -> "status = 'completed'"
+  ClassCancelled -> "status = 'cancelled'"
+  ClassFailed -> "status = 'failed'"
+
+-- | Prototype exact current-header counts in a single snapshot. The caller
+-- owns statement/deadline policy, as with other direct inspection reads.
+inspectionInstanceCounts :: (Store :> es) => WorkflowCountsQuery -> Eff es WorkflowCounts
+inspectionInstanceCounts query = runTransaction (Tx.statement () statement)
+  where
+    statement = preparable sql params (D.singleRow decoder)
+    sql =
+      "/* keiro-inspection-counts-v1 */ SELECT now(), "
+        <> Text.intercalate ", " ["count(*) FILTER (WHERE " <> classPredicate c <> ")" | c <- [minBound .. maxBound]]
+        <> " FROM keiro.keiro_workflows"
+        <> maybe "" (const " WHERE workflow_name = $1") query.workflowName
+    params = maybe E.noParams (\name -> const name >$< E.param (E.nonNullable E.text)) query.workflowName
+    total = D.column (D.nonNullable D.int8)
+    decoder =
+      WorkflowCounts
+        <$> D.column (D.nonNullable D.timestamptz)
+        <*> (WorkflowStatusCounts <$> total <*> total <*> total <*> total <*> total <*> total <*> total)

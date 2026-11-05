@@ -1,0 +1,410 @@
+[
+  {
+    "case": "10000-force_custom_plan-absent-class.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'running' AND attempts <> 0)) ORDER BY workflow_id, workflow_name LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "dd28a2e81d421d88d07fdd9830b2d2519b446ab0642b8218440153cc362b22f5",
+    "after_sha256": "dd28a2e81d421d88d07fdd9830b2d2519b446ab0642b8218440153cc362b22f5"
+  },
+  {
+    "case": "10000-force_custom_plan-absent-name.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND workflow_name = $1 ORDER BY workflow_id, workflow_name LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7",
+    "after_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7"
+  },
+  {
+    "case": "10000-force_custom_plan-created-deep.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND (created_at, workflow_name, workflow_id) < ($1,$2,$3) ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC LIMIT $4) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC",
+    "before_sha256": "90c0f57c64c257496ac471eda025e0e33a3323985dfa4cbc045f11c41dcf34e8",
+    "after_sha256": "90c0f57c64c257496ac471eda025e0e33a3323985dfa4cbc045f11c41dcf34e8"
+  },
+  {
+    "case": "10000-force_custom_plan-created-first.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC",
+    "before_sha256": "8cdfaffc283f585baa5ea3efaa027e67b7bece9e15eabc899de5829d6bcc6966",
+    "after_sha256": "8cdfaffc283f585baa5ea3efaa027e67b7bece9e15eabc899de5829d6bcc6966"
+  },
+  {
+    "case": "10000-force_custom_plan-created-rare-status.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'failed')) ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC",
+    "before_sha256": "1a8a305564386cfcddd8cdcfe201cb429b2211b71dba43cf69a8fd6c27f5bb79",
+    "after_sha256": "1a8a305564386cfcddd8cdcfe201cb429b2211b71dba43cf69a8fd6c27f5bb79"
+  },
+  {
+    "case": "10000-force_custom_plan-created-window.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND created_at >= $1 ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC",
+    "before_sha256": "1766720e281e898ed38c3abe0fb2c67540e3c1ed390b34ab5d90d5553cb381aa",
+    "after_sha256": "1766720e281e898ed38c3abe0fb2c67540e3c1ed390b34ab5d90d5553cb381aa"
+  },
+  {
+    "case": "10000-force_custom_plan-key-deep.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND (workflow_id, workflow_name) > ($1,$2) ORDER BY workflow_id, workflow_name LIMIT $3) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "c465efdc6aa3497a3e3b76be6fa80a0370e3a25be0e3eccbf84bf1340eac6b4b",
+    "after_sha256": "c465efdc6aa3497a3e3b76be6fa80a0370e3a25be0e3eccbf84bf1340eac6b4b"
+  },
+  {
+    "case": "10000-force_custom_plan-key-first.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true ORDER BY workflow_id, workflow_name LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "0e26420151bcfd5c5c790b8f684796d8bc9646af2722cd3098330eee7aa65ec3",
+    "after_sha256": "0e26420151bcfd5c5c790b8f684796d8bc9646af2722cd3098330eee7aa65ec3"
+  },
+  {
+    "case": "10000-force_custom_plan-key-past-wide.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND (workflow_id, workflow_name) > ($1,$2) ORDER BY workflow_id, workflow_name LIMIT $3) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "c465efdc6aa3497a3e3b76be6fa80a0370e3a25be0e3eccbf84bf1340eac6b4b",
+    "after_sha256": "c465efdc6aa3497a3e3b76be6fa80a0370e3a25be0e3eccbf84bf1340eac6b4b"
+  },
+  {
+    "case": "10000-force_custom_plan-mixed-class.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'failed') OR (status = 'running' AND attempts = 0)) ORDER BY workflow_id, workflow_name LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "33d7df820874ddcd83e2527e961f8a54329a0faf692f751735509b4a090df137",
+    "after_sha256": "33d7df820874ddcd83e2527e961f8a54329a0faf692f751735509b4a090df137"
+  },
+  {
+    "case": "10000-force_custom_plan-rare-status-deep.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'failed')) AND (workflow_id, workflow_name) > ($1,$2) ORDER BY workflow_id, workflow_name LIMIT $3) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "270e282ece3bc892a15d61df2fab1788ecbe40abfb53c074824e9893f9c87e58",
+    "after_sha256": "270e282ece3bc892a15d61df2fab1788ecbe40abfb53c074824e9893f9c87e58"
+  },
+  {
+    "case": "10000-force_custom_plan-rare-status.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'failed')) ORDER BY workflow_id, workflow_name LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "83575ec7fbed0dd5f0edc59c43a2945e43e2a53567472a1f09cd234ab89d50bf",
+    "after_sha256": "83575ec7fbed0dd5f0edc59c43a2945e43e2a53567472a1f09cd234ab89d50bf"
+  },
+  {
+    "case": "10000-force_custom_plan-running-class.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'running' AND attempts = 0)) ORDER BY workflow_id, workflow_name LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "ce094b7312bfd8099ae4d88cd9541c59eee139f9c41a9bd07b4932f3c1f41639",
+    "after_sha256": "ce094b7312bfd8099ae4d88cd9541c59eee139f9c41a9bd07b4932f3c1f41639"
+  },
+  {
+    "case": "10000-force_custom_plan-small-name-rare.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'failed')) AND workflow_name = $1 ORDER BY workflow_id, workflow_name LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "fb4c6a22702ba1213ab550ecade624fde07563e56448c8f44bcd9216b043bfbb",
+    "after_sha256": "fb4c6a22702ba1213ab550ecade624fde07563e56448c8f44bcd9216b043bfbb"
+  },
+  {
+    "case": "10000-force_custom_plan-small-name.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND workflow_name = $1 ORDER BY workflow_id, workflow_name LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7",
+    "after_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7"
+  },
+  {
+    "case": "10000-force_custom_plan-update-window.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND updated_at >= $1 ORDER BY workflow_id, workflow_name LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "005a930c46d77ab821bfa819eca258ae4d896756b3a5937e0311c1d1ed417b35",
+    "after_sha256": "005a930c46d77ab821bfa819eca258ae4d896756b3a5937e0311c1d1ed417b35"
+  },
+  {
+    "case": "10000-force_custom_plan-wide-name.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND workflow_name = $1 ORDER BY workflow_id, workflow_name LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7",
+    "after_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7"
+  },
+  {
+    "case": "10000-force_generic_plan-absent-class.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'running' AND attempts <> 0)) ORDER BY workflow_id, workflow_name LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "dd28a2e81d421d88d07fdd9830b2d2519b446ab0642b8218440153cc362b22f5",
+    "after_sha256": "dd28a2e81d421d88d07fdd9830b2d2519b446ab0642b8218440153cc362b22f5"
+  },
+  {
+    "case": "10000-force_generic_plan-absent-name.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND workflow_name = $1 ORDER BY workflow_id, workflow_name LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7",
+    "after_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7"
+  },
+  {
+    "case": "10000-force_generic_plan-created-deep.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND (created_at, workflow_name, workflow_id) < ($1,$2,$3) ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC LIMIT $4) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC",
+    "before_sha256": "90c0f57c64c257496ac471eda025e0e33a3323985dfa4cbc045f11c41dcf34e8",
+    "after_sha256": "90c0f57c64c257496ac471eda025e0e33a3323985dfa4cbc045f11c41dcf34e8"
+  },
+  {
+    "case": "10000-force_generic_plan-created-first.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC",
+    "before_sha256": "8cdfaffc283f585baa5ea3efaa027e67b7bece9e15eabc899de5829d6bcc6966",
+    "after_sha256": "8cdfaffc283f585baa5ea3efaa027e67b7bece9e15eabc899de5829d6bcc6966"
+  },
+  {
+    "case": "10000-force_generic_plan-created-rare-status.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'failed')) ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC",
+    "before_sha256": "1a8a305564386cfcddd8cdcfe201cb429b2211b71dba43cf69a8fd6c27f5bb79",
+    "after_sha256": "1a8a305564386cfcddd8cdcfe201cb429b2211b71dba43cf69a8fd6c27f5bb79"
+  },
+  {
+    "case": "10000-force_generic_plan-created-window.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND created_at >= $1 ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC",
+    "before_sha256": "1766720e281e898ed38c3abe0fb2c67540e3c1ed390b34ab5d90d5553cb381aa",
+    "after_sha256": "1766720e281e898ed38c3abe0fb2c67540e3c1ed390b34ab5d90d5553cb381aa"
+  },
+  {
+    "case": "10000-force_generic_plan-key-deep.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND (workflow_id, workflow_name) > ($1,$2) ORDER BY workflow_id, workflow_name LIMIT $3) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "c465efdc6aa3497a3e3b76be6fa80a0370e3a25be0e3eccbf84bf1340eac6b4b",
+    "after_sha256": "c465efdc6aa3497a3e3b76be6fa80a0370e3a25be0e3eccbf84bf1340eac6b4b"
+  },
+  {
+    "case": "10000-force_generic_plan-key-first.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true ORDER BY workflow_id, workflow_name LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "0e26420151bcfd5c5c790b8f684796d8bc9646af2722cd3098330eee7aa65ec3",
+    "after_sha256": "0e26420151bcfd5c5c790b8f684796d8bc9646af2722cd3098330eee7aa65ec3"
+  },
+  {
+    "case": "10000-force_generic_plan-key-past-wide.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND (workflow_id, workflow_name) > ($1,$2) ORDER BY workflow_id, workflow_name LIMIT $3) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "c465efdc6aa3497a3e3b76be6fa80a0370e3a25be0e3eccbf84bf1340eac6b4b",
+    "after_sha256": "c465efdc6aa3497a3e3b76be6fa80a0370e3a25be0e3eccbf84bf1340eac6b4b"
+  },
+  {
+    "case": "10000-force_generic_plan-mixed-class.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'failed') OR (status = 'running' AND attempts = 0)) ORDER BY workflow_id, workflow_name LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "33d7df820874ddcd83e2527e961f8a54329a0faf692f751735509b4a090df137",
+    "after_sha256": "33d7df820874ddcd83e2527e961f8a54329a0faf692f751735509b4a090df137"
+  },
+  {
+    "case": "10000-force_generic_plan-rare-status-deep.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'failed')) AND (workflow_id, workflow_name) > ($1,$2) ORDER BY workflow_id, workflow_name LIMIT $3) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "270e282ece3bc892a15d61df2fab1788ecbe40abfb53c074824e9893f9c87e58",
+    "after_sha256": "270e282ece3bc892a15d61df2fab1788ecbe40abfb53c074824e9893f9c87e58"
+  },
+  {
+    "case": "10000-force_generic_plan-rare-status.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'failed')) ORDER BY workflow_id, workflow_name LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "83575ec7fbed0dd5f0edc59c43a2945e43e2a53567472a1f09cd234ab89d50bf",
+    "after_sha256": "83575ec7fbed0dd5f0edc59c43a2945e43e2a53567472a1f09cd234ab89d50bf"
+  },
+  {
+    "case": "10000-force_generic_plan-running-class.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'running' AND attempts = 0)) ORDER BY workflow_id, workflow_name LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "ce094b7312bfd8099ae4d88cd9541c59eee139f9c41a9bd07b4932f3c1f41639",
+    "after_sha256": "ce094b7312bfd8099ae4d88cd9541c59eee139f9c41a9bd07b4932f3c1f41639"
+  },
+  {
+    "case": "10000-force_generic_plan-small-name-rare.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'failed')) AND workflow_name = $1 ORDER BY workflow_id, workflow_name LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "fb4c6a22702ba1213ab550ecade624fde07563e56448c8f44bcd9216b043bfbb",
+    "after_sha256": "fb4c6a22702ba1213ab550ecade624fde07563e56448c8f44bcd9216b043bfbb"
+  },
+  {
+    "case": "10000-force_generic_plan-small-name.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND workflow_name = $1 ORDER BY workflow_id, workflow_name LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7",
+    "after_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7"
+  },
+  {
+    "case": "10000-force_generic_plan-update-window.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND updated_at >= $1 ORDER BY workflow_id, workflow_name LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "005a930c46d77ab821bfa819eca258ae4d896756b3a5937e0311c1d1ed417b35",
+    "after_sha256": "005a930c46d77ab821bfa819eca258ae4d896756b3a5937e0311c1d1ed417b35"
+  },
+  {
+    "case": "10000-force_generic_plan-wide-name.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND workflow_name = $1 ORDER BY workflow_id, workflow_name LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7",
+    "after_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7"
+  },
+  {
+    "case": "100000-force_custom_plan-absent-class.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'running' AND attempts <> 0)) ORDER BY workflow_id, workflow_name LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "dd28a2e81d421d88d07fdd9830b2d2519b446ab0642b8218440153cc362b22f5",
+    "after_sha256": "dd28a2e81d421d88d07fdd9830b2d2519b446ab0642b8218440153cc362b22f5"
+  },
+  {
+    "case": "100000-force_custom_plan-absent-name.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND workflow_name = $1 ORDER BY workflow_id, workflow_name LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7",
+    "after_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7"
+  },
+  {
+    "case": "100000-force_custom_plan-created-deep.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND (created_at, workflow_name, workflow_id) < ($1,$2,$3) ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC LIMIT $4) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC",
+    "before_sha256": "90c0f57c64c257496ac471eda025e0e33a3323985dfa4cbc045f11c41dcf34e8",
+    "after_sha256": "90c0f57c64c257496ac471eda025e0e33a3323985dfa4cbc045f11c41dcf34e8"
+  },
+  {
+    "case": "100000-force_custom_plan-created-first.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC",
+    "before_sha256": "8cdfaffc283f585baa5ea3efaa027e67b7bece9e15eabc899de5829d6bcc6966",
+    "after_sha256": "8cdfaffc283f585baa5ea3efaa027e67b7bece9e15eabc899de5829d6bcc6966"
+  },
+  {
+    "case": "100000-force_custom_plan-created-rare-status.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'failed')) ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC",
+    "before_sha256": "1a8a305564386cfcddd8cdcfe201cb429b2211b71dba43cf69a8fd6c27f5bb79",
+    "after_sha256": "1a8a305564386cfcddd8cdcfe201cb429b2211b71dba43cf69a8fd6c27f5bb79"
+  },
+  {
+    "case": "100000-force_custom_plan-created-window.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND created_at >= $1 ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC",
+    "before_sha256": "1766720e281e898ed38c3abe0fb2c67540e3c1ed390b34ab5d90d5553cb381aa",
+    "after_sha256": "1766720e281e898ed38c3abe0fb2c67540e3c1ed390b34ab5d90d5553cb381aa"
+  },
+  {
+    "case": "100000-force_custom_plan-key-deep.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND (workflow_id, workflow_name) > ($1,$2) ORDER BY workflow_id, workflow_name LIMIT $3) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "c465efdc6aa3497a3e3b76be6fa80a0370e3a25be0e3eccbf84bf1340eac6b4b",
+    "after_sha256": "c465efdc6aa3497a3e3b76be6fa80a0370e3a25be0e3eccbf84bf1340eac6b4b"
+  },
+  {
+    "case": "100000-force_custom_plan-key-first.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true ORDER BY workflow_id, workflow_name LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "0e26420151bcfd5c5c790b8f684796d8bc9646af2722cd3098330eee7aa65ec3",
+    "after_sha256": "0e26420151bcfd5c5c790b8f684796d8bc9646af2722cd3098330eee7aa65ec3"
+  },
+  {
+    "case": "100000-force_custom_plan-key-past-wide.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND (workflow_id, workflow_name) > ($1,$2) ORDER BY workflow_id, workflow_name LIMIT $3) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "c465efdc6aa3497a3e3b76be6fa80a0370e3a25be0e3eccbf84bf1340eac6b4b",
+    "after_sha256": "c465efdc6aa3497a3e3b76be6fa80a0370e3a25be0e3eccbf84bf1340eac6b4b"
+  },
+  {
+    "case": "100000-force_custom_plan-mixed-class.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'failed') OR (status = 'running' AND attempts = 0)) ORDER BY workflow_id, workflow_name LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "33d7df820874ddcd83e2527e961f8a54329a0faf692f751735509b4a090df137",
+    "after_sha256": "33d7df820874ddcd83e2527e961f8a54329a0faf692f751735509b4a090df137"
+  },
+  {
+    "case": "100000-force_custom_plan-rare-status-deep.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'failed')) AND (workflow_id, workflow_name) > ($1,$2) ORDER BY workflow_id, workflow_name LIMIT $3) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "270e282ece3bc892a15d61df2fab1788ecbe40abfb53c074824e9893f9c87e58",
+    "after_sha256": "270e282ece3bc892a15d61df2fab1788ecbe40abfb53c074824e9893f9c87e58"
+  },
+  {
+    "case": "100000-force_custom_plan-rare-status.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'failed')) ORDER BY workflow_id, workflow_name LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "83575ec7fbed0dd5f0edc59c43a2945e43e2a53567472a1f09cd234ab89d50bf",
+    "after_sha256": "83575ec7fbed0dd5f0edc59c43a2945e43e2a53567472a1f09cd234ab89d50bf"
+  },
+  {
+    "case": "100000-force_custom_plan-running-class.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'running' AND attempts = 0)) ORDER BY workflow_id, workflow_name LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "ce094b7312bfd8099ae4d88cd9541c59eee139f9c41a9bd07b4932f3c1f41639",
+    "after_sha256": "ce094b7312bfd8099ae4d88cd9541c59eee139f9c41a9bd07b4932f3c1f41639"
+  },
+  {
+    "case": "100000-force_custom_plan-small-name-rare.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'failed')) AND workflow_name = $1 ORDER BY workflow_id, workflow_name LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "fb4c6a22702ba1213ab550ecade624fde07563e56448c8f44bcd9216b043bfbb",
+    "after_sha256": "fb4c6a22702ba1213ab550ecade624fde07563e56448c8f44bcd9216b043bfbb"
+  },
+  {
+    "case": "100000-force_custom_plan-small-name.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND workflow_name = $1 ORDER BY workflow_id, workflow_name LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7",
+    "after_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7"
+  },
+  {
+    "case": "100000-force_custom_plan-update-window.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND updated_at >= $1 ORDER BY workflow_id, workflow_name LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "005a930c46d77ab821bfa819eca258ae4d896756b3a5937e0311c1d1ed417b35",
+    "after_sha256": "005a930c46d77ab821bfa819eca258ae4d896756b3a5937e0311c1d1ed417b35"
+  },
+  {
+    "case": "100000-force_custom_plan-wide-name.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND workflow_name = $1 ORDER BY workflow_id, workflow_name LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7",
+    "after_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7"
+  },
+  {
+    "case": "100000-force_generic_plan-absent-class.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'running' AND attempts <> 0)) ORDER BY workflow_id, workflow_name LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "dd28a2e81d421d88d07fdd9830b2d2519b446ab0642b8218440153cc362b22f5",
+    "after_sha256": "dd28a2e81d421d88d07fdd9830b2d2519b446ab0642b8218440153cc362b22f5"
+  },
+  {
+    "case": "100000-force_generic_plan-absent-name.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND workflow_name = $1 ORDER BY workflow_id, workflow_name LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7",
+    "after_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7"
+  },
+  {
+    "case": "100000-force_generic_plan-created-deep.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND (created_at, workflow_name, workflow_id) < ($1,$2,$3) ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC LIMIT $4) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC",
+    "before_sha256": "90c0f57c64c257496ac471eda025e0e33a3323985dfa4cbc045f11c41dcf34e8",
+    "after_sha256": "90c0f57c64c257496ac471eda025e0e33a3323985dfa4cbc045f11c41dcf34e8"
+  },
+  {
+    "case": "100000-force_generic_plan-created-first.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC",
+    "before_sha256": "8cdfaffc283f585baa5ea3efaa027e67b7bece9e15eabc899de5829d6bcc6966",
+    "after_sha256": "8cdfaffc283f585baa5ea3efaa027e67b7bece9e15eabc899de5829d6bcc6966"
+  },
+  {
+    "case": "100000-force_generic_plan-created-rare-status.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'failed')) ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC",
+    "before_sha256": "1a8a305564386cfcddd8cdcfe201cb429b2211b71dba43cf69a8fd6c27f5bb79",
+    "after_sha256": "1a8a305564386cfcddd8cdcfe201cb429b2211b71dba43cf69a8fd6c27f5bb79"
+  },
+  {
+    "case": "100000-force_generic_plan-created-window.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND created_at >= $1 ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY created_at DESC, workflow_name DESC, workflow_id DESC",
+    "before_sha256": "1766720e281e898ed38c3abe0fb2c67540e3c1ed390b34ab5d90d5553cb381aa",
+    "after_sha256": "1766720e281e898ed38c3abe0fb2c67540e3c1ed390b34ab5d90d5553cb381aa"
+  },
+  {
+    "case": "100000-force_generic_plan-key-deep.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND (workflow_id, workflow_name) > ($1,$2) ORDER BY workflow_id, workflow_name LIMIT $3) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "c465efdc6aa3497a3e3b76be6fa80a0370e3a25be0e3eccbf84bf1340eac6b4b",
+    "after_sha256": "c465efdc6aa3497a3e3b76be6fa80a0370e3a25be0e3eccbf84bf1340eac6b4b"
+  },
+  {
+    "case": "100000-force_generic_plan-key-first.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true ORDER BY workflow_id, workflow_name LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "0e26420151bcfd5c5c790b8f684796d8bc9646af2722cd3098330eee7aa65ec3",
+    "after_sha256": "0e26420151bcfd5c5c790b8f684796d8bc9646af2722cd3098330eee7aa65ec3"
+  },
+  {
+    "case": "100000-force_generic_plan-key-past-wide.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND (workflow_id, workflow_name) > ($1,$2) ORDER BY workflow_id, workflow_name LIMIT $3) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "c465efdc6aa3497a3e3b76be6fa80a0370e3a25be0e3eccbf84bf1340eac6b4b",
+    "after_sha256": "c465efdc6aa3497a3e3b76be6fa80a0370e3a25be0e3eccbf84bf1340eac6b4b"
+  },
+  {
+    "case": "100000-force_generic_plan-mixed-class.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'failed') OR (status = 'running' AND attempts = 0)) ORDER BY workflow_id, workflow_name LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "33d7df820874ddcd83e2527e961f8a54329a0faf692f751735509b4a090df137",
+    "after_sha256": "33d7df820874ddcd83e2527e961f8a54329a0faf692f751735509b4a090df137"
+  },
+  {
+    "case": "100000-force_generic_plan-rare-status-deep.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'failed')) AND (workflow_id, workflow_name) > ($1,$2) ORDER BY workflow_id, workflow_name LIMIT $3) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "270e282ece3bc892a15d61df2fab1788ecbe40abfb53c074824e9893f9c87e58",
+    "after_sha256": "270e282ece3bc892a15d61df2fab1788ecbe40abfb53c074824e9893f9c87e58"
+  },
+  {
+    "case": "100000-force_generic_plan-rare-status.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'failed')) ORDER BY workflow_id, workflow_name LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "83575ec7fbed0dd5f0edc59c43a2945e43e2a53567472a1f09cd234ab89d50bf",
+    "after_sha256": "83575ec7fbed0dd5f0edc59c43a2945e43e2a53567472a1f09cd234ab89d50bf"
+  },
+  {
+    "case": "100000-force_generic_plan-running-class.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'running' AND attempts = 0)) ORDER BY workflow_id, workflow_name LIMIT $1) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "ce094b7312bfd8099ae4d88cd9541c59eee139f9c41a9bd07b4932f3c1f41639",
+    "after_sha256": "ce094b7312bfd8099ae4d88cd9541c59eee139f9c41a9bd07b4932f3c1f41639"
+  },
+  {
+    "case": "100000-force_generic_plan-small-name-rare.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND ((status = 'failed')) AND workflow_name = $1 ORDER BY workflow_id, workflow_name LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "fb4c6a22702ba1213ab550ecade624fde07563e56448c8f44bcd9216b043bfbb",
+    "after_sha256": "fb4c6a22702ba1213ab550ecade624fde07563e56448c8f44bcd9216b043bfbb"
+  },
+  {
+    "case": "100000-force_generic_plan-small-name.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND workflow_name = $1 ORDER BY workflow_id, workflow_name LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7",
+    "after_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7"
+  },
+  {
+    "case": "100000-force_generic_plan-update-window.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND updated_at >= $1 ORDER BY workflow_id, workflow_name LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "005a930c46d77ab821bfa819eca258ae4d896756b3a5937e0311c1d1ed417b35",
+    "after_sha256": "005a930c46d77ab821bfa819eca258ae4d896756b3a5937e0311c1d1ed417b35"
+  },
+  {
+    "case": "100000-force_generic_plan-wide-name.json",
+    "sql": "/* keiro-inspection-page-v2 */ WITH inspection_page AS MATERIALIZED (SELECT workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at FROM keiro.keiro_workflows WHERE true AND workflow_name = $1 ORDER BY workflow_id, workflow_name LIMIT $2) SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY workflow_id, workflow_name",
+    "before_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7",
+    "after_sha256": "40978dcdb9868f427c46f96ae7f70121ed6be8d71c8c3018abd8500d5dcf1be7"
+  }
+]

@@ -22,6 +22,11 @@ provenance:
       at: 2026-11-04T05:23:21Z
       mode: "update"
       note: "Applied validation findings: frozen binaries outside the tree, explicit M3 pairing and keiro prefix, byte-identical list SQL, release-gate scope, OKF log and IR-58 obligations"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-05T12:44:58Z
+      mode: "implement"
+      note: "Implement read-only feasibility prototype first; focused performance validation excludes DSL conformance per user scope"
 ---
 
 # Count workflow instances by status class without runtime performance regressions
@@ -56,7 +61,7 @@ index for this query.
 ## Progress
 
 
-- [ ] M1: A prototype owner read returns exact counts and retained normal-planner evidence establishes the million-instance timeout and index-backed acceptance without changing runtime writes or schema.
+- [ ] M1: Prototype and correctness/timeout evidence retained on 2026-11-05: 648 cases match a complete list drain, million-row reads peak at 130.473 ms, and 19 focused tests pass. The index-backed criterion fails for both shapes; a scope decision is pending. See [evidence](../../keiro/bench/results/workflow-counts/README.md).
 - [ ] M2: The supported library API, CLI command, and mechanically derived HTTP route agree on all seven counts, filtering, observation semantics, and existing resource limits.
 - [ ] M3: Matched capacity and active-polling measurements establish no attributable runtime regression; the final candidate passes the existing release gate and documents the measured operating envelope.
 
@@ -64,6 +69,26 @@ index for this query.
 ## Surprises & Discoveries
 
 
+The full feasibility matrix completed on 2026-11-05. Both shapes return exact
+counts with all measured reads inside the existing two-second timeout. Across
+108 million-row cases per shape, the single-scan candidate's maximum first/warm
+reads were 105.851/102.445 ms; the selective prototype's were 128.031/130.473 ms.
+The single-scan candidate uses a sequential scan in 72 of 108 cases. The selective
+prototype does so in six: unfiltered 99%-active, maintained and recently updated,
+in automatic/custom/generic plan modes. Its running/retrying branch scans the
+heap; other branches and the measured name-filtered cases use existing indexes.
+Thus neither qualifies under the accepted index-backed criterion. Full artifacts,
+settings, actual prepared SQL, row/buffer/heap/spill observations and the failing
+index check are retained in [workflow-counts](../../keiro/bench/results/workflow-counts/README.md).
+The fixture's existing `random_page_cost=1` is retained in EXPLAIN SETTINGS;
+sequential scans were never disabled. First reads are not OS-cold.
+
+The classification-helper extraction preserves all 68 actual prepared list
+statement texts byte-for-byte, with hashes retained in
+[list-sql-identity.json](../../keiro/bench/results/workflow-counts/list-sql-identity.json).
+The focused `Keiro.Workflow.Inspection` suite passes 19 examples, including the
+two new prototype count checks. IR-58 had already been accepted and linked to
+this plan in the starting tree; its status now records implementation in progress.
 
 ## Decision Log
 
@@ -77,6 +102,15 @@ index for this query.
 - Decision: Make performance evidence a prerequisite for completion, including unpaced writer capacity and polling through the actual HTTP application.
   Rationale: A paced test can hide lost writer headroom; a fast isolated SQL query can still interfere with workers. Existing 5% interference guards are rejection ceilings, not permission to introduce a smaller reproducible regression.
   Date: 2026-10-26
+- Decision: Run the bounded SQL feasibility experiment before building the M3 controller and frozen runtime harness. Skip DSL conformance and the combined release gate that invokes it; use focused owner/ops/HTTP correctness checks and performance checks within the requested scope.
+  Rationale: The user explicitly requested simple performance work and excluded DSL conformance. The unchanged baseline source is retained by commit identity, so deferring the unused runtime harness preserves the matched-baseline requirement without building infrastructure before feasibility is known.
+  Date: 2026-11-05
+
+Revision note (2026-11-05): Reordered read-only feasibility ahead of the runtime
+harness; the original clean source revision remains the baseline. DSL conformance
+is excluded by the implementation request, so a full release-gate pass will not
+be claimed. These scope instructions take precedence over the original combined
+release-gate commands below.
 
 Revision note (2026-11-03): Validation against the working tree confirmed the
 cited files, identifiers, schema, HTTP defaults, evidence figures, and ADRs.
@@ -91,6 +125,18 @@ that strict validation enforces.
 ## Outcomes & Retrospective
 
 
+Feasibility checkpoint, 2026-11-05: the owner prototype and two-shape query driver
+are implemented and tested without any schema, migration, lifecycle-write or
+list-SQL changes. The measured concrete alternative is the simpler single-scan
+query, which fits comfortably inside the existing timeout on this machine.
+Changing the index criterion requires a scope decision before M2/M3; the user
+has been asked whether to accept planner-selected scans while keeping the schema
+unchanged and runtime-isolation measurements mandatory. No transport endpoint
+or no-regression claim is delivered yet. All milestone checkboxes stay open.
+The M3 controller/frozen binaries are deferred until this decision, avoiding
+unused measurement infrastructure. Existing ADR-40 already requires measured
+runtime isolation and writer evidence for index changes; no new durable decision
+has been accepted at this checkpoint, so no ADR is changed.
 
 ## Context and Orientation
 
@@ -186,8 +232,8 @@ and `docs/improvement-requests/` under `mori/improvement-requests-profile.dhall`
 Editing any of these documents requires advancing its `timestamp` and appending a
 matching entry to that bundle's `log.md` with `okf log add`; otherwise
 `just user-documentation-validate` or `just adr-validate`, and therefore the
-release gate's correctness stage, fail. IR-58 is currently `status: proposed`
-with no `plan` field. Bundle precedent (IR-56 and IR-60 in
+release gate's correctness stage, fail. IR-58 was already `status: accepted` with this `plan` link in the starting
+revision and is now `status: in-progress`. Bundle precedent (IR-56 and IR-60 in
 `docs/improvement-requests/log.md`) links an accepted request to its ExecPlan
 with `status: accepted`, a `plan:` path, and an `Update` log entry, then closes
 it with `status: completed`, `completedAt`, a `resolution`, and a `Completion`
@@ -201,11 +247,13 @@ log entry. No Justfile recipe validates that bundle; Concrete Steps run
 ### M1 — Prove the owner read and its cost before exposing it
 
 
-Capture the pre-implementation source revision, uncommitted source diff if any,
-dependency/build settings, and frozen baseline binary before editing runtime code.
-First prepare the measurement-only harness additions described in M3; they use
+The pre-implementation source is commit `9a54e48030ed3080f79a84d3364ea2dd74d0ab39`,
+with a clean working tree. Implement the bounded read-only feasibility prototype
+first. Prepare and freeze the measurement-only harness described in M3 only if
+that gate permits transport work; reconstruct its baseline from this unchanged
+production revision. Those additions use
 HTTP URLs and existing writer APIs, so they can compile before the new count API
-exists. Freeze that binary against unchanged production code, then retain the
+exists. Freeze that binary against the recorded unchanged production code, then retain the
 same harness for the candidate. If the workload changes later, rebuild both
 controls from their recorded sources. Preserve unrelated work already in this
 checkout. Before the first implementation commit, link IR-58 to this plan as the

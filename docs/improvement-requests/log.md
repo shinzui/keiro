@@ -1,7 +1,8 @@
 # Bundle Update Log
 
 ## 2026-11-05
-* **Completion**: IR-57 completed under ExecPlan 327: feeding_subscriptions beside the frozen status row, with paired SQL and fifty-trial writer evidence including fixed idle replication and reported uncertainty.
+* **Update**: IR-58 implementation started under ExecPlan 325: retain exact-count prototype and million-row feasibility evidence; index-backed acceptance and transport/runtime measurements remain open.
+* **Completion**: IR-57 completed under ExecPlan 327: feeding\_subscriptions beside the frozen status row, with paired SQL and fifty-trial writer evidence including fixed idle replication and reported uncertainty.
 
 ## 2026-11-04
 * **Update**: IR-57 accepted under ExecPlan 327: sorted feeding\_subscriptions beside the unchanged v1 relation; corrected jitsurei subscription identity.

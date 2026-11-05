@@ -1,0 +1,37 @@
+{
+  "baseline_revision": "9a54e48030ed3080f79a84d3364ea2dd74d0ab39",
+  "baseline_working_tree": "clean",
+  "cabal_plan_sha256": "c575f85e201e5b7d53b5db4a8a13bc5fc09019a2cf1c03606c4c52851b7447ef",
+  "command": "nix develop -c cabal exec -- runghc -XGHC2024 -package=keiro -package=keiro-test-support scripts/workflow-counts-query-evidence.hs keiro/bench/results/workflow-counts/query",
+  "exit_code": 1,
+  "correctness": "648 cases equal complete list drain",
+  "timeout": "648 cases, first plus five timed warm reads each, no timeout at 2000 ms",
+  "index_criterion": "failed for both shapes",
+  "ghc": "9.12.4",
+  "cabal_optimization": "O1",
+  "fixture": "disposable migrated PostgreSQL 18.6, local ephemeral fixture; default random_page_cost=1 retained in EXPLAIN SETTINGS",
+  "rts": "runghc defaults; no runtime interference claim",
+  "measured_source_sha256": {
+    "keiro/src/Keiro/Workflow/Inspection.hs": "d43c36253701f92178d2af34a091ed9ee24ad178e882337657cb08b556493472",
+    "keiro/src/Keiro/Workflow/Inspection/Query.hs": "a25b9ed945949cabca384110bbf9dfdad2cebf6b9420d9cbdd14fbc6aa4e59f2",
+    "keiro/src/Keiro/Workflow/Instance.hs": "f3a5b90b0b6c781f992e04e7b57dbf3367cbfc0f59528d2b2306b68d160d0d0f",
+    "keiro/test/WorkflowInspectionSpec.hs": "6ff0a3f1c6e557f1bfb1bfc4234f5c662ec6e35cd205059b4be9861876e35fd7",
+    "scripts/workflow-counts-query-evidence.hs": "705bbb685d428c68c01098c2dd3ed951c12e7acd24873481b6c043a9a6daae7c",
+    "flake.lock": "e794dcfd6c385d254c5d28e4c0e61c3ded0fcf4548db6ee235167a73be211d55",
+    "cabal.project": "86909d27a6156b1224e9b4045693dd7d4333a023fc6b854383dd11bfefab17f9"
+  },
+  "retained_source_sha256": {
+    "keiro/src/Keiro/Workflow/Inspection.hs": "d43c36253701f92178d2af34a091ed9ee24ad178e882337657cb08b556493472",
+    "keiro/src/Keiro/Workflow/Inspection/Query.hs": "a25b9ed945949cabca384110bbf9dfdad2cebf6b9420d9cbdd14fbc6aa4e59f2",
+    "keiro/src/Keiro/Workflow/Instance.hs": "6b3bac222d58c280f528e43c5f13922121a203ce8451d454a7346b9c28dc1ee5",
+    "keiro/test/WorkflowInspectionSpec.hs": "6ff0a3f1c6e557f1bfb1bfc4234f5c662ec6e35cd205059b4be9861876e35fd7",
+    "scripts/workflow-counts-query-evidence.hs": "79eda498f515549924a578c525be8d0034543265e7af6ddfa836c9811fbd08ac",
+    "flake.lock": "e794dcfd6c385d254c5d28e4c0e61c3ded0fcf4548db6ee235167a73be211d55",
+    "cabal.project": "86909d27a6156b1224e9b4045693dd7d4333a023fc6b854383dd11bfefab17f9"
+  },
+  "post_format_validation": {
+    "build": "passed",
+    "sql_identity_cases": 216,
+    "scope": "formatting only after full cohort; final 1000-row smoke confirms identical actual prepared SQL for both shapes and all filters; no replacement performance claim"
+  }
+}
