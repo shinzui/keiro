@@ -13,7 +13,7 @@ import Hasql.Transaction qualified as Tx
 import Keiro.Inbox (InboxError, InboxResult, runInboxTransactionWith)
 import Keiro.Inbox.Types (KafkaDeliveryRef)
 import Keiro.Integration.Event (IntegrationEvent)
-import Keiro.Outbox (IntegrationProducer (..))
+import Keiro.Outbox (IntegrationProducer (..), ProducerTracePolicy (..))
 import Kiroku.Store.Effect (Store)
 
 {- | The inbox runner, wired to the scaffolded dedupe policy. The handler (the
@@ -37,5 +37,6 @@ incidentProducer =
         { name = "hospital-capacity-outbox"
         , source = "hospital-capacity"
         , messageIdPrefix = "msg"
+        , tracePolicy = PreserveDraftTrace
         , mapEvent = \_recorded _event -> Nothing
         }

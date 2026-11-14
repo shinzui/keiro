@@ -1,6 +1,9 @@
 # Keiro User Documentation Log
 
 ## 2026-11-14
+
+* **Update**: Document producer trace-policy adoption, quiescent cutoff activation and policy-aware rollback, plus batch creation links.
+
 * **Update**: DOC-15: document command creation metadata and category span queries.
 
 ## 2026-11-05

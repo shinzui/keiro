@@ -26,7 +26,7 @@ import Effectful.Exception qualified as Effectful
 import Keiro.Command (defaultRunCommandOptions)
 import Keiro.Command qualified as Command
 import Keiro.EventStream.Validate (unvalidated)
-import Keiro.Integration.Event (IntegrationContentType (..), IntegrationEvent (..))
+import Keiro.Integration.Event (IntegrationContentType (..), IntegrationEvent (..), TraceContext (..))
 import Keiro.Outbox qualified as Outbox
 import Keiro.ProcessManager (defaultWorkerOptions, runProcessManagerWorkerWith)
 import Keiro.Projection (AsyncApplyOutcome (..), AsyncProjection (..), applyAsyncProjection)
@@ -41,6 +41,7 @@ import Kiroku.Store.Subscription.Stream (AckItem (..), defaultStreamBufferSize, 
 import Kiroku.Store.Subscription.Types (SubscriptionConfig, SubscriptionName (..), SubscriptionResult (..), SubscriptionTarget (..), defaultSubscriptionConfig)
 import Kiroku.Store.Transaction qualified as StoreTx
 import Kiroku.Store.Types (CategoryName (..), EventData (..), EventId (..), EventType (..), ExpectedVersion (..), RecordedEvent, StreamName (..), StreamVersion (..))
+import Numeric (showHex)
 import OpenTelemetry.Trace.Core (Tracer)
 import Retention.Fixture (LedgerCommand (..), TargetCommand (..), TargetEventStream, ackAdapter, appendSignals, decodeSignal, ledgerTarget, retentionLedger, retentionManager, retentionRouter, retentionTargetStream, sampleOnAck, seedLedger, seedLedgerRaw)
 import Retention.Measure (GateConfig (..), HeapSample (..), Verdict (..), measureLeg, measureLegWithSampler, sampleHeap)
@@ -79,8 +80,9 @@ allLegs =
     Leg "kiroku-read-tail" kirokuReadTail,
     Leg "command-short-history" commandShortHistory,
     Leg "command-short-history-tracer" (\config handle -> withRecordingTracer (\tracer -> commandShortHistoryWithTracer (Just tracer) config handle)),
-    Leg "outbox-publisher" (outboxPublisher Nothing),
-    Leg "outbox-publisher-tracer" (\config handle -> withRecordingTracer (\tracer -> outboxPublisher (Just tracer) config handle)),
+    Leg "outbox-publisher" (outboxPublisher Nothing False),
+    Leg "outbox-publisher-tracer" (\config handle -> withRecordingTracer (\tracer -> outboxPublisher (Just tracer) False config handle)),
+    Leg "outbox-publisher-contexts-tracer" (\config handle -> withRecordingTracer (\tracer -> outboxPublisher (Just tracer) True config handle)),
     Leg "pm-worker-tracer" (\config handle -> withRecordingTracer (\tracer -> pmWorkerWithTracer (Just tracer) config handle)),
     Leg "command-long-history-verify-every" commandLongHistoryVerifyEvery
   ]
@@ -392,9 +394,9 @@ expectRight :: (Show errorType) => Either errorType a -> IO a
 expectRight = either (fail . show) pure
 
 -- Processor discards finished spans; ownership is checked separately.
-outboxPublisher :: Maybe Tracer -> GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
-outboxPublisher tracer config (_, StoreRunner runStore) = do
-  let name = maybe "outbox-publisher" (const "outbox-publisher-tracer") tracer
+outboxPublisher :: Maybe Tracer -> Bool -> GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
+outboxPublisher tracer withContext config (_, StoreRunner runStore) = do
+  let name = if withContext then "outbox-publisher-contexts-tracer" else maybe "outbox-publisher" (const "outbox-publisher-tracer") tracer
       options = Outbox.defaultPublishOptions {Outbox.tracer = tracer, Outbox.batchSize = 1}
       message index =
         IntegrationEvent
@@ -412,7 +414,7 @@ outboxPublisher tracer config (_, StoreRunner runStore) = do
             occurredAt = UTCTime (ModifiedJulianDay 61000) (secondsToDiffTime 0),
             causationId = Nothing,
             correlationId = Nothing,
-            traceContext = Nothing,
+            traceContext = if withContext then Just (TraceContext ("00-0af7651916cd43dd8448eb211c80319c-" <> Text.justifyRight 16 '0' (Text.pack (showHex index "")) <> "-01") Nothing) else Nothing,
             attributes = Nothing
           }
   -- A fixed backlog: enqueue outside the measured draining loop.

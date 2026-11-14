@@ -2,7 +2,7 @@
 type: Research Document
 title: OpenTelemetry semantic-conventions audit
 description: Audit Keiro instrumentation sites against the OpenTelemetry semantic conventions and record gaps and actions.
-timestamp: "2026-11-14T22:01:22Z"
+timestamp: 2026-11-14T23:17:22Z
 researchId: RES-16
 status: active
 scope: Keiro tracing and metrics instrumentation governed by OpenTelemetry semantic conventions.
@@ -67,122 +67,43 @@ reconcile against the post-implementation `src/`.
 
 ## Outbox enqueue
 
-**File:** `src/Keiro/Outbox.hs:79` — `enqueueIntegrationEventTx`; same module
-at line 195 — `enqueueProducerEventTx`; `src/Keiro/Outbox/Schema.hs:100` —
-`enqueueOutboxTx` (the low-level row insertion the two helpers share).
+`Keiro.Outbox.enqueueProducerEventTx` runs in the caller's SQL transaction and
+opens no independent span. `IntegrationProducer.tracePolicy` defaults explicitly
+to `PreserveDraftTrace` in examples and fixtures. With `DeriveTraceAfter cutoff`,
+only source events strictly above the immutable recorded global-position cutoff
+derive missing creation context from stored metadata. Explicit draft context wins;
+overridden draft provenance does not change eligibility. This is independent of a
+tracer on the enqueuing worker. Legacy, pre-cutover and explicit-context paths do
+not read source metadata. The frozen producer digest still includes `TraceField`.
 
-**Span name:** `create <destination>` — the spec's recommended verb for
-"the application created a message but has not yet sent it".
-
-**Span kind:** `Internal`. The enqueue happens entirely inside the caller's
-`hasql-transaction` `Tx.Transaction`; no traffic crosses the network at this
-point, so `Producer` is wrong (the producer span is opened later by the
-publisher worker, see "Outbox publish" below).
-
-**Required attributes (citation: `-- $attributes_messaging_trace_minimal`,
-line 27014):**
-
-- `messaging.operation.name` — `messaging_operation_name`. Value: `"create"`.
-- `messaging.system` — `messaging_system`. Value: `"kafka"` (`keiro`'s only
-  outbound transport today).
-
-**Conditionally required:**
-
-- `messaging.operation.type` — `messaging_operation_type`. Value: `"create"`
-  (the spec value for "create a message but do not send it").
-- `messaging.destination.name` — `messaging_destination_name`. Value:
-  `event ^. #destination`.
-- `messaging.message.id` — `messaging_message_id`. Value: `event ^. #messageId`.
-
-**Recommended:**
-
-- `messaging.kafka.message.key` — `messaging_kafka_message_key`. Value:
-  `event ^. #key`, when present (and UTF-8 decodable).
-- `messaging.client.id` — `messaging_client_id`. Value: a stable application
-  identifier when the caller supplies one (not currently captured in
-  `keiro`; producers may set it via a span attribute decorator).
-
-**Error handling (citation: `-- $registry_error`, line 26956):**
-
-- `enqueueOutboxTx` returns unit; failures bubble up as `Tx.Transaction`
-  errors and surface on the surrounding command span (see "Command run"
-  below). Set `error.type` to `"db_insert_failed"` if a wrapping helper
-  catches the exception locally.
-
-**Gap as of 2026-05-19:** No span emitted. The enqueue runs inside the
-caller's hasql transaction and is observable only as a row in
-`keiro_outbox`. The `traceparent` columns on the row are written from the
-caller's `IntegrationEvent.traceContext`, which today is always `Nothing`
-(no upstream constructs it from a real span).
-
-**Action:** Out of scope for Milestone 4 to keep the patch small. The
-follow-up to instrument the enqueue is filed under [[milestone-9-followups]]
-in the Decision Log; the current plan covers the publisher-side span (which
-is the higher-value signal for dashboards because it captures broker latency
-and retries).
-
+The inline `enqueueIntegrationEventTx` path has no source event. Applications
+capture context before the transaction and preserve the same value on replay.
+See [producer adoption](../user/outbox.md#trace-policy-adoption) and
+[ADR-60](../adr/0060-event-creation-context-and-durable-span-correlation.md).
 
 ## Outbox publish
 
-**File:** `src/Keiro/Outbox.hs:228` — `publishClaimedOutbox`, with the
-per-row body at `src/Keiro/Outbox.hs:244–269`; the `KafkaProducerRecord`
-shape is built in `src/Keiro/Outbox/Kafka.hs:55` — `outboxRowToKafkaRecord`.
+`Keiro.Outbox.publishClaimedOutbox` uses `Keiro.Telemetry.withProducerBatchSpan`.
+The Producer-kind span is a root, restoring any ambient context on exit. It is
+named `send <destination>` for a uniform batch and `send` for a mixed batch.
 
-**Span name:** `send <destination>`. The `<destination>` is
-`row ^. #event ^. #destination` (the Kafka topic name).
+The span records `messaging.system=kafka`, `messaging.operation.name=send`,
+`messaging.operation.type=publish`, `messaging.batch.message_count` and the
+existing `keiro.outbox.batch.size`. Only uniform batches have the span's
+`messaging.destination.name`. Only singleton batches have `messaging.message.id`
+and the Kafka key on the span.
 
-**Span kind:** `Producer`. This is the main producer-side span.
+Each valid stored creation context contributes a link with `messaging.message.id`,
+up to 128 links in row order. Mixed batches additionally put the destination on
+each link. Further valid contexts are counted in `keiro.outbox.links.dropped`.
+Absent or malformed contexts omit links. Evaluated link identities and scalar
+attributes own no outbox row or payload. A missing tracer bypasses batch decoding.
 
-**Required attributes (citation: `-- $attributes_messaging_trace_minimal`,
-line 27014):**
-
-- `messaging.operation.name` — `messaging_operation_name`. Value: `"send"`.
-- `messaging.system` — `messaging_system`. Value: `"kafka"`.
-
-**Conditionally required:**
-
-- `messaging.operation.type` — `messaging_operation_type`. Value: `"publish"`
-  (spec value for "send a message to a destination").
-- `messaging.destination.name` — `messaging_destination_name`. Value:
-  `row ^. #event ^. #destination`.
-- `messaging.message.id` — `messaging_message_id`. Value:
-  `row ^. #event ^. #messageId`.
-
-**Recommended (citation: `-- $messaging_attributes`, line 27047 and
-`-- $registry_messaging_kafka`, line 27708):**
-
-- `messaging.kafka.message.key` — `messaging_kafka_message_key`. Value:
-  `row ^. #event ^. #key`, when present (and UTF-8 decodable).
-- `messaging.destination.partition.id` — `messaging_destination_partition_id`.
-  Optional; populated only if a future publisher returns the chosen
-  partition.
-- `messaging.client.id` — `messaging_client_id`. Optional; the application
-  is expected to supply this on the `Tracer` instance via a resource
-  attribute rather than per-span.
-- `messaging.batch.message_count` — `messaging_batch_messageCount`. Not
-  applicable to keiro today: `publishClaimedOutbox` calls `publish` once
-  per row.
-
-**Error handling (citation: `-- $registry_error`, line 26956):**
-
-- On `PublishFailed`: set `error.type` to a low-cardinality classifier:
-  `"publish_failed"` for transient transport errors (row will be retried) /
-  `"dead_letter"` when `markOutboxFailedTx` returns `OutboxDead` (row has
-  exhausted `maxAttempts`).
-- Set span status to `Error` with the failure text in the description.
-- On `PublishRejected`: leave span status unset/OK and omit `error.type`. A terminal
-  rejection is a handled publisher decision, and its bounded audit detail remains on
-  the retained outbox row rather than entering telemetry attributes.
-
-**Gap as of 2026-05-19:** No span emitted. The `IntegrationEvent.traceContext`
-field is serialized to `traceparent` / `tracestate` Kafka headers verbatim
-(see `src/Keiro/Integration/Event.hs:196–200`), but it is never *constructed*
-from a real span context: the only producer of the field is the application,
-and the jitsurei example at `jitsurei/app/Main.hs:116` hardcodes `Nothing`.
-
-**Action:** Milestone 4 wraps the per-row body of `publishClaimedOutbox` in
-`Keiro.Telemetry.withProducerSpan`. The Milestone 7 propagator wiring
-replaces the `Nothing` literal with an extraction from the active span.
+Wire headers retain the stored creation context; they never take the send span's
+identity. `PublishFailed` sets `error.type=publish_failed` and error status.
+`PublishRejected` is a handled terminal decision and leaves error status unset.
+The exported single-message `withProducerSpan` retains its existing API for
+application callers; the durable publisher uses the batch-aware helper.
 
 
 ## Inbox consume
@@ -479,7 +400,7 @@ This table is the at-a-glance summary the Milestone 9 sweep will reconcile.
 | Site                | Span name pattern              | Kind     | Anchor                                       | Status as of 2026-05-19 |
 | ------------------- | ------------------------------ | -------- | -------------------------------------------- | ----------------------- |
 | Outbox enqueue      | `create <destination>`         | Internal | `$attributes_messaging_trace_minimal` 27014  | Gap (out of scope M4)   |
-| Outbox publish      | `send <destination>`           | Producer | `$attributes_messaging_trace_minimal` 27014  | Gap → M4                |
+| Outbox publish      | `send <destination>` or `send` | Producer | `$attributes_messaging_trace_minimal` 27014  | Root with bounded creation links |
 | Inbox consume       | `process <destination>`        | Consumer | `$attributes_messaging_trace_minimal` 27014  | Gap → M5                |
 | Inbox process       | (inherits consumer span)       | Internal | n/a                                          | Closed transitively M5  |
 | Command run         | `command <category>`                     | Internal | `$span_db_client` 19833                      | Gap → M6                |

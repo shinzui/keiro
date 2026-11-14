@@ -7,7 +7,7 @@ tags: [keiro, integration-events, messaging]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:05:10Z
-timestamp: 2026-10-27T21:15:00Z
+timestamp: 2026-11-14T23:17:22Z
 ---
 
 # Integration Events
@@ -229,3 +229,14 @@ inserts one outbox row per mapped private event in the same Postgres
 transaction that advances its checkpoint. The publisher worker drains
 the outbox into Kafka and marks each row `sent` (or, after
 `max_attempts`, `dead`).
+
+## Creation context across the outbox
+
+Commands with a configured tracer persist creation context in domain-event metadata.
+A canonical producer can derive missing draft context from that durable event using
+an immutable `DeriveTraceAfter` cutoff; the default examples use `PreserveDraftTrace`.
+Follow [the adoption procedure](outbox.md#trace-policy-adoption) before enabling it.
+Derivation is deterministic and independent of the enqueuing worker's tracer.
+The publisher links its root batch span to stored creation contexts and sends those
+same contexts in Kafka headers. Explicit draft context is preserved. Trace headers
+remain part of producer equality, so changing them on replay is a content conflict.

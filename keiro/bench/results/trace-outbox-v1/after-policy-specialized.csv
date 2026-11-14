@@ -1,0 +1,5 @@
+Name,Mean (ps),2*Stdev (ps),Allocated,Copied,Peak Memory
+All.producer-identity.trace-policy-legacy-1000,60501624998,4262784094,106234996,1885330,18874368
+All.producer-identity.trace-policy-derived-1000,56620075004,4940480384,112900419,1982903,18874368
+All.producer-identity.trace-policy-pre-cutover-1000,59206437500,7605705716,107452985,1884116,18874368
+All.producer-identity.trace-policy-explicit-1000,59485937500,3084935272,112725855,1943654,18874368

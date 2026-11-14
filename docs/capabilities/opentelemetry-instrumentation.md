@@ -19,6 +19,9 @@ interface:
 evidence:
   - kind: test
     resource: keiro/test/Main.hs
+    proves: "Producer cutoff survives restart, rollback and successful-row GC; batch send spans are roots with bounded per-message links and restore ambient context."
+  - kind: test
+    resource: keiro/test/Main.hs
     proves: "All four command entry points stamp one creation context across a multi-event batch; retries preserve it, explicit caller context wins, and no configured tracer leaves metadata unchanged inside an ambient span."
   - kind: test
     resource: keiro/test/Main.hs

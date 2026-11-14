@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Event creation context and durable span correlation
 description: Commands stamp W3C creation context once per run and durable consumers correlate through evaluated span identities without changing replay.
-timestamp: 2026-11-14T22:59:20Z
+timestamp: 2026-11-14T23:17:22Z
 docId: ADR-60
 status: Accepted
 date: 2026-11-14
@@ -50,6 +50,21 @@ Retained-span ownership evidence complements the steady-state gate in
 
 Command span names are `command <category>`, using Kiroku's canonical prefix-before-dash
 category rule. Keep the complete stream identifier in `keiro.stream.name`.
+
+Producer derivation uses `PreserveDraftTrace` or `DeriveTraceAfter cutoff` on the
+producer record. The latter only reads metadata for recorded positions strictly above
+the immutable cutoff when no explicit draft context exists. Draft provenance overrides
+cannot change eligibility. It runs without ambient context or I/O inside the transaction.
+ADR-59's quiescent activation and policy-aware rollback rules apply even after successful
+outbox-row GC. Identity encoding, canonical digest bytes and strict `TraceField` comparison
+remain unchanged. Inline enqueues must supply stable context themselves.
+
+The durable publisher opens root Producer spans with up to 128 evaluated creation links
+in row order, carrying message IDs and mixed-batch destinations. It counts additional valid
+contexts, uses a common destination name only for uniform batches, and keeps per-message
+span attributes only for singletons. Wire headers carry the stored creation context rather
+than the send identity. Missing tracers bypass decoding. The existing exported single-event
+helper keeps its API; the durable publisher uses the batch-aware helper.
 
 ## Consequences
 

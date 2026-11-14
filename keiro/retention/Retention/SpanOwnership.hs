@@ -8,11 +8,17 @@ import Control.Concurrent (threadDelay)
 import Control.Exception (bracket, evaluate)
 import Control.Monad (forM, forM_, void)
 import Data.Aeson qualified as Aeson
+import Data.ByteString qualified as BS
 import Data.ByteString.Lazy qualified as Lazy
 import Data.IORef (readIORef, writeIORef)
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Time (UTCTime (..))
+import Data.Time.Calendar (Day (ModifiedJulianDay))
+import Data.UUID qualified as UUID
 import Keiro.Command qualified as Command
+import Keiro.Integration.Event qualified as Integration
+import Keiro.Outbox qualified as Outbox
 import Keiro.Stream qualified as Stream
 import Keiro.Telemetry qualified as Telemetry
 import Keiro.Test.Postgres (Fixture, StoreRunner (..), withFreshResourceStore)
@@ -42,6 +48,31 @@ spec fixture = describe "Span payload ownership" do
           awaitCollection weak `shouldReturn` True
           spans <- readIORef exported
           length spans `shouldBe` 8
+
+  it "collects batch payloads with mixed destinations and more than 128 linked rows" $ do
+    (processor, exported) <- inMemoryListExporter
+    bracket
+      (createTracerProvider [processor] emptyTracerProviderOptions)
+      (\provider -> void (shutdownTracerProvider provider Nothing))
+      $ \provider -> do
+        weak <- produceBatchPayloads (makeTracer provider "keiro-retention" tracerOptions)
+        awaitCollection weak `shouldReturn` True
+        spans <- readIORef exported
+        length spans `shouldBe` 1
+
+{-# NOINLINE produceBatchPayloads #-}
+produceBatchPayloads :: Tracer -> IO [Weak Text]
+produceBatchPayloads tracer = do
+  prepared <- forM [1 .. 200 :: Int] $ \index -> do
+    payload <- evaluate (Text.replicate (128 * 1024) (Text.pack (show index)))
+    weak <- mkWeakPtr payload Nothing
+    let now = UTCTime (ModifiedJulianDay 60000) 0
+        context = Integration.TraceContext "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01" Nothing
+        event = Integration.IntegrationEvent (Text.pack (show index)) "retention" (if even index then "even" else "odd") Nothing "Ownership" 1 Integration.ApplicationJson Nothing Nothing Nothing (BS.replicate 1024 65) now Nothing Nothing (Just context) (Just (Aeson.object ["payload" Aeson..= payload]))
+        row = Outbox.OutboxRow (Outbox.OutboxId UUID.nil) event Outbox.OutboxPending 0 now Nothing Nothing Nothing Nothing now now
+    pure (row, weak)
+  Telemetry.withProducerBatchSpan (Just tracer) (map fst prepared) (const (pure ()))
+  pure (map snd prepared)
 
 {-# NOINLINE produceNoOpPayloads #-}
 produceNoOpPayloads :: StoreRunner -> Tracer -> IO [Weak Text]

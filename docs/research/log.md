@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-11-14
+
+* **Update**: Reconcile outbox enqueue and publish audit with immutable derivation and root batch spans.
+
 * **Update**: RES-16: reconcile command spans and event creation metadata with the implemented runtime.
 
 ## 2026-10-14

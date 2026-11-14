@@ -7,7 +7,7 @@ tags: [keiro, outbox, integration-events, reference]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:06:27Z
-timestamp: 2026-10-27T21:15:00Z
+timestamp: 2026-11-14T23:17:22Z
 ---
 
 # Durable Outbox
@@ -338,6 +338,7 @@ ordersIntegrationProducer = IntegrationProducer
   { name = "ordering-integration-producer"
   , source = "ordering"
   , messageIdPrefix = "msg"
+  , tracePolicy = PreserveDraftTrace
   , mapEvent = \recorded -> \case
       OrderSubmitted orderId quantity ->
         Just IntegrationEventDraft
@@ -403,3 +404,32 @@ runOutboxMaintenance = void $
 A future schema-registry adapter populates `schemaReference` (and may
 swap `contentType` to Avro or Protobuf). The envelope already carries
 every field a registry needs, so no further migration is required.
+
+## Trace policy adoption
+
+Every `IntegrationProducer` now requires `tracePolicy`. Use `PreserveDraftTrace`
+for existing deployments. To derive missing message context from a source event,
+choose `DeriveTraceAfter cutoff`: only the recorded event's global position strictly
+above the cutoff is eligible. Explicit draft context always wins, including malformed
+values. Draft provenance overrides do not affect eligibility. The cutoff and producer
+source/name must be durable application configuration tied to the store identity.
+
+Pause every producer worker for that identity and drain in-flight transactions.
+Pause source writers and drain pending appends before reading a committed global-position
+high-water mark. Persist that mark, upgrade every producer worker to policy-aware code
+using the same cutoff, then resume writers and workers. An empty store can adopt zero
+before writers start. Never recompute the cutoff at startup or advance it later.
+
+After activation, rollback requires a policy-aware binary with the same cutoff;
+a pre-policy binary must remain stopped for that producer. Pausing workers is safe.
+Disabling derivation after eligible enqueues changes frozen content and causes
+`ProducerIdentityConflict [TraceField]`. Garbage collection does not reset the rule.
+Trace headers remain part of strict producer content comparison.
+
+A configured publisher tracer opens one root send span per publish call, linking
+at most 128 valid row creation contexts. Uniform batches use `send <destination>`;
+mixed batches use `send` with destinations on links. Larger batches omit per-message
+span attributes. `messaging.batch.message_count` reports batch size and
+`keiro.outbox.links.dropped` reports additional valid contexts. Kafka headers always
+carry the stored creation context. The inline enqueue API has no source event;
+capture context before its transaction and supply the same value on replay.

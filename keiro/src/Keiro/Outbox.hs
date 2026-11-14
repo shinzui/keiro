@@ -53,6 +53,7 @@ module Keiro.Outbox
 
     -- * Canonical producer-subscription helper
     IntegrationProducer (..),
+    ProducerTracePolicy (..),
     IntegrationProducerConfigError (..),
     IntegrationEventDraft (..),
     mkIntegrationProducer,
@@ -97,18 +98,16 @@ import Keiro.Telemetry
     recordOutboxReclaimed,
     recordOutboxRejected,
     recordOutboxRetried,
-    withProducerSpan,
+    traceContextFromMetadata,
+    withProducerBatchSpan,
   )
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId, GlobalPosition, RecordedEvent (..))
-import OpenTelemetry.Attributes.Key (AttributeKey (..), unkey)
+import OpenTelemetry.Attributes.Key (unkey)
 import OpenTelemetry.SemanticConventions (error_type)
 import OpenTelemetry.Trace.Core (SpanStatus (..), addAttribute, setStatus)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
-
-keiro_outbox_batch_size :: AttributeKey Int64
-keiro_outbox_batch_size = AttributeKey "keiro.outbox.batch.size"
 
 -- | Mint a fresh time-ordered UUIDv7 for use as an 'OutboxId'.
 freshOutboxId :: (IOE :> es) => Eff es OutboxId
@@ -135,6 +134,13 @@ enqueueIntegrationEventTx outboxId event =
 -- Producer-subscription helper
 -- ---------------------------------------------------------------------------
 
+-- | Immutable per-producer/store adoption policy. Never recompute or move the
+-- cutoff after activation; see the producer guide for quiescence and rollback.
+data ProducerTracePolicy
+  = PreserveDraftTrace
+  | DeriveTraceAfter !GlobalPosition
+  deriving stock (Generic, Eq, Show)
+
 -- | Configuration for the canonical producer subscription.
 --
 -- A service running 'IntegrationProducer' reads its private event stream,
@@ -156,6 +162,7 @@ data IntegrationProducer e = IntegrationProducer
   { name :: !Text,
     source :: !Text,
     messageIdPrefix :: !Text,
+    tracePolicy :: !ProducerTracePolicy,
     mapEvent :: !(RecordedEvent -> e -> Maybe IntegrationEventDraft)
   }
   deriving stock (Generic)
@@ -273,7 +280,15 @@ enqueueProducerEventTx producer recorded emission draft =
         .~ ((draft ^. #sourceEventId) <|> Just (recorded ^. #eventId))
         & #sourceGlobalPosition
         .~ ((draft ^. #sourceGlobalPosition) <|> Just (recorded ^. #globalPosition))
-    event = normalizeProducerEvent (draftToEvent (producer ^. #source) (identity ^. #messageId) withProvenance)
+    withTrace = case producer ^. #tracePolicy of
+      PreserveDraftTrace -> withProvenance
+      DeriveTraceAfter cutoff
+        | recorded ^. #globalPosition > cutoff -> case draft ^. #traceContext of
+            Just _ -> withProvenance
+            Nothing -> maybe withProvenance (\context -> withProvenance & #traceContext ?~ context) (traceContextFromMetadata (recorded ^. #metadata))
+        | otherwise -> withProvenance
+    event = normalizeProducerEvent (draftToEvent (producer ^. #source) (identity ^. #messageId) withTrace)
+{-# INLINE enqueueProducerEventTx #-}
 
 -- ---------------------------------------------------------------------------
 -- Publisher worker
@@ -362,11 +377,10 @@ publishClaimedOutbox publish options mMetrics = do
 
     publishRows :: [OutboxRow] -> Eff es (Map.Map OutboxId PublishOutcome)
     publishRows [] = pure Map.empty
-    publishRows batch@(firstRow : _) =
+    publishRows batch =
       Map.fromList
         <$> withBatchSpan
           batch
-          firstRow
           ( do
               attempted <- trySync (publish batch)
               let normalized =
@@ -381,17 +395,11 @@ publishClaimedOutbox publish options mMetrics = do
 
     withBatchSpan ::
       [OutboxRow] ->
-      OutboxRow ->
       Eff es [(OutboxId, PublishOutcome)] ->
       Eff es [(OutboxId, PublishOutcome)]
-    withBatchSpan batch firstRow action =
-      withProducerSpan
-        (options ^. #tracer)
-        (firstRow ^. #event)
-        (outboxRowToKafkaRecord firstRow)
-        $ \mSpan -> do
-          for_ mSpan $ \sp ->
-            addAttribute sp (unkey keiro_outbox_batch_size) (fromIntegral (length batch) :: Int64)
+    withBatchSpan batch action =
+      withProducerBatchSpan (options ^. #tracer) batch $
+        \mSpan -> do
           outcomes <- action
           case (mSpan, firstFailure outcomes) of
             (Just sp, Just errMsg) -> do

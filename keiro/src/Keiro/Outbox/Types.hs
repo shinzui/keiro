@@ -164,9 +164,9 @@ data OutboxRow = OutboxRow
 --
 -- The optional 'tracer' field opts the publisher into OpenTelemetry
 -- instrumentation: when present, the publisher opens a @Producer@-kind
--- span around each publish call, attributing the first row's
--- 'IntegrationEvent.destination' (topic), 'IntegrationEvent.messageId',
--- and Kafka key per the messaging semantic conventions. When 'tracer' is
+-- root span around each publish call with at most 128 creation-context links.
+-- A common destination is attributed on the span; mixed destinations and message
+-- IDs are on links. Only singleton batches have per-message span attributes. When 'tracer' is
 -- 'Nothing' (the default) the publisher emits no spans.
 data OutboxPublishOptions = OutboxPublishOptions
   { batchSize :: !Int,

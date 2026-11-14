@@ -7,7 +7,7 @@ tags: [keiro, integration-events, kafka, guide]
 generated:
   by: human:nadeem
   at: 2026-07-24T13:06:07Z
-timestamp: 2026-10-27T21:15:00Z
+timestamp: 2026-11-14T23:17:22Z
 ---
 
 # Integration Events With Kafka
@@ -73,6 +73,7 @@ ordersIntegrationProducer = IntegrationProducer
   { name = "ordering-integration-producer"
   , source = "ordering"
   , messageIdPrefix = "msg"
+  , tracePolicy = PreserveDraftTrace
   , mapEvent = \recorded -> \case
       OrderSubmittedLocal orderId quantity ->
         Just IntegrationEventDraft

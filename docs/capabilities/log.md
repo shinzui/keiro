@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-11-14
+
+* **Update**: Record producer cutoff and bounded batch link evidence for CAP-15.
+
 * **Update**: CAP-15: record command event creation context, category span names and no-tracer behavior.
 
 ## 2026-10-27

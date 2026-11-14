@@ -51,7 +51,7 @@ import Keiro.Inbox
     runInboxTransactionBatch,
     runInboxTransactionWith,
   )
-import Keiro.Integration.Event (IntegrationContentType (..), IntegrationEvent (..))
+import Keiro.Integration.Event (IntegrationContentType (..), IntegrationEvent (..), TraceContext (..))
 import Keiro.Outbox
   ( OutboxId (..),
     OutboxRow,
@@ -95,6 +95,7 @@ import Kiroku.Store.Types
     StreamName (..),
     StreamVersion (..),
   )
+import Numeric (showHex)
 import OpenTelemetry.MeterProvider (createMeterProvider, defaultSdkMeterProviderOptions)
 import OpenTelemetry.Metric.Core (getMeter)
 import OpenTelemetry.Resource (emptyMaterializedResources)
@@ -1261,7 +1262,7 @@ tracingBenchmarks :: Store.KirokuStore -> Store.KirokuStore -> StoreRunner -> St
 tracingBenchmarks store dispatchStore runner outboxStore tracer =
   [ bgroup "tracing" $
       [selected (prepareCommandStore store) $ \_ -> bgroup "command" ([commandCell distinct traced | distinct <- [True, False], traced <- [False, True]] <> [batchCommandCell traced | traced <- [False, True]])]
-        <> [publishCell traced | traced <- [False, True]]
+        <> [publishCell withContext traced | withContext <- [False, True], traced <- [False, True]]
         <> [selected (prepareCommandStore dispatchStore) $ \_ -> bgroup "process-manager" [dispatchCell traced | traced <- [False, True]]]
   ]
   where
@@ -1289,11 +1290,13 @@ tracingBenchmarks store dispatchStore runner outboxStore tracer =
                 Right value | value ^. #eventsAppended == 100 -> pure ()
                 other -> liftIO (fail (show other))
        in selectedCounterWithCleanup label 100 (prepareCommand store label 100 (commandBudget EmitLarge) action) (\n -> workCountProbe store (Text.pack label) ("tracing-" <> Text.pack label <> "-") n (n * 100)) $ \counter -> bench label (nfIO (action counter))
-    publishCell traced =
-      let label = "publish-backlog" <> suffix traced
+    publishCell withContext traced =
+      let label = (if withContext then "publish-contexts" else "publish-backlog") <> suffix traced
           action = do
             runStoreChecked outboxStore (Store.runTransaction (Tx.sql "TRUNCATE keiro.keiro_outbox"))
-            seedOutbox outboxStore (scenarioMessages (const Nothing))
+            let messages = scenarioMessages (const Nothing)
+                contextual = zipWith (\index (oid, event) -> (oid, event & #traceContext ?~ TraceContext ("00-0af7651916cd43dd8448eb211c80319c-" <> Text.justifyRight 16 '0' (Text.pack (showHex index "")) <> "-01") Nothing)) [1 :: Int ..] messages
+            seedOutbox outboxStore (if withContext then contextual else messages)
             runStoreChecked outboxStore $ do
               let drain = do
                     backlog <- countOutboxBacklog

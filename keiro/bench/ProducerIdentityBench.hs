@@ -35,6 +35,10 @@ producerIdentityBenchmarks store sequenceRef =
         sqlBench "legacy-fresh-1000" (run True False False),
         freshBench True "deterministic-fresh-1000" (run True True False),
         sqlBench "deterministic-fresh-and-replay-1000" (run True True True),
+        sqlBench "trace-policy-legacy-1000" (runTrace PreserveDraftTrace False),
+        sqlBench "trace-policy-derived-1000" (runTrace (DeriveTraceAfter (GlobalPosition 0)) False),
+        sqlBench "trace-policy-pre-cutover-1000" (runTrace (DeriveTraceAfter (GlobalPosition 1000)) False),
+        sqlBench "trace-policy-explicit-1000" (runTrace (DeriveTraceAfter (GlobalPosition 0)) True),
         sqlBench "legacy-single-tx-per-event-1000" (run False False False),
         freshBench False "deterministic-single-tx-per-event-1000" (run False True False)
       ]
@@ -44,6 +48,17 @@ producerIdentityBenchmarks store sequenceRef =
     freshBench batch name action =
       selected (checkFreshRatio store sequenceRef batch) $ \_ -> sqlBench name action
     run = runProducerWorkload store sequenceRef
+    runTrace policy explicit = do
+      generation <- atomicModifyIORef' sequenceRef (\n -> (n + 1, n + 1))
+      result <- Store.runStoreIO store $ do
+        Store.runTransaction (Tx.sql "TRUNCATE keiro.keiro_outbox")
+        let context = TraceContext "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01" Nothing
+            configuredProducer = producer & #tracePolicy .~ policy
+            tracedDraft = if explicit then draft & #traceContext ?~ context else draft
+            actions = [enqueueProducerEventTx configuredProducer (sourceEvent generation i & #metadata ?~ Aeson.object ["traceparent" Aeson..= (context ^. #traceparent)]) 0 tracedDraft | i <- [1 .. 1000]]
+        outcomes <- Store.runTransaction (sequence actions)
+        unless (all (\case ProducerInserted _ -> True; _ -> False) outcomes) (error "trace-policy benchmark failed to insert")
+      either (fail . show) pure result
 
 -- The diagnostic pairs call precisely the normal benchmark workload, including
 -- timed reset, preparation, insert-result checks and transaction boundaries.
@@ -91,7 +106,7 @@ runProducerWorkload store sequenceRef batch deterministic replay = do
     isDuplicate _ = False
 
 producer :: IntegrationProducer ()
-producer = IntegrationProducer "bench-producer" "bench.outbox" "msg" (\_ _ -> Just draft)
+producer = IntegrationProducer "bench-producer" "bench.outbox" "msg" PreserveDraftTrace (\_ _ -> Just draft)
 
 draft :: IntegrationEventDraft
 draft =

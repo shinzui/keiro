@@ -23,6 +23,11 @@ provenance:
       at: 2026-11-14T19:06:08Z
       mode: "update"
       note: "Apply review findings, reconcile ownership and acceptance gates, and verify available upstream releases."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-14T23:12:09Z
+      mode: "implement"
+      note: "Implement immutable producer trace policy and bounded root batch links"
 ---
 
 # Derive outbox creation context from source events and link it from the send span
@@ -57,19 +62,31 @@ finding one `send` span with two links.
 
 ## Progress
 
-- [ ] M1: The immutable producer cutover policy and activation/rollback fixtures satisfy ADR-42
+- [x] M1 (2026-11-14): The immutable producer cutover policy and activation/rollback fixtures satisfy ADR-42
   and ADR-59; policy plumbing is explicit at every enqueue entry point.
-- [ ] M2: `enqueueProducerEventTx` fills a missing `traceContext` from the source event's
+- [x] M2 (2026-11-14): `enqueueProducerEventTx` fills a missing `traceContext` from the source event's
   metadata under that rule; replays stay identical; tests pass.
-- [ ] M3: The publisher's span is a root with one bounded link per row, correctly named for
+- [x] M3 (2026-11-14): The publisher's span is a root with one bounded link per row, correctly named for
   mixed-destination batches, carrying `messaging.batch.message_count`.
-- [ ] M4: Benchmark and retention gates pass; costs recorded.
-- [ ] M5: Documents and the correlation ADR updated; parent MasterPlan updated.
+- [x] M4 (2026-11-14): Benchmark and retention gates pass; costs recorded.
+- [x] M5 (2026-11-14): Documents and the correlation ADR updated; parent MasterPlan updated.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- The current DSL scaffolder emits mapper holes rather than `IntegrationProducer` records.
+  Repository-wide source search found one filled consumer fixture, now explicitly preserving
+  draft trace context; its live-runtime compile suite is the affected consumer check.
+- The focused outbox suite passes 66 examples and telemetry passes 13, including root/restore,
+  mixed destinations and 200 valid contexts bounded to 128 links. The actual mixed-batch
+  retained-span payload probe also passes before any exported attributes are inspected.
+- Kept the public `withProducerSpan` API and added a batch helper. Link attributes use the
+  API's existing `AttributeMap` interface; no dependency or digest change is needed.
+- The first comparison exposed allocation in bypass cases from lost enqueue specialization.
+  Keeping the canonical enqueue helper inline and sharing benchmark producer configuration
+  removes that regression. Retain the initial and specialized measurements; publisher rows
+  are unaffected by this enqueue-only change. Explicit/pre-cutover cases pay the position
+  check but perform no metadata read.
 
 
 ## Decision Log
@@ -110,7 +127,29 @@ finding one `send` span with two links.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete. Canonical producers now choose an explicit immutable trace policy; legacy,
+cutoff boundary, restart/rollback, explicit override and GC sequences preserve strict
+identity. The literal producer digest and `TraceField` conflicts remain unchanged.
+The batch-aware publisher opens restored-context roots with at most 128 links and
+correct uniform/mixed attributes; the single-event public helper retains its API.
+
+Evidence is in `keiro/bench/results/trace-outbox-v1/`: matched dependency versions,
+source/binary hashes, reproducible control/candidate harness patches, native allocation
+CSV, initial and specialized measurements, 66 outbox examples, 13 telemetry examples,
+25 retention/ownership examples, and a final 22-example identity recheck. The filled DSL
+consumer and strict affected documentation/extension/re-export checks pass.
+
+All accepted timings are −6.4% to +4.4%, within the unchanged 25% ceiling. No-tracer
+publisher allocation differs by less than 0.08%; legacy enqueue allocates 0.97% less.
+Pre-cutover/explicit policy comparison adds about 225 B per row, with no metadata lookup.
+Eligible derivation adds about 6.7 KB per row versus candidate legacy through lookup,
+normalization and SQL trace fields. Traced contextual publishing adds about 1.24 KB per
+row versus the old no-link path. The distinct-context retention leg ends Bounded at
+222 B/op and 0.21 MiB growth; actual mixed 200-row spans release payloads uninspected.
+
+ADR-60 and the producer adoption guide retain the quiescent activation and policy-aware
+rollback requirements. The final full repository gate remains at initiative integration;
+unaffected checks reuse the accepted EP-1 baseline per the Master's validation cadence.
 
 
 ## Context and Orientation

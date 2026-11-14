@@ -1,0 +1,23 @@
+{
+  "baseline": "6c1b59ed",
+  "candidate_base": "6c1b59ed",
+  "candidate_sources": {
+    "keiro/src/Keiro/Outbox.hs": "d762f01b569b9af4569cf6606b5625ccc02792fa6326951a632b194bf2348aa7",
+    "keiro/src/Keiro/Telemetry.hs": "15e1ae866b4bf5ee56937d2c2dac891486b2af4d6024d4f37fb7a1a8be2e9264",
+    "keiro/bench/Main.hs": "95bbf571440389b5ea9bbfdc3fc5ab25d05956204d2edd2b2419d6ab39128229",
+    "keiro/bench/ProducerIdentityBench.hs": "5b738844eb7dc6a44f76bf1ac616168841840ba7c14d6fa24a5e9327bd03b70d"
+  },
+  "control_harness_sources": {
+    "keiro/bench/Main.hs": "ed3eb2c11461d95b5088b65ad4d9535968bc4f3d84efc8e23afddaae4bbc0d7d",
+    "keiro/bench/ProducerIdentityBench.hs": "1f6cd777b4d0216f3106be0c87dc379e90c2d696d40fbadee617a190dbd42706"
+  },
+  "binary_sha256": {
+    "control": "2ba4cf4baf8543b6075cbf957907cd6271aea3baa6aeccbd5a7c551a2cc8f12c",
+    "candidate_final": "6c713d396c94307accd6c376192c7db170124df5665a545a9779f8942a7d6ff5"
+  },
+  "dependency_versions_identical": true,
+  "rts": "-N2 -T",
+  "timing_ceiling_percent": 25,
+  "toolchain_reference": "../tracing-baseline-v1/environment.json",
+  "accepted_rows": "Publisher rows from after.csv; enqueue rows from after-policy-specialized.csv. Initial enqueue rows retained as exploratory evidence."
+}

@@ -12,7 +12,7 @@ import Control.Concurrent (forkIO, killThread, threadDelay)
 import Control.Concurrent.MVar (MVar, modifyMVar, newEmptyMVar, newMVar, putMVar, readMVar, takeMVar, tryPutMVar)
 import Control.Concurrent.STM (atomically, putTMVar)
 import Control.Exception (AsyncException (..), ErrorCall, Exception, SomeException, displayException, evaluate, finally, throwIO, try)
-import Control.Monad (forM, forM_)
+import Control.Monad (forM, forM_, replicateM_)
 import Data.Aeson (object, withObject, (.:), (.:?))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -422,6 +422,7 @@ import OpenTelemetry.Trace
   )
 import OpenTelemetry.Trace.Core
   ( ImmutableSpan (..),
+    Link (..),
     NewLink (..),
     Span,
     SpanContext (..),
@@ -431,6 +432,7 @@ import OpenTelemetry.Trace.Core
     getSpanContext,
     inSpan',
   )
+import OpenTelemetry.Util (appendOnlyBoundedCollectionValues)
 import Paths_keiro qualified as Package
 import PreCanonicalRecoverySpec qualified
 import PreimageSpec qualified
@@ -7694,6 +7696,46 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         Store.withStore (Store.defaultConnectionSettings conn) $ \storeHandle -> do
           runDraft sampleDraft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerDuplicateIdentical identity)
           rows storeHandle `shouldReturn` Right [before]
+    for_ [9, 10, 11] $ \position ->
+      it ("preserves immutable trace cutover across restart, rollback and GC at " <> show position) $
+        withFreshDatabase fixture $ \conn -> do
+          let context = TraceContext "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01" Nothing
+              event = recorded & #globalPosition .~ GlobalPosition position & #metadata ?~ object ["traceparent" Aeson..= (context ^. #traceparent)]
+              policy = sampleProducer & #tracePolicy .~ ProducerOutbox.DeriveTraceAfter (GlobalPosition 10)
+              firstPolicy = if position <= 10 then sampleProducer else policy
+              -- Overridden provenance must not determine policy eligibility.
+              draft = sampleDraft & #sourceGlobalPosition ?~ GlobalPosition 999
+              expected = if position > 10 then Just context else Nothing
+          Store.withStore (Store.defaultConnectionSettings conn) $ \storeHandle -> do
+            enqueue firstPolicy event 0 draft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerInserted identity)
+          Store.withStore (Store.defaultConnectionSettings conn) $ \storeHandle -> do
+            -- Restart and supported rollback both retain the same policy.
+            replicateM_ 2 $ enqueue policy event 0 draft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerDuplicateIdentical identity)
+            Right [row] <- rows storeHandle
+            (row ^. #event) ^. #traceContext `shouldBe` expected
+            Prelude.lookup headerTraceParent (integrationHeaders (row ^. #event)) `shouldBe` fmap (^. #traceparent) expected
+            let explicit = TraceContext "explicit" Nothing
+            enqueue policy event 0 (draft & #traceContext ?~ explicit) storeHandle
+              `shouldReturn` Right (ProducerOutbox.ProducerIdentityConflict identity (ProducerOutbox.TraceField NonEmpty.:| []))
+            Right _ <- Store.runStoreIO storeHandle $ publishClaimedOutbox (perRow (const (pure PublishSucceeded))) defaultPublishOptions Nothing
+            now <- getCurrentTime
+            Store.runStoreIO storeHandle (garbageCollectSent 0 (addUTCTime 1 now)) `shouldReturn` Right 1
+            enqueue policy event 0 draft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerInserted identity)
+            Right [after] <- rows storeHandle
+            after ^. #event `shouldBe` row ^. #event
+    around (withFreshStore fixture) $ do
+      it "keeps explicit context and absent source metadata under derived policy" $ \storeHandle -> do
+        let policy = sampleProducer & #tracePolicy .~ ProducerOutbox.DeriveTraceAfter (GlobalPosition 0)
+            explicit = TraceContext "explicit" Nothing
+        enqueue policy recorded 0 sampleDraft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerInserted identity)
+        Right [plain] <- rows storeHandle
+        (plain ^. #event) ^. #traceContext `shouldBe` Nothing
+        let event = recorded & #metadata ?~ object ["traceparent" Aeson..= ("source" :: Text)]
+            draft = sampleDraft & #traceContext ?~ explicit
+        result <- enqueue policy event 1 draft storeHandle
+        shouldBeRight_ result
+        Right allRows <- rows storeHandle
+        map ((^. #traceContext) . (^. #event)) allRows `shouldContain` [Just explicit]
     around (withFreshStore fixture) $ do
       it "returns inserted, identical retry, and defaults recorded provenance" $ \storeHandle -> do
         runDraft sampleDraft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerInserted identity)
@@ -8923,7 +8965,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           textAttr (csAttributes batchSpan) "messaging.destination.name"
             `shouldBe` Just (okEvent ^. #destination)
           textAttr (csAttributes batchSpan) "messaging.kafka.message.key"
-            `shouldBe` (okEvent ^. #key)
+            `shouldBe` Nothing
           intAttr (csAttributes batchSpan) "keiro.outbox.batch.size" `shouldBe` Just 2
           textAttr (csAttributes batchSpan) "error.type" `shouldBe` Just "publish_failed"
           case csStatus batchSpan of
@@ -10378,6 +10420,40 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       callsAfter `shouldBe` (1 :: Int)
       snd result `shouldBe` "ok"
       fst result `shouldSatisfy` isNothing
+
+    it "does not inspect batch rows without a tracer" $ do
+      Telemetry.withProducerBatchSpan Nothing (error "batch inspected") (const (pure (7 :: Int))) `shouldReturn` 7
+
+    for_ [2, 200] $ \count ->
+      it ("opens a root mixed send span with bounded creation links for " <> show count <> " rows") $ do
+        (processor, spansRef) <- inMemoryListExporter
+        provider <- createTracerProvider [processor] emptyTracerProviderOptions
+        let tracer = makeTracer provider "keiro-test" tracerOptions
+        inSpan' tracer "ambient" defaultSpanArguments $ \outer -> do
+          contexts <- forM [1 .. count] $ \_ -> inSpan' tracer "creation" defaultSpanArguments $ \_ ->
+            maybe (fail "missing creation context") pure =<< Telemetry.traceContextFromCurrentSpan
+          let rows = zipWith (\index context -> telemetryOutboxRow (sampleIntegrationEnvelope & #messageId .~ Text.pack (show index) & #destination .~ (if even index then "even" else "odd") & #traceContext ?~ context)) [1 :: Int ..] contexts
+          Telemetry.withProducerBatchSpan (Just tracer) rows $ \_ -> pure ()
+          restored <- Telemetry.traceContextFromCurrentSpan
+          outerContext <- getSpanContext outer
+          restoredLink <- maybe (fail "missing restored parent") pure (restored >>= Telemetry.creationLinkFromTraceContext)
+          spanId (linkContext restoredLink) `shouldBe` spanId outerContext
+          exported <- readIORef spansRef
+          captured <- traverse captureSpan exported
+          let [batch] = filter ((== "send") . csName) captured
+          csParent batch `shouldSatisfy` isNothing
+          intAttr (csAttributes batch) "messaging.batch.message_count" `shouldBe` Just (fromIntegral count)
+          textAttr (csAttributes batch) "messaging.destination.name" `shouldBe` Nothing
+          textAttr (csAttributes batch) "messaging.message.id" `shouldBe` Nothing
+          intAttr (csAttributes batch) "keiro.outbox.links.dropped" `shouldBe` (if count > 128 then Just 72 else Nothing)
+          length (csLinks batch) `shouldBe` min 128 count
+          for_ (zip [1 :: Int ..] (csLinks batch)) $ \(index, link) -> do
+            textAttr (frozenLinkAttributes link) "messaging.message.id" `shouldBe` Just (Text.pack (show index))
+            textAttr (frozenLinkAttributes link) "messaging.destination.name" `shouldBe` Just (if even index then "even" else "odd")
+            let Just expected = Telemetry.creationLinkFromTraceContext (contexts Prelude.!! (index - 1))
+            spanId (frozenLinkContext link) `shouldBe` spanId (linkContext expected)
+        _ <- shutdownTracerProvider provider Nothing
+        pure ()
 
     it "keeps unstamped, non-object and caller-parent metadata unchanged" $ do
       let caller = Just (object ["traceparent" Aeson..= ("caller" :: Text), "audit" Aeson..= True])
@@ -15617,6 +15693,7 @@ data CapturedSpan = CapturedSpan
     csAttributes :: Attributes,
     csStatus :: SpanStatus,
     csContext :: SpanContext,
+    csLinks :: [Link],
     csParent :: Maybe Span
   }
 
@@ -15630,6 +15707,7 @@ captureSpan sp = do
         csAttributes = hotAttributes hot,
         csStatus = hotStatus hot,
         csContext = spanContext sp,
+        csLinks = Vector.toList (appendOnlyBoundedCollectionValues (hotLinks hot)),
         csParent = spanParent sp
       }
 
@@ -15838,12 +15916,18 @@ inboxTestCounterCountStmt =
     E.noParams
     (D.singleRow (fromIntegral <$> D.column (D.nonNullable D.int8)))
 
+telemetryOutboxRow :: IntegrationEvent -> OutboxRow
+telemetryOutboxRow event =
+  let now = UTCTime (ModifiedJulianDay 60000) (secondsToDiffTime 0)
+   in OutboxRow (OutboxId outboxUuid1) event OutboxPending 0 now Nothing Nothing Nothing Nothing now now
+
 sampleProducer :: IntegrationProducer ()
 sampleProducer =
   IntegrationProducer
     { name = "ordering-integration-producer",
       source = "ordering",
       messageIdPrefix = "msg",
+      tracePolicy = ProducerOutbox.PreserveDraftTrace,
       mapEvent = \_recorded () -> Just sampleDraft
     }
 

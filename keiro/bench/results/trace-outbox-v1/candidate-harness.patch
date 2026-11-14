@@ -1,0 +1,89 @@
+diff --git a/keiro/bench/Main.hs b/keiro/bench/Main.hs
+index 083c641a..310c489d 100644
+--- a/keiro/bench/Main.hs
++++ b/keiro/bench/Main.hs
+@@ -51,7 +51,7 @@ import Keiro.Inbox
+     runInboxTransactionBatch,
+     runInboxTransactionWith,
+   )
+-import Keiro.Integration.Event (IntegrationContentType (..), IntegrationEvent (..))
++import Keiro.Integration.Event (IntegrationContentType (..), IntegrationEvent (..), TraceContext (..))
+ import Keiro.Outbox
+   ( OutboxId (..),
+     OutboxRow,
+@@ -95,6 +95,7 @@ import Kiroku.Store.Types
+     StreamName (..),
+     StreamVersion (..),
+   )
++import Numeric (showHex)
+ import OpenTelemetry.MeterProvider (createMeterProvider, defaultSdkMeterProviderOptions)
+ import OpenTelemetry.Metric.Core (getMeter)
+ import OpenTelemetry.Resource (emptyMaterializedResources)
+@@ -1261,7 +1262,7 @@ tracingBenchmarks :: Store.KirokuStore -> Store.KirokuStore -> StoreRunner -> St
+ tracingBenchmarks store dispatchStore runner outboxStore tracer =
+   [ bgroup "tracing" $
+       [selected (prepareCommandStore store) $ \_ -> bgroup "command" ([commandCell distinct traced | distinct <- [True, False], traced <- [False, True]] <> [batchCommandCell traced | traced <- [False, True]])]
+-        <> [publishCell traced | traced <- [False, True]]
++        <> [publishCell withContext traced | withContext <- [False, True], traced <- [False, True]]
+         <> [selected (prepareCommandStore dispatchStore) $ \_ -> bgroup "process-manager" [dispatchCell traced | traced <- [False, True]]]
+   ]
+   where
+@@ -1289,11 +1290,13 @@ tracingBenchmarks store dispatchStore runner outboxStore tracer =
+                 Right value | value ^. #eventsAppended == 100 -> pure ()
+                 other -> liftIO (fail (show other))
+        in selectedCounterWithCleanup label 100 (prepareCommand store label 100 (commandBudget EmitLarge) action) (\n -> workCountProbe store (Text.pack label) ("tracing-" <> Text.pack label <> "-") n (n * 100)) $ \counter -> bench label (nfIO (action counter))
+-    publishCell traced =
+-      let label = "publish-backlog" <> suffix traced
++    publishCell withContext traced =
++      let label = (if withContext then "publish-contexts" else "publish-backlog") <> suffix traced
+           action = do
+             runStoreChecked outboxStore (Store.runTransaction (Tx.sql "TRUNCATE keiro.keiro_outbox"))
+-            seedOutbox outboxStore (scenarioMessages (const Nothing))
++            let messages = scenarioMessages (const Nothing)
++                contextual = zipWith (\index (oid, event) -> (oid, event & #traceContext ?~ TraceContext ("00-0af7651916cd43dd8448eb211c80319c-" <> Text.justifyRight 16 '0' (Text.pack (showHex index "")) <> "-01") Nothing)) [1 :: Int ..] messages
++            seedOutbox outboxStore (if withContext then contextual else messages)
+             runStoreChecked outboxStore $ do
+               let drain = do
+                     backlog <- countOutboxBacklog
+diff --git a/keiro/bench/ProducerIdentityBench.hs b/keiro/bench/ProducerIdentityBench.hs
+index 806a2a18..43186f99 100644
+--- a/keiro/bench/ProducerIdentityBench.hs
++++ b/keiro/bench/ProducerIdentityBench.hs
+@@ -35,6 +35,10 @@ producerIdentityBenchmarks store sequenceRef =
+         sqlBench "legacy-fresh-1000" (run True False False),
+         freshBench True "deterministic-fresh-1000" (run True True False),
+         sqlBench "deterministic-fresh-and-replay-1000" (run True True True),
++        sqlBench "trace-policy-legacy-1000" (runTrace PreserveDraftTrace False),
++        sqlBench "trace-policy-derived-1000" (runTrace (DeriveTraceAfter (GlobalPosition 0)) False),
++        sqlBench "trace-policy-pre-cutover-1000" (runTrace (DeriveTraceAfter (GlobalPosition 1000)) False),
++        sqlBench "trace-policy-explicit-1000" (runTrace (DeriveTraceAfter (GlobalPosition 0)) True),
+         sqlBench "legacy-single-tx-per-event-1000" (run False False False),
+         freshBench False "deterministic-single-tx-per-event-1000" (run False True False)
+       ]
+@@ -44,6 +48,17 @@ producerIdentityBenchmarks store sequenceRef =
+     freshBench batch name action =
+       selected (checkFreshRatio store sequenceRef batch) $ \_ -> sqlBench name action
+     run = runProducerWorkload store sequenceRef
++    runTrace policy explicit = do
++      generation <- atomicModifyIORef' sequenceRef (\n -> (n + 1, n + 1))
++      result <- Store.runStoreIO store $ do
++        Store.runTransaction (Tx.sql "TRUNCATE keiro.keiro_outbox")
++        let context = TraceContext "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01" Nothing
++            configuredProducer = producer & #tracePolicy .~ policy
++            tracedDraft = if explicit then draft & #traceContext ?~ context else draft
++            actions = [enqueueProducerEventTx configuredProducer (sourceEvent generation i & #metadata ?~ Aeson.object ["traceparent" Aeson..= (context ^. #traceparent)]) 0 tracedDraft | i <- [1 .. 1000]]
++        outcomes <- Store.runTransaction (sequence actions)
++        unless (all (\case ProducerInserted _ -> True; _ -> False) outcomes) (error "trace-policy benchmark failed to insert")
++      either (fail . show) pure result
+ 
+ -- The diagnostic pairs call precisely the normal benchmark workload, including
+ -- timed reset, preparation, insert-result checks and transaction boundaries.
+@@ -91,7 +106,7 @@ runProducerWorkload store sequenceRef batch deterministic replay = do
+     isDuplicate _ = False
+ 
+ producer :: IntegrationProducer ()
+-producer = IntegrationProducer "bench-producer" "bench.outbox" "msg" (\_ _ -> Just draft)
++producer = IntegrationProducer "bench-producer" "bench.outbox" "msg" PreserveDraftTrace (\_ _ -> Just draft)
+ 
+ draft :: IntegrationEventDraft
+ draft =

@@ -2,6 +2,9 @@
 
 ## 2026-11-14
 
+* **Update**: Extend ADR-60 with deterministic producer trace cutover and bounded root batch links; preserve ADR-42 equality and ADR-59 activation/rollback.
+
+
 * **Update**: ADR-60: force bounded scalar outcome projections after an actual retained-span no-op probe demonstrated payload retention.
 
 

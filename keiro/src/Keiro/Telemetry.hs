@@ -27,6 +27,7 @@ module Keiro.Telemetry
   ( -- * Span helpers
     Tracer,
     withProducerSpan,
+    withProducerBatchSpan,
     withConsumerSpan,
     withCommandSpan,
     withWorkflowSpan,
@@ -192,6 +193,7 @@ where
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.List qualified as List
 import Keiro.Inbox.Kafka (KafkaInboundRecord)
 import Keiro.Integration.Event
   ( IntegrationEvent,
@@ -199,22 +201,20 @@ import Keiro.Integration.Event
     headerTraceParent,
     headerTraceState,
   )
-import Keiro.Outbox.Kafka (KafkaProducerRecord)
+import Keiro.Outbox.Kafka (KafkaProducerRecord, outboxRowToKafkaRecord)
+import Keiro.Outbox.Types (OutboxRow)
 import Keiro.Prelude
 import Keiro.Workflow.Types (StepName (..), WorkflowId (..), WorkflowName (..))
 import Kiroku.Store.Observability (KirokuEvent (..))
 import Kiroku.Store.Types (CategoryName (..), StreamName (..), categoryName)
 import "base" Control.Exception (bracket)
+import "base" GHC.Exts (fromList)
 import "base" GHC.Stack (HasCallStack)
 import "bytestring" Data.ByteString qualified as ByteString
-import "hs-opentelemetry-api" OpenTelemetry.Attributes
-  ( addAttributesFromBuilder,
-    defaultAttributeLimits,
-    emptyAttributes,
-    (.@),
-  )
+import "hs-opentelemetry-api" OpenTelemetry.Attributes (addAttributesFromBuilder, defaultAttributeLimits, emptyAttributes, toAttribute, (.@))
 import "hs-opentelemetry-api" OpenTelemetry.Attributes.Key (AttributeKey (..))
 import "hs-opentelemetry-api" OpenTelemetry.Context (insertSpan, lookupSpan)
+import "hs-opentelemetry-api" OpenTelemetry.Context qualified as Context
 import "hs-opentelemetry-api" OpenTelemetry.Context.ThreadLocal
   ( attachContext,
     detachContext,
@@ -353,6 +353,54 @@ withProducerSpan (Just tracer) event record body =
   where
     name = "send " <> (event ^. #destination)
     args = defaultSpanArguments {kind = Producer}
+
+-- | Publish a durable batch as a root span with at most 128 creation links.
+-- No row, metadata projection or payload is retained by the SDK. The untraced
+-- branch deliberately does not inspect the batch.
+withProducerBatchSpan ::
+  (MonadUnliftIO m, HasCallStack) =>
+  Maybe Tracer -> [OutboxRow] -> (Maybe Span -> m a) -> m a
+withProducerBatchSpan Nothing _ body = body Nothing
+withProducerBatchSpan (Just tracer) rows body = do
+  let (!count, !common, !mixed, !valid, !identities) = List.foldl' collect (0 :: Int64, Nothing, False, 0 :: Int64, []) rows
+      !name = maybe "send" ("send " <>) (if mixed then Nothing else common)
+      !batchLinks = List.foldl' (makeLink mixed) [] identities
+      !args = defaultSpanArguments {kind = Producer, links = batchLinks}
+  withRunInIO $ \runInIO ->
+    bracket (attachContext Context.empty) detachContext $ \_ -> runInIO $
+      inSpan' tracer name args $ \sp -> do
+        addAttribute sp (unkey messaging_system) ("kafka" :: Text)
+        addAttribute sp (unkey messaging_operation_type) ("publish" :: Text)
+        addAttribute sp (unkey messaging_operation_name) ("send" :: Text)
+        unless mixed $ for_ common (addAttribute sp (unkey messaging_destination_name))
+        addAttribute sp "messaging.batch.message_count" count
+        addAttribute sp "keiro.outbox.batch.size" count
+        when (valid > 128) $ addAttribute sp "keiro.outbox.links.dropped" (valid - 128)
+        case rows of
+          [row] -> setProducerAttributes sp (row ^. #event) (outboxRowToKafkaRecord row)
+          _ -> pure ()
+        body (Just sp)
+  where
+    collect (!count, !common, !mixed, !valid, !saved) row =
+      let event = row ^. #event
+          !destination = event ^. #destination
+          !common' = common <|> Just destination
+          !mixed' = mixed || maybe False (/= destination) common
+       in case (event ^. #traceContext) >>= creationLinkFromTraceContext of
+            Nothing -> (count + 1, common', mixed', valid, saved)
+            Just link
+              | valid >= 128 -> (count + 1, common', mixed', valid + 1, saved)
+              | otherwise ->
+                  let !messageId = event ^. #messageId
+                      !identity = (linkContext link, messageId, destination)
+                   in (count + 1, common', mixed', valid + 1, identity : saved)
+    makeLink mixed acc (!context, !messageId, !destination) =
+      let !fields =
+            fromList $
+              [(unkey messaging_message_id, toAttribute messageId)]
+                <> [(unkey messaging_destination_name, toAttribute destination) | mixed]
+          !link = NewLink context fields
+       in link : acc
 
 -- | Run @body@ inside a @Consumer@-kind span named @"process " <> topic@.
 --
@@ -574,8 +622,10 @@ setProducerAttributes sp event _record = do
   addAttribute sp (unkey messaging_system) ("kafka" :: Text)
   addAttribute sp (unkey messaging_operation_type) ("publish" :: Text)
   addAttribute sp (unkey messaging_operation_name) ("send" :: Text)
-  addAttribute sp (unkey messaging_destination_name) (event ^. #destination)
-  addAttribute sp (unkey messaging_message_id) (event ^. #messageId)
+  let !destination = event ^. #destination
+      !messageId = event ^. #messageId
+  addAttribute sp (unkey messaging_destination_name) destination
+  addAttribute sp (unkey messaging_message_id) messageId
   case event ^. #key of
     Nothing -> pure ()
     Just k -> addAttribute sp (unkey messaging_kafka_message_key) k
