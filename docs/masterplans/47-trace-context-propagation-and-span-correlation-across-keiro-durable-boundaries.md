@@ -171,7 +171,7 @@ revises ADR-1.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Establish tracing-enabled performance and retention baselines | docs/plans/330-establish-tracing-enabled-performance-and-retention-baselines.md | None | None | In Progress |
+| 1 | Establish tracing-enabled performance and retention baselines | docs/plans/330-establish-tracing-enabled-performance-and-retention-baselines.md | None | None | Complete |
 | 2 | Stamp trace context on appended events and name command spans by category | docs/plans/331-stamp-trace-context-on-appended-events-and-name-command-spans-by-category.md | EP-1 | None | Not Started |
 | 3 | Derive outbox creation context from source events and link it from the send span | docs/plans/332-derive-outbox-creation-context-from-source-events-and-link-it-from-the-send-span.md | EP-1, EP-2 | None | Not Started |
 | 4 | Open linked processing spans in subscription workers and the inbox consumer helper | docs/plans/333-open-linked-processing-spans-in-subscription-workers-and-the-inbox-consumer-helper.md | EP-1, EP-2, EP-5 | None | Not Started |
@@ -309,16 +309,12 @@ its timer/workflow path with directly supplied traced context and can complete b
 
 ## Progress
 
-EP-1 has eight working benchmark cells and six passing matched retention legs, plus a
-retained-span ownership probe whose controlled span-owned leak is detected. Five serial baseline
-samples at `7579be21` and actual-count diagnostics passed; evidence is in
-`keiro/bench/results/tracing-baseline-v1/`. Its acceptance is blocked by the unavailable Mori
-registry database:
-`nix develop -c mori terms validate --path .` fails with connection refused on the configured
-PostgreSQL socket. Repository verification remains incomplete; dependent children remain
-Not Started under the whole-child prerequisites. The external releases are available; EP-5
-awaits EP-1, and EP-4 awaits EP-1, EP-2 and EP-5. The combined command/worker/timer/workflow
-acceptance remains an initiative gate after both EP-4 and EP-6 complete.
+EP-1 is Complete. Eight benchmark cells, five serial timing samples, native Tasty allocation
+receipts, workload-count diagnostics and all 22 retention/ownership examples pass. The earlier
+Mori failure was an outdated shell connection string; the corrected local connection passes
+registry discovery, terminology and the complete repository verification gate. Evidence is in
+`keiro/bench/results/tracing-baseline-v1/`. EP-2 is next, followed by EP-3, EP-5, EP-4 and EP-6.
+The combined command/worker/timer/workflow check and final full gate remain outstanding.
 
 Cross-plan gates not owned by a child plan:
 
@@ -357,6 +353,16 @@ Cross-plan gates not owned by a child plan:
 
 
 ## Decision Log
+
+- Decision (2026-11-14): Run the complete repository gate for the unchanged-runtime baseline
+  and again for the integrated final candidate. Between them, accept children using their
+  affected builds, behavior suites, retention/ownership probes, measurements and documentation
+  checks, reusing baseline evidence only for unchanged checks. A dependency or generated-code
+  change requires its affected consumer suites. Hard artifact dependencies and release gates
+  remain unchanged.
+  Rationale: The user requested deliberate, efficient testing. Repeating unrelated DSL mutation
+  proofs after every telemetry-only edit adds no distinct evidence; final integration still
+  receives the complete gate. Child plans record their actual checks and reused evidence.
 
 - Decision: Creation context is stored in event metadata under `traceparent` and `tracestate`.
   Rationale: The Kiroku adapter already projects exactly these keys into the envelope and

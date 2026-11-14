@@ -42,8 +42,22 @@ controlled failed collection assertion; `retention.log` records the restored sui
 `dependency-versions.json` preserves the resolved package versions. `SHA256SUMS` covers the retained
 measurements and logs.
 
-EP-1 acceptance remains open because the required Mori terminology check cannot connect to its
-registry database (`terminology-blocker.log`). The broad verification run was stopped after
-its active fixture-mutating proof restored source (`verify-interrupted.log`); it is not a
-passing repository gate. Restore Mori connectivity and rerun `nix develop -c just verify`
-before accepting EP-1 or beginning its dependent plans.
+The initial connection failure in `terminology-blocker.log` came from an outdated agent-shell
+connection string. The user supplied the available local PostgreSQL socket on 2026-11-14;
+registry discovery and all 64 terminology records then validated. The earlier broad run was
+stopped (`verify-interrupted.log`); it is historical evidence, not a passing repository gate.
+The complete corrected-environment `nix develop -c just verify` run passed (exit 0);
+`verify-current-shell.log.gz` preserves its output. Runtime library source was unchanged from
+`2ec2bc4b`; subsequent documentation corrections explain the stale connection string.
+
+The native Tasty allocation reference is `allocations.csv` and `allocations.log`. Reproduce it
+from the repository root without changing the harness:
+
+```bash
+nix develop -c cabal run keiro-bench -- -p tracing -j1 --time-mode wall --stdev 100 --timeout 10s --csv /tmp/tracing-allocations.csv +RTS -N2 -T -RTS
+```
+
+This is an allocation diagnostic, not a replacement timing baseline. Tasty reports bytes per
+fixed workload; retain its `Allocated` column when comparing later plans. The loose timing
+setting bounds diagnostic work; the five 5%-deviation recordings remain the timing reference.
+

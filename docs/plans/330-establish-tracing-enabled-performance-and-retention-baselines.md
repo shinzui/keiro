@@ -79,8 +79,10 @@ produces the "before" measurement and the commit that later plans use as their b
 KEIRO_RETENTION_LEGS=baseline-no-store nix develop -c cabal test keiro-retention --test-show-details=direct --test-options='--match "collects payloads with finished"'
 ```
 
-- Mori registry list/search could not connect to its database socket (remote tunnel timeout).
-  Dependency source inspection used the local checkout after those required lookup attempts.
+- The initial Mori failures came from an outdated shell connection string, not an unavailable
+  database. After using the local socket supplied by the user, registry discovery and all 64
+  terminology records validate. Historical failed-connection logs are preserved as execution
+  history; they are not a current prerequisite failure.
 
 
 
@@ -113,12 +115,16 @@ single-stream commands 67.998/69.247, publisher 186.144/184.243, dispatch 31.917
 Differences are within the sample spread; no new time ceiling or historical baseline changed.
 The final restored `keiro-retention` suite passed all 22 examples (19 legs and three ownership
 cases). Its raw log and the deliberate failed ownership assertion are retained with the baseline.
-Acceptance remains open: `nix develop -c mori terms validate --path .`
-fails because the registry database socket refuses connections. The broad `just verify` run
-passed the structural-enum mutation proof and consumer-enum literal proof, then was stopped
-at that boundary after the required terminology failure was established independently.
-A complete repository verification pass is still required after Mori connectivity returns.
-No dependent child may start until this prerequisite is accepted.
+Complete (2026-11-14): the corrected environment passes the full `just verify` gate, including
+797 core examples, 898 DSL examples, all 22 retention examples, the package/consumer suites,
+mutation proofs, migrations and strict document checks. The original interrupted run remains
+historical evidence. `verify-current-shell.log.gz` preserves the complete successful output.
+
+Tasty already supports allocation measurements under `+RTS -T`; use that existing feature rather
+than a custom probe. `allocations.csv` and `allocations.log` retain the unchanged-runtime
+reference for all eight cells. The extra diagnostic run passed; no benchmark source change or
+new threshold was needed. Subsequent children use this accepted source checkpoint and the
+five timing samples, reusing unaffected checks per the Master's verification cadence.
 
 
 
