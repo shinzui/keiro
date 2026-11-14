@@ -7,7 +7,7 @@ tags: [keiro, pgmq, work-queues, tutorial]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:05:47Z
-timestamp: 2026-10-27T21:15:00Z
+timestamp: 2026-11-14T23:33:52Z
 ---
 
 # Work Queues
@@ -361,3 +361,27 @@ tests own this example.
   that must not be lost if the command commits.
 - [Deploy Ordering](../user/deploy-ordering.md#3-upgrade-versioned-job-workers-before-producers)
   — the workers-before-producers rule for versioned payloads.
+
+## Parent or link
+
+Both continuous workers and `runJobOnceWithContext` open one Consumer span named
+`process <jobName>` through Shibuya's shared helper. They link the context captured
+by `enqueueTraced`. The default `ParentAndLink` also continues the producer trace.
+For delayed jobs, long retries or independent tail sampling, select `LinkOnly`:
+
+```haskell
+tuning = defaultJobTuning
+  { telemetry = defaultAdapterTelemetry {traceCorrelation = LinkOnly} }
+```
+
+These types and defaults are exported from `Keiro.PGMQ.Job` and `Keiro.PGMQ`.
+A valid creation context produces a root in a new trace under `LinkOnly`, allowing
+independent sampling. Without usable headers both policies use the ambient context
+and omit the link. Existing span-name queries must change from `<jobName> process`
+to `process <jobName>`. Raw `JobTuning` constructors require the new telemetry field;
+prefer `mkJobTuning` followed by a record update.
+
+Consumer extraction is W3C-only. Enqueue injection follows the provider's configured
+propagator, so configure W3C TraceContext if you want consumer correlation. A provider
+using only another format can write headers the consumer cannot read. The direct drain
+keeps its existing settlement and exception semantics and omits supervised inflight gauges.

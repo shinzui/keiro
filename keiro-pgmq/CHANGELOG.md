@@ -6,6 +6,15 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
 
 ## [Unreleased]
 
+- Breaking: process spans are now named `process <jobName>` (previously `<jobName> process`).
+  Both execution paths use Shibuya's shared helper and link stored creation context.
+- Breaking: `JobTuning` requires `telemetry :: AdapterTelemetry`; `mkJobTuning` and
+  `defaultJobTuning` select `ParentAndLink`. Record-update to `LinkOnly` for independent
+  delayed/retried traces. These policy types and defaults are re-exported.
+- Require shibuya-core 0.13.0.1 and shibuya-pgmq-adapter 0.19.0.0. Consumer extraction
+  remains W3C-only; common attributes and acknowledgement behavior agree on both paths.
+
+
 ## 0.24.0.0 — 2026-11-05
 
 No changes this release.

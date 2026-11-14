@@ -1,0 +1,32 @@
+{
+  "baseline": "f3048422",
+  "candidate_base": "f3048422",
+  "candidate_sources": {
+    "keiro-pgmq/src/Keiro/PGMQ/Job.hs": "1eef0cb3d062de63d975c37541704763a0e73c094cb759994d4bfbb59747b362",
+    "keiro/src/Keiro/Outbox.hs": "2839eed6c6a0ee9566220110b6448dc3230ec0ed5387d983e22c8e71634db3f0",
+    "keiro/bench/Main.hs": "fb09f08016b4fb3b418b6077f93eb4105f86b820abd35f3639889dcc750f3b7c",
+    "keiro/retention/Retention/Fixture.hs": "2a00dfbdcdaa30b8a528cdb4daf06bb64058b44d98cd318b02e2be1af035c508"
+  },
+  "binary_sha256": {
+    "control": "1e472b11b6729a1a9f70fd0340b7f0351ae6313b1457fc943adf832ea3a71daa",
+    "candidate": "1678573ba5da752c68119fc348f9430958e95427cad745cb4dec33a377d5c574"
+  },
+  "dependency_changes": {
+    "shibuya-core": [
+      "0.12.0.0",
+      "0.13.0.1"
+    ],
+    "shibuya-kiroku-adapter": [
+      "0.7.0.1",
+      "0.8.0.0"
+    ],
+    "shibuya-pgmq-adapter": [
+      "0.18.0.0",
+      "0.19.0.0"
+    ]
+  },
+  "shared_http2": "5.4.14",
+  "toolchain_reference": "../tracing-baseline-v1/environment.json",
+  "rts": "-N2 -T",
+  "timing_ceiling_percent": 25
+}

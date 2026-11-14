@@ -1,7 +1,7 @@
 ---
 type: Reference
 title: API Reference
-timestamp: 2026-10-27T21:15:00Z
+timestamp: 2026-11-14T23:41:04Z
 description: Map Keiro's public modules and their user-facing interfaces.
 docId: DOC-2
 tags: [keiro, api, modules, reference]
@@ -1120,8 +1120,10 @@ nodes and available directly:
 
 - `Keiro.PGMQ` — the umbrella module.
 - `Keiro.PGMQ.Job` — `Job (..)`, `RetryPolicy (..)`, `defaultRetryPolicy`,
-  `mkRetryPolicy`, `JobPolling (..)`, `JobOrdering (..)`, `JobTuning (..)`, and
-  the job runner. Every `Job` declares `jobOrdering` (`Unordered`,
+  `mkRetryPolicy`, `JobPolling (..)`, `JobOrdering (..)`, `JobTuning (..)`,
+  `AdapterTelemetry`, `defaultAdapterTelemetry`, `TraceCorrelation (..)`, and
+  the job runner. `JobTuning.telemetry` defaults to `ParentAndLink`; select
+  `LinkOnly` for independent delayed/retried processing traces. Every `Job` declares `jobOrdering` (`Unordered`,
   `FifoThroughput`, `FifoRoundRobin`, or `FifoHeads`); explicit tuning must match
   it, and a mismatch, invalid raw tuning, or a legacy FIFO batch above one throws
   `JobConsumptionConfigError` before any read. `FifoHeads` is the strict per-group
@@ -1140,11 +1142,11 @@ nodes and available directly:
   `purgeDlqForce` is the unconditional escape hatch.
 - `Keiro.PGMQ.Runtime` / `Keiro.PGMQ.Metrics` — worker wiring and instruments.
 
-The 0.22.0.0 package uses the [PGMQ family](mori://shinzui/pgmq-hs)
+The package uses the [PGMQ family](mori://shinzui/pgmq-hs)
 `>=0.7.0.0 && <0.8`,
 [shibuya-pgmq-adapter](mori://shinzui/shibuya-pgmq-adapter/packages/shibuya-pgmq-adapter)
-`^>=0.18.0.0`, and [shibuya-core](mori://shinzui/shibuya/packages/shibuya-core)
-`^>=0.12.0.0`. Apply PGMQ migration 0007 before queue traffic and retain polling
+`^>=0.19.0.0`, and [shibuya-core](mori://shinzui/shibuya/packages/shibuya-core)
+`^>=0.13.0.1`. Apply PGMQ migration 0007 before queue traffic and retain polling
 for partitioned queues, which no longer emit insert notifications.
 Grouped-head FIFO (`FifoHeads`) additionally needs a deployed PGMQ extension 1.12
 or later; other orderings add no server requirement.

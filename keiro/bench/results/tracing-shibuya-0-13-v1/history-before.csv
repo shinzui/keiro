@@ -1,0 +1,3 @@
+Name,Mean (ps),2*Stdev (ps),Allocated,Copied,Peak Memory
+All.tracing.command.append-one-stream,74105800006,7361806616,86854694,1525190,19922944
+All.tracing.command.append-one-stream/tracer,85074699996,4693394874,91770038,1737181,19922944

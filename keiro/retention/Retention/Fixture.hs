@@ -82,7 +82,7 @@ import Kiroku.Store.Subscription.Types (SubscriptionConfig)
 import Kiroku.Store.Subscription.Types qualified as Sub
 import Kiroku.Store.Types (EventData (..), EventId (..), EventType (..), ExpectedVersion (..), GlobalPosition (..), RecordedEvent (..), StreamName (..), StreamVersion (..))
 import Numeric.Natural (Natural)
-import Shibuya.Adapter (Adapter (..))
+import Shibuya.Adapter (Adapter (..), defaultAdapterTelemetry)
 import Shibuya.Core.Ack (AckDecision (..))
 import Shibuya.Core.Ack qualified as Ack
 import Shibuya.Core.AckHandle (AckHandle (..))
@@ -408,7 +408,7 @@ ackAdapter store config bufferSize = do
   (source, cancel) <- subscriptionAckStream store config validatedBufferSize
   let ingested = fmap (toIngested cancel) (Streamly.morphInner liftIO source)
   pure
-    ( Adapter {adapterName = "retention-ack-bridge", source = ingested, shutdown = liftIO cancel},
+    ( Adapter {telemetry = defaultAdapterTelemetry, adapterName = "retention-ack-bridge", source = ingested, shutdown = liftIO cancel},
       cancel
     )
 

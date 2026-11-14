@@ -23,6 +23,11 @@ provenance:
       at: 2026-11-14T19:06:08Z
       mode: "update"
       note: "Apply review findings, reconcile ownership and acceptance gates, and verify available upstream releases."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-14T23:26:42Z
+      mode: "implement"
+      note: "Adopt released Shibuya correlation helpers and align both PGMQ execution paths"
 ---
 
 # Align keiro-pgmq job spans with Shibuya 0.13 and expose the correlation policy
@@ -57,17 +62,34 @@ a tracer and comparing the exported spans.
 
 ## Progress
 
-- [ ] M1: Repository builds against the three matching releases; dependency migration is recorded.
-- [ ] M2: The bounded drain opens its span through Shibuya's shared function; the hand-copied
+- [x] M1 (2026-11-14): Repository builds against the three matching releases; dependency migration is recorded.
+- [x] M2 (2026-11-14): The bounded drain opens its span through Shibuya's shared function; the hand-copied
   construction is gone; both paths export identical span names, links and common attributes.
-- [ ] M3: `JobTuning` carries the telemetry policy and both paths honour it.
-- [ ] M4: Tests cover both policies on both paths; ADR-1, the user guide and the changelog are
+- [x] M3 (2026-11-14): `JobTuning` carries the telemetry policy and both paths honour it.
+- [x] M4 (2026-11-14): Tests cover both policies on both paths; ADR-1, the user guide and the changelog are
   revised; the parent MasterPlan is updated.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- The local Hackage index lacked the published adapter release. Updating it to
+  2026-11-14T23:18:16Z resolves all three matching releases without source pins.
+  The solve also moves http2 from 5.4.13 to 5.4.14; measurement attribution records
+  that unrelated resolver change explicitly.
+- Released `AdapterTelemetry` has `Eq` and `Show`, so `JobTuning` retains both.
+  All in-memory adapter literals now carry explicit defaults; raw invalid-tuning
+  fixtures also require the new strict field.
+- Shared process helpers retain evaluated link identities. The bounded path also
+  forces message ID/destination projections before SDK ownership, following EP-2's
+  observed lazy-attribute failure.
+- All 83 PGMQ examples pass, with the two existing PGMQ-provisioning pending cases
+  unchanged. The added actual-job tests establish correlation parity and payload
+  collection on both paths under both policies; delayed/retried LinkOnly deliveries
+  are distinct linked roots. The remaining repository consumer suites pass, including 898 DSL examples and all
+  conformance consumers. The full parallel run's core suite had one 100 ms cutover
+  deadline race (810 other examples passed); the unchanged failing test passes in
+  isolation in 1.19 seconds. Both observations are retained, and the final sequential
+  repository gate remains required.
 
 
 ## Decision Log
@@ -100,7 +122,25 @@ a tracer and comparing the exported spans.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete. Both actual execution paths share Shibuya's process helper, common naming
+and creation-link/parent rules. JobTuning exposes AdapterTelemetry with the existing
+ParentAndLink default and retains Eq/Show. Required adapter fields and matching bounds
+are updated across Cabal stanzas, fixtures, examples and Mori metadata; no source pin
+was added. ADR-1, the queue guide, API reference, capability and release notes agree.
+
+Evidence is retained in `keiro/bench/results/tracing-shibuya-0-13-v1/`: successful
+all-component build, all affected suite coverage (including 898 DSL and 83 PGMQ
+examples), 25 retention/ownership examples, strict docs/policies and matched benchmark
+binaries/dependencies. The one unrelated 100 ms core cutover race passes unchanged in
+isolation; both logs are explicit rather than claiming the parallel command exited cleanly.
+The final sequential initiative gate remains required.
+
+All 12 dependency-migration timing cells pass the unchanged 25% ceiling (−10.6% to
++6.4%). The isolated history pair resolves the full run's allocation movement to
++0.009% untraced / −0.010% traced; original observations remain retained. No new
+context parsing occurs on the disabled-tracing branch. Actual job payload ownership
+passes on both paths under both policies, independently of core timing measurements.
+No dedicated job timing or zero-overhead claim is inferred from sharing code.
 
 
 ## Context and Orientation

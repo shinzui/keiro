@@ -122,7 +122,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=0.12.0.0"
+              , versionConstraint = Some "^>=0.13.0.1"
               }
           ]
         }
@@ -219,7 +219,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=0.12.0.0"
+              , versionConstraint = Some "^>=0.13.0.1"
               }
           , Schema.Dependency.WithAugmentation
               { name = "shinzui/shibuya-pgmq-adapter:shibuya-pgmq-adapter"
@@ -228,7 +228,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=0.18.0.0"
+              , versionConstraint = Some "^>=0.19.0.0"
               }
           , Schema.Dependency.WithAugmentation
               { name = "shinzui/pgmq-hs:pgmq-config"
@@ -381,7 +381,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Test
-              , versionConstraint = Some "^>=0.12.0.0"
+              , versionConstraint = Some "^>=0.13.0.1"
               }
           ]
         }

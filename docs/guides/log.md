@@ -1,6 +1,9 @@
 # Keiro Guides Log
 
 ## 2026-11-14
+
+* **Update**: Explain PGMQ ParentAndLink and LinkOnly tuning, sampling, span rename and W3C-only consumer extraction.
+
 * **Update**: Make the integration producer example explicitly preserve draft trace context.
 
 ## 2026-11-05

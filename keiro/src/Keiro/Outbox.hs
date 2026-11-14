@@ -85,7 +85,6 @@ import Keiro.Integration.Event
     TraceContext,
   )
 import Keiro.Outbox.Identity
-import Keiro.Outbox.Kafka (outboxRowToKafkaRecord)
 import Keiro.Outbox.Schema
 import Keiro.Outbox.Types
 import Keiro.Prelude
@@ -117,6 +116,9 @@ freshOutboxId = fmap OutboxId (liftIO V7.genUUID)
 -- already running inside a 'runCommandWithSqlEvents' transaction. The
 -- caller supplies a stable 'OutboxId' so retried command attempts coalesce
 -- on the @(source, message_id)@ unique constraint.
+--
+-- This inline path has no source event. Capture trace context before entering
+-- the transaction and supply the same context on replay.
 --
 -- Ordering caveat: under 'PerKeyHeadOfLine' and 'PerSourceStream', the publisher
 -- orders rows by @created_at@, which PostgreSQL sets to transaction-start time.
@@ -155,6 +157,8 @@ data ProducerTracePolicy
 -- * 'messageIdPrefix' — non-empty namespace, validated using TypeID prefix
 --   syntax. The resulting deterministic message ID is opaque text, not a TypeID.
 --   Prefer 'mkIntegrationProducer'; direct record construction bypasses validation.
+-- * 'tracePolicy' — immutable per-producer/store trace adoption; begin with
+--   'PreserveDraftTrace' and follow the producer guide before setting a cutoff.
 -- * 'mapEvent' — pure mapper from a private 'RecordedEvent' and its
 --   decoded payload to an 'IntegrationEventDraft'. Returning 'Nothing'
 --   skips the event without enqueuing a row.

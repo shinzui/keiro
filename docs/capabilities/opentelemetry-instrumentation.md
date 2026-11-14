@@ -4,7 +4,7 @@ type: Capability
 description: "Emit bounded OpenTelemetry spans and metrics across commands, projections/rebuilds, dispatch, messaging, timers, workflows, and PGMQ jobs, with W3C propagation across durable boundaries."
 generated:
   by: openai/codex
-  at: "2026-11-14T22:01:22Z"
+  at: "2026-11-14T23:33:52Z"
 capabilityId: CAP-15
 provider: mori://shinzui/keiro
 status: shipped
@@ -31,7 +31,7 @@ evidence:
     proves: "How to wire an OTel exporter and what telemetry keiro emits for operating a deployment."
   - kind: test
     resource: keiro-pgmq/test/Main.hs
-    proves: "PGMQ jobs propagate W3C trace context across enqueue/settlement and record bounded queue, attempt, retry, completion, and dead-letter metrics."
+    proves: "PGMQ worker and bounded-drain paths share process naming, creation links and ParentAndLink/LinkOnly policy; actual decoded payloads collect while exported spans remain alive. Delayed/retried LinkOnly deliveries use independent roots."
   - kind: module
     resource: keiro/src/Keiro/Telemetry.hs
     proves: "The telemetry surface: span kinds and the common attribute set applied across delivery and handler paths."

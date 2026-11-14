@@ -48,11 +48,12 @@
 -- Both execution shapes propagate W3C trace context and emit the same common
 -- per-message span. A message enqueued with 'enqueueTraced' carries @traceparent@
 -- (and optional @tracestate@) in PGMQ's JSONB @headers@ column; at consumption
--- time that context is extracted and installed as the parent, so the handler's
--- span continues the producer's trace even across processes. The span is
--- Consumer-kind, named @\<jobName\> process@, and carries
+-- time the W3C context is extracted as a creation link. 'ParentAndLink' also
+-- continues that trace; 'LinkOnly' opens an independent root when context decodes.
+-- Both paths call Shibuya's shared process-span helper. The span is
+-- Consumer-kind, named @process \<jobName\>@, and carries
 -- @messaging.system=shibuya@, @messaging.destination.name=\<jobName\>@,
--- @messaging.operation.type=process@, @messaging.message.id@,
+-- @messaging.operation.type=process@, @messaging.operation.name=process@, @messaging.message.id@,
 -- @shibuya.partition@ for FIFO deliveries, and @shibuya.ack.decision@ once the
 -- message has actually been finalized. @AckOk@ and @AckRetry@ end the span @OK@;
 -- dead-lettering and halting end it @ERROR@ with the reason.
@@ -80,6 +81,9 @@ module Keiro.PGMQ.Job
     JobPolling (..),
     JobOrdering (..),
     JobTuning (..),
+    AdapterTelemetry (traceCorrelation),
+    TraceCorrelation (..),
+    defaultAdapterTelemetry,
     JobTuningConfigError (..),
     JobConsumptionConfigError (..),
     mkJobTuning,
@@ -162,6 +166,7 @@ import "pgmq-effectful" Pgmq.Effectful
 import "pgmq-effectful" Pgmq.Effectful qualified as Pgmq
 import "pgmq-effectful" Pgmq.Effectful.Effect (readGrouped, readGroupedHead, readGroupedRoundRobin)
 import "pgmq-hasql" Pgmq.Hasql.Statements.Types (ReadGrouped (..))
+import "shibuya-core" Shibuya.Adapter (AdapterTelemetry (traceCorrelation), TraceCorrelation (..), defaultAdapterTelemetry)
 import "shibuya-core" Shibuya.App
   ( AppConfig (..),
     AppError,
@@ -183,10 +188,9 @@ import "shibuya-core" Shibuya.Core.Ack
 import "shibuya-core" Shibuya.Core.Ingested qualified as Shibuya
 import "shibuya-core" Shibuya.Core.Lease (Lease (..))
 import "shibuya-core" Shibuya.Core.Types (Attempt (..), Envelope (..))
-
--- Qualified only for 'unMessageId': shibuya's @MessageId@ type name would
--- otherwise collide with @Pgmq.Effectful@'s, which the producer signatures use.
 import "shibuya-core" Shibuya.Core.Types qualified as ShibuyaTypes
+import "shibuya-core" Shibuya.Telemetry.Process (withProcessSpan)
+
 import "shibuya-core" Shibuya.Telemetry.Effect
   ( Span,
     SpanStatus (..),
@@ -196,18 +200,15 @@ import "shibuya-core" Shibuya.Telemetry.Effect
     recordException,
     setStatus,
     toAttribute,
-    withExtractedContext,
-    withSpan',
   )
-import "shibuya-core" Shibuya.Telemetry.Propagation (extractTraceContext)
 import "shibuya-core" Shibuya.Telemetry.Semantic
   ( attrMessagingDestinationName,
     attrMessagingMessageId,
     attrMessagingOperation,
+    attrMessagingOperationName,
     attrMessagingSystem,
     attrShibuyaAckDecision,
     attrShibuyaPartition,
-    consumerSpanArgs,
     eventHandlerCompleted,
     eventHandlerStarted,
     mkEvent,
@@ -329,7 +330,8 @@ data JobTuning = JobTuning
   { visibilityTimeout :: !Int32,
     batchSize :: !Int32,
     polling :: !JobPolling,
-    ordering :: !JobOrdering
+    ordering :: !JobOrdering,
+    telemetry :: !AdapterTelemetry
   }
   deriving stock (Eq, Show)
 
@@ -340,7 +342,8 @@ defaultJobTuning =
     { visibilityTimeout = 30,
       batchSize = 1,
       polling = PollEvery 1,
-      ordering = Unordered
+      ordering = Unordered,
+      telemetry = defaultAdapterTelemetry
     }
 
 data JobTuningConfigError
@@ -354,7 +357,7 @@ mkJobTuning visibilityTimeout batchSize polling
   | visibilityTimeout < 1 = Left (NonPositiveVisibilityTimeout visibilityTimeout)
   | batchSize < 1 = Left (NonPositiveBatchSize batchSize)
   | not (validPolling polling) = Left NonPositivePollInterval
-  | otherwise = Right JobTuning {visibilityTimeout, batchSize, polling, ordering = Unordered}
+  | otherwise = Right JobTuning {visibilityTimeout, batchSize, polling, ordering = Unordered, telemetry = defaultAdapterTelemetry}
 
 -- | Set the FIFO read strategy on an existing tuning, e.g.
 -- @withOrdering FifoThroughput defaultJobTuning@. Every 'JobOrdering' value is
@@ -801,6 +804,7 @@ adapterConfigFor tuning job =
   (defaultConfig job.jobQueue.physicalName)
     { visibilityTimeout = tuning.visibilityTimeout,
       batchSize = tuning.batchSize,
+      telemetry = tuning.telemetry,
       polling = toPollingConfig tuning.polling,
       fifoConfig = toFifoConfig tuning.ordering,
       maxRetries = job.jobPolicy.maxRetries,
@@ -911,27 +915,29 @@ runJobWorkers strategy inboxSize procs = do
 -- and still get exactly one span.
 --
 -- The attribute set is deliberately the subset the two execution shapes agree on:
--- the OTel @messaging.*@ quartet plus @shibuya.partition@ for FIFO deliveries. The
+-- the common OTel @messaging.*@ attributes plus @shibuya.partition@ for FIFO deliveries. The
 -- @shibuya.inflight.*@ gauges are omitted because the direct drain has no shibuya
 -- inbox and no concurrency meter to report.
 withOneShotProcessSpan ::
   (IOE :> es, Tracing :> es) =>
+  TraceCorrelation ->
   Job p ->
   Envelope Value ->
   (Span -> Eff es a) ->
   Eff es a
-withOneShotProcessSpan job envelope act =
-  withExtractedContext (envelope.traceContext >>= extractTraceContext) $
-    withSpan' (processSpanName job.jobName) consumerSpanArgs $ \traceSpan -> do
-      let ShibuyaTypes.MessageId messageIdText = envelope.messageId
-      addAttribute traceSpan attrMessagingSystem ("shibuya" :: Text)
-      addAttribute traceSpan attrMessagingDestinationName job.jobName
-      addAttribute traceSpan attrMessagingOperation ("process" :: Text)
-      addAttribute traceSpan attrMessagingMessageId messageIdText
-      case envelope.partition of
-        Just partition -> addAttribute traceSpan attrShibuyaPartition partition
-        Nothing -> pure ()
-      act traceSpan
+withOneShotProcessSpan policy job envelope act =
+  withProcessSpan policy (processSpanName job.jobName) envelope.traceContext $ \traceSpan -> do
+    let !messageIdText = case envelope.messageId of ShibuyaTypes.MessageId text -> text
+        !destination = job.jobName
+    addAttribute traceSpan attrMessagingSystem ("shibuya" :: Text)
+    addAttribute traceSpan attrMessagingDestinationName destination
+    addAttribute traceSpan attrMessagingOperation ("process" :: Text)
+    addAttribute traceSpan attrMessagingOperationName ("process" :: Text)
+    addAttribute traceSpan attrMessagingMessageId messageIdText
+    case envelope.partition of
+      Just partition -> addAttribute traceSpan attrShibuyaPartition partition
+      Nothing -> pure ()
+    act traceSpan
 
 -- | Record a finalization that already succeeded on the process span, using the
 -- same decision text and status mapping as shibuya's continuous runner. Call this
@@ -1042,7 +1048,7 @@ runJobOnceWithContext tuning n job handle = do
     step count message = do
       let envelope = pgmqMessageToEnvelope message
       disposed <-
-        withOneShotProcessSpan job envelope (processMessage message envelope)
+        withOneShotProcessSpan tuning.telemetry.traceCorrelation job envelope (processMessage message envelope)
       pure $
         if disposed
           then count + 1

@@ -18,7 +18,7 @@
 module Main (main) where
 
 import Control.Concurrent (threadDelay)
-import Control.Exception (bracket, throwIO, try)
+import Control.Exception (bracket, evaluate, throwIO, try)
 import Data.Aeson (FromJSON, ToJSON, Value (..), object, parseJSON, toJSON, (.=))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -66,6 +66,8 @@ import Pgmq.Types (QueueName, parseQueueName, queueNameToText)
 import Shibuya.Adapter.Pgmq (PgmqAdapterEnv)
 import Shibuya.App (AppHandle, ShutdownConfig (..), SupervisionStrategy (IgnoreFailures), stopAppGracefully)
 import Shibuya.Telemetry.Effect (Tracing)
+import System.Mem (performMajorGC)
+import System.Mem.Weak (Weak, deRefWeak, mkWeakPtr)
 import System.Timeout (timeout)
 import Test.Hspec
 
@@ -250,6 +252,7 @@ data CapturedSpan = CapturedSpan
     csStatus :: OTel.SpanStatus,
     csContext :: OTel.SpanContext,
     csParent :: Maybe OTel.Span,
+    csLinks :: [OTel.Link],
     csEventNames :: [Text]
   }
 
@@ -264,6 +267,7 @@ captureSpan sp = do
         csStatus = hotStatus hot,
         csContext = spanContext sp,
         csParent = spanParent sp,
+        csLinks = toList (appendOnlyBoundedCollectionValues (hotLinks hot)),
         csEventNames =
           map eventName (toList (appendOnlyBoundedCollectionValues (hotEvents hot)))
       }
@@ -281,18 +285,18 @@ spansNamed name = filter ((== name) . csName)
 parentSpanContext :: CapturedSpan -> IO (Maybe OTel.SpanContext)
 parentSpanContext = traverse OTel.getSpanContext . csParent
 
--- | The one @\<jobName\> process@ span a single one-shot delivery must produce.
+-- | The one @process \<jobName\>@ span a single one-shot delivery must produce.
 -- Anything other than exactly one is a failure that names every captured span, so
 -- a duplicate wrapper is diagnosed rather than silently accepted by taking the
 -- head of the list.
 theProcessSpan :: Text -> [CapturedSpan] -> IO CapturedSpan
 theProcessSpan jobName spans =
-  case spansNamed (jobName <> " process") spans of
+  case spansNamed ("process " <> jobName) spans of
     [only] -> pure only
     other ->
       fail
         ( "expected exactly one "
-            <> show (jobName <> " process")
+            <> show ("process " <> jobName)
             <> " span, got "
             <> show (length other)
             <> "; all captured spans: "
@@ -322,6 +326,53 @@ waitUntil predicate =
       if ok
         then pure True
         else threadDelay 100_000 >> loop
+
+-- Keep the actual decoded payload's weak key, then leave every handler/runtime
+-- scope before checking collection with the uninspected exporter still alive.
+{-# NOINLINE produceCorrelatedJobs #-}
+produceCorrelatedJobs :: Text -> OTel.TracerProvider -> OTel.Tracer -> TraceCorrelation -> Job Ping -> IO (OTel.SpanContext, [Weak Text])
+produceCorrelatedJobs connStr provider tracer policy job = do
+  weakRef <- newIORef []
+  producer <- OTel.createSpan tracer Ctxt.empty "enqueue" OTel.defaultSpanArguments
+  producerContext <- OTel.getSpanContext producer
+  let tuning = defaultJobTuning {polling = PollEvery 0.01, telemetry = defaultAdapterTelemetry {traceCorrelation = policy}}
+      handler _ payload = do
+        weak <- liftIO $ evaluate payload.message >>= \text -> mkWeakPtr text Nothing
+        liftIO $ modifyIORef' weakRef (weak :)
+        pure Done
+      enqueuePayload = bracket (CtxtLocal.attachContext (Ctxt.insertSpan producer Ctxt.empty)) CtxtLocal.detachContext $ \_ ->
+        runDbTraced connStr tracer $ do
+          ensureJobQueue job
+          _ <- enqueueTraced provider job (MessageHeaders (object [])) (Ping (Text.replicate (128 * 1024) "x") 1)
+          pure ()
+  enqueuePayload
+  runDbTraced connStr tracer (runJobOnceWithContext tuning 1 job handler) `shouldReturn` 1
+  enqueuePayload
+  processed <- runDbTraced connStr tracer $ do
+    result <- runJobWorkers IgnoreFailures 16 [jobProcessorWithContext tuning job handler]
+    case result of
+      Left err -> liftIO $ fail (show err)
+      Right app -> do
+        ready <- liftIO $ waitUntil ((== 2) . length <$> readIORef weakRef)
+        stopAppQuickly app
+        pure ready
+  processed `shouldBe` True
+  OTel.endSpan producer Nothing
+  weak <- readIORef weakRef
+  pure (producerContext, weak)
+
+collectWeakTexts :: [Weak Text] -> IO Bool
+collectWeakTexts keys = loop (20 :: Int)
+  where
+    loop remaining = do
+      performMajorGC
+      values <- traverse deRefWeak keys
+      if all (maybe True (const False)) values
+        then pure True
+        else
+          if remaining == 0
+            then pure False
+            else threadDelay 10_000 >> loop (remaining - 1)
 
 spec :: SpecWith Text
 spec = do
@@ -1045,6 +1096,80 @@ spec = do
     map csName spans `shouldSatisfy` elem ("publish " <> queue)
     map csName spans `shouldSatisfy` elem ("receive " <> queue)
 
+  mapM_
+    ( \policy ->
+        it ("both paths share process correlation and release payloads under " <> show policy) $ \connStr -> do
+          (provider, spansRef) <- setupCapturingProvider
+          let tracer = OTel.makeTracer provider "keiro-pgmq-test" OTel.tracerOptions
+              job = mkJob "keiro_pgmq_test.correlation"
+          (producerContext, weak) <- produceCorrelatedJobs connStr provider tracer policy job
+          collectWeakTexts weak `shouldReturn` True
+          -- The exporter remains a strong root throughout the collection assertion.
+          exported <- readIORef spansRef
+          length exported `shouldSatisfy` (> 0)
+          spans <- capturedSpans provider spansRef
+          let processSpans = spansNamed ("process " <> job.jobName) spans
+          length processSpans `shouldBe` 2
+          mapM_
+            ( \processSpan -> do
+                csKind processSpan `shouldBe` OTel.Consumer
+                textAttr (csAttributes processSpan) "messaging.operation.name" `shouldBe` Just "process"
+                textAttr (csAttributes processSpan) "messaging.operation.type" `shouldBe` Just "process"
+                textAttr (csAttributes processSpan) "messaging.destination.name" `shouldBe` Just job.jobName
+                textAttr (csAttributes processSpan) "shibuya.ack.decision" `shouldBe` Just "ack_ok"
+                csStatus processSpan `shouldBe` OTel.Ok
+                case csLinks processSpan of
+                  [link] -> do
+                    OTel.traceId (OTel.frozenLinkContext link) `shouldBe` OTel.traceId producerContext
+                    OTel.spanId (OTel.frozenLinkContext link) `shouldBe` OTel.spanId producerContext
+                  _ -> expectationFailure "expected one creation link"
+                parent <- parentSpanContext processSpan
+                case policy of
+                  ParentAndLink -> do
+                    OTel.traceId (csContext processSpan) `shouldBe` OTel.traceId producerContext
+                    fmap OTel.spanId parent `shouldBe` Just (OTel.spanId producerContext)
+                  LinkOnly -> do
+                    OTel.traceId (csContext processSpan) `shouldNotBe` OTel.traceId producerContext
+                    fmap OTel.spanId parent `shouldBe` Nothing
+            )
+            processSpans
+          case (policy, processSpans) of
+            (LinkOnly, [a, b]) -> OTel.traceId (csContext a) `shouldNotBe` OTel.traceId (csContext b)
+            _ -> pure ()
+    )
+    [ParentAndLink, LinkOnly]
+
+  it "delayed and retried LinkOnly deliveries remain distinct roots linked to enqueue" $ \connStr -> do
+    (provider, spansRef) <- setupCapturingProvider
+    let tracer = OTel.makeTracer provider "keiro-pgmq-test" OTel.tracerOptions
+        job = mkJob "keiro_pgmq_test.delayed_correlation"
+        tuning = defaultJobTuning {telemetry = defaultAdapterTelemetry {traceCorrelation = LinkOnly}}
+    producer <- OTel.createSpan tracer Ctxt.empty "enqueue" OTel.defaultSpanArguments
+    producerContext <- OTel.getSpanContext producer
+    bracket (CtxtLocal.attachContext (Ctxt.insertSpan producer Ctxt.empty)) CtxtLocal.detachContext $ \_ ->
+      runDbTraced connStr tracer $ do
+        ensureJobQueue job
+        _ <- enqueueTracedWithDelay provider job 1 (MessageHeaders (object [])) (Ping "delayed" 1)
+        pure ()
+    OTel.endSpan producer Nothing
+    runDbTraced connStr tracer (runJobOnceWithContext tuning 1 job (\_ _ -> pure Done)) `shouldReturn` 0
+    threadDelay 1_100_000
+    runDbTraced connStr tracer (runJobOnceWithContext tuning 1 job (\_ _ -> pure (Retry (RetryDelay 0)))) `shouldReturn` 1
+    runDbTraced connStr tracer (runJobOnceWithContext tuning 1 job (\_ _ -> pure Done)) `shouldReturn` 1
+    spans <- capturedSpans provider spansRef
+    let deliveries = spansNamed ("process " <> job.jobName) spans
+    length deliveries `shouldBe` 2
+    mapM_
+      ( \delivery -> do
+          parentSpanContext delivery >>= (\parent -> fmap OTel.spanId parent `shouldBe` Nothing)
+          OTel.traceId (csContext delivery) `shouldNotBe` OTel.traceId producerContext
+          map (OTel.spanId . OTel.frozenLinkContext) (csLinks delivery) `shouldBe` [OTel.spanId producerContext]
+      )
+      deliveries
+    case deliveries of
+      [a, b] -> OTel.traceId (csContext a) `shouldNotBe` OTel.traceId (csContext b)
+      _ -> pure ()
+
   -- EP-111 M2: the central proof — the one-shot process span continues the
   -- producer's trace using only what the PGMQ headers carry.
   it "one-shot process span continues the enqueued W3C parent" $ \connStr -> do
@@ -1294,7 +1419,8 @@ spec = do
             { visibilityTimeout = 30,
               batchSize = 0,
               polling = PollEvery 1,
-              ordering = Unordered
+              ordering = Unordered,
+              telemetry = defaultAdapterTelemetry
             }
         mismatchedTuning = defaultJobTuning
         unsafeTuning =
@@ -1356,7 +1482,8 @@ spec = do
             { visibilityTimeout = 0,
               batchSize = 1,
               polling = PollEvery 1,
-              ordering = FifoHeads
+              ordering = FifoHeads,
+              telemetry = defaultAdapterTelemetry
             }
         build tuning =
           runDb connStr $

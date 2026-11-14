@@ -8,10 +8,21 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Breaking Changes
 
+- `IntegrationProducer` requires `tracePolicy`; use `PreserveDraftTrace` until explicit
+  adoption of an immutable `DeriveTraceAfter` cutoff. Strict trace-content equality stays intact.
+- Mixed publisher batches use the span name `send`; only singleton batch spans carry
+  per-message ID and Kafka key attributes. Uniform batches retain `send <destination>`.
+- Require shibuya-core 0.13.0.1 and matching shibuya-kiroku-adapter 0.8.0.0.
+  In-memory `Adapter` constructors now supply explicit telemetry defaults.
+
 - Command spans are named `command <category>` (for example `command counter`),
   replacing the full stream name (`counter-42`). The full name remains in `keiro.stream.name`.
 
 ### New Features
+
+- Producer context can derive deterministically from stored source-event metadata above
+  an immutable cutoff. Publisher root spans link up to 128 stored creation contexts,
+  report batch size and omitted valid links, and preserve creation context on the wire.
 
 - Commands with a configured tracer stamp event metadata with the command span's W3C
   creation context once per run, preserving explicit caller context across retries.

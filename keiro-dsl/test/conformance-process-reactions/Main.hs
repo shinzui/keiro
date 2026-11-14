@@ -26,7 +26,7 @@ import Keiro.ProcessManager.Reaction qualified as Reaction
 import Keiro.Test.Postgres (StoreRunner (..), withFreshResourceStore, withMigratedSuite)
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Types (EventId (..), EventType (..), GlobalPosition (..), RecordedEvent (..), StreamId (..), StreamName (..), StreamVersion (..))
-import Shibuya.Adapter (Adapter (..))
+import Shibuya.Adapter (Adapter (..), defaultAdapterTelemetry)
 import Shibuya.Core.Ack (AckDecision (..))
 import Shibuya.Core.AckHandle (AckHandle (..))
 import Shibuya.Core.Ingested (DeliveryStatus (..), Ingested (..))
@@ -200,6 +200,7 @@ inMemoryAdapter :: (IOE :> es) => Text -> IORef [AckDecision] -> [msg] -> Adapte
 inMemoryAdapter name decisions messages =
   Adapter
     { adapterName = name,
+      telemetry = defaultAdapterTelemetry,
       source = Streamly.fromList (map ingest messages),
       shutdown = pure ()
     }

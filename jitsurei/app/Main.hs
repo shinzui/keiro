@@ -64,7 +64,7 @@ import OpenTelemetry.MeterProvider
   )
 import OpenTelemetry.Metric.Core (getMeter, shutdownMeterProvider)
 import OpenTelemetry.Resource (emptyMaterializedResources)
-import Shibuya.Adapter (Adapter (..))
+import Shibuya.Adapter (Adapter (..), defaultAdapterTelemetry)
 import Shibuya.Core.AckHandle (AckHandle (..))
 import Shibuya.Core.Ingested (DeliveryStatus (..), Ingested (..))
 import Shibuya.Core.Types (Envelope (..), MessageId (..))
@@ -722,6 +722,7 @@ processManagerAdapter :: RecordedEvent -> OrderEvent -> Adapter es (RecordedEven
 processManagerAdapter recorded event =
   Adapter
     { adapterName = "jitsurei-fulfillment-demo",
+      telemetry = defaultAdapterTelemetry,
       source =
         Streamly.fromList
           [ Ingested

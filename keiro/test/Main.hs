@@ -441,7 +441,7 @@ import ProjectionReplaySpec qualified
 import ReactionExample qualified
 import ReadModelSpec qualified
 import ReplayCompatibilitySpec qualified
-import Shibuya.Adapter (Adapter (..))
+import Shibuya.Adapter (Adapter (..), defaultAdapterTelemetry)
 import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), HaltReason (..), RetryDelay (..), deadLetterCodeText, deadLetterReasonCode, deadLetterReasonDetail, renderDeadLetterReason)
 import Shibuya.Core.AckHandle (AckHandle (..))
 import Shibuya.Core.Ingested (DeliveryStatus (..), Ingested (..))
@@ -19056,6 +19056,7 @@ inMemoryAdapter ::
 inMemoryAdapter decisionsRef messages =
   Adapter
     { adapterName = "router-test-adapter",
+      telemetry = defaultAdapterTelemetry,
       source = Streamly.fromList (fmap ingest messages),
       shutdown = pure ()
     }

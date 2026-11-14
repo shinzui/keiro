@@ -2,6 +2,9 @@
 
 ## 2026-11-14
 
+* **Update**: Add both-path PGMQ correlation, delayed/retry and retained-payload evidence to CAP-15.
+
+
 * **Update**: Record producer cutoff and bounded batch link evidence for CAP-15.
 
 * **Update**: CAP-15: record command event creation context, category span names and no-tracer behavior.

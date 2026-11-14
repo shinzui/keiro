@@ -108,7 +108,7 @@ import ReadModelBench
     runReadModelLatencyEvidenceIfRequested,
     setupReadModelBench,
   )
-import Shibuya.Adapter (Adapter (..))
+import Shibuya.Adapter (Adapter (..), defaultAdapterTelemetry)
 import Shibuya.Core.AckHandle (AckHandle (..))
 import Shibuya.Core.Ingested (DeliveryStatus (..), Ingested (..))
 import Shibuya.Core.Types (Envelope (..))
@@ -1169,6 +1169,7 @@ fanoutAdapter :: FanoutInput -> Adapter es FanoutInput
 fanoutAdapter input =
   Adapter
     { adapterName = "bench-domain-coordinator",
+      telemetry = defaultAdapterTelemetry,
       source =
         Streamly.fromList
           [ Ingested

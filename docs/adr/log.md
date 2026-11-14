@@ -2,6 +2,9 @@
 
 ## 2026-11-14
 
+* **Update**: Revise ADR-1: both PGMQ execution paths use the released shared process helper and explicit parent/link policy while preserving settlement differences.
+
+
 * **Update**: Extend ADR-60 with deterministic producer trace cutover and bounded root batch links; preserve ADR-42 equality and ADR-59 activation/rollback.
 
 

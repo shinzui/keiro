@@ -1,8 +1,8 @@
 ---
 type: Architecture Decision Record
 title: keiro-pgmq job processing emits one process span per delivery on both execution paths
-description: Both keiro-pgmq job-execution paths emit exactly one process span per delivery under a shared observable contract rather than a shared implementation.
-timestamp: 2026-07-22T18:31:41Z
+description: Both keiro-pgmq job-execution paths emit exactly one process span per delivery under a shared processing-span implementation and observable contract.
+timestamp: 2026-11-14T23:33:52Z
 docId: ADR-1
 status: Accepted
 date: 2026-07-22
@@ -42,16 +42,22 @@ finalization, the handled count) purely to obtain telemetry.
 
 ## Decision
 
-Instrument the bounded drain directly, and hold the two paths to a shared observable
-contract rather than a shared implementation.
+Keep the bounded drain's execution semantics and open both paths' spans through
+`Shibuya.Telemetry.Process.withProcessSpan`. The supervised runner already uses this
+public helper; the bounded drain supplies its name, policy, headers and common attributes.
 
 Every delivery on either path runs inside exactly one Consumer-kind span named
-`<jobName> process`. Both paths extract the W3C trace context that `enqueueTraced` stored in
-PGMQ's JSONB `headers` column and install it as a remote parent for the dynamic extent of
-that one delivery, so the span continues the producer's trace across processes.
+`process <jobName>`. Both paths extract the W3C creation context that `enqueueTraced`
+stored in PGMQ's JSONB `headers` column and link to it. `JobTuning.telemetry` carries
+Shibuya's `AdapterTelemetry`; its default `ParentAndLink` also installs that context as
+a remote parent. `LinkOnly` opens an independent root when headers decode. Absent or
+malformed headers preserve the ambient-parent fallback without links under either policy.
+The previous context is restored on exit. Delayed and retried deliveries can therefore
+be sampled independently while retaining their relation to the enqueuer.
 
 Both paths carry the same common attributes: `messaging.system=shibuya`,
 `messaging.destination.name=<jobName>`, `messaging.operation.type=process`,
+`messaging.operation.name=process`,
 `messaging.message.id`, and `shibuya.partition` when the delivery has a FIFO group.
 
 Both paths use the same acknowledgement vocabulary and status mapping: `shibuya.ack.decision`
@@ -75,7 +81,7 @@ that statement throws, the exception propagates out of a span carrying no acknow
 attribute, which is the truthful reading.
 
 Implementation constraints that follow: the bounded path reuses shibuya's public telemetry
-helpers (`Shibuya.Telemetry.Effect`, `.Propagation`, `.Semantic`) and
+helpers (`Shibuya.Telemetry.Process`, `.Effect`, `.Semantic`) and
 `Shibuya.Adapter.Pgmq.Convert.pgmqMessageToEnvelope`, and imports nothing from
 `Shibuya.Internal.*`. Lower-level PGMQ operation spans (`publish <queue>`,
 `receive <queue>`, deletes, visibility changes, DLQ sends) remain the traced
@@ -85,17 +91,17 @@ settlement and neither replaces nor renames them.
 
 ## Consequences
 
-A trace that starts at `enqueueTraced` is now continuous through either execution shape, and
-the two shapes are comparable in a trace store because their span names, kinds, and common
-attributes agree.
+The two execution shapes share span naming, creation-link and parent-policy implementation.
+The common attribute set and acknowledgement mapping remain explicit in the bounded path
+and are kept in step by tests against the continuous path. `JobTuning` retains its `Eq`
+and `Show` instances because the released `AdapterTelemetry` supports them.
 
-The cost is a duplicated instrumentation site. `Keiro.PGMQ.Job`'s private
-`withOneShotProcessSpan` and `recordAckOnSpan` must be kept in step with shibuya's
-`processOne` by hand. A change to shibuya's span name, attribute keys, decision vocabulary,
-or status mapping will not produce a compile error here — it will produce a silent
-divergence. The `keiro-pgmq-test` examples that assert the attribute set, the decision
-strings, and the status mapping are the guard, and they should be updated deliberately
-rather than relaxed when they fail.
+Queries matching `<jobName> process` must switch to `process <jobName>`. `JobTuning`'s
+exported raw record gains a required telemetry field; use `mkJobTuning` and record updates.
+Source-compatible PGMQ and Kiroku adapters accompany the repository's Shibuya 0.13 bump.
+Consumer extraction remains W3C-only even though enqueue uses the provider's configured
+propagator; a non-W3C-only provider cannot yield these consumer creation links.
+Retained-span tests exercise actual decoded job payloads on both paths under both policies.
 
 Anyone tempted to "simplify" by routing `runJobOnceWithContext` through `runApp` should read
 the Context section first: that change trades documented drain semantics for implementation

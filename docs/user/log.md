@@ -2,6 +2,9 @@
 
 ## 2026-11-14
 
+* **Update**: Update PGMQ API reference with telemetry policy exports and released Shibuya dependency bounds.
+
+
 * **Update**: Document producer trace-policy adoption, quiescent cutoff activation and policy-aware rollback, plus batch creation links.
 
 * **Update**: DOC-15: document command creation metadata and category span queries.
