@@ -68,3 +68,11 @@ medians are 1.0568, 1.0618 and 1.0593; per-event medians are below 1.0, with 1.1
 for both. The older failed third control remains separate above. All CSVs remain the
 same five-sample medians; no row or threshold moved in response to that producer failure.
 This accepts plan 315, while plan 316's full release-gate red/green proof remains separate.
+
+## Tracer-enabled baselines
+
+The additive [tracing baseline](../tracing-baseline-v1/README.md) records matched command,
+publisher and process-manager workloads for MasterPlan 47. It preserves these historical
+CSVs and their ceilings. Recording spans use a discard-on-end processor; retained-span payload
+ownership is checked separately. The tracing baseline is an initial measurement, not a new
+historical release threshold.

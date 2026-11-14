@@ -1,0 +1,3 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Error: lookup local terminology project: pool usage error: ConnectionUsageError (NetworkingConnectionError "connection to server on socket \"/Users/shinzui/.local/state/sungkyung-clients/postgresql/.s.PGSQL.5432\" failed: Connection refused\n\tIs the server running locally and accepting connections on that socket?\n")

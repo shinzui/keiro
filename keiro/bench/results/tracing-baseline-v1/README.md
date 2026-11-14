@@ -32,3 +32,18 @@ PostgreSQL benchmark fixtures retain durable commit settings; no global database
 Historical CSVs and thresholds are unchanged. These new rows have no enforced time ceiling yet;
 their role is an attributed starting point for subsequent tracing changes. Small differences,
 including negative measured overhead, must be interpreted against the raw sample spread.
+
+Recorded on 2026-11-14 at source `7579be21`: all five samples passed all eight cells. See
+[pair medians](pairs.md). The untraced/traced deltas (−0.4%, +1.8%, −1.0%, +2.1%) lie within
+the observed spreads; they do not establish a performance improvement. `work-counts.log` is a
+separate, untimed-count diagnostic invocation using `KEIRO_BENCH_WORK_COUNTS=1` and `--stdev 100`.
+Count probes are disabled in the five timing samples. `ownership-negative.log` preserves the
+controlled failed collection assertion; `retention.log` records the restored suite (22 examples, zero failures).
+`dependency-versions.json` preserves the resolved package versions. `SHA256SUMS` covers the retained
+measurements and logs.
+
+EP-1 acceptance remains open because the required Mori terminology check cannot connect to its
+registry database (`terminology-blocker.log`). The broad verification run was stopped after
+its active fixture-mutating proof restored source (`verify-interrupted.log`); it is not a
+passing repository gate. Restore Mori connectivity and rerun `nix develop -c just verify`
+before accepting EP-1 or beginning its dependent plans.

@@ -310,8 +310,10 @@ its timer/workflow path with directly supplied traced context and can complete b
 ## Progress
 
 EP-1 has eight working benchmark cells and six passing matched retention legs, plus a
-retained-span ownership probe whose controlled span-owned leak is detected. Baseline recording
-is in progress. Its acceptance is blocked by the unavailable Mori registry database:
+retained-span ownership probe whose controlled span-owned leak is detected. Five serial baseline
+samples at `7579be21` and actual-count diagnostics passed; evidence is in
+`keiro/bench/results/tracing-baseline-v1/`. Its acceptance is blocked by the unavailable Mori
+registry database:
 `nix develop -c mori terms validate --path .` fails with connection refused on the configured
 PostgreSQL socket. Repository verification remains incomplete; dependent children remain
 Not Started under the whole-child prerequisites. The external releases are available; EP-5

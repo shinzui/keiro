@@ -1,0 +1,253 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.24.0.0 (test:keiro-retention) (ephemeral targets)
+keiro.cabal has been changed. Re-configuring with most recently used options.
+If this fails, please run configure manually.
+Configuring test suite 'keiro-retention' for keiro-0.24.0.0...
+Preprocessing test suite 'keiro-retention' for keiro-0.24.0.0...
+Building test suite 'keiro-retention' for keiro-0.24.0.0...
+Running 1 test suites...
+Test suite keiro-retention: RUNNING...
+
+Span payload ownership
+  collects payloads with live spans retained [✔]
+  collects payloads with finished spans retained [✔]
+  detects a span-owned payload and collects it after releasing spans [✔]
+Retention legs
+leg=baseline-no-store operations=1500 blocks=6 block=250
+block  ops  live_bytes  large_objects_bytes  threads
+1  250  676,088  242,584  48
+2  500  678,448  242,584  46
+3  750  683,104  242,584  46
+4  1000  688,152  242,584  46
+5  1250  693,640  242,584  46
+6  1500  698,248  242,584  46
+slope=20 B/op  growth=0.02 MiB  verdict=bounded
+
+  baseline-no-store [✔]
+leg=kiroku-append-probe operations=1500 blocks=6 block=250
+block  ops  live_bytes  large_objects_bytes  threads
+1  250  922,712  315,560  48
+2  500  1,047,896  315,560  46
+3  750  1,143,200  315,560  46
+4  1000  1,267,872  315,560  46
+5  1250  1,444,384  381,096  46
+6  1500  1,587,520  381,096  46
+slope=552 B/op  growth=0.51 MiB  verdict=bounded
+
+post-return leg=kiroku-append-probe live_bytes=1519408 large_objects_bytes=381096
+  kiroku-append-probe [✔]
+leg=kiroku-append-only operations=1500 blocks=6 block=250
+block  ops  live_bytes  large_objects_bytes  threads
+1  250  1,632,264  413,000  48
+2  500  1,762,576  410,600  46
+3  750  1,850,672  410,600  46
+4  1000  1,938,248  410,600  46
+5  1250  2,026,856  410,600  46
+6  1500  2,114,112  410,600  46
+slope=352 B/op  growth=0.34 MiB  verdict=bounded
+
+post-return leg=kiroku-append-only live_bytes=2041312 large_objects_bytes=410600
+  kiroku-append-only [✔]
+leg=kiroku-append-tx operations=1500 blocks=6 block=250
+block  ops  live_bytes  large_objects_bytes  threads
+1  250  2,154,880  424,200  48
+2  500  2,208,600  388,624  46
+3  750  2,296,128  388,624  46
+4  1000  2,383,992  388,624  46
+5  1250  2,472,512  388,624  46
+6  1500  2,559,848  388,624  46
+slope=352 B/op  growth=0.33 MiB  verdict=bounded
+
+post-return leg=kiroku-append-tx live_bytes=2517320 large_objects_bytes=388624
+  kiroku-append-tx [✔]
+leg=kiroku-probe-only operations=1500 blocks=6 block=250
+block  ops  live_bytes  large_objects_bytes  threads
+1  250  3,087,328  419,680  48
+2  500  3,122,224  415,608  46
+3  750  3,155,552  415,608  46
+4  1000  3,188,016  415,608  46
+5  1250  3,221,392  415,608  46
+6  1500  3,253,944  415,608  46
+slope=132 B/op  growth=0.13 MiB  verdict=bounded
+
+post-return leg=kiroku-probe-only live_bytes=3204536 large_objects_bytes=415608
+  kiroku-probe-only [✔]
+leg=kiroku-subscribe-ack operations=1500 blocks=6 block=250
+block  ops  live_bytes  large_objects_bytes  threads
+1  250  3,873,904  495,576  50
+2  500  3,830,680  460,464  48
+3  750  3,836,664  460,464  48
+4  1000  3,842,560  460,464  48
+5  1250  3,848,136  460,464  48
+6  1500  3,852,952  460,464  48
+slope=22 B/op  growth=0.02 MiB  verdict=bounded
+
+post-return leg=kiroku-subscribe-ack live_bytes=3719040 large_objects_bytes=419544
+  kiroku-subscribe-ack [✔]
+leg=hand-bridge-ack operations=1500 blocks=6 block=250
+block  ops  live_bytes  large_objects_bytes  threads
+1  250  4,365,504  480,904  50
+2  500  4,318,432  444,064  48
+3  750  4,324,712  444,064  48
+4  1000  4,329,752  444,064  48
+5  1250  4,335,912  444,064  48
+6  1500  4,341,280  444,064  48
+slope=23 B/op  growth=0.02 MiB  verdict=bounded
+
+post-return leg=hand-bridge-ack live_bytes=4215360 large_objects_bytes=411296
+  hand-bridge-ack [✔]
+leg=shibuya-adapter-ack operations=1500 blocks=6 block=250
+block  ops  live_bytes  large_objects_bytes  threads
+1  250  4,853,168  473,608  50
+2  500  4,836,000  469,520  48
+3  750  4,842,528  469,520  48
+4  1000  4,846,592  469,520  48
+5  1250  4,853,656  469,520  48
+6  1500  4,858,680  469,520  48
+slope=23 B/op  growth=0.02 MiB  verdict=bounded
+
+post-return leg=shibuya-adapter-ack live_bytes=4723504 large_objects_bytes=429168
+  shibuya-adapter-ack [✔]
+leg=pm-worker operations=1500 blocks=6 block=250
+block  ops  live_bytes  large_objects_bytes  threads
+1  250  5,692,616  533,768  50
+2  500  5,940,888  498,736  48
+3  750  6,219,136  498,736  48
+4  1000  6,506,584  498,736  48
+5  1250  6,785,680  498,736  48
+6  1500  7,004,000  498,736  46
+slope=1077 B/op  growth=1.01 MiB  verdict=bounded
+
+post-return leg=pm-worker live_bytes=6942432 large_objects_bytes=465968
+  pm-worker [✔]
+router-worker target snapshots: Never
+leg=router-worker operations=1500 blocks=6 block=250
+block  ops  live_bytes  large_objects_bytes  threads
+1  250  8,227,368  526,888  50
+2  500  6,993,752  494,208  48
+3  750  4,182,992  494,208  48
+4  1000  3,140,280  494,208  48
+5  1250  1,947,032  494,208  48
+6  1500  1,750,616  494,208  46
+slope=-5089 B/op  growth=0.00 MiB  verdict=bounded
+
+post-return leg=router-worker live_bytes=1683544 large_objects_bytes=461440
+  router-worker [✔]
+leg=projection-apply operations=1500 blocks=6 block=250
+block  ops  live_bytes  large_objects_bytes  threads
+1  250  2,387,992  518,944  49
+2  500  2,362,984  482,088  48
+3  750  2,407,792  482,088  48
+4  1000  2,427,856  482,088  48
+5  1250  2,473,000  482,088  48
+6  1500  2,492,480  482,088  48
+slope=130 B/op  growth=0.12 MiB  verdict=bounded
+
+post-return leg=projection-apply live_bytes=2310768 large_objects_bytes=449320
+  projection-apply [✔]
+leg=command-long-history operations=1500 blocks=6 block=250
+block  ops  live_bytes  large_objects_bytes  threads
+1  250  2,461,104  474,200  46
+2  500  2,609,424  474,200  46
+3  750  2,755,600  474,200  46
+4  1000  2,901,608  474,200  46
+5  1250  3,050,352  474,200  46
+6  1500  3,182,872  474,200  46
+slope=577 B/op  growth=0.55 MiB  verdict=bounded
+
+post-return leg=command-long-history live_bytes=3157400 large_objects_bytes=474200
+  command-long-history [✔]
+leg=hydrate-only operations=1500 blocks=6 block=250
+block  ops  live_bytes  large_objects_bytes  threads
+1  250  3,257,232  470,616  46
+2  500  3,308,928  470,616  46
+3  750  3,395,256  470,616  46
+4  1000  3,481,728  470,616  46
+5  1250  3,568,208  470,616  46
+6  1500  3,652,712  470,616  46
+slope=344 B/op  growth=0.33 MiB  verdict=bounded
+
+post-return leg=hydrate-only live_bytes=3624080 large_objects_bytes=470616
+  hydrate-only [✔]
+leg=kiroku-read-tail operations=1500 blocks=6 block=250
+block  ops  live_bytes  large_objects_bytes  threads
+1  250  3,621,072  444,952  48
+2  500  3,647,816  440,904  46
+3  750  3,682,672  440,904  46
+4  1000  3,717,008  440,904  46
+5  1250  3,750,832  440,904  46
+6  1500  3,786,040  440,904  46
+slope=138 B/op  growth=0.13 MiB  verdict=bounded
+
+post-return leg=kiroku-read-tail live_bytes=3759104 large_objects_bytes=440904
+  kiroku-read-tail [✔]
+leg=command-short-history operations=1500 blocks=6 block=250
+block  ops  live_bytes  large_objects_bytes  threads
+1  250  3,894,176  488,520  48
+2  500  3,969,104  451,720  46
+3  750  4,076,912  451,720  46
+4  1000  4,184,240  451,720  46
+5  1250  4,277,144  451,720  46
+6  1500  4,378,264  451,720  46
+slope=407 B/op  growth=0.39 MiB  verdict=bounded
+
+post-return leg=command-short-history live_bytes=4352144 large_objects_bytes=451720
+  command-short-history [✔]
+leg=command-short-history-tracer operations=1500 blocks=6 block=250
+block  ops  live_bytes  large_objects_bytes  threads
+1  250  4,463,712  455,832  48
+2  500  4,537,208  419,152  46
+3  750  4,642,448  423,216  46
+4  1000  4,740,552  419,152  46
+5  1250  4,843,136  419,152  46
+6  1500  4,975,280  451,920  46
+slope=431 B/op  growth=0.42 MiB  verdict=bounded
+
+post-return leg=command-short-history-tracer live_bytes=4949328 large_objects_bytes=451920
+  command-short-history-tracer [✔]
+leg=outbox-publisher operations=1500 blocks=6 block=250
+block  ops  live_bytes  large_objects_bytes  threads
+1  250  5,229,640  485,640  48
+2  500  5,250,280  448,800  47
+3  750  5,294,576  448,800  47
+4  1000  5,250,920  448,800  47
+5  1250  5,224,888  448,800  47
+6  1500  5,209,344  448,800  47
+slope=-61 B/op  growth=0.00 MiB  verdict=bounded
+
+post-return leg=outbox-publisher live_bytes=5168376 large_objects_bytes=448800
+  outbox-publisher [✔]
+leg=outbox-publisher-tracer operations=1500 blocks=6 block=250
+block  ops  live_bytes  large_objects_bytes  threads
+1  250  5,146,040  425,112  48
+2  500  5,163,128  388,288  47
+3  750  5,222,304  388,288  47
+4  1000  5,281,288  388,288  47
+5  1250  5,340,992  388,288  47
+6  1500  5,399,240  388,288  47
+slope=236 B/op  growth=0.23 MiB  verdict=bounded
+
+post-return leg=outbox-publisher-tracer live_bytes=5363912 large_objects_bytes=388288
+  outbox-publisher-tracer [✔]
+leg=pm-worker-tracer operations=1500 blocks=6 block=250
+block  ops  live_bytes  large_objects_bytes  threads
+1  250  6,169,520  506,704  50
+2  500  6,364,032  502,912  48
+3  750  6,556,896  506,936  48
+4  1000  6,728,848  506,936  48
+5  1250  6,887,176  506,936  48
+6  1500  6,957,680  506,936  46
+slope=607 B/op  growth=0.57 MiB  verdict=bounded
+
+post-return leg=pm-worker-tracer live_bytes=6852256 large_objects_bytes=463848
+  pm-worker-tracer [✔]
+
+Finished in 80.5916 seconds
+22 examples, 0 failures
+Test suite keiro-retention: PASS
+Test suite logged to:
+/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/t/keiro-retention/test/keiro-0.24.0.0-keiro-retention.log
+1 of 1 test suites (1 of 1 test cases) passed.

@@ -1,0 +1,9 @@
+Name,Mean (ps),2*Stdev (ps)
+All.tracing.command.append-distinct-streams,18262196874,1216644584
+All.tracing.command.append-distinct-streams/tracer,18338768750,1397444658
+All.tracing.command.append-one-stream,65165300000,5203777396
+All.tracing.command.append-one-stream/tracer,71250875001,4087532276
+All.tracing.publish-backlog,185173399987,12929839444
+All.tracing.publish-backlog/tracer,180178049996,31136016756
+All.tracing.process-manager.dispatch,38852999999,4621673008
+All.tracing.process-manager.dispatch/tracer,33248900000,7872720182

@@ -1,0 +1,22 @@
+All
+  tracing
+    command
+      append-distinct-streams:        OK
+        18.4 ms ± 1.7 ms
+      append-distinct-streams/tracer: OK
+        18.4 ms ± 6.1 ms
+      append-one-stream:              OK
+        65.9 ms ± 4.8 ms
+      append-one-stream/tracer:       OK
+        65.9 ms ± 5.6 ms
+    publish-backlog:                  OK
+      183  ms ± 7.5 ms
+    publish-backlog/tracer:           OK
+      189  ms ±  15 ms
+    process-manager
+      dispatch:                       OK
+        32.6 ms ± 3.2 ms
+      dispatch/tracer:                OK
+        32.6 ms ± 2.1 ms
+
+All 8 tests passed (32.05s)

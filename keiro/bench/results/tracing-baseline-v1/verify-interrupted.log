@@ -1,0 +1,18 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+python3 scripts/release_workflow.py locked -- just _verify
++ just _verify
+bash keiro-dsl/test/mapped-structural-enum-equality-mutation-test.sh
+PASS  mutation: collapsed binding
+PASS  mutation: omitted fixture branch
+PASS  mutation: omitted finite-domain alternative
+PASS  mutation: wrong inverse
+PASS  mutation: bijective meaning swap
+PASS  control: fixture order is not a sampling contract
+PASS  mutation: missing binding symbol
+PASS  mutation: wrong binding signature
+PASS  restored baseline
+bash keiro-dsl/test/consumer-enum-literal-sampling-test.sh
+PASS: consumer enum literal guard compiles and samples by canonical key
+bash keiro-dsl/test/mapped-register-construction-mutation-test.shrelease: Command '['just', '_verify']' returned non-zero exit status 143.
+error: recipe `verify` failed on line 16 with exit code 1

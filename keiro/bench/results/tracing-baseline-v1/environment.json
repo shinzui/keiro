@@ -1,0 +1,25 @@
+{
+  "revision": "7579be2119a298d653bdd9e441b04f95c15ea80f",
+  "platform": "macOS-27.2-arm64-arm-64bit-Mach-O",
+  "machine": "Apple M5 Ultra",
+  "ghc": "9.12.4",
+  "cabal": "3.16.1.0",
+  "postgres": "postgres (PostgreSQL) 18.6",
+  "binary_sha256": "b7246d2b51ac285427adc83ca5d1e6b46654974e2358739cc52a7f729033e412",
+  "command": [
+    "/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/b/keiro-bench/build/keiro-bench/keiro-bench",
+    "-p",
+    "tracing",
+    "-j1",
+    "--time-mode",
+    "wall",
+    "--hide-progress",
+    "--stdev",
+    "5",
+    "--timeout",
+    "10s",
+    "+RTS",
+    "-N2",
+    "-RTS"
+  ]
+}

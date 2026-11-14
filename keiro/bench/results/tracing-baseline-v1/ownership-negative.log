@@ -1,0 +1,66 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.24.0.0 (test:keiro-retention) (file retention/Retention/SpanOwnership.hs changed)
+Preprocessing test suite 'keiro-retention' for keiro-0.24.0.0...
+Building test suite 'keiro-retention' for keiro-0.24.0.0...
+[3 of 6] Compiling Retention.SpanOwnership ( retention/Retention/SpanOwnership.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/t/keiro-retention/build/keiro-retention/keiro-retention-tmp/Retention/SpanOwnership.o ) [Source file changed]
+retention/Retention/SpanOwnership.hs:47:19: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘span’ shadows the existing binding
+      imported from ‘Prelude’ at retention/Retention/SpanOwnership.hs:5:8-30
+      (and originally defined in ‘ghc-internal-9.1204.0:GHC.Internal.List’)
+   |
+47 |           mapM_ (\span -> endSpan span Nothing) live
+   |                   ^^^^
+
+retention/Retention/SpanOwnership.hs:54:25: warning: [GHC-40910] [-Wunused-matches]
+    Defined but not used: ‘retainPayload’
+   |
+54 | produce tracer finished retainPayload = do
+   |                         ^^^^^^^^^^^^^
+
+retention/Retention/SpanOwnership.hs:58:5: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘context’ shadows the existing binding
+      imported from ‘Test.Hspec’ at retention/Retention/SpanOwnership.hs:18:1-17
+      (and originally defined in ‘hspec-core-2.11.18:Test.Hspec.Core.Spec’)
+   |
+58 |     context <- Context.getContext
+   |     ^^^^^^^
+
+retention/Retention/SpanOwnership.hs:59:5: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘span’ shadows the existing binding
+      imported from ‘Prelude’ at retention/Retention/SpanOwnership.hs:5:8-30
+      (and originally defined in ‘ghc-internal-9.1204.0:GHC.Internal.List’)
+   |
+59 |     span <- createSpan tracer context "ownership" defaultSpanArguments
+   |     ^^^^
+
+[6 of 6] Compiling Main             ( retention/Main.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/t/keiro-retention/build/keiro-retention/keiro-retention-tmp/Main.o ) [Retention.SpanOwnership changed]
+[7 of 7] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/t/keiro-retention/build/keiro-retention/keiro-retention [Objects changed]
+Running 1 test suites...
+Test suite keiro-retention: RUNNING...
+
+Span payload ownership
+  collects payloads with finished spans retained [✘]
+
+Failures:
+
+  retention/Retention/SpanOwnership.hs:38:17: 
+  1) Span payload ownership collects payloads with finished spans retained
+       expected: True
+        but got: False
+
+  To rerun use: --match "/Span payload ownership/collects payloads with finished spans retained/" --seed 1915952602
+
+Randomized with seed 1915952602
+
+Finished in 0.2414 seconds
+1 example, 1 failure
+Test suite keiro-retention: FAIL
+Test suite logged to:
+/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/t/keiro-retention/test/keiro-0.24.0.0-keiro-retention.log
+0 of 1 test suites (0 of 1 test cases) passed.
+Error: [Cabal-7125]
+Tests failed for test:keiro-retention from keiro-0.24.0.0.
+

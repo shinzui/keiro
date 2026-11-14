@@ -60,7 +60,7 @@ produces the "before" measurement and the commit that later plans use as their b
 - [x] M2 (2026-11-14): `keiro-retention` has tracer-enabled legs for a command loop, a subscription worker
   and the outbox publisher, each ending in a `Bounded` verdict on unchanged library code; a focused ownership probe proves payload collection while spans remain alive, and its
   deliberate span-retention negative control fails.
-- [ ] M3: Baseline numbers and the reproduction procedure are recorded under
+- [x] M3 (2026-11-14): Baseline numbers and the reproduction procedure are recorded under
   `keiro/bench/results/` and described where the existing baselines are described.
 
 
@@ -106,7 +106,14 @@ KEIRO_RETENTION_LEGS=baseline-no-store nix develop -c cabal test keiro-retention
 ## Outcomes & Retrospective
 
 Implementation checkpoint: recording benchmark pairs and retention/ownership probes are in place.
-M3 recording is next. Acceptance remains open: `nix develop -c mori terms validate --path .`
+Five serial recordings at source `7579be21` passed all eight cells. Evidence and reproduction
+instructions are in `keiro/bench/results/tracing-baseline-v1/`; the actual-count diagnostic
+also passed. Median no-tracer/tracer workloads (ms): distinct commands 18.413/18.339,
+single-stream commands 67.998/69.247, publisher 186.144/184.243, dispatch 31.917/32.592.
+Differences are within the sample spread; no new time ceiling or historical baseline changed.
+The final restored `keiro-retention` suite passed all 22 examples (19 legs and three ownership
+cases). Its raw log and the deliberate failed ownership assertion are retained with the baseline.
+Acceptance remains open: `nix develop -c mori terms validate --path .`
 fails because the registry database socket refuses connections. The broad `just verify` run
 passed the structural-enum mutation proof and consumer-enum literal proof, then was stopped
 at that boundary after the required terminology failure was established independently.

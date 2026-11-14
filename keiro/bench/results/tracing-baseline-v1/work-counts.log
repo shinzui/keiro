@@ -1,0 +1,30 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+All
+  tracing
+    command
+      append-distinct-streams:        {"events":600,"events_bytes":1335296,"label":"append-distinct-streams","prefix":"tracing-append-distinct-streams-","stream_events_bytes":2449408,"streams":600,"streams_bytes":1949696}
+OK
+        18.8 ms ±  28 ms
+      append-distinct-streams/tracer: {"events":600,"events_bytes":2064384,"label":"append-distinct-streams/tracer","prefix":"tracing-append-distinct-streams/tracer-","stream_events_bytes":2678784,"streams":600,"streams_bytes":2187264}
+OK
+        17.3 ms ±  28 ms
+      append-one-stream:              {"events":600,"events_bytes":2777088,"label":"append-one-stream","prefix":"tracing-append-one-stream-","stream_events_bytes":2908160,"streams":6,"streams_bytes":2187264}
+OK
+        68.0 ms ±  28 ms
+      append-one-stream/tracer:       {"events":600,"events_bytes":3497984,"label":"append-one-stream/tracer","prefix":"tracing-append-one-stream/tracer-","stream_events_bytes":3129344,"streams":6,"streams_bytes":2187264}
+OK
+        67.6 ms ±  47 ms
+    publish-backlog:                  OK
+      187  ms ±  52 ms
+    publish-backlog/tracer:           OK
+      179  ms ±  33 ms
+    process-manager
+      dispatch:                       {"events":600,"events_bytes":1351680,"label":"dispatch","prefix":"bench-command-domain-process-manager:dispatch-","stream_events_bytes":2506752,"streams":600,"streams_bytes":2048000}
+OK
+        35.0 ms ±  31 ms
+      dispatch/tracer:                {"events":600,"events_bytes":2072576,"label":"dispatch/tracer","prefix":"bench-command-domain-process-manager:dispatch/tracer-","stream_events_bytes":2777088,"streams":600,"streams_bytes":2400256}
+OK
+        32.0 ms ±  30 ms
+
+All 8 tests passed (6.45s)

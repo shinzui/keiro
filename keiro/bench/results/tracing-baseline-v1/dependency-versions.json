@@ -1,0 +1,1306 @@
+[
+  {
+    "package": "Cabal",
+    "version": "3.14.2.0"
+  },
+  {
+    "package": "Cabal-syntax",
+    "version": "3.14.2.0"
+  },
+  {
+    "package": "Glob",
+    "version": "0.10.2"
+  },
+  {
+    "package": "HUnit",
+    "version": "1.6.2.0"
+  },
+  {
+    "package": "OneTuple",
+    "version": "0.4.3"
+  },
+  {
+    "package": "Only",
+    "version": "0.1"
+  },
+  {
+    "package": "QuickCheck",
+    "version": "2.18.0.0"
+  },
+  {
+    "package": "SHA",
+    "version": "1.6.4.4"
+  },
+  {
+    "package": "StateVar",
+    "version": "1.2.2"
+  },
+  {
+    "package": "abstract-deque",
+    "version": "0.3"
+  },
+  {
+    "package": "adjunctions",
+    "version": "4.4.4"
+  },
+  {
+    "package": "aeson",
+    "version": "2.2.5.1"
+  },
+  {
+    "package": "aeson-casing",
+    "version": "0.2.0.0"
+  },
+  {
+    "package": "aeson-pretty",
+    "version": "0.8.11"
+  },
+  {
+    "package": "ansi-terminal",
+    "version": "1.1.5"
+  },
+  {
+    "package": "ansi-terminal-types",
+    "version": "1.1.3"
+  },
+  {
+    "package": "appar",
+    "version": "0.1.8"
+  },
+  {
+    "package": "array",
+    "version": "0.5.8.0"
+  },
+  {
+    "package": "assoc",
+    "version": "1.1.1"
+  },
+  {
+    "package": "async",
+    "version": "2.2.6"
+  },
+  {
+    "package": "atomic-primops",
+    "version": "0.8.8"
+  },
+  {
+    "package": "attoparsec",
+    "version": "0.14.4"
+  },
+  {
+    "package": "attoparsec-aeson",
+    "version": "2.2.2.0"
+  },
+  {
+    "package": "auto-update",
+    "version": "0.2.8"
+  },
+  {
+    "package": "base",
+    "version": "4.21.2.0"
+  },
+  {
+    "package": "base-compat",
+    "version": "0.15.0"
+  },
+  {
+    "package": "base-orphans",
+    "version": "0.9.4"
+  },
+  {
+    "package": "base16",
+    "version": "2.0"
+  },
+  {
+    "package": "base16-bytestring",
+    "version": "1.0.2.0"
+  },
+  {
+    "package": "base64",
+    "version": "2.1"
+  },
+  {
+    "package": "base64-bytestring",
+    "version": "1.2.1.0"
+  },
+  {
+    "package": "bifunctors",
+    "version": "5.6.3"
+  },
+  {
+    "package": "binary",
+    "version": "0.8.9.3"
+  },
+  {
+    "package": "binary-parser",
+    "version": "0.5.7.7"
+  },
+  {
+    "package": "bitvec",
+    "version": "1.1.6.0"
+  },
+  {
+    "package": "blaze-builder",
+    "version": "0.4.4.1"
+  },
+  {
+    "package": "blaze-html",
+    "version": "0.9.2.0"
+  },
+  {
+    "package": "blaze-markup",
+    "version": "0.8.3.0"
+  },
+  {
+    "package": "bsb-http-chunked",
+    "version": "0.0.0.4"
+  },
+  {
+    "package": "byteorder",
+    "version": "1.0.4"
+  },
+  {
+    "package": "bytestring",
+    "version": "0.12.2.0"
+  },
+  {
+    "package": "bytestring-strict-builder",
+    "version": "0.4.5.8"
+  },
+  {
+    "package": "bytestring-tree-builder",
+    "version": "0.2.7.13"
+  },
+  {
+    "package": "call-stack",
+    "version": "0.4.0"
+  },
+  {
+    "package": "case-insensitive",
+    "version": "1.2.2.0"
+  },
+  {
+    "package": "cborg",
+    "version": "0.2.10.0"
+  },
+  {
+    "package": "cereal",
+    "version": "0.5.8.3"
+  },
+  {
+    "package": "character-ps",
+    "version": "0.1"
+  },
+  {
+    "package": "charset",
+    "version": "0.3.12"
+  },
+  {
+    "package": "clock",
+    "version": "0.8.4"
+  },
+  {
+    "package": "cmdargs",
+    "version": "0.10.22"
+  },
+  {
+    "package": "codd",
+    "version": "0.1.8"
+  },
+  {
+    "package": "colour",
+    "version": "2.3.7"
+  },
+  {
+    "package": "comonad",
+    "version": "5.0.10"
+  },
+  {
+    "package": "conduit",
+    "version": "1.3.6.1"
+  },
+  {
+    "package": "conduit-extra",
+    "version": "1.3.8"
+  },
+  {
+    "package": "containers",
+    "version": "0.7"
+  },
+  {
+    "package": "contravariant",
+    "version": "1.5.6"
+  },
+  {
+    "package": "contravariant-extras",
+    "version": "0.3.5.4"
+  },
+  {
+    "package": "cookie",
+    "version": "0.5.1"
+  },
+  {
+    "package": "cryptohash-md5",
+    "version": "0.11.101.0"
+  },
+  {
+    "package": "cryptohash-sha1",
+    "version": "0.11.101.0"
+  },
+  {
+    "package": "cryptohash-sha256",
+    "version": "0.11.102.1"
+  },
+  {
+    "package": "cryptohash-sha512",
+    "version": "0.11.103.0"
+  },
+  {
+    "package": "crypton",
+    "version": "1.1.5"
+  },
+  {
+    "package": "crypton-asn1-encoding",
+    "version": "0.10.0"
+  },
+  {
+    "package": "crypton-asn1-parse",
+    "version": "0.10.0"
+  },
+  {
+    "package": "crypton-asn1-types",
+    "version": "0.4.1"
+  },
+  {
+    "package": "crypton-connection",
+    "version": "0.4.6"
+  },
+  {
+    "package": "crypton-pem",
+    "version": "0.3.0"
+  },
+  {
+    "package": "crypton-socks",
+    "version": "0.6.2"
+  },
+  {
+    "package": "crypton-x509",
+    "version": "1.9.1"
+  },
+  {
+    "package": "crypton-x509-store",
+    "version": "1.9.0"
+  },
+  {
+    "package": "crypton-x509-system",
+    "version": "1.9.0"
+  },
+  {
+    "package": "crypton-x509-validation",
+    "version": "1.9.1"
+  },
+  {
+    "package": "data-default",
+    "version": "0.8.0.2"
+  },
+  {
+    "package": "data-default-class",
+    "version": "0.2.0.0"
+  },
+  {
+    "package": "data-fix",
+    "version": "0.3.4"
+  },
+  {
+    "package": "deepseq",
+    "version": "1.5.1.0"
+  },
+  {
+    "package": "directory",
+    "version": "1.3.10.1"
+  },
+  {
+    "package": "distributive",
+    "version": "0.6.3"
+  },
+  {
+    "package": "dlist",
+    "version": "1.0"
+  },
+  {
+    "package": "double-conversion",
+    "version": "2.0.5.0"
+  },
+  {
+    "package": "easy-file",
+    "version": "0.2.6"
+  },
+  {
+    "package": "ech-config",
+    "version": "0.0.2"
+  },
+  {
+    "package": "effectful",
+    "version": "2.7.1.0"
+  },
+  {
+    "package": "effectful-core",
+    "version": "2.7.1.2"
+  },
+  {
+    "package": "entropy",
+    "version": "0.4.1.11"
+  },
+  {
+    "package": "ephemeral-pg",
+    "version": "0.3.1.0"
+  },
+  {
+    "package": "exceptions",
+    "version": "0.10.12"
+  },
+  {
+    "package": "fast-logger",
+    "version": "3.2.9"
+  },
+  {
+    "package": "file-embed",
+    "version": "0.0.16.0"
+  },
+  {
+    "package": "file-io",
+    "version": "0.1.6"
+  },
+  {
+    "package": "filelock",
+    "version": "0.1.1.9"
+  },
+  {
+    "package": "filepath",
+    "version": "1.5.5.0"
+  },
+  {
+    "package": "formatting",
+    "version": "7.2.0"
+  },
+  {
+    "package": "free",
+    "version": "5.2"
+  },
+  {
+    "package": "fusion-plugin-types",
+    "version": "0.1.0"
+  },
+  {
+    "package": "generic-lens",
+    "version": "2.3.0.0"
+  },
+  {
+    "package": "generic-lens-core",
+    "version": "2.3.0.0"
+  },
+  {
+    "package": "ghc",
+    "version": "9.12.4"
+  },
+  {
+    "package": "ghc-bignum",
+    "version": "1.3"
+  },
+  {
+    "package": "ghc-boot",
+    "version": "9.12.4"
+  },
+  {
+    "package": "ghc-boot-th",
+    "version": "9.12.4"
+  },
+  {
+    "package": "ghc-heap",
+    "version": "9.12.4"
+  },
+  {
+    "package": "ghc-internal",
+    "version": "9.1204.0"
+  },
+  {
+    "package": "ghc-platform",
+    "version": "0.1.0.0"
+  },
+  {
+    "package": "ghc-prim",
+    "version": "0.13.0"
+  },
+  {
+    "package": "ghci",
+    "version": "9.12.4"
+  },
+  {
+    "package": "half",
+    "version": "0.3.3"
+  },
+  {
+    "package": "happy",
+    "version": "2.2"
+  },
+  {
+    "package": "happy-lib",
+    "version": "2.2"
+  },
+  {
+    "package": "hashable",
+    "version": "1.5.1.0"
+  },
+  {
+    "package": "hashtables",
+    "version": "1.4.2"
+  },
+  {
+    "package": "haskell-lexer",
+    "version": "1.2.1"
+  },
+  {
+    "package": "haskell-src-exts",
+    "version": "1.24.0"
+  },
+  {
+    "package": "haskell-src-meta",
+    "version": "0.8.16"
+  },
+  {
+    "package": "hasql",
+    "version": "1.10.3.7"
+  },
+  {
+    "package": "hasql-notifications",
+    "version": "0.2.5.0"
+  },
+  {
+    "package": "hasql-pool",
+    "version": "1.4.2.3"
+  },
+  {
+    "package": "hasql-transaction",
+    "version": "1.2.3.1"
+  },
+  {
+    "package": "haxl",
+    "version": "2.5.1.1"
+  },
+  {
+    "package": "heaps",
+    "version": "0.4.1"
+  },
+  {
+    "package": "hpc",
+    "version": "0.7.0.2"
+  },
+  {
+    "package": "hpke",
+    "version": "0.2.0"
+  },
+  {
+    "package": "hs-opentelemetry-api",
+    "version": "1.0.0.0"
+  },
+  {
+    "package": "hs-opentelemetry-api-types",
+    "version": "1.0.0.0"
+  },
+  {
+    "package": "hs-opentelemetry-exporter-handle",
+    "version": "1.0.0.0"
+  },
+  {
+    "package": "hs-opentelemetry-exporter-in-memory",
+    "version": "1.0.0.0"
+  },
+  {
+    "package": "hs-opentelemetry-exporter-otlp",
+    "version": "1.0.0.0"
+  },
+  {
+    "package": "hs-opentelemetry-otlp",
+    "version": "1.0.0.0"
+  },
+  {
+    "package": "hs-opentelemetry-propagator-b3",
+    "version": "1.0.0.0"
+  },
+  {
+    "package": "hs-opentelemetry-propagator-datadog",
+    "version": "1.0.0.0"
+  },
+  {
+    "package": "hs-opentelemetry-propagator-jaeger",
+    "version": "1.0.0.0"
+  },
+  {
+    "package": "hs-opentelemetry-propagator-w3c",
+    "version": "1.0.0.0"
+  },
+  {
+    "package": "hs-opentelemetry-propagator-xray",
+    "version": "1.0.0.0"
+  },
+  {
+    "package": "hs-opentelemetry-sdk",
+    "version": "1.0.0.0"
+  },
+  {
+    "package": "hs-opentelemetry-semantic-conventions",
+    "version": "1.40.0.0"
+  },
+  {
+    "package": "hsc2hs",
+    "version": "0.68.10"
+  },
+  {
+    "package": "hspec",
+    "version": "2.11.18"
+  },
+  {
+    "package": "hspec-core",
+    "version": "2.11.18"
+  },
+  {
+    "package": "hspec-discover",
+    "version": "2.11.18"
+  },
+  {
+    "package": "hspec-expectations",
+    "version": "0.8.4"
+  },
+  {
+    "package": "http-client",
+    "version": "0.7.19"
+  },
+  {
+    "package": "http-client-tls",
+    "version": "0.4.0"
+  },
+  {
+    "package": "http-conduit",
+    "version": "2.3.9.1"
+  },
+  {
+    "package": "http-date",
+    "version": "0.0.13"
+  },
+  {
+    "package": "http-semantics",
+    "version": "0.4.2"
+  },
+  {
+    "package": "http-types",
+    "version": "0.12.6"
+  },
+  {
+    "package": "http2",
+    "version": "5.4.13"
+  },
+  {
+    "package": "indexed-profunctors",
+    "version": "0.1.1.1"
+  },
+  {
+    "package": "indexed-traversable",
+    "version": "0.1.5"
+  },
+  {
+    "package": "indexed-traversable-instances",
+    "version": "0.1.2.1"
+  },
+  {
+    "package": "integer-conversion",
+    "version": "0.1.1"
+  },
+  {
+    "package": "integer-gmp",
+    "version": "1.1"
+  },
+  {
+    "package": "integer-logarithms",
+    "version": "1.0.5"
+  },
+  {
+    "package": "invariant",
+    "version": "0.6.5"
+  },
+  {
+    "package": "iproute",
+    "version": "1.7.15"
+  },
+  {
+    "package": "jitsurei",
+    "version": "0.1.0.0"
+  },
+  {
+    "package": "jitsurei-ops-http",
+    "version": "0.1.0.0"
+  },
+  {
+    "package": "kan-extensions",
+    "version": "5.2.8"
+  },
+  {
+    "package": "keiki",
+    "version": "0.9.1.0"
+  },
+  {
+    "package": "keiki-codec-json",
+    "version": "0.9.1.0"
+  },
+  {
+    "package": "keiro",
+    "version": "0.24.0.0"
+  },
+  {
+    "package": "keiro-core",
+    "version": "0.24.0.0"
+  },
+  {
+    "package": "keiro-dsl",
+    "version": "0.24.0.0"
+  },
+  {
+    "package": "keiro-dsl-behavior-complete-report",
+    "version": "0.0.0.0"
+  },
+  {
+    "package": "keiro-dsl-codec-compare-artifact-info",
+    "version": "0.1.0.0"
+  },
+  {
+    "package": "keiro-dsl-conformance-service-runtime",
+    "version": "0.0.0.0"
+  },
+  {
+    "package": "keiro-dsl-corpus-regen",
+    "version": "0.1.0.0"
+  },
+  {
+    "package": "keiro-migrations",
+    "version": "0.24.0.0"
+  },
+  {
+    "package": "keiro-ops",
+    "version": "0.24.0.0"
+  },
+  {
+    "package": "keiro-ops-http",
+    "version": "0.24.0.0"
+  },
+  {
+    "package": "keiro-pgmq",
+    "version": "0.24.0.0"
+  },
+  {
+    "package": "keiro-test-support",
+    "version": "0.24.0.0"
+  },
+  {
+    "package": "keiro-workspace-proof-conformance",
+    "version": "0.0.0.0"
+  },
+  {
+    "package": "kiroku-cli",
+    "version": "0.3.0.1"
+  },
+  {
+    "package": "kiroku-metrics",
+    "version": "0.4.0.1"
+  },
+  {
+    "package": "kiroku-store",
+    "version": "0.13.0.2"
+  },
+  {
+    "package": "kiroku-store-migrations",
+    "version": "0.7.3.0"
+  },
+  {
+    "package": "lens",
+    "version": "5.3.6"
+  },
+  {
+    "package": "lens-family",
+    "version": "2.1.3"
+  },
+  {
+    "package": "lens-family-core",
+    "version": "2.1.3"
+  },
+  {
+    "package": "libBF",
+    "version": "0.6.9"
+  },
+  {
+    "package": "libyaml",
+    "version": "0.1.4"
+  },
+  {
+    "package": "libyaml-clib",
+    "version": "0.2.5"
+  },
+  {
+    "package": "lockfree-queue",
+    "version": "0.2.4"
+  },
+  {
+    "package": "megaparsec",
+    "version": "9.8.3"
+  },
+  {
+    "package": "microlens",
+    "version": "0.5.0.0"
+  },
+  {
+    "package": "mime-types",
+    "version": "0.1.2.2"
+  },
+  {
+    "package": "mlkem",
+    "version": "0.2.3.0"
+  },
+  {
+    "package": "mmorph",
+    "version": "1.2.2"
+  },
+  {
+    "package": "mmzk-typeid",
+    "version": "0.7.1.2"
+  },
+  {
+    "package": "monad-control",
+    "version": "1.0.3.1"
+  },
+  {
+    "package": "mono-traversable",
+    "version": "1.0.21.0"
+  },
+  {
+    "package": "mtl",
+    "version": "2.3.2"
+  },
+  {
+    "package": "network",
+    "version": "3.2.13.0"
+  },
+  {
+    "package": "network-bsd",
+    "version": "2.8.1.0"
+  },
+  {
+    "package": "network-byte-order",
+    "version": "0.1.9"
+  },
+  {
+    "package": "network-control",
+    "version": "0.1.7"
+  },
+  {
+    "package": "network-info",
+    "version": "0.2.1"
+  },
+  {
+    "package": "network-uri",
+    "version": "2.6.4.2"
+  },
+  {
+    "package": "nothunks",
+    "version": "0.3.2"
+  },
+  {
+    "package": "nqe",
+    "version": "0.6.9"
+  },
+  {
+    "package": "old-locale",
+    "version": "1.0.0.7"
+  },
+  {
+    "package": "optparse-applicative",
+    "version": "0.19.0.0"
+  },
+  {
+    "package": "os-string",
+    "version": "2.0.10"
+  },
+  {
+    "package": "parallel",
+    "version": "3.3.0.0"
+  },
+  {
+    "package": "parsec",
+    "version": "3.1.18.0"
+  },
+  {
+    "package": "parser-combinators",
+    "version": "1.3.1"
+  },
+  {
+    "package": "pg-migrate",
+    "version": "1.2.0.0"
+  },
+  {
+    "package": "pg-migrate-cli",
+    "version": "1.2.0.0"
+  },
+  {
+    "package": "pg-migrate-embed",
+    "version": "1.2.0.0"
+  },
+  {
+    "package": "pg-migrate-import-codd",
+    "version": "1.2.0.0"
+  },
+  {
+    "package": "pg-migrate-import-hasql-migration",
+    "version": "1.2.0.0"
+  },
+  {
+    "package": "pg-migrate-test-support",
+    "version": "1.2.0.0"
+  },
+  {
+    "package": "pgmq-config",
+    "version": "0.7.0.0"
+  },
+  {
+    "package": "pgmq-core",
+    "version": "0.7.0.0"
+  },
+  {
+    "package": "pgmq-effectful",
+    "version": "0.7.0.0"
+  },
+  {
+    "package": "pgmq-hasql",
+    "version": "0.7.0.0"
+  },
+  {
+    "package": "pgmq-migration",
+    "version": "0.7.0.0"
+  },
+  {
+    "package": "postgresql-binary",
+    "version": "0.15.0.1"
+  },
+  {
+    "package": "postgresql-connection-string",
+    "version": "0.1.0.6"
+  },
+  {
+    "package": "postgresql-libpq",
+    "version": "0.11.0.0"
+  },
+  {
+    "package": "postgresql-libpq-configure",
+    "version": "0.11"
+  },
+  {
+    "package": "postgresql-simple",
+    "version": "0.7.0.1"
+  },
+  {
+    "package": "pretty",
+    "version": "1.1.3.6"
+  },
+  {
+    "package": "prettyprinter",
+    "version": "1.7.2"
+  },
+  {
+    "package": "prettyprinter-ansi-terminal",
+    "version": "1.1.4"
+  },
+  {
+    "package": "primitive",
+    "version": "0.9.1.0"
+  },
+  {
+    "package": "process",
+    "version": "1.6.26.1"
+  },
+  {
+    "package": "profunctors",
+    "version": "5.6.3"
+  },
+  {
+    "package": "proto-lens",
+    "version": "0.7.1.7"
+  },
+  {
+    "package": "proto-lens-runtime",
+    "version": "0.7.0.8"
+  },
+  {
+    "package": "psqueues",
+    "version": "0.2.8.3"
+  },
+  {
+    "package": "quickcheck-io",
+    "version": "0.2.0"
+  },
+  {
+    "package": "ram",
+    "version": "0.22.1"
+  },
+  {
+    "package": "random",
+    "version": "1.3.1"
+  },
+  {
+    "package": "recv",
+    "version": "0.1.3"
+  },
+  {
+    "package": "reflection",
+    "version": "2.1.9"
+  },
+  {
+    "package": "resourcet",
+    "version": "1.3.0"
+  },
+  {
+    "package": "rts",
+    "version": "1.0.3"
+  },
+  {
+    "package": "safe",
+    "version": "0.3.21"
+  },
+  {
+    "package": "safe-exceptions",
+    "version": "0.1.7.4"
+  },
+  {
+    "package": "sbv",
+    "version": "14.9"
+  },
+  {
+    "package": "scientific",
+    "version": "0.3.10.0"
+  },
+  {
+    "package": "semaphore-compat",
+    "version": "1.0.0"
+  },
+  {
+    "package": "semialign",
+    "version": "1.4"
+  },
+  {
+    "package": "semigroupoids",
+    "version": "6.0.2"
+  },
+  {
+    "package": "serialise",
+    "version": "0.2.6.1"
+  },
+  {
+    "package": "shibuya-core",
+    "version": "0.12.0.0"
+  },
+  {
+    "package": "shibuya-kiroku-adapter",
+    "version": "0.7.0.1"
+  },
+  {
+    "package": "shibuya-pgmq-adapter",
+    "version": "0.18.0.0"
+  },
+  {
+    "package": "simple-sendfile",
+    "version": "0.2.33"
+  },
+  {
+    "package": "split",
+    "version": "0.2.5.1"
+  },
+  {
+    "package": "splitmix",
+    "version": "0.1.3.2"
+  },
+  {
+    "package": "stm",
+    "version": "2.5.3.1"
+  },
+  {
+    "package": "streaming",
+    "version": "0.2.4.0"
+  },
+  {
+    "package": "streaming-commons",
+    "version": "0.2.3.1"
+  },
+  {
+    "package": "streamly",
+    "version": "0.11.1"
+  },
+  {
+    "package": "streamly-core",
+    "version": "0.3.3"
+  },
+  {
+    "package": "strict",
+    "version": "0.5.1"
+  },
+  {
+    "package": "strict-mutable-base",
+    "version": "2.0.0.0"
+  },
+  {
+    "package": "syb",
+    "version": "0.7.4"
+  },
+  {
+    "package": "system-cxx-std-lib",
+    "version": "1.0"
+  },
+  {
+    "package": "tagged",
+    "version": "0.8.11"
+  },
+  {
+    "package": "tasty",
+    "version": "1.5.5"
+  },
+  {
+    "package": "tasty-bench",
+    "version": "0.5.1"
+  },
+  {
+    "package": "template-haskell",
+    "version": "2.23.0.0"
+  },
+  {
+    "package": "template-haskell-compat-v0208",
+    "version": "0.1.9.6"
+  },
+  {
+    "package": "temporary",
+    "version": "1.3"
+  },
+  {
+    "package": "terminal-size",
+    "version": "0.3.4"
+  },
+  {
+    "package": "text",
+    "version": "2.1.4"
+  },
+  {
+    "package": "text-builder",
+    "version": "1.0.0.5"
+  },
+  {
+    "package": "text-builder-core",
+    "version": "0.1.1.3"
+  },
+  {
+    "package": "text-iso8601",
+    "version": "0.1.1.2"
+  },
+  {
+    "package": "text-short",
+    "version": "0.1.6.1"
+  },
+  {
+    "package": "th-abstraction",
+    "version": "0.7.2.0"
+  },
+  {
+    "package": "th-compat",
+    "version": "0.1.7"
+  },
+  {
+    "package": "th-expand-syns",
+    "version": "0.4.12.0"
+  },
+  {
+    "package": "th-lift",
+    "version": "0.8.7"
+  },
+  {
+    "package": "th-orphans",
+    "version": "0.13.17"
+  },
+  {
+    "package": "th-reify-many",
+    "version": "0.1.10"
+  },
+  {
+    "package": "these",
+    "version": "1.2.1"
+  },
+  {
+    "package": "thread-utils-context",
+    "version": "0.4.1.1"
+  },
+  {
+    "package": "thread-utils-finalizers",
+    "version": "0.1.1.0"
+  },
+  {
+    "package": "time",
+    "version": "1.14"
+  },
+  {
+    "package": "time-compat",
+    "version": "1.9.9"
+  },
+  {
+    "package": "time-hourglass",
+    "version": "0.3.0"
+  },
+  {
+    "package": "time-manager",
+    "version": "0.5.2"
+  },
+  {
+    "package": "tls",
+    "version": "2.4.6"
+  },
+  {
+    "package": "transformers",
+    "version": "0.6.3.0"
+  },
+  {
+    "package": "transformers-base",
+    "version": "0.4.6.1"
+  },
+  {
+    "package": "transformers-compat",
+    "version": "0.7.2"
+  },
+  {
+    "package": "tree-view",
+    "version": "0.5.1"
+  },
+  {
+    "package": "typed-process",
+    "version": "0.2.13.0"
+  },
+  {
+    "package": "unagi-chan",
+    "version": "0.4.1.4"
+  },
+  {
+    "package": "unicode-data",
+    "version": "0.9.0"
+  },
+  {
+    "package": "uniplate",
+    "version": "1.6.13"
+  },
+  {
+    "package": "unique",
+    "version": "0.0.2"
+  },
+  {
+    "package": "unix",
+    "version": "2.8.8.0"
+  },
+  {
+    "package": "unix-compat",
+    "version": "0.7.4.1"
+  },
+  {
+    "package": "unix-time",
+    "version": "0.5.1"
+  },
+  {
+    "package": "unliftio",
+    "version": "0.2.25.1"
+  },
+  {
+    "package": "unliftio-core",
+    "version": "0.2.1.0"
+  },
+  {
+    "package": "unordered-containers",
+    "version": "0.2.21"
+  },
+  {
+    "package": "utf8-string",
+    "version": "1.0.2"
+  },
+  {
+    "package": "uuid",
+    "version": "1.3.16.1"
+  },
+  {
+    "package": "uuid-types",
+    "version": "1.0.6.1"
+  },
+  {
+    "package": "vault",
+    "version": "0.3.2.0"
+  },
+  {
+    "package": "vector",
+    "version": "0.13.2.0"
+  },
+  {
+    "package": "vector-algorithms",
+    "version": "0.9.1.0"
+  },
+  {
+    "package": "vector-builder",
+    "version": "0.3.8.7"
+  },
+  {
+    "package": "vector-stream",
+    "version": "0.1.0.1"
+  },
+  {
+    "package": "wai",
+    "version": "3.2.5"
+  },
+  {
+    "package": "wai-app-static",
+    "version": "3.2.1"
+  },
+  {
+    "package": "wai-extra",
+    "version": "3.1.18"
+  },
+  {
+    "package": "wai-logger",
+    "version": "2.5.1"
+  },
+  {
+    "package": "wai-websockets",
+    "version": "3.0.1.2"
+  },
+  {
+    "package": "warp",
+    "version": "3.4.21"
+  },
+  {
+    "package": "websockets",
+    "version": "0.13.0.0"
+  },
+  {
+    "package": "wherefrom-compat",
+    "version": "0.2.0.0"
+  },
+  {
+    "package": "witherable",
+    "version": "0.5"
+  },
+  {
+    "package": "word8",
+    "version": "0.1.4"
+  },
+  {
+    "package": "yaml",
+    "version": "0.11.11.2"
+  },
+  {
+    "package": "zlib",
+    "version": "0.7.1.1"
+  }
+]
