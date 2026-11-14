@@ -6,7 +6,7 @@ module Main
   )
 where
 
-import BenchSetup (memoSetup, nextBoundedIteration, nextIteration, selected, selectedCounterWithCleanup, selectedWithCleanup, setupTrace)
+import BenchSetup (memoSetup, nextBoundedIteration, nextIteration, selected, selectedCounterWithCleanup, selectedWithCleanup, setupTrace, withRecordingTracer)
 import CommandProbe (commandPlanProbe, maintenanceProbe, rebuildCountProbe, tableResetProbe, workCountProbe)
 import Control.Concurrent (threadDelay)
 import Control.Monad (replicateM_)
@@ -98,6 +98,7 @@ import Kiroku.Store.Types
 import OpenTelemetry.MeterProvider (createMeterProvider, defaultSdkMeterProviderOptions)
 import OpenTelemetry.Metric.Core (getMeter)
 import OpenTelemetry.Resource (emptyMaterializedResources)
+import OpenTelemetry.Trace.Core (Tracer)
 import ProducerIdentityBench (producerIdentityBenchmarks, runProducerIdentityProbe)
 import ReadModelBench
   ( probeReadModelCounts,
@@ -158,43 +159,47 @@ main = do
   unless evidence ordinaryMain
 
 ordinaryMain :: IO ()
-ordinaryMain =
+ordinaryMain = withRecordingTracer $ \tracer ->
   withMigratedBenchmarkSuite \fixture ->
-    withFreshResourceStore fixture \(store, runner) ->
-      withFreshResourceStore fixture \(outboxStore, _) ->
-        withFreshResourceStore fixture \(inboxStore, _) ->
-          withFreshResourceStore fixture \(delegatedStore, _) ->
-            withFreshResourceStore fixture \(producerStore, _) ->
-              withFreshResourceStore fixture \(rebuildStore, _) ->
-                withFreshResourceStore fixture \(readModelStore, readModelRunner) -> do
-                  (provider, _env) <- createMeterProvider emptyMaterializedResources defaultSdkMeterProviderOptions
-                  meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
-                  metrics <- Telemetry.newKeiroMetrics meter
-                  producerCounter <- newIORef 0
-                  readModelSetup <- memoSetup do
-                    setupTrace "read-model" "shared" "schema history=25000"
-                    model <- setupReadModelBench readModelStore readModelRunner
-                    runReadModelExplainEvidenceIfRequested model
-                    runReadModelLatencyEvidenceIfRequested model
-                    pure model
-                  runInboxDelegatedExplainIfRequested delegatedStore
-                  producerProbe <- lookupEnv "KEIRO_BENCH_PRODUCER_PROBE"
-                  resetProbe <- lookupEnv "KEIRO_BENCH_RESET_PROBE"
-                  probe <- lookupEnv "KEIRO_BENCH_COMMAND_PROBE"
-                  if producerProbe == Just "1"
-                    then runProducerIdentityProbe producerStore
-                    else
-                      if probe == Just "1"
-                        then runCommandGrowthProbe store
-                        else
-                          if resetProbe == Just "1"
-                            then runResetProbes outboxStore inboxStore producerStore
-                            else
-                              defaultMain
-                                ( benchmarks store runner outboxStore inboxStore rebuildStore metrics (inboxDelegatedBenchmarks delegatedStore metrics)
-                                    <> [selectedWithCleanup readModelSetup probeReadModelCounts (\model -> readModelBenchmarks model !! groupIndex) | groupIndex <- [0 .. 2]]
-                                    <> producerIdentityBenchmarks producerStore producerCounter
-                                )
+    withFreshResourceStore fixture \(tracingCommandStore, _) ->
+      withFreshResourceStore fixture \(tracingDispatchStore, tracingRunner) ->
+        withFreshResourceStore fixture \(tracingOutboxStore, _) ->
+          withFreshResourceStore fixture \(store, runner) ->
+            withFreshResourceStore fixture \(outboxStore, _) ->
+              withFreshResourceStore fixture \(inboxStore, _) ->
+                withFreshResourceStore fixture \(delegatedStore, _) ->
+                  withFreshResourceStore fixture \(producerStore, _) ->
+                    withFreshResourceStore fixture \(rebuildStore, _) ->
+                      withFreshResourceStore fixture \(readModelStore, readModelRunner) -> do
+                        (provider, _env) <- createMeterProvider emptyMaterializedResources defaultSdkMeterProviderOptions
+                        meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+                        metrics <- Telemetry.newKeiroMetrics meter
+                        producerCounter <- newIORef 0
+                        readModelSetup <- memoSetup do
+                          setupTrace "read-model" "shared" "schema history=25000"
+                          model <- setupReadModelBench readModelStore readModelRunner
+                          runReadModelExplainEvidenceIfRequested model
+                          runReadModelLatencyEvidenceIfRequested model
+                          pure model
+                        runInboxDelegatedExplainIfRequested delegatedStore
+                        producerProbe <- lookupEnv "KEIRO_BENCH_PRODUCER_PROBE"
+                        resetProbe <- lookupEnv "KEIRO_BENCH_RESET_PROBE"
+                        probe <- lookupEnv "KEIRO_BENCH_COMMAND_PROBE"
+                        if producerProbe == Just "1"
+                          then runProducerIdentityProbe producerStore
+                          else
+                            if probe == Just "1"
+                              then runCommandGrowthProbe store
+                              else
+                                if resetProbe == Just "1"
+                                  then runResetProbes outboxStore inboxStore producerStore
+                                  else
+                                    defaultMain
+                                      ( tracingBenchmarks tracingCommandStore tracingDispatchStore tracingRunner tracingOutboxStore tracer
+                                          <> benchmarks store runner outboxStore inboxStore rebuildStore metrics (inboxDelegatedBenchmarks delegatedStore metrics)
+                                          <> [selectedWithCleanup readModelSetup probeReadModelCounts (\model -> readModelBenchmarks model !! groupIndex) | groupIndex <- [0 .. 2]]
+                                          <> producerIdentityBenchmarks producerStore producerCounter
+                                      )
 
 benchmarks :: Store.KirokuStore -> StoreRunner -> Store.KirokuStore -> Store.KirokuStore -> Store.KirokuStore -> Telemetry.KeiroMetrics -> [Benchmark] -> [Benchmark]
 benchmarks store runner outboxStore inboxStore rebuildStore metrics delegatedInboxBenchmarks =
@@ -1250,3 +1255,49 @@ runResetProbes outboxStore inboxStore producerStore = do
   tableResetProbe outboxStore "keiro.keiro_outbox" 2000 (outboxSeed outboxStore 2000)
   tableResetProbe inboxStore "keiro.keiro_inbox" 2000 inboxSeed
   tableResetProbe producerStore "keiro.keiro_outbox" 1000 (outboxSeed producerStore 1000)
+
+-- Fixed 100-command workloads; each scenario owns its own bounded namespace.
+tracingBenchmarks :: Store.KirokuStore -> Store.KirokuStore -> StoreRunner -> Store.KirokuStore -> Tracer -> [Benchmark]
+tracingBenchmarks store dispatchStore runner outboxStore tracer =
+  [ bgroup "tracing" $
+      [selected (prepareCommandStore store) $ \_ -> bgroup "command" [commandCell distinct traced | distinct <- [True, False], traced <- [False, True]]]
+        <> [publishCell traced | traced <- [False, True]]
+        <> [selected (prepareCommandStore dispatchStore) $ \_ -> bgroup "process-manager" [dispatchCell traced | traced <- [False, True]]]
+  ]
+  where
+    options traced = defaultRunCommandOptions & #tracer .~ (if traced then Just tracer else Nothing)
+    suffix traced = if traced then "/tracer" else ""
+    commandCell distinct traced =
+      let label = (if distinct then "append-distinct-streams" else "append-one-stream") <> suffix traced
+          action counter = do
+            iteration <- nextIteration label 100 counter
+            for_ [1 .. 100 :: Int] $ \index -> runStoreChecked store do
+              let target = stream ("tracing-" <> Text.pack label <> "-" <> Text.pack (show iteration) <> "-" <> Text.pack (show (if distinct then index else 0)))
+              result <- runCommand (options traced) legacyAcceptedOneStream target EmitOne
+              case result of
+                Right value | value ^. #eventsAppended == 1 -> pure ()
+                other -> liftIO (fail (show other))
+       in selectedCounterWithCleanup label 100 (prepareCommand store label 100 1000 action) (\n -> workCountProbe store (Text.pack label) ("tracing-" <> Text.pack label <> "-") (n * if distinct then 100 else 1) (n * 100)) $ \counter -> bench label (nfIO (action counter))
+    publishCell traced =
+      let label = "publish-backlog" <> suffix traced
+          action = do
+            runStoreChecked outboxStore (Store.runTransaction (Tx.sql "TRUNCATE keiro.keiro_outbox"))
+            seedOutbox outboxStore (scenarioMessages (const Nothing))
+            runStoreChecked outboxStore $ do
+              let drain = do
+                    backlog <- countOutboxBacklog
+                    when (backlog > 0) $ do
+                      void (publishClaimedOutbox (simulatedPublish (BrokerModel 0 0)) (defaultPublishOptions & #tracer .~ (if traced then Just tracer else Nothing)) Nothing)
+                      drain
+              drain
+       in selected (warmAction outboxStore "tracing" label action) $ \_ -> bench label (nfIO action)
+    dispatchCell traced =
+      let label = "dispatch" <> suffix traced
+          action counter = do
+            iteration <- nextIteration label 100 counter
+            runResourceStoreChecked runner $
+              for_ [1 .. 100 :: Int] $ \index -> do
+                let n = iteration * 100 + index
+                    input = FanoutInput (Text.pack label <> "-" <> Text.pack (show n)) 1
+                runDomainProcessManagerWorker (options traced) fanoutDomainProcessManager (fanoutAdapter input) (\message -> Just (iterationSourceEvent n, message))
+       in selectedCounterWithCleanup label 100 (prepareCommand dispatchStore label 100 1000 action) (\n -> workCountProbe dispatchStore (Text.pack label) ("bench-command-domain-process-manager:" <> Text.pack label <> "-") (n * 100) (n * 100)) $ \counter -> bench label (nfIO (action counter))

@@ -8,6 +8,7 @@ import Data.Text qualified as Text
 import Keiro.Test.Postgres (withFreshResourceStore, withMigratedSuite)
 import Retention.Legs (Leg (..), allLegs)
 import Retention.Measure
+import Retention.SpanOwnership qualified as SpanOwnership
 import System.Environment (lookupEnv)
 import Test.Hspec
 
@@ -16,7 +17,8 @@ main = do
   config <- gateConfigFromEnvironment
   selected <- selectLegs
   withMigratedSuite \fixture ->
-    hspec $
+    hspec $ do
+      SpanOwnership.spec
       describe "Retention legs" $
         forM_ selected \leg ->
           it (Text.unpack leg.legName) $

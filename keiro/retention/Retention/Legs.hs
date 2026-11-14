@@ -12,10 +12,13 @@ import Control.Concurrent.STM (atomically, putTMVar)
 import Control.Exception (evaluate, finally)
 import Control.Monad (forM_, unless, void, when)
 import Data.Aeson (toJSON)
+import Data.ByteString qualified as BS
 import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text.IO
+import Data.Time (UTCTime (..), secondsToDiffTime)
+import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Data.UUID qualified as UUID
 import Data.Vector qualified as Vector
 import Effectful (Eff, IOE, liftIO, (:>))
@@ -23,6 +26,8 @@ import Effectful.Exception qualified as Effectful
 import Keiro.Command (defaultRunCommandOptions)
 import Keiro.Command qualified as Command
 import Keiro.EventStream.Validate (unvalidated)
+import Keiro.Integration.Event (IntegrationContentType (..), IntegrationEvent (..))
+import Keiro.Outbox qualified as Outbox
 import Keiro.ProcessManager (defaultWorkerOptions, runProcessManagerWorkerWith)
 import Keiro.Projection (AsyncApplyOutcome (..), AsyncProjection (..), applyAsyncProjection)
 import Keiro.ReadModel.Schema (registerReadModel)
@@ -36,8 +41,10 @@ import Kiroku.Store.Subscription.Stream (AckItem (..), defaultStreamBufferSize, 
 import Kiroku.Store.Subscription.Types (SubscriptionConfig, SubscriptionName (..), SubscriptionResult (..), SubscriptionTarget (..), defaultSubscriptionConfig)
 import Kiroku.Store.Transaction qualified as StoreTx
 import Kiroku.Store.Types (CategoryName (..), EventData (..), EventId (..), EventType (..), ExpectedVersion (..), RecordedEvent, StreamName (..), StreamVersion (..))
+import OpenTelemetry.Trace.Core (Tracer)
 import Retention.Fixture (LedgerCommand (..), TargetCommand (..), TargetEventStream, ackAdapter, appendSignals, decodeSignal, ledgerTarget, retentionLedger, retentionManager, retentionRouter, retentionTargetStream, sampleOnAck, seedLedger, seedLedgerRaw)
 import Retention.Measure (GateConfig (..), HeapSample (..), Verdict (..), measureLeg, measureLegWithSampler, sampleHeap)
+import Retention.Tracing (withRecordingTracer)
 import Shibuya.Adapter (Adapter (..))
 import Shibuya.Adapter.Kiroku (defaultKirokuAdapterConfig, kirokuAdapter)
 import Shibuya.Core.Ack (AckDecision (..))
@@ -71,6 +78,10 @@ allLegs =
     Leg "hydrate-only" hydrateOnly,
     Leg "kiroku-read-tail" kirokuReadTail,
     Leg "command-short-history" commandShortHistory,
+    Leg "command-short-history-tracer" (\config handle -> withRecordingTracer (\tracer -> commandShortHistoryWithTracer (Just tracer) config handle)),
+    Leg "outbox-publisher" (outboxPublisher Nothing),
+    Leg "outbox-publisher-tracer" (\config handle -> withRecordingTracer (\tracer -> outboxPublisher (Just tracer) config handle)),
+    Leg "pm-worker-tracer" (\config handle -> withRecordingTracer (\tracer -> pmWorkerWithTracer (Just tracer) config handle)),
     Leg "command-long-history-verify-every" commandLongHistoryVerifyEvery
   ]
 
@@ -135,16 +146,19 @@ kirokuReadTail config (_, runner@(StoreRunner runStore)) = do
   pure measured
 
 commandShortHistory :: GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
-commandShortHistory config (_, StoreRunner runStore) = do
-  let options = defaultRunCommandOptions {Command.seedVerifySampleRate = 0}
-  measured <- measureLeg config "command-short-history" \index -> do
+commandShortHistory = commandShortHistoryWithTracer Nothing
+
+commandShortHistoryWithTracer :: Maybe Tracer -> GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
+commandShortHistoryWithTracer tracer config (_, StoreRunner runStore) = do
+  let options = defaultRunCommandOptions {Command.seedVerifySampleRate = 0, Command.tracer = tracer}
+  measured <- measureLeg config (maybe "command-short-history" (const "command-short-history-tracer") tracer) \index -> do
     let target = KeiroStream.stream ("retentiontarget-" <> Text.pack (show (index `mod` 16))) :: KeiroStream.Stream TargetEventStream
         expected = StreamVersion (fromIntegral ((index - 1) `div` 16 + 1))
     outcome <- runStore (Command.runCommand options retentionTargetStream target (Credit 1))
     case outcome of
       Right (Right result) | result.eventsAppended == 1 && result.streamVersion == expected -> pure ()
       other -> fail ("command-short-history: command " <> show index <> ": " <> show other)
-  postReturn "command-short-history" (operationCount config)
+  postReturn (maybe "command-short-history" (const "command-short-history-tracer") tracer) (operationCount config)
   pure measured
 
 baselineNoStore :: GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
@@ -298,17 +312,20 @@ consumeAdapter expected blockSize sample adapter = go 1 adapter.source
           when (index < expected) (go (index + 1) rest)
 
 pmWorker :: GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
-pmWorker config (store, runner@(StoreRunner runStore)) = do
+pmWorker = pmWorkerWithTracer Nothing
+
+pmWorkerWithTracer :: Maybe Tracer -> GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
+pmWorkerWithTracer tracer config (store, runner@(StoreRunner runStore)) = do
   appendSignals runner (operationCount config)
-  measured <- measureLegWithSampler config "pm-worker" \sample -> do
+  measured <- measureLegWithSampler config (maybe "pm-worker" (const "pm-worker-tracer") tracer) \sample -> do
     outcome <- runStore do
       adapter <- kirokuAdapter store (defaultKirokuAdapterConfig (SubscriptionName "retention-pm") sourceTarget)
       instrumented <- sampleOnAck (operationCount config) config.blockSize sample adapter
-      runProcessManagerWorkerWith defaultWorkerOptions defaultRunCommandOptions retentionManager instrumented decodeSignal
+      runProcessManagerWorkerWith defaultWorkerOptions (defaultRunCommandOptions {Command.tracer = tracer}) retentionManager instrumented decodeSignal
         `Effectful.finally` adapter.shutdown
     void (expectRight outcome)
   assertTargets runner (operationCount config) [0 .. 15] (\accountNumber -> length [index | index <- [1 .. operationCount config], index `mod` 16 == accountNumber])
-  postReturn "pm-worker" (operationCount config)
+  postReturn (maybe "pm-worker" (const "pm-worker-tracer") tracer) (operationCount config)
   pure measured
 
 routerWorker :: GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
@@ -373,3 +390,47 @@ postReturn name count = do
 
 expectRight :: (Show errorType) => Either errorType a -> IO a
 expectRight = either (fail . show) pure
+
+-- Processor discards finished spans; ownership is checked separately.
+outboxPublisher :: Maybe Tracer -> GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
+outboxPublisher tracer config (_, StoreRunner runStore) = do
+  let name = maybe "outbox-publisher" (const "outbox-publisher-tracer") tracer
+      options = Outbox.defaultPublishOptions {Outbox.tracer = tracer, Outbox.batchSize = 1}
+      message index =
+        IntegrationEvent
+          { messageId = Text.pack (show index),
+            source = "retention",
+            destination = "retention.events",
+            key = Nothing,
+            eventType = "Retention",
+            schemaVersion = 1,
+            contentType = ApplicationJson,
+            schemaReference = Nothing,
+            sourceEventId = Nothing,
+            sourceGlobalPosition = Nothing,
+            payloadBytes = BS.replicate 1024 65,
+            occurredAt = UTCTime (ModifiedJulianDay 61000) (secondsToDiffTime 0),
+            causationId = Nothing,
+            correlationId = Nothing,
+            traceContext = Nothing,
+            attributes = Nothing
+          }
+  -- A fixed backlog: enqueue outside the measured draining loop.
+  forM_ [1 .. operationCount config] \index ->
+    void (expectRight =<< runStore (Store.runTransaction (Outbox.enqueueIntegrationEventTx (Outbox.OutboxId (UUID.fromWords 0 0 0 (fromIntegral index))) (message index))))
+  measured <- measureLegWithSampler config name \sample -> do
+    count <- newIORef 0
+    let drain = do
+          summary <- expectRight =<< runStore (Outbox.publishClaimedOutbox (\rows -> pure [(row.outboxId, Outbox.PublishSucceeded) | row <- rows]) options Nothing)
+          when (summary.published == 0) (fail "outbox retention made no progress")
+          previous <- readIORef count
+          let next = previous + summary.published
+          -- Single-message passes keep sampling at exact operation counts.
+          atomicModifyIORef' count (const (next, ()))
+          when (next `mod` config.blockSize == 0) (sample next)
+          when (next < operationCount config) drain
+    drain
+  backlog <- expectRight =<< runStore Outbox.countOutboxBacklog
+  unless (backlog == 0) (fail "outbox retention did not drain backlog")
+  postReturn name (operationCount config)
+  pure measured

@@ -23,6 +23,11 @@ provenance:
       at: 2026-11-14T19:06:08Z
       mode: "update"
       note: "Apply review findings, reconcile ownership and acceptance gates, and verify available upstream releases."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-14T19:32:21Z
+      mode: "implement"
+      note: "Begin tracer benchmark and retention baseline implementation"
 ---
 
 # Establish tracing-enabled performance and retention baselines
@@ -50,9 +55,9 @@ produces the "before" measurement and the commit that later plans use as their b
 
 ## Progress
 
-- [ ] M1: `keiro-bench` has tracer-enabled cells for the command path, outbox publish, and
+- [x] M1 (2026-11-14): `keiro-bench` has tracer-enabled cells for the command path, outbox publish, and
   process-manager dispatch, each next to its no-tracer counterpart, and they run.
-- [ ] M2: `keiro-retention` has tracer-enabled legs for a command loop, a subscription worker
+- [x] M2 (2026-11-14): `keiro-retention` has tracer-enabled legs for a command loop, a subscription worker
   and the outbox publisher, each ending in a `Bounded` verdict on unchanged library code; a focused ownership probe proves payload collection while spans remain alive, and its
   deliberate span-retention negative control fails.
 - [ ] M3: Baseline numbers and the reproduction procedure are recorded under
@@ -61,7 +66,22 @@ produces the "before" measurement and the commit that later plans use as their b
 
 ## Surprises & Discoveries
 
-(None yet.)
+- The recording tracer uses a discard-on-end processor, with an explicit `isRecording` assertion.
+  Processor-free providers can take the SDK's dropped-span fast path; discarding avoids measuring
+  exporter accumulation. Library source is unchanged.
+- Focused acceptance: all eight tracing benchmark cells passed; six matched retention legs at
+  1,500 operations passed `Bounded` (traced command 486 B/op, publisher 243 B/op,
+  subscription 1,075 B/op; all growth below 1.1 MiB). Ownership: three examples passed.
+- A temporary span-owned payload attribute made the finished-span collection assertion fail
+  (`expected: True`, `but got: False`) using the command below; the perturbation was restored.
+
+```bash
+KEIRO_RETENTION_LEGS=baseline-no-store nix develop -c cabal test keiro-retention --test-show-details=direct --test-options='--match "collects payloads with finished"'
+```
+
+- Mori registry list/search could not connect to its database socket (remote tunnel timeout).
+  Dependency source inspection used the local checkout after those required lookup attempts.
+
 
 
 ## Decision Log
@@ -70,10 +90,9 @@ produces the "before" measurement and the commit that later plans use as their b
   Rationale: Resolve the recorded review findings before implementation; accepted durable constraints
   are recorded in [ADR-59](../adr/0059-durable-trace-correlation-preserves-replay-and-exact-wake-identity.md).
 
-- Decision: Tracer-enabled cells use a real tracer from a provider with no span processors.
+- Decision: Tracer-enabled cells use a real tracer with a discard-on-end processor.
   Rationale: The cost under test is Keiro's and the SDK's span and context work, not an
-  exporter. A provider without processors creates recording spans under the default sampler
-  with no I/O. Retention legs that must show a span not retaining data use the in-memory
+  exporter. An explicit `isRecording` check guards the recording path without I/O. Retention legs that must show a span not retaining data use the in-memory
   exporter instead, so finished spans stay referenced.
   Date: 2026-11-11
 
@@ -86,7 +105,14 @@ produces the "before" measurement and the commit that later plans use as their b
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Implementation checkpoint: recording benchmark pairs and retention/ownership probes are in place.
+M3 recording is next. Acceptance remains open: `nix develop -c mori terms validate --path .`
+fails because the registry database socket refuses connections. The broad `just verify` run
+passed the structural-enum mutation proof and consumer-enum literal proof, then was stopped
+at that boundary after the required terminology failure was established independently.
+A complete repository verification pass is still required after Mori connectivity returns.
+No dependent child may start until this prerequisite is accepted.
+
 
 
 ## Context and Orientation

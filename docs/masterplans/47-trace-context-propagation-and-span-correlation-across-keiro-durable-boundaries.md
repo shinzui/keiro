@@ -22,6 +22,11 @@ provenance:
       at: 2026-11-14T19:06:08Z
       mode: "update"
       note: "Apply review findings, reconcile ownership and acceptance gates, and verify available upstream releases."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-14T19:32:21Z
+      mode: "implement"
+      note: "Start EP-1 measurement prerequisite"
 ---
 
 # Trace context propagation and span correlation across Keiro durable boundaries
@@ -166,7 +171,7 @@ revises ADR-1.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Establish tracing-enabled performance and retention baselines | docs/plans/330-establish-tracing-enabled-performance-and-retention-baselines.md | None | None | Not Started |
+| 1 | Establish tracing-enabled performance and retention baselines | docs/plans/330-establish-tracing-enabled-performance-and-retention-baselines.md | None | None | In Progress |
 | 2 | Stamp trace context on appended events and name command spans by category | docs/plans/331-stamp-trace-context-on-appended-events-and-name-command-spans-by-category.md | EP-1 | None | Not Started |
 | 3 | Derive outbox creation context from source events and link it from the send span | docs/plans/332-derive-outbox-creation-context-from-source-events-and-link-it-from-the-send-span.md | EP-1, EP-2 | None | Not Started |
 | 4 | Open linked processing spans in subscription workers and the inbox consumer helper | docs/plans/333-open-linked-processing-spans-in-subscription-workers-and-the-inbox-consumer-helper.md | EP-1, EP-2, EP-5 | None | Not Started |
@@ -304,7 +309,12 @@ its timer/workflow path with directly supplied traced context and can complete b
 
 ## Progress
 
-No child plan has started. EP-1 can begin now. The external releases are available; EP-5
+EP-1 has eight working benchmark cells and six passing matched retention legs, plus a
+retained-span ownership probe whose controlled span-owned leak is detected. Baseline recording
+is in progress. Its acceptance is blocked by the unavailable Mori registry database:
+`nix develop -c mori terms validate --path .` fails with connection refused on the configured
+PostgreSQL socket. Repository verification remains incomplete; dependent children remain
+Not Started under the whole-child prerequisites. The external releases are available; EP-5
 awaits EP-1, and EP-4 awaits EP-1, EP-2 and EP-5. The combined command/worker/timer/workflow
 acceptance remains an initiative gate after both EP-4 and EP-6 complete.
 

@@ -1,9 +1,14 @@
 -- | Selection-aware fixture diagnostics shared by the benchmark groups.
-module BenchSetup (selected, selectedWithCleanup, memoSetup, setupTrace, freshCounter, nextIteration, nextBoundedIteration, selectedCounter, selectedCounterWithCleanup) where
+module BenchSetup (withRecordingTracer, selected, selectedWithCleanup, memoSetup, setupTrace, freshCounter, nextIteration, nextBoundedIteration, selectedCounter, selectedCounterWithCleanup) where
 
 import Control.Concurrent.MVar (modifyMVar, newMVar)
 import Control.DeepSeq (NFData (..))
+import Control.Exception (bracket)
+import Control.Monad (unless)
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
+import OpenTelemetry.Exporter.InMemory.Span (inMemoryListExporter)
+import OpenTelemetry.Processor.Span (SpanProcessor (..))
+import OpenTelemetry.Trace.Core
 import System.Environment (lookupEnv)
 import System.IO (hPutStrLn, stderr)
 import Test.Tasty.Bench (Benchmark, envWithCleanup)
@@ -70,3 +75,19 @@ selectedCounterWithCleanup label units acquire cleanup build =
         cleanup n
     )
     build
+
+-- Benchmark SDK work without exporting I/O or accumulating completed spans.
+-- Check recording explicitly: processor-free providers can be non-recording.
+withRecordingTracer :: (Tracer -> IO a) -> IO a
+withRecordingTracer action = bracket acquire (\(provider, _) -> shutdownTracerProvider provider Nothing) (action . snd)
+  where
+    acquire = do
+      (processor, _) <- inMemoryListExporter
+      -- Keep the SDK's recording path but discard completed spans immediately.
+      let discard = processor {spanProcessorOnEnd = const (pure ())}
+      provider <- createTracerProvider [discard] emptyTracerProviderOptions
+      let tracer = makeTracer provider "keiro-bench" tracerOptions
+      inSpan' tracer "recording-check" defaultSpanArguments $ \span -> do
+        recording <- isRecording span
+        unless recording (fail "benchmark tracer is not recording")
+      pure (provider, tracer)
