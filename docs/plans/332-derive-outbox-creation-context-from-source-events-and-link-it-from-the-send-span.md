@@ -11,6 +11,18 @@ provenance:
     model: "claude-fable-5-2"
     harness: "claude-code"
     at: 2026-11-12T04:43:48Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-14T18:45:33Z
+      verdict: "changes-requested"
+      note: "Capability activation still conflicts on replay of rows enqueued before activation; specify durable per-event cutover semantics and test activation and rollback."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-14T19:06:08Z
+      mode: "update"
+      note: "Apply review findings, reconcile ownership and acceptance gates, and verify available upstream releases."
 ---
 
 # Derive outbox creation context from source events and link it from the send span
@@ -33,8 +45,7 @@ span, `send <destination>`, has no relation to anything: no parent and no link. 
 is named and attributed from the first row, although a batch can contain several destinations.
 
 After this change, with tracing configured: an outbox row produced from a domain event carries
-that event's *creation context*, the identity of the command span that appended it, without the
-application doing anything; the Kafka headers carry it to consumers as they already would; and
+that event's *creation context*, the identity of the command span that appended it, after the application adopts a fixed producer cutover policy; the Kafka headers carry it to consumers as they already would; and
 the publisher's span is a root span with one *link* per row to that row's creation context. A
 link is OpenTelemetry's pointer from one span to another causally related span in a different
 trace. From a command's trace, a backend that follows links reaches the publish; from the
@@ -46,8 +57,8 @@ finding one `send` span with two links.
 
 ## Progress
 
-- [ ] M1: The rollout rule for the derived context is decided against ADR-42 and ADR-18 and
-  recorded; no code yet.
+- [ ] M1: The immutable producer cutover policy and activation/rollback fixtures satisfy ADR-42
+  and ADR-59; policy plumbing is explicit at every enqueue entry point.
 - [ ] M2: `enqueueProducerEventTx` fills a missing `traceContext` from the source event's
   metadata under that rule; replays stay identical; tests pass.
 - [ ] M3: The publisher's span is a root with one bounded link per row, correctly named for
@@ -62,6 +73,10 @@ finding one `send` span with two links.
 
 
 ## Decision Log
+
+- Decision (2026-11-14): Replace deployment toggles with immutable per-producer event-position cutovers and explicit rollback limits.
+  Rationale: Resolve the recorded review findings before implementation; accepted durable constraints
+  are recorded in [ADR-59](../adr/0059-durable-trace-correlation-preserves-replay-and-exact-wake-identity.md).
 
 - Decision: The context is derived from the source event's metadata at enqueue, not read from
   the current span.
@@ -103,9 +118,9 @@ finding one `send` span with two links.
 This is a child of
 `docs/masterplans/47-trace-context-propagation-and-span-correlation-across-keiro-durable-boundaries.md`.
 Prerequisites: `docs/plans/330-establish-tracing-enabled-performance-and-retention-baselines.md`
-Complete (tracer-enabled outbox benchmark cell and retention leg exist), and Milestone 1 of
+Complete (tracer-enabled outbox benchmark cell and retention leg exist), and
 `docs/plans/331-stamp-trace-context-on-appended-events-and-name-command-spans-by-category.md`
-accepted, which provides in `Keiro.Telemetry`:
+Complete, including its correlation ADR, which provides in `Keiro.Telemetry`:
 
 ```haskell
 traceContextFromMetadata :: Maybe Value -> Maybe TraceContext
@@ -114,8 +129,7 @@ creationLinkFromTraceContext :: TraceContext -> Maybe NewLink
 
 If `traceContextFromMetadata` does not exist in `keiro/src/Keiro/Telemetry.hs`, stop. Plan 331
 as a whole makes commands write `traceparent`/`tracestate` into the metadata of the events they
-append; this plan's enqueue tests can construct such events directly, so only Milestone 1 is
-required, but the feature is only useful in production once 331 is complete.
+append; this plan's enqueue tests can construct such events directly, but the full prerequisite is required because this plan extends its accepted correlation ADR.
 
 Run everything in the Nix development shell (`nix develop -c …`).
 
@@ -162,8 +176,8 @@ producer content digest covers "identity, routing, schema, payload, occurrence, 
 attributes, and provenance classes" and is a versioned contract. Read it in full before
 Milestone 1.
 [ADR-18](../adr/0018-runtime-semantics-use-capability-profiles-and-frozen-fold-identity.md):
-released runtime behaviour is selected by explicit, monotone capabilities. It is the mechanism
-to use if the derivation must be switched on per deployment.
+covers DSL capability profiles and fold identity; it is not a deployment switch available to
+`enqueueProducerEventTx`. [ADR-59](../adr/0059-durable-trace-correlation-preserves-replay-and-exact-wake-identity.md) specifies the producer cutover contract.
 [ADR-37](../adr/0037-outbox-publication-rejection-is-terminal-audit-truth.md): a rejected
 publication is a handled outcome, not a span error; keep that.
 [ADR-58](../adr/0058-benchmark-release-gates-require-isolated-fixed-workloads-and-attributed-baselines.md)
@@ -178,48 +192,58 @@ payload; a stored context must never change a replay or identity outcome.
 
 ## Plan of Work
 
-### Milestone 1: decide the rollout rule
+### Milestone 1: freeze the producer cutover
 
-The hazard is a mixed deployment. Suppose node A runs the new code and node B the old. A command
-on A appends an event whose metadata has `traceparent`. If B enqueues the outbox row first, the
-stored row has no trace context; if A then replays the enqueue, it derives one, the `TraceField`
-class differs, and the result is `ProducerIdentityConflict` for what is really a benign
-duplicate. The reverse order has the same effect.
+Follow ADR-42 and ADR-59. Add `ProducerTracePolicy = PreserveDraftTrace | DeriveTraceAfter GlobalPosition`
+to `Keiro.Outbox` and a strict `tracePolicy` field on `IntegrationProducer`. Existing constructors,
+examples, generated producers and fixtures explicitly use `PreserveDraftTrace`; update the DSL
+scaffolder and its golden/compile fixtures as part of this milestone. The existing enqueue
+signature is unchanged. This is a documented public record change.
 
-Read ADR-42 and ADR-18 and the code that selects capabilities, and choose between two rules;
-record the choice and its reasoning in the Decision Log and the parent MasterPlan before writing
-code.
+`DeriveTraceAfter cutoff` derives only when the source `RecordedEvent.globalPosition` is strictly
+greater than the immutable cutoff. Positions at or below it retain the old draft-only behavior,
+even when their metadata contains trace context. Explicit draft context always wins. Use the
+recorded event position, never the draft's optional overridden provenance position. The policy
+is application-owned durable configuration keyed by producer source/name and store identity;
+it must be identical on every worker and retained across restart, rollback and replay.
 
-Rule A, capability-gated: the derivation is part of a new named capability; a producer derives
-the context only when that capability is selected, and it is selected only once every node runs
-code that knows it. This is the conservative choice and the default recommendation.
+Activation requires pausing every producer worker for that identity, draining in-flight
+transactions, and pausing source writers long enough to establish a committed global-position
+high-water mark with no pending append that can commit below it. Persist that mark as the cutoff,
+upgrade all producer workers to policy-aware code with the same value, then resume writers and
+workers. No old worker may process post-cutover events. Existing installations default to the
+legacy policy until this explicit adoption; a new empty store may adopt a zero cutoff before
+starting writers. Do not recompute a cutoff at startup or advance it later.
 
-Rule B, conflict-tolerant: derivation is unconditional, and a conflict whose only differing
-class is `TraceField`, where one side is absent and the other equals the value derived from the
-source event, is treated as identical. This avoids a capability but changes
-`differingContentFields`' behaviour, which ADR-42 may forbid.
+A Boolean capability is insufficient: historical rows created while it was off still conflict
+after it turns on. Do not weaken `TraceField` comparison or copy existing row content over a
+new candidate to hide drift. Rollback after activation requires a policy-aware binary retaining
+the same cutoff; a pre-policy binary must remain stopped. Pausing workers is safe, disabling the
+policy after post-cutover enqueues is not.
 
-If neither fits what the ADRs allow, stop and raise it in the parent MasterPlan rather than
-inventing a third.
+Test pre-cutover traced events first enqueued by legacy code and replayed after activation,
+events exactly at the cutoff, post-cutover events across restart and supported rollback, explicit
+draft overrides, and changed explicit context still producing `ProducerIdentityConflict`.
+Repeat after successful-row GC to prove derivation does not depend on an existing outbox row.
 
 ### Milestone 2: derive at enqueue
 
 In `enqueueProducerEventTx`, extend the existing provenance defaulting so that
 `traceContext` becomes `(draft ^. #traceContext) <|> traceContextFromMetadata (recorded ^. #metadata)`
-under the rule chosen in Milestone 1. An explicit draft value always wins. The inline path
+only for `DeriveTraceAfter cutoff` events above the cutoff. An explicit draft value always wins. The inline path
 `enqueueIntegrationEventTx` is unchanged, because it has no source event; document on it that an
 application wanting trace context there must capture it before the transaction with
 `traceContextFromCurrentSpan` and that a replay must supply the same value.
 
 This path is tracer-independent by design: the value is copied from stored data, so it is the
 same whether or not the enqueuing process has a tracer, which is what keeps replays identical.
-It costs one metadata lookup per enqueue.
+The legacy policy performs no metadata lookup. The derived policy pays one position comparison
+and, for eligible events without explicit context, one metadata lookup per enqueue.
 
 Tests: a source event with `traceparent` metadata yields a row whose `traceContext` equals it and
 Kafka headers that carry it; a source event without it yields no trace context, exactly as
 before; an explicit draft value wins; enqueuing the same source event twice returns
-`ProducerDuplicateIdentical`; the mixed-deployment sequences from Milestone 1 behave as the
-chosen rule specifies; `producerContentDigest` for an event without trace context is unchanged
+`ProducerDuplicateIdentical`; the activation and supported rollback sequences from Milestone 1 remain identical; `producerContentDigest` for an event without trace context is unchanged
 from before this plan (assert against a literal captured from the current code).
 
 ### Milestone 3: the send span
@@ -262,12 +286,14 @@ Add benchmark cells for publishing a backlog whose rows all carry distinct creat
 with and without a tracer, and one for enqueue with a source event that carries context. Compare
 with a worktree of the previous plan's last commit using the procedure recorded by plan 330.
 Reading rule: no-tracer publish cells unchanged in allocation; the tracer publish cell increases
-by one link with a one-entry map per row up to 128, recorded per row; enqueue cells increase by
-one metadata lookup, and `ProducerIdentityBench` is unchanged. Anything else stops the plan.
+by one link with a one-entry map per row up to 128, recorded per row; eligible derived-policy enqueue cells add one position comparison and one metadata lookup;
+legacy-policy `ProducerIdentityBench` behavior and content bytes are unchanged. Measure explicit
+context and pre-cutover cases separately, since they bypass metadata derivation. Anything else stops the plan.
 
 Add a tracer-enabled retention leg for publishing a long backlog of rows with distinct contexts,
-using the in-memory exporter held for a window, and assert that rows are collected while spans
-are alive (`Bounded`). Run the whole retention suite.
+with a bounded exporter window and require `Bounded`. Extend plan 330's separate ownership
+probe with the real batch-link builder, including mixed destinations and more than 128 rows;
+assert payload collection while spans remain alive. Run the whole retention suite.
 
 ### Milestone 5: documents
 
@@ -276,8 +302,8 @@ Update the "Outbox enqueue" and "Outbox publish" sections of
 `docs/capabilities/opentelemetry-instrumentation.md` (valid frontmatter, new evidence), and the
 changelog (behaviour change: the send span's name for mixed batches and its attribute set).
 Extend the correlation ADR created by plan 331 with the outbox rules: derivation from the source
-event, the rollout rule, links on the send span and the bound. If Milestone 1 chose a
-capability, document it wherever capabilities are listed. Mark this plan Complete in the parent
+event, the rollout rule, links on the send span and the bound. Document the immutable cutoff, the quiescent activation procedure and the minimum rollback
+version in the producer guide. Keep ADR-42's strict conflict semantics unchanged. Mark this plan Complete in the parent
 MasterPlan and update Progress.
 
 
@@ -308,7 +334,7 @@ bounds batch links at 128
 
 ## Validation and Acceptance
 
-Enqueuing from an event whose metadata has `traceparent T` stores a row with trace context `T`
+With a fixed `DeriveTraceAfter` policy, enqueuing from an eligible event whose metadata has `traceparent T` stores a row with trace context `T`
 and publishes a Kafka record whose `traceparent` header is `T`; replaying the enqueue reports an
 identical duplicate. Before this plan the row and header are empty unless the application set
 them.
@@ -318,23 +344,21 @@ commands' spans. Before this plan it yields a span with no links.
 
 The digest of an event without trace context is byte-identical to before.
 
-`keiro-test`, `keiro-retention` and `just verify` pass; the benchmark comparison shows no
-allocation change in no-tracer cells and the recorded, explained change in tracer cells.
+`keiro-test`, `keiro-retention` and `just verify` pass; the benchmark comparison shows no allocation change in no-tracer publisher cells and legacy
+enqueue cells, and attributes the derived-policy lookup cost separately from tracer costs.
 
 
 ## Idempotence and Recovery
 
-Source edits only; no schema change, since the outbox table already has trace columns. All
-commands are repeatable against throwaway databases. If the rollout rule is a capability,
-turning it off restores the previous enqueue behaviour without data repair; rows already stored
-with a derived context remain valid and replay identically while the capability stays on. Do not
-toggle the capability off and on across replays of the same source events without reading the
-rollout section of the ADR this plan writes.
-
+Source edits only; the outbox table already has trace columns. Tests use throwaway databases.
+Before activation the legacy policy remains safe on both binaries. After activation retain the
+same persisted cutoff on every restart and rollback; never run a pre-policy binary for that
+producer. There is no safe toggle back to draft-only behavior for post-cutover source events.
+Replaying pre-cutover events remains draft-only, including after outbox garbage collection.
 
 ## Interfaces and Dependencies
 
-Prerequisites: plan 330 Complete; plan 331 Milestone 1 accepted. No new package dependency.
+Prerequisites: plans 330 and 331 Complete. No new package dependency.
 
 Uses `Keiro.Telemetry.traceContextFromMetadata` and `creationLinkFromTraceContext`;
 `OpenTelemetry.Trace.Core` (`NewLink`, `SpanArguments.links`);
@@ -353,4 +377,5 @@ withProducerBatchSpan ::
 If `Keiro.Telemetry` cannot import `OutboxRow` without a module cycle, take a list of
 `(messageId, destination, Maybe TraceContext)` triples instead and note it here.
 
-New attribute key `keiro.outbox.links.dropped`. No other plan depends on this one.
+`IntegrationProducer.tracePolicy` and `ProducerTracePolicy` are owned here, including generated
+producer construction sites. New attribute key `keiro.outbox.links.dropped`. No other plan depends on this one.

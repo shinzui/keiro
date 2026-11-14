@@ -11,6 +11,18 @@ provenance:
     model: "claude-fable-5-2"
     harness: "claude-code"
     at: 2026-11-12T04:43:48Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-14T18:45:33Z
+      verdict: "changes-requested"
+      note: "Resume context needs snapshot-aware metadata recovery and exact wake identity; latest StepRecorded need not be the waking event. Reconcile EP-4 acceptance prerequisite."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-14T19:06:08Z
+      mode: "update"
+      note: "Apply review findings, reconcile ownership and acceptance gates, and verify available upstream releases."
 ---
 
 # Persist trace context on timers and workflow journals and link it on fire and resume
@@ -36,7 +48,7 @@ After this change, with a tracer configured: a timer remembers the trace context
 current when it was scheduled, and firing it opens a span that *links* to that context; a
 workflow's journal events remember the context that was current when each was appended, and a
 resumed run's span links to the context of the step that woke it and to the context of the
-workflow's start. A link is OpenTelemetry's pointer from one span to a causally related span in
+generation's journal origin (the first persisted journal event). A link is OpenTelemetry's pointer from one span to a causally related span in
 another trace, the right relation when the earlier work finished long ago. Someone can see it
 by scheduling a timer inside a traced command, letting the worker fire it, and finding the
 fire span linked to the command.
@@ -45,11 +57,11 @@ fire span linked to the command.
 ## Progress
 
 - [ ] M1: A forward migration adds nullable trace columns to the timers table; the expected
-  schema snapshot is regenerated; migration tests pass.
+  schema snapshot is regenerated; a nullable workflow trace-await hint is added; migration tests pass.
 - [ ] M2: Timers store a supplied trace context, Keiro's own scheduling call sites supply it
   when a tracer is configured, and the timer worker opens a linked span per fired timer.
 - [ ] M3: Workflow journal appends are stamped with the current context, and a resumed run's
-  span links to the waking step and the start.
+  span links to the exact awaited step and the journal origin, including with snapshots.
 - [ ] M4: Benchmark and retention gates pass; costs recorded.
 - [ ] M5: Documents and the correlation ADR updated; parent MasterPlan updated.
 
@@ -61,6 +73,10 @@ fire span linked to the command.
 
 ## Decision Log
 
+- Decision (2026-11-14): Use exact trace-await hints and bounded event lookups independent of snapshots; label journal origin honestly.
+  Rationale: Resolve the recorded review findings before implementation; accepted durable constraints
+  are recorded in [ADR-59](../adr/0059-durable-trace-correlation-preserves-replay-and-exact-wake-identity.md).
+
 - Decision: Timer trace context is stored in two new nullable columns, not inside `payload`.
   Rationale: `payload` is opaque application data that Keiro does not interpret; putting
   framework keys in it would change what applications read back. The outbox and inbox tables
@@ -70,12 +86,15 @@ fire span linked to the command.
 - Decision: Workflow context is stored in journal event metadata under the same keys as domain
   events, not on the derived instance row.
   Rationale: The journal is the workflow's durable record; each wake appends a journal event,
-  so the waking context is naturally per event. No schema change is needed.
+  so the waking context is naturally per event. A nullable `trace_awaited_step` on the current
+  workflow instance records which step a traced run suspended on; it stores no context and
+  does not control readiness or replay. ADR-59 defines its lifecycle.
   Date: 2026-11-11
 
 - Decision: Resume links are added after the journal is read, with `addLink`, rather than in
   the span's creation arguments.
-  Rationale: The contexts to link are in the journal, which is read inside the workflow span.
+  Rationale: The contexts are fetched by bounded origin and exact-event lookups inside the workflow span,
+  independently of snapshot hydration.
   Opening the span later would leave journal replay untraced. The cost is that samplers cannot
   see these links; record it as a known limitation.
   Date: 2026-11-11
@@ -144,7 +163,8 @@ edit a shipped migration, schema-qualify every object, regenerate the expected-s
 [ADR-9](../adr/0009-keiro-owns-live-schema-verification-under-pg-migrate.md) covers live schema
 verification.
 
-Relevant ADRs: ADR-9 above;
+Relevant ADRs: ADR-9 above; [ADR-59](../adr/0059-durable-trace-correlation-preserves-replay-and-exact-wake-identity.md) for exact wake identity and snapshot-independent lookup;
+[ADR-6](../adr/0006-workflow-wake-source-rows-govern-exposure-and-terminal-races.md) for wake races;
 [ADR-58](../adr/0058-benchmark-release-gates-require-isolated-fixed-workloads-and-attributed-baselines.md)
 and
 [ADR-48](../adr/0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md)
@@ -154,10 +174,15 @@ for Milestone 4;
 freeze workflow replay identity: journal *metadata* must not influence replay, and Milestone 3
 includes a check that it does not. Plan 331 creates the correlation ADR that this plan extends.
 
-The contract from the parent MasterPlan: with no tracer nothing new is computed or stored
-(columns and metadata keys stay absent); with a tracer, one context read per schedule or journal
+The contract from the parent MasterPlan: without a tracer no context is captured and no
+metadata key or trace hint is populated (an existing hint is cleared on untraced suspension); with a tracer, one context read per schedule or journal
 append and at most two links per resume; stored context never changes a replay; nothing
 reachable from a span references a timer payload or journal event.
+
+
+The actual instance table is `keiro.keiro_workflows`, managed by
+`keiro/src/Keiro/Workflow/Instance.hs` and its schema module. Update every upsert deliberately
+so same-generation wake writes preserve the trace hint and generation changes clear it.
 
 
 ## Plan of Work
@@ -167,6 +192,7 @@ reachable from a span references a timer payload or journal event.
 Create a forward migration adding `traceparent text` and `tracestate text`, both nullable with
 no default, to `keiro.keiro_timers`. Adding nullable columns without defaults does not rewrite
 the table. Follow the README: generate the file with `keiro-migrate new`, run `check`,
+also add nullable `trace_awaited_step text` to `keiro.keiro_workflows`,
 regenerate the expected-schema snapshot, and run the migrations test suite. Old code that does
 not name the columns in its inserts keeps working against the new schema, which is what makes a
 rolling deployment safe; confirm every existing insert and select names its columns explicitly.
@@ -218,18 +244,47 @@ Confirm journal metadata does not influence replay: read how journal events are 
 folded, and add a test that replays one journal twice, once with and once without trace keys in
 metadata, and gets identical results and identical replay digests.
 
-Link on resume. In `runActive`, after the journal has been read for a run that is a resume,
-collect at most two contexts from the journal events' metadata with `traceContextFromMetadata`:
-the first journal event's (the start) and the most recent wake's (the last `StepRecorded` that
-was not written by this run). Add them to the workflow span with `addLink`, each with a
-one-entry attribute map `keiro.workflow.link = "start"` or `"wake"`; when both are the same
-context, add one. A first run adds nothing. Do this only when the tracer is set. Extend
-`withWorkflowSpan` or its body as needed, keeping its pass-through behaviour.
+Link on resume without changing `loadJournal` or the snapshot format. That function returns
+only a step-result map and deliberately skips snapshotted history, so its result cannot supply
+trace metadata. In `Workflow/Instance.hs`, extend the existing suspension transaction under
+`workflowStepLockKey` to persist `trace_awaited_step = awaitedStep` for a traced suspension,
+even when a racing wake makes the resulting status `running`. For untraced suspensions write
+NULL so a previous traced wait cannot become a stale attribution. Wake upserts preserve the
+hint within the same generation; rotation clears it; terminal transitions clear it. The hint
+is telemetry only and must never affect claims, readiness, lifecycle arbitration or replay.
 
-Tests: a workflow that sleeps and is resumed by the timer worker exports a resume span with a
-`wake` link to the timer fire span and a `start` link to the first run's workflow span; a
-workflow resumed by a signal links to the signalling caller's span; a first run has no links;
-no tracer, no metadata keys and no links; the replay-equality test above.
+At traced run entry, read the generation and hint before interpretation changes the instance.
+A non-null hint identifies the last suspension; do not substitute the latest journal step.
+Fetch its exact event using `deterministicJournalId name wid generation awaitedStep` and
+`Kiroku.Store.Read.getEvent`, then confirm the returned stream and decoded step key match.
+Read the generation's first persisted event separately with a one-event read from version zero.
+These two lookups work even when both events precede the snapshot boundary; do not scan the
+journal, retain its payloads, or extend the snapshot state with trace data. Kiroku API source:
+`mori://shinzui/kiroku/packages/kiroku-store` (`src/Kiroku/Store/Read.hs`, artifact-level source URI pending).
+
+Add at most two evaluated links with `keiro.workflow.link = "origin"` or `"wake"` after those
+lookups. Deduplicate equal contexts, preferring the `wake` label. "Origin" means the first
+persisted event in this generation, not necessarily the first workflow invocation: a workflow
+that sleeps before recording any step may first journal the wake itself. Never fabricate a
+first-run context in that case. A first invocation without a prior hint has no resume links.
+Cancellation without a journal event, missing history, malformed metadata, and legacy instances
+without a hint omit the unavailable link. A later signal for a different awakeable cannot
+replace the exact awaited event. Tracer-free runs perform neither lookup. Open resume spans in
+an empty context and restore the ambient context on success, failure and cancellation.
+
+Wake APIs such as `signalAwakeable` currently have no tracer options. Preserve their current
+signatures as untraced wrappers and add explicitly traced variants taking `Maybe Tracer`, with
+metadata captured before `prepareJournalAppend`. Thread the configured tracer through sleep
+fire and child-completion paths; do not infer enablement solely from ambient context. Repeated
+append of an existing step preserves its original journal metadata.
+
+Tests cover sleep, signal and child wakes; an unrelated later step/signal; a snapshot beyond
+both origin and wake; missing or malformed context; generation rotation; first-step sleep;
+wake-before-suspend and suspend-before-wake races; cancellation with no journal event; repeated
+resume after failure; and untraced suspension following a traced one. Assert identical outcomes,
+step results, replay digests and claim behavior with tracing off/on. For a workflow that records
+a step before sleeping, the resume has `origin` pointing to that first run and `wake` pointing
+to the timer fire. An ownership probe keeps spans alive while the fetched event payloads collect.
 
 ### Milestone 4: gates
 
@@ -237,8 +292,11 @@ Add benchmark cells, with and without a tracer, for scheduling and firing a fixe
 timers and for a workflow that suspends and resumes a fixed number of times. Compare against a
 worktree of the previous plan's last commit using the procedure plan 330 recorded. Reading
 rule: no-tracer cells unchanged in allocation except for the two extra null columns per timer
-row read, which should be negligible and must be stated; tracer cells increase by one context
-read and two short strings per schedule or journal append, and one span per fire; record each.
+row read and the nullable trace-await hint in the existing suspension write; measure and
+attribute these additive schema costs explicitly rather than claiming zero allocation; tracer cells increase by one context
+read and two short strings per schedule or journal append, one span per fire, and at most
+two event lookups plus a trace-hint read per traced resume; record each. Include long-journal
+snapshot cases to establish that tracing does not introduce a full-history scan.
 Anything else stops the plan.
 
 Add tracer-enabled retention legs for a long run of timer fires and for a workflow with a long
@@ -252,7 +310,9 @@ Update the "Timer fire" and "Workflow run" sections of
 the migrations guide's list of migrations if it has one, and the changelog (new migration,
 `TimerRequest` field, `TimerWorkerOptions.tracer`, new spans and links). Extend the correlation
 ADR with: where timer and workflow contexts are stored; resume links use `addLink` and why;
-journal metadata is excluded from replay. Mark this plan Complete in the parent MasterPlan and
+journal metadata is excluded from replay; exact wake hints and bounded snapshot-independent
+lookups follow ADR-59; missing evidence omits a link. EP-4 is not a completion prerequisite: the
+combined chain is a separate initiative release gate. Mark this plan Complete in the parent MasterPlan and
 update Progress.
 
 
@@ -280,7 +340,7 @@ Expected new test lines:
 ```text
 a timer stores the scheduling span's context
 firing a timer opens a root span linked to the scheduling span
-a resumed workflow links to the wake and to the start
+a resumed workflow links to the exact wake and journal origin across snapshots
 journal metadata does not affect replay
 ```
 
@@ -292,7 +352,9 @@ Scheduling a timer inside a traced command and letting the worker fire it export
 span is exported for the fire.
 
 A workflow that sleeps and resumes exports two `workflow <name>` spans; the second carries a
-`wake` link to the timer fire span and a `start` link to the first. Before this plan the second
+`wake` link to the timer fire span and an `origin` link to the first recorded step's span
+when the workflow records a step before sleeping. The same assertions pass with a snapshot
+beyond both events and an unrelated later signal. Before this plan the second
 has no links.
 
 Replaying a journal with and without trace metadata gives identical results. The migration
@@ -307,7 +369,9 @@ benchmark comparison matches the reading rule with costs recorded here.
 
 The migration is forward-only and additive; never edit it after it ships, and correct mistakes
 with a further migration. It is safe to apply before deploying the new code. Rolling back the
-code leaves two unused nullable columns and extra metadata keys that older code ignores. If
+code leaves unused nullable columns and extra metadata keys that older code ignores. Before
+re-enabling traced resumes after an old binary has run, clear trace-await hints while workers
+are stopped: old code cannot maintain them. Missing hints safely omit wake links. If
 `keiro-migrate new` was run twice, delete the unwanted file and its manifest line before
 committing, and re-run `check`. Tests use throwaway databases.
 
@@ -346,5 +410,7 @@ withTimerFireSpan ::
 ```
 
 New attribute keys: `keiro.timer.id`, `keiro.timer.process_manager`, `keiro.timer.fire_lag`,
-`keiro.workflow.link`. New table columns: `keiro.keiro_timers.traceparent`, `.tracestate`.
+`keiro.workflow.link`. New table columns: `keiro.keiro_timers.traceparent`, `.tracestate`, and
+`keiro.keiro_workflows.trace_awaited_step`. The exact wake query is keyed by workflow
+name, ID, generation and step name; no new snapshot format or trace-driven readiness rule.
 No other plan depends on this one.

@@ -10,6 +10,18 @@ provenance:
     model: "claude-fable-5-2"
     harness: "claude-code"
     at: 2026-11-12T04:43:48Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-14T18:45:33Z
+      verdict: "changes-requested"
+      note: "Resolve EP-4/EP-6 acceptance ordering, outbox cutover replay compatibility, workflow context selection and snapshot recovery, and span-retention evidence."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-14T19:06:08Z
+      mode: "update"
+      note: "Apply review findings, reconcile ownership and acceptance gates, and verify available upstream releases."
 ---
 
 # Trace context propagation and span correlation across Keiro durable boundaries
@@ -68,7 +80,7 @@ After this initiative, with a tracer configured:
   context follows the policy of the Shibuya adapter in use, as defined by `shibuya-core` 0.13.
 - Command spans have one name per category.
 
-None of this may cost anything when no tracer is configured, which is how most tests and many
+Span creation, context capture and decoding must be bypassed when no tracer is configured, which is how most tests and many
 deployments run, and it may not make a span keep message data alive. Keiro has benchmark and
 heap-retention release gates; this initiative extends them to tracer-enabled runs before
 changing behaviour and holds every change to them.
@@ -106,7 +118,7 @@ the plan that closes the causal chain, and the only one that needs a new functio
 `shibuya-core`.
 
 `keiro-pgmq` (EP-5) is separate because it is a different package with its own decision record
-and tests, and it is blocked on two external releases rather than on Keiro work.
+and tests, and it owns the dependency migration after the measurement baseline.
 
 Timers and workflows (EP-6) are separate because they need a schema migration and have their
 own retention concerns.
@@ -116,7 +128,7 @@ was rejected: enqueue runs inside a database transaction with no access to the t
 context that differs between a first attempt and a replay would be reported as an identity
 conflict, since trace headers are part of the frozen producer content digest
 ([ADR-42](../adr/0042-producer-outbox-identity-is-a-versioned-source-event-contract.md)).
-Deriving it from the source event's metadata is deterministic. Routing subscription workers
+Deriving it from the source event's metadata is deterministic under the immutable producer cutoff in ADR-59. Routing subscription workers
 through Shibuya's runner to obtain its span was rejected for the reason
 [ADR-1](../adr/0001-keiro-pgmq-job-processing-telemetry-contract.md) gives for the bounded
 drain: it would change delivery semantics to obtain telemetry. A single ExecPlan was rejected
@@ -136,8 +148,9 @@ Relevant ADRs, read for this plan:
   [ADR-48](../adr/0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md):
   how benchmark and heap-retention evidence must be produced. EP-1 follows both.
 - [ADR-18](../adr/0018-runtime-semantics-use-capability-profiles-and-frozen-fold-identity.md):
-  released runtime behaviour is selected by explicit capabilities. EP-3 uses it to decide how
-  the new derivation is rolled out.
+  DSL capability profiles freeze fold identity; they do not provide a producer deployment switch.
+- [ADR-59](../adr/0059-durable-trace-correlation-preserves-replay-and-exact-wake-identity.md): fixed producer cutovers, exact wake selection and span-ownership acceptance
+  are the accepted constraints for EP-1, EP-3 and EP-6; implementation is still pending.
 
 The Shibuya side of this work is
 `mori://shinzui/shibuya/masterplans/8-configurable-trace-correlation-for-consumer-spans`, which
@@ -155,9 +168,9 @@ revises ADR-1.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Establish tracing-enabled performance and retention baselines | docs/plans/330-establish-tracing-enabled-performance-and-retention-baselines.md | None | None | Not Started |
 | 2 | Stamp trace context on appended events and name command spans by category | docs/plans/331-stamp-trace-context-on-appended-events-and-name-command-spans-by-category.md | EP-1 | None | Not Started |
-| 3 | Derive outbox creation context from source events and link it from the send span | docs/plans/332-derive-outbox-creation-context-from-source-events-and-link-it-from-the-send-span.md | EP-1, EP-2 M1 | EP-2 | Not Started |
-| 4 | Open linked processing spans in subscription workers and the inbox consumer helper | docs/plans/333-open-linked-processing-spans-in-subscription-workers-and-the-inbox-consumer-helper.md | EP-1, EP-2, Shibuya gate | None | Not Started |
-| 5 | Align keiro-pgmq job spans with Shibuya 0.13 and expose the correlation policy | docs/plans/334-align-keiro-pgmq-job-spans-with-shibuya-0-13-and-expose-the-correlation-policy.md | Shibuya gate, PGMQ adapter gate | EP-1 | Not Started |
+| 3 | Derive outbox creation context from source events and link it from the send span | docs/plans/332-derive-outbox-creation-context-from-source-events-and-link-it-from-the-send-span.md | EP-1, EP-2 | None | Not Started |
+| 4 | Open linked processing spans in subscription workers and the inbox consumer helper | docs/plans/333-open-linked-processing-spans-in-subscription-workers-and-the-inbox-consumer-helper.md | EP-1, EP-2, EP-5 | None | Not Started |
+| 5 | Align keiro-pgmq job spans with Shibuya 0.13 and expose the correlation policy | docs/plans/334-align-keiro-pgmq-job-spans-with-shibuya-0-13-and-expose-the-correlation-policy.md | EP-1, Shibuya gate, PGMQ adapter gate | None | Not Started |
 | 6 | Persist trace context on timers and workflow journals and link it on fire and resume | docs/plans/335-persist-trace-context-on-timers-and-workflow-journals-and-link-it-on-fire-and-resume.md | EP-1, EP-2 | EP-4 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -168,35 +181,28 @@ accepted output is needed, name it explicitly (e.g., EP-1 M1) and explain it bel
 
 ## Dependency Graph
 
-EP-1 blocks EP-2, EP-3, EP-4 and EP-6 as a whole: each compares its working tree against a
+EP-1 blocks EP-2, EP-3, EP-4, EP-5 and EP-6 as a whole: each compares its working tree against a
 baseline that must already contain the tracer-enabled benchmark cells and retention legs.
 
-EP-2 blocks EP-4 and EP-6 as a whole, because both read the context EP-2 writes and their tests
-depend on stamped events. EP-3 needs only EP-2's first milestone, whose accepted output is the
-metadata keys and the functions `traceContextFromMetadata` and `stampTraceContext` in
-`Keiro.Telemetry` with `keiro-test` passing; EP-3 does not need the command span rename.
+EP-2 blocks EP-3, EP-4 and EP-6 as a whole: consumers use its helpers and extend its
+correlation ADR. EP-5 owns the repository-wide dependency bump and completes before EP-4,
+so there is one owner for adapter construction changes and common tracing tests.
 
-Two gates are outside this repository.
+The external release gates were verified on 2026-11-14 against Hackage package registries and
+upstream tags: `shibuya-core` 0.13.0.1 (`v0.13.0.1`), `shibuya-pgmq-adapter` 0.19.0.0
+(`v0.19.0.0`) and `shibuya-kiroku-adapter` 0.8.0.0
+(`shibuya-kiroku-adapter-v0.8.0.0`). They are available. EP-5 adopts
+`shibuya-core ^>=0.13.0.1` and the matching adapter bounds across all packages, including
+DSL tests, and verifies a complete dependency solve in the Nix shell.
 
-The Shibuya gate: `shibuya-core` 0.13.0.0 published on Hackage. It provides the
-`TraceCorrelation` policy, the `AdapterTelemetry` record on `Adapter`, the link helper, the
-processing span named `process <destination>`, and the shared span function `withProcessSpan`.
-It is produced by `mori://shinzui/shibuya/masterplans/8-configurable-trace-correlation-for-consumer-spans`.
-Keiro's bound is `shibuya-core ^>=0.12.0.0`, so EP-4 and EP-5 cannot build until it is raised.
-Raising it is itself a breaking change for Keiro's in-memory adapters and tests, which construct
-`Adapter` records; whichever of EP-4 and EP-5 starts first performs the bump for the whole
-repository and records it here.
+The upstream work is recorded in
+`mori://shinzui/shibuya/masterplans/8-configurable-trace-correlation-for-consumer-spans`,
+`mori://shinzui/shibuya/plans/58-adopt-trace-correlation-in-the-pgmq-adapter`, and
+`mori://shinzui/shibuya/plans/59-adopt-trace-correlation-in-the-kiroku-adapter-with-a-link-only-default`.
 
-The PGMQ adapter gate: a `shibuya-pgmq-adapter` release built against `shibuya-core` 0.13 with
-the `telemetry` field on `PgmqAdapterConfig`, produced by
-`mori://shinzui/shibuya/plans/58-adopt-trace-correlation-in-the-pgmq-adapter`. EP-5 needs it.
-The retention suite uses `shibuya-kiroku-adapter`, so the matching Kiroku adapter release
-(`mori://shinzui/shibuya/plans/59-adopt-trace-correlation-in-the-kiroku-adapter-with-a-link-only-default`)
-is needed by whichever plan performs the bump.
-
-Until those gates pass, EP-1, EP-2, EP-3 and EP-6 can proceed in that order; none of them needs
-Shibuya 0.13. EP-6 lists EP-4 as a soft dependency only because a timer fired from inside a
-subscription worker gets a better creation context once EP-4 exists.
+Execution order is EP-1, EP-2, EP-3, EP-5, EP-4, EP-6. If a new external compatibility blocker
+prevents EP-5, EP-6 may instead complete after EP-3: EP-4 remains a soft dependency for EP-6,
+and the combined EP-4/EP-6 check is an initiative release gate, not child acceptance.
 
 EP-2, EP-3, EP-4 and EP-6 all touch `Keiro.Telemetry` and the same benchmark and retention
 suites. Run them one at a time, each taking its baseline at the previous plan's last commit, so
@@ -240,33 +246,45 @@ other work.
 **The no-tracer, cost and retention contract.** Defined by EP-1 as executable gates; every
 later plan must pass them and extend them to its new path.
 
-1. With no tracer configured, nothing new is allocated or computed: no context is read, no
-   metadata is modified, no header is decoded. Existing benchmark cells show no allocation
-   change.
+1. With no tracer configured, span helpers capture no context and decode no headers. Existing
+   no-tracer publisher/command cells show no allocation change. Durable producer derivation is
+   deliberately tracer-independent under its explicit policy; its lookup cost is measured
+   separately. EP-6 attributes additive nullable-column costs in timer reads and suspension writes.
 2. With a tracer, added work per unit is a bounded constant: one context read and two metadata
    keys per appended batch of events, one link per processed message, at most 128 links on any
-   span that covers a batch.
+   span that covers a batch; at most two event lookups and one trace-hint read per traced resume.
 3. Nothing reachable from a span may reference an event payload, a row, an envelope, or an
    unevaluated thunk over them. Links hold an evaluated span identity and, on batch spans, an
    evaluated message identifier.
-4. Heap residency under sustained work stays within the retention suite's `Bounded` verdict
-   with a tracer configured.
+4. Heap residency under sustained work stays within `Bounded`. Separately, the EP-1 ownership
+   probe retains spans while payload weak references clear; each link-building plan extends it.
+   A span-owned negative control must fail that probe. Bounded heap alone is not ownership proof.
 5. Stored trace context never changes the outcome of a replay, a duplicate check, a digest, or
    an identity comparison. Where a stored context participates in a frozen digest (the producer
    outbox), it must be derived deterministically from durable data.
 
 **The `shibuya-core` 0.13 surface.** Consumed by EP-4 and EP-5; defined in the Shibuya
 MasterPlan cited above. EP-4 calls `Shibuya.Telemetry.Process.withProcessSpanIO` with the
-adapter's `telemetry.traceCorrelation`; EP-5 calls it for the bounded drain and passes an
+adapter's `telemetry.traceCorrelation`; EP-5 calls the Effectful `withProcessSpan` for the bounded drain and passes an
 `AdapterTelemetry` into the PGMQ adapter configuration. Both must update every test that matches
 the old span name `<destination> process`.
 
-**The dependency bump.** Raising `shibuya-core` to `^>=0.13.0.0` (and the matching
+**The dependency bump.** Raising `shibuya-core` to `^>=0.13.0.1` (and the matching
 `shibuya-pgmq-adapter` and `shibuya-kiroku-adapter` bounds) touches `keiro`, `keiro-pgmq`, the
-test support package and every in-memory adapter. One plan does it, as described in the
-Dependency Graph.
+test support package and every in-memory adapter. EP-5 owns it; EP-4 consumes the accepted result.
 
-**Migrations.** Only EP-6 adds one (trace columns on `keiro.keiro_timers`). It follows
+**Replay-safe producer adoption.** EP-3 owns `IntegrationProducer.tracePolicy`, generated
+construction sites, and the fixed `DeriveTraceAfter` position cutoff. Legacy producers preserve
+draft trace context. Every worker uses the same durable cutoff across replays and supported
+rollback; trace conflicts remain strict. See ADR-59.
+
+**Workflow context selection.** EP-6 owns the trace-await hint lifecycle and two bounded event
+lookups independent of snapshot hydration. `origin` identifies the generation's first persisted
+event, not an assumed first invocation. `wake` identifies the exact previously awaited step;
+unavailable evidence yields no link.
+
+**Migrations.** Only EP-6 adds one (trace columns on `keiro.keiro_timers` and a nullable
+`trace_awaited_step` hint on `keiro.keiro_workflows`). It follows
 `keiro-migrations/README.md`: a new forward migration through `keiro-migrate new`, never an edit
 to a shipped one, and a regenerated expected-schema snapshot.
 
@@ -279,20 +297,24 @@ for its boundary. The new ADR is created by EP-2 and extended by EP-3, EP-4 and 
 command's event, consumed by a process manager through the Kiroku adapter, dispatching a second
 command whose event is stamped again. EP-4 owns a test that asserts, with an in-memory span
 exporter, that the second command's event metadata carries a context whose trace contains the
-process manager's processing span, and that this span links to the first command's span. Run
-it before finalising EP-6, whose links rest on the same mechanism.
+process manager's processing span, and that this span links to the first command's span. EP-4 accepts this command-chain test independently. After EP-4 and EP-6 are both Complete,
+run the combined reaction-to-timer-to-workflow case as an initiative release gate. EP-6 tests
+its timer/workflow path with directly supplied traced context and can complete before EP-4.
 
 
 ## Progress
 
-No child plan has started. EP-1 can begin now. EP-4 and EP-5 are blocked on the Shibuya gate;
-EP-5 also on the PGMQ adapter gate.
+No child plan has started. EP-1 can begin now. The external releases are available; EP-5
+awaits EP-1, and EP-4 awaits EP-1, EP-2 and EP-5. The combined command/worker/timer/workflow
+acceptance remains an initiative gate after both EP-4 and EP-6 complete.
 
 Cross-plan gates not owned by a child plan:
 
-- [ ] Shibuya gate: `shibuya-core` 0.13.0.0 on Hackage.
-- [ ] PGMQ adapter gate: `shibuya-pgmq-adapter` and `shibuya-kiroku-adapter` releases built
-  against `shibuya-core` 0.13 on Hackage.
+- [x] Shibuya gate: `shibuya-core` 0.13.0.1 verified on Hackage and upstream tag (2026-11-14).
+- [x] Adapter gate: `shibuya-pgmq-adapter` 0.19.0.0 and `shibuya-kiroku-adapter` 0.8.0.0
+  verified on Hackage and upstream tags (2026-11-14).
+- [ ] Combined EP-4/EP-6 check: reaction schedules a timer, firing wakes a workflow, and exact
+  wake/origin links survive a workflow snapshot and an unrelated later signal.
 - [ ] Keiro release with all six plans, passing the repository's release preflight including the
   benchmark gates of ADR-58 and the retention gate of ADR-48, with no unexplained change in the
   no-tracer cells.
@@ -311,8 +333,8 @@ Cross-plan gates not owned by a child plan:
   span would differ on replay and surface as `ProducerIdentityConflict [TraceField]`. This is
   why EP-3 derives the context from the source event instead.
 - A rolling deployment can still produce that conflict: an event stamped by a new node, first
-  enqueued by an old node (no context) and replayed by a new node (derived context). EP-3 must
-  gate the derivation so it cannot differ between nodes of one deployment.
+  enqueued by an old node (no context) and replayed by a new node (derived context). EP-3 uses an immutable producer cutoff, selected with producers and writers quiescent,
+  so pre-cutover events remain draft-only on every replay. A deployment Boolean is insufficient.
 - Inbox handlers run synchronously in the caller's thread in both inbox modes, so the inbox has
   no deferred work to link. The `traceparent` stored on inbox rows is read back only by lookup
   and listing functions. `withConsumerSpan` has no caller outside the tests.
@@ -352,6 +374,11 @@ Cross-plan gates not owned by a child plan:
   Rationale: The requirement is no performance regression and no space leak, and neither the
   benchmarks nor the retention suite currently runs with a tracer.
   Date: 2026-11-11
+
+
+- Revision (2026-11-14): Applied review findings: fixed producer cutover and rollback semantics,
+  exact snapshot-independent workflow attribution, retained-span ownership probes, a separate
+  combined release gate, and EP-5 ownership of the now-available dependency releases.
 
 
 ## Outcomes & Retrospective

@@ -11,6 +11,18 @@ provenance:
     model: "claude-fable-5-2"
     harness: "claude-code"
     at: 2026-11-12T04:43:48Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-14T18:45:33Z
+      verdict: "comments"
+      note: "Local bounded-span path checked; include matching Kiroku adapter prerequisite if owning repository-wide bump. Upstream API verification remains outstanding."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-14T19:06:08Z
+      mode: "update"
+      note: "Apply review findings, reconcile ownership and acceptance gates, and verify available upstream releases."
 ---
 
 # Align keiro-pgmq job spans with Shibuya 0.13 and expose the correlation policy
@@ -45,8 +57,7 @@ a tracer and comparing the exported spans.
 
 ## Progress
 
-- [ ] M1: `keiro-pgmq` builds and passes its tests against `shibuya-core` 0.13 and the matching
-  `shibuya-pgmq-adapter` release (if a sibling plan has not already done the bump).
+- [ ] M1: Repository builds against the three matching releases; dependency migration is recorded.
 - [ ] M2: The bounded drain opens its span through Shibuya's shared function; the hand-copied
   construction is gone; both paths export identical span names, links and common attributes.
 - [ ] M3: `JobTuning` carries the telemetry policy and both paths honour it.
@@ -60,6 +71,10 @@ a tracer and comparing the exported spans.
 
 
 ## Decision Log
+
+- Decision (2026-11-14): Own all three dependency bumps after baseline acceptance; verify released interfaces and ownership evidence.
+  Rationale: Resolve the recorded review findings before implementation; accepted durable constraints
+  are recorded in [ADR-59](../adr/0059-durable-trace-correlation-preserves-replay-and-exact-wake-identity.md).
 
 - Decision: The bounded drain calls `Shibuya.Telemetry.Process.withProcessSpan` instead of
   constructing the span.
@@ -92,12 +107,11 @@ a tracer and comparing the exported spans.
 
 This is a child of
 `docs/masterplans/47-trace-context-propagation-and-span-correlation-across-keiro-durable-boundaries.md`.
-Prerequisites, both outside this repository: `shibuya-core` 0.13.0.0 on Hackage, and a
+Prerequisite: plan 330 Complete. External prerequisites: `shibuya-core` 0.13.0.1 on Hackage, and a
 `shibuya-pgmq-adapter` release built against it whose `PgmqAdapterConfig` has a
 `telemetry :: AdapterTelemetry` field. Verify on Hackage itself. If either is missing, this plan
-cannot start. The tracer-enabled baselines of
-`docs/plans/330-establish-tracing-enabled-performance-and-retention-baselines.md` are useful but
-not required: `keiro-pgmq` has no benchmark stanza.
+cannot start. The matching `shibuya-kiroku-adapter` 0.8.0.0 release is also required for
+the repository-wide solve. Plan 330 supplies the baseline for this dependency migration.
 
 Run everything in the Nix development shell (`nix develop -c …`).
 
@@ -127,7 +141,8 @@ data PgmqAdapterConfig = PgmqAdapterConfig { ..., telemetry :: !AdapterTelemetry
 
 `withProcessSpan` opens the Consumer-kind span with the given full name, always linked to the
 creation context in the headers when there is one, a child of it under `ParentAndLink`, a root
-under `LinkOnly`; with tracing disabled it passes a sentinel span and does nothing else.
+under `LinkOnly` when headers decode; absent or malformed headers inherit ambient context
+without links under either policy. With tracing disabled it passes a sentinel span and does nothing else.
 
 The code, all in `keiro-pgmq/src/Keiro/PGMQ/Job.hs`:
 
@@ -168,15 +183,16 @@ before its handler runs has no processing span) is not addressed here.
 
 ## Plan of Work
 
-### Milestone 1: the dependency bump
+### Milestone 1: own the repository dependency bump
 
-If not already done by
-`docs/plans/333-open-linked-processing-spans-in-subscription-workers-and-the-inbox-consumer-helper.md`,
-raise `shibuya-core` to `^>=0.13.0.0` and `shibuya-pgmq-adapter` to the release that supports
-it, in every stanza across the repository that names them, after checking the published
-versions; add `telemetry = defaultAdapterTelemetry` to every `Adapter { … }` literal the compiler
-reports. Record the bump in the parent MasterPlan. Expect `keiro-pgmq-test` to fail on span
-names at this point for the continuous path only; that is the divergence this plan removes.
+Plan 330 must be Complete so the migration has an attributed baseline. This plan is the sole
+owner of the repository-wide bump: use `shibuya-core ^>=0.13.0.1`,
+`shibuya-pgmq-adapter ^>=0.19.0.0` and `shibuya-kiroku-adapter ^>=0.8.0.0` in every affected
+stanza, including DSL tests and retention. Hackage metadata and corresponding upstream tags
+were verified on 2026-11-14. Inspect adapter Cabal compatibility and solve in the Nix shell.
+Add `telemetry = defaultAdapterTelemetry` to all in-memory adapter literals and update related
+fixtures. Milestone 1 accepts a successful build; telemetry tests may remain red until M2/M3.
+This child cannot be Complete until all repository suites pass. Plan 333 begins only then.
 
 ### Milestone 2: one span implementation
 
@@ -233,7 +249,7 @@ Mark this plan Complete in the parent MasterPlan and update Progress.
 From the repository root:
 
 ```bash
-cabal update
+nix develop -c cabal update
 nix develop -c cabal build all --enable-tests --enable-benchmarks
 nix develop -c cabal test keiro-pgmq-test --test-show-details=direct
 nix develop -c just adr-validate
@@ -268,14 +284,15 @@ export a root span in a new trace.
 
 Source and bound edits only. All commands are repeatable; tests provision their own queues. If
 the upstream releases are missing, do not pin source checkouts to proceed; the plan stays Not
-Started. There is no performance gate of its own because the change removes code from the
-bounded path and adds one strict field read per worker; if the parent MasterPlan's release gate
-shows a `keiro-pgmq` regression, investigate here first.
+Started. Run plan 330's baseline comparison and ownership probes after the dependency bump;
+attribute dependency-wide effects separately from Keiro span changes. Add a bounded job-span
+ownership case for both policies. Removing copied code is not evidence of zero overhead.
 
 
 ## Interfaces and Dependencies
 
-Prerequisites: `shibuya-core` 0.13.0.0 and the matching `shibuya-pgmq-adapter` on Hackage.
+Prerequisites: plan 330 Complete; `shibuya-core` 0.13.0.1, `shibuya-pgmq-adapter`
+0.19.0.0 and `shibuya-kiroku-adapter` 0.8.0.0 on Hackage.
 
 Consumes `Shibuya.Telemetry.Process.withProcessSpan`, `Shibuya.Telemetry.Semantic.processSpanName`
 and `attrMessagingOperationName`, `Shibuya.Adapter.AdapterTelemetry`, `defaultAdapterTelemetry`,
@@ -296,4 +313,4 @@ data JobTuning = JobTuning
 A related, independent improvement to the `receive <queue>` spans of the traced PGMQ
 interpreter is planned in
 `mori://shinzui/pgmq-hs/plans/32-link-receive-spans-to-message-creation-contexts-in-the-traced-interpreter`;
-nothing here depends on it. No other plan depends on this one.
+nothing here depends on it. Plan 333 depends on this plan Complete.

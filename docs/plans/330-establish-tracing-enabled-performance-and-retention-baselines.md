@@ -11,6 +11,18 @@ provenance:
     model: "claude-fable-5-2"
     harness: "claude-code"
     at: 2026-11-12T04:43:48Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-14T18:45:33Z
+      verdict: "changes-requested"
+      note: "Retention controls must retain spans while proving payload collection; processor-free or drained spans and a global IORef leak do not establish that contract. Cabal dependency claims are stale."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-14T19:06:08Z
+      mode: "update"
+      note: "Apply review findings, reconcile ownership and acceptance gates, and verify available upstream releases."
 ---
 
 # Establish tracing-enabled performance and retention baselines
@@ -41,8 +53,8 @@ produces the "before" measurement and the commit that later plans use as their b
 - [ ] M1: `keiro-bench` has tracer-enabled cells for the command path, outbox publish, and
   process-manager dispatch, each next to its no-tracer counterpart, and they run.
 - [ ] M2: `keiro-retention` has tracer-enabled legs for a command loop, a subscription worker
-  and the outbox publisher, each ending in a `Bounded` verdict on unchanged library code; one
-  leg has been shown to fail under a deliberately introduced retention bug.
+  and the outbox publisher, each ending in a `Bounded` verdict on unchanged library code; a focused ownership probe proves payload collection while spans remain alive, and its
+  deliberate span-retention negative control fails.
 - [ ] M3: Baseline numbers and the reproduction procedure are recorded under
   `keiro/bench/results/` and described where the existing baselines are described.
 
@@ -53,6 +65,10 @@ produces the "before" measurement and the commit that later plans use as their b
 
 
 ## Decision Log
+
+- Decision (2026-11-14): Use retained-span ownership evidence in addition to bounded heap; correct direct Cabal dependencies.
+  Rationale: Resolve the recorded review findings before implementation; accepted durable constraints
+  are recorded in [ADR-59](../adr/0059-durable-trace-correlation-preserves-replay-and-exact-wake-identity.md).
 
 - Decision: Tracer-enabled cells use a real tracer from a provider with no span processors.
   Rationale: The cost under test is Keiro's and the SDK's span and context work, not an
@@ -100,7 +116,9 @@ field: `RunCommandOptions.tracer` (`keiro/src/Keiro/Command.hs`), `OutboxPublish
 suite `keiro/test/Main.hs` already builds tracers with
 `createTracerProvider [processor] emptyTracerProviderOptions` and `makeTracer`, using
 `inMemoryListExporter` from `hs-opentelemetry-exporter-in-memory`; the benchmark and retention
-stanzas already depend on the SDK and that exporter.
+benchmark stanza already depends on the API and SDK, but not the exporter; the retention
+stanza declares none of these directly. Add the API, SDK and in-memory exporter dependencies
+to each stanza that imports them, using the existing test-suite bounds.
 
 Relevant ADRs.
 [ADR-58](../adr/0058-benchmark-release-gates-require-isolated-fixed-workloads-and-attributed-baselines.md)
@@ -109,6 +127,8 @@ growth bounds and reproducible baselines with attributed causes. Read it before 
 new cells must meet it.
 [ADR-48](../adr/0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md)
 defines how retention legs measure and what `Bounded` means. New legs must follow it.
+[ADR-59](../adr/0059-durable-trace-correlation-preserves-replay-and-exact-wake-identity.md)
+requires the separate retained-span ownership probe and span-owned negative control.
 
 Today, with a tracer configured, the instrumented paths are: the command span around each
 command run, the `send` span around each published outbox batch, and the workflow span around
@@ -149,10 +169,22 @@ the in-memory exporter in a mode that does not accumulate spans without bound (d
 it per measurement window), or a processor-less provider, so the leg measures Keiro's retention
 and not the exporter's. State in each leg's comment which it uses and why.
 
-Prove a leg can fail: temporarily make a span retain per-event data (for example add each
-event's payload to a list held by a global `IORef` inside the command span body), run the
-tracer command leg, record the non-`Bounded` verdict in Surprises & Discoveries, and revert
-before committing.
+Separately add a bounded ownership probe in `keiro/retention/Retention/SpanOwnership.hs`.
+Create a finite batch of distinct, large payloads in a helper scope; retain the finished spans
+in the in-memory exporter, release all workload references, force major collections, and
+check weak references to the payloads have cleared while the span count remains unchanged.
+Keep the exporter and spans alive through the assertions and verify their identities afterward.
+Do not return payloads, rows, envelopes, or closures capturing them from the helper scope.
+Use a bounded retry deadline for GC observations and report failure rather than silently skip.
+Also exercise live spans held behind a completion barrier after the payload-processing helper
+has returned; release the barrier and verify cleanup on failure.
+
+The negative control must retain those same payloads through the tested span-owned attribute
+or lazy link construction, not through an unrelated global list. It must fail the ownership
+assertion with spans retained, then pass after the span roots are released. Revert only that
+controlled perturbation. Record the exact command, failed assertion and restored pass. The
+steady-state `Bounded` legs and this ownership probe prove different properties; both are
+required. Later children extend this probe with their actual link-building paths.
 
 ### Milestone 3: record the baseline
 
@@ -207,12 +239,11 @@ nix develop -c just verify
 ## Validation and Acceptance
 
 Each tracer cell runs and has a no-tracer twin measuring the same fixed work. Each new retention
-leg ends `Bounded` on unchanged library code, and one has been shown to fail under an introduced
-retention bug with the output recorded here.
+leg ends `Bounded` on unchanged library code. The ownership probe collects payloads while
+spans remain alive and its span-owned negative control fails, with both outputs recorded here.
 
 Existing cells and legs are unchanged in name and result: `git diff` shows only additions under
-`keiro/bench/` and `keiro/retention/`, the cabal stanza's module list if new modules were
-added, and documentation. No file under `keiro/src`, `keiro-core/src` or `keiro-pgmq/src`
+`keiro/bench/` and `keiro/retention/`, the Cabal module and dependency lists needed by those additions, and documentation. No file under `keiro/src`, `keiro-core/src` or `keiro-pgmq/src`
 changes.
 
 The recorded baseline can be reproduced by following the written procedure.
@@ -220,9 +251,8 @@ The recorded baseline can be reproduced by following the written procedure.
 
 ## Idempotence and Recovery
 
-Everything is additive and repeatable. Benchmarks and legs provision fresh stores. Revert the
-temporary retention bug with `git checkout -- keiro/src` and confirm `git status` shows
-`keiro/src` clean before committing. If a new leg is noisy, record three consecutive readings
+Everything is additive and repeatable. Benchmarks and legs provision fresh stores. Revert only the exact temporary negative-control edit; preserve unrelated working-tree changes.
+Confirm the restored ownership probe passes before committing. If a new leg is noisy, record three consecutive readings
 and the chosen bound with its rationale rather than loosening silently.
 
 

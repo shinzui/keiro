@@ -11,6 +11,18 @@ provenance:
     model: "claude-fable-5-2"
     harness: "claude-code"
     at: 2026-11-12T04:43:48Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-14T18:45:33Z
+      verdict: "comments"
+      note: "Command call sites and metadata ownership checked; no blocking local finding. Upstream API verification limited by unavailable Mori registry."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-14T19:06:08Z
+      mode: "update"
+      note: "Apply review findings, reconcile ownership and acceptance gates, and verify available upstream releases."
 ---
 
 # Stamp trace context on appended events and name command spans by category
@@ -62,6 +74,10 @@ With no tracer configured, nothing changes and nothing is added to the command p
 
 
 ## Decision Log
+
+- Decision (2026-11-14): Require complete event-stamping handoff for outbox ADR ownership and extend command ownership evidence.
+  Rationale: Resolve the recorded review findings before implementation; accepted durable constraints
+  are recorded in [ADR-59](../adr/0059-durable-trace-correlation-preserves-replay-and-exact-wake-identity.md).
 
 - Decision: The context is stored as top-level `traceparent` and `tracestate` string keys in
   the event's JSON metadata.
@@ -222,8 +238,8 @@ Surprises & Discoveries. A time regression beyond the gate's threshold, or alloc
 that explanation, stops the plan: look first for a per-retry or per-event context read, or for
 metadata being rebuilt per event rather than once.
 
-Run `cabal test keiro-retention` including the tracer legs; all must end `Bounded`. The stamped
-strings are part of the event, not of the span, so the span must not hold the metadata value:
+Run `cabal test keiro-retention` including the tracer legs; all must end `Bounded`. Extend plan 330's retained-span ownership probe to the stamped command path. The stamped
+strings are part of the event, so the span must not hold the metadata value:
 confirm the span body does not capture it in an attribute or closure that outlives the run.
 
 ### Milestone 5: documents
@@ -232,7 +248,8 @@ Create an ADR in `docs/adr/` following `agents/skills/exec-plan/ADR.md` (the bun
 profile-governed: allocate the handle with `okf id next docs/adr --profile docs/adr/profile.dhall ADR`,
 add the log entry, run `just adr-validate`). Record: creation context is stored in event
 metadata under these two keys; it is written only with a tracer, once per run, never overriding
-the caller; it is telemetry and must never participate in replay, identity or digests; links are
+the caller; it must not change domain replay or identifiers; downstream producer content already includes
+trace headers and must preserve ADR-42 through ADR-59's immutable cutover; links are
 Keiro's correlation across durable boundaries; command spans are named by category. Later plans
 extend this ADR.
 
@@ -307,5 +324,5 @@ creationLinkFromTraceContext :: TraceContext -> Maybe NewLink
 
 Changed: `withCommandSpan` names its span `"command " <> category`; signature unchanged.
 
-Consumers under the parent MasterPlan: the outbox plan (332) needs only Milestone 1; the
+Consumers under the parent MasterPlan: the outbox plan (332) requires this plan Complete, including its ADR; the
 subscription-worker plan (333) and the timer and workflow plan (335) need this plan Complete.

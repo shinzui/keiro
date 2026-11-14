@@ -11,6 +11,18 @@ provenance:
     model: "claude-fable-5-2"
     harness: "claude-code"
     at: 2026-11-12T04:43:48Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-14T18:45:33Z
+      verdict: "comments"
+      note: "Local worker paths checked; reconcile chain-test prerequisite with EP-6 completion. Released Shibuya API verification remains outstanding because Mori registry is unavailable."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-14T19:06:08Z
+      mode: "update"
+      note: "Apply review findings, reconcile ownership and acceptance gates, and verify available upstream releases."
 ---
 
 # Open linked processing spans in subscription workers and the inbox consumer helper
@@ -48,8 +60,7 @@ creation context, so applications that call it directly get the same behaviour.
 
 ## Progress
 
-- [ ] M1: The repository builds and all tests pass against `shibuya-core` 0.13 and the matching
-  adapter releases (if a sibling plan has not already done this bump).
+- [ ] M1: EP-5 is Complete; its dependency handoff builds and existing tests pass.
 - [ ] M2: Process managers, routers and reactions open one linked processing span per handled
   event when given a tracer, and none otherwise; dispatched commands are its children.
 - [ ] M3: The end-to-end chain test passes: command, event, process manager, command, event.
@@ -64,6 +75,10 @@ creation context, so applications that call it directly get the same behaviour.
 
 
 ## Decision Log
+
+- Decision (2026-11-14): Consume EP-5 dependency migration and keep combined workflow acceptance at initiative scope.
+  Rationale: Resolve the recorded review findings before implementation; accepted durable constraints
+  are recorded in [ADR-59](../adr/0059-durable-trace-correlation-preserves-replay-and-exact-wake-identity.md).
 
 - Decision: Workers open their own processing span with Shibuya's shared span function instead
   of running under Shibuya's runner.
@@ -101,13 +116,15 @@ This is a child of
 `docs/masterplans/47-trace-context-propagation-and-span-correlation-across-keiro-durable-boundaries.md`.
 Prerequisites:
 
+- `docs/plans/334-align-keiro-pgmq-job-spans-with-shibuya-0-13-and-expose-the-correlation-policy.md` Complete (owns dependency migration).
+
 - `docs/plans/330-establish-tracing-enabled-performance-and-retention-baselines.md` Complete
   (tracer-enabled process-manager benchmark cell and subscription-worker retention leg exist).
 - `docs/plans/331-stamp-trace-context-on-appended-events-and-name-command-spans-by-category.md`
   Complete: commands run with a tracer write `traceparent`/`tracestate` into the metadata of
   appended events, and `Keiro.Telemetry` exports `traceContextFromMetadata` and
   `creationLinkFromTraceContext`.
-- `shibuya-core` 0.13.0.0 on Hackage, and releases of `shibuya-kiroku-adapter` and
+- `shibuya-core` 0.13.0.1 on Hackage, and releases of `shibuya-kiroku-adapter` and
   `shibuya-pgmq-adapter` built against it. Verify on Hackage itself, not only the local index.
   If they are not published, this plan cannot start.
 
@@ -130,8 +147,7 @@ data AdapterTelemetry  -- built from defaultAdapterTelemetry; field traceCorrela
 -- Shibuya.Telemetry.Process
 -- Open the Consumer-kind processing span for one message: always linked to
 -- the creation context in the given headers, a child of it only under
--- ParentAndLink, a root under LinkOnly. No-op without usable headers beyond
--- opening the span.
+-- ParentAndLink, a root under LinkOnly. Without usable headers it inherits ambient context and adds no link.
 withProcessSpanIO ::
   Tracer -> TraceCorrelation -> Text -> Maybe TraceHeaders -> (Span -> IO a) -> IO a
 ```
@@ -182,20 +198,13 @@ references the envelope, the recorded event or its payload.
 
 ## Plan of Work
 
-### Milestone 1: the dependency bump
+### Milestone 1: verify the accepted dependency handoff
 
-If `keiro/keiro.cabal` still bounds `shibuya-core ^>=0.12.0.0`, raise it to `^>=0.13.0.0` in
-every stanza and package that names it (`keiro`, `keiro-pgmq`, `keiro-test-support`, the
-retention suite's `shibuya-kiroku-adapter` bound, `keiro-pgmq`'s `shibuya-pgmq-adapter` bound),
-after checking the published versions. Fix every `Adapter { … }` literal the compiler reports by
-adding `telemetry = defaultAdapterTelemetry`; these are in-memory adapters in tests, benchmarks
-and test support. Update tests that match Shibuya's old span name `<destination> process`
-(notably `keiro-pgmq/test/Main.hs`, whose `theProcessSpan` helper near line 289 matches
-`jobName <> " process"`) only as far as needed to keep the suites green; the rest of the
-`keiro-pgmq` alignment belongs to
-`docs/plans/334-align-keiro-pgmq-job-spans-with-shibuya-0-13-and-expose-the-correlation-policy.md`.
-If that plan has already done the bump, skip this milestone and say so in Progress. Record the
-bump in the parent MasterPlan either way.
+Plan `docs/plans/334-align-keiro-pgmq-job-spans-with-shibuya-0-13-and-expose-the-correlation-policy.md`
+must be Complete. It owns the repository-wide bump and adapter literal changes. Confirm all
+packages solve with `shibuya-core ^>=0.13.0.1`, `shibuya-pgmq-adapter ^>=0.19.0.0` and
+`shibuya-kiroku-adapter ^>=0.8.0.0`, then run the existing suites unchanged. Do not perform a
+second independent migration. These releases and tags were verified on 2026-11-14.
 
 ### Milestone 2: the processing span
 
@@ -218,7 +227,7 @@ that an application configures one place.
 
 Do not read the policy or build the span name per event: both are per-worker constants.
 
-Tests, per worker kind: with a tracer and an event whose envelope carries a creation context,
+Tests, per worker kind: with a tracer and an event whose envelope carries a valid creation context,
 one processing span named `process <worker>` with one link to that context; under an adapter
 with `LinkOnly` it is a root with a new trace identifier, under `ParentAndLink` a child; the
 dispatched command's span is a child of the processing span; an event without context yields a
@@ -253,7 +262,8 @@ and without a tracer, and compare with a worktree of the previous plan's last co
 procedure plan 330 recorded. Reading rule: no-tracer cells unchanged in allocation; the tracer
 cell increases by one span and one link per event, recorded per event; anything else stops the
 plan. Run `keiro-retention` with its tracer subscription leg extended so events carry contexts;
-it must end `Bounded`, showing the processing span does not retain envelopes.
+it must end `Bounded`. Also extend plan 330's retained-span ownership probe with the actual
+subscription span helper; payloads must collect while spans remain reachable.
 
 ### Milestone 6: documents
 
@@ -270,7 +280,7 @@ the inbox has no span. Mark this plan Complete in the parent MasterPlan and upda
 From the repository root:
 
 ```bash
-cabal update
+nix develop -c cabal update
 nix develop -c cabal build all --enable-tests --enable-benchmarks
 nix develop -c cabal test keiro-test --test-show-details=direct --test-options='--match "processing span"'
 nix develop -c cabal test keiro-test
@@ -316,7 +326,7 @@ the change leaves no data to repair.
 
 ## Interfaces and Dependencies
 
-Prerequisites: plans 330 and 331 Complete; `shibuya-core` 0.13.0.0 and matching adapter
+Prerequisites: plans 330, 331 and 334 Complete; `shibuya-core` 0.13.0.1 and matching adapter
 releases on Hackage.
 
 Consumes `Shibuya.Telemetry.Process.withProcessSpanIO`,

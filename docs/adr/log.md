@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-14
+* **Update**: Accepted durable trace adoption, exact workflow wake attribution, and retained-span ownership constraints for MasterPlan 47.
+
 ## 2026-11-05
 * **Update**: ADR-28 and ADR-53: record compiled input-consumer metadata, durable hook and shared bounded transport (plan 324).
 * **Update**: ADR-40: bound inspection query parallelism after measured count-burst interference; preserve schema and ordinary writer policy (plan 325).
