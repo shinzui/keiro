@@ -1,0 +1,9 @@
+Name,Mean (ps),2*Stdev (ps),Allocated,Copied,Peak Memory
+All.tracing.command.append-distinct-streams,17927259374,1885270838,10673465,147946,31457280
+All.tracing.command.append-distinct-streams/tracer,18258921875,948162700,11571270,158841,51380224
+All.tracing.command.append-one-stream,64450450006,5504752132,87648059,1575392,62914560
+All.tracing.command.append-one-stream/tracer,67109174995,4679978466,92590264,1861624,62914560
+All.tracing.command.append-batch,1797504687,139275590,3156048,32473,62914560
+All.tracing.command.append-batch/tracer,1872104687,176638888,3250682,34457,62914560
+All.tracing.process-manager.dispatch,31292824996,1724455616,18384458,318306,62914560
+All.tracing.process-manager.dispatch/tracer,32059350000,1770630426,20167061,324318,62914560

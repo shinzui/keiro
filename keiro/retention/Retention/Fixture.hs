@@ -9,6 +9,7 @@ module Retention.Fixture
     TargetEvent (..),
     TargetEventStream,
     retentionTargetStream,
+    retentionNoOpTargetStream,
     LedgerCommand (..),
     LedgerEvent (..),
     LedgerRegs,
@@ -218,6 +219,15 @@ seedLedgerRaw (StoreRunner runStore) target count = appendChunks count
 
 retentionTargetStream :: ValidatedEventStream (HsPred '[] TargetCommand) '[] TargetState TargetCommand TargetEvent
 retentionTargetStream = mkEventStreamOrThrow "retention-target" targetStreamDef
+
+-- A real silent command for probing typed outcome ownership without writing events.
+retentionNoOpTargetStream :: ValidatedEventStream (HsPred '[] TargetCommand) '[] TargetState TargetCommand TargetEvent
+retentionNoOpTargetStream =
+  mkEventStreamOrThrow
+    "retention-no-op"
+    targetStreamDef
+      { transducer = targetTransducer {edgesOut = \state -> [edge {output = []} | edge <- targetTransducer.edgesOut state]}
+      }
 
 snapshottedTargetStream :: ValidatedEventStream (HsPred '[] TargetCommand) '[] TargetState TargetCommand TargetEvent
 snapshottedTargetStream =

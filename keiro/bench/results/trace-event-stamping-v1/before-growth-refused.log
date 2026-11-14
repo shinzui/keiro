@@ -1,0 +1,64 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+From https://github.com/mzabani/codd
+ * [new tag]           v0.1.0     -> v0.1.0
+ * [new tag]           v0.1.2     -> v0.1.2
+ * [new tag]           v0.1.3     -> v0.1.3
+ * [new tag]           v0.1.4     -> v0.1.4
+ * [new tag]           v0.1.5     -> v0.1.5
+ * [new tag]           v0.1.6     -> v0.1.6
+ * [new tag]           v0.1.8     -> v0.1.8
+From https://github.com/mzabani/codd
+ * tag                 v0.1.8     -> FETCH_HEAD
+HEAD is now at 29478ff4 Prepare for v0.1.8 release
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-core-0.24.0.0 (lib) (configuration changed)
+ - keiro-migrations-0.24.0.0 (lib) (configuration changed)
+ - keiro-0.24.0.0 (lib) (configuration changed)
+ - keiro-test-support-0.24.0.0 (lib) (configuration changed)
+ - keiro-0.24.0.0 (bench:keiro-bench) (configuration changed)
+Configuring library for keiro-core-0.24.0.0...
+Configuring library for keiro-migrations-0.24.0.0...
+Preprocessing library for keiro-migrations-0.24.0.0...
+Building library for keiro-migrations-0.24.0.0...
+Preprocessing library for keiro-core-0.24.0.0...
+Building library for keiro-core-0.24.0.0...
+[1 of 5] Compiling Keiro.Migrations.Internal.Definition ( src/Keiro/Migrations/Internal/Definition.hs, /private/tmp/keiro-mp47-baseline/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.24.0.0/build/Keiro/Migrations/Internal/Definition.o, /private/tmp/keiro-mp47-baseline/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.24.0.0/build/Keiro/Migrations/Internal/Definition.dyn_o ) [Impure plugin forced recompilation]
+Configuring library for keiro-0.24.0.0...
+Configuring library for keiro-test-support-0.24.0.0...
+Preprocessing library for keiro-0.24.0.0...
+Building library for keiro-0.24.0.0...
+Preprocessing library for keiro-test-support-0.24.0.0...
+Building library for keiro-test-support-0.24.0.0...
+Configuring benchmark 'keiro-bench' for keiro-0.24.0.0...
+Preprocessing benchmark 'keiro-bench' for keiro-0.24.0.0...
+Building benchmark 'keiro-bench' for keiro-0.24.0.0...
+All
+  tracing
+    command
+      append-distinct-streams:        OK
+        18.1 ms ± 1.5 ms,  10 MB allocated, 147 KB copied,  30 MB peak memory
+      append-distinct-streams/tracer: OK
+        18.0 ms ± 599 μs,  11 MB allocated, 154 KB copied,  49 MB peak memory
+      append-one-stream:              OK
+        65.8 ms ± 5.5 ms,  84 MB allocated, 1.5 MB copied,  60 MB peak memory
+      append-one-stream/tracer:       OK
+        67.8 ms ± 3.5 ms,  84 MB allocated, 1.4 MB copied,  60 MB peak memory
+      append-batch:                   FAIL
+        Exception: user error (benchmark fixture growth budget exceeded: append-batch iterations=1001)
+        Use -p '/tracing/&&$0=="All.tracing.command.append-batch"' to rerun this test only.
+      append-batch/tracer:            FAIL
+        Exception: user error (benchmark fixture growth budget exceeded: append-batch/tracer iterations=1001)
+        Use -p '/tracing/&&/append-batch\/tracer/' to rerun this test only.
+    publish-backlog:                  OK
+      184  ms ±  12 ms, 231 MB allocated, 1.5 MB copied,  60 MB peak memory
+    publish-backlog/tracer:           OK
+      191  ms ± 5.4 ms, 231 MB allocated, 1.4 MB copied,  60 MB peak memory
+    process-manager
+      dispatch:                       OK
+        31.2 ms ± 2.6 ms,  17 MB allocated, 306 KB copied,  60 MB peak memory
+      dispatch/tracer:                OK
+        31.0 ms ± 3.1 ms,  19 MB allocated, 312 KB copied,  60 MB peak memory
+
+2 out of 10 tests failed (34.23s)

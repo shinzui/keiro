@@ -1,5 +1,8 @@
 # Keiro User Documentation Log
 
+## 2026-11-14
+* **Update**: DOC-15: document command creation metadata and category span queries.
+
 ## 2026-11-05
 * **Update**: DOC-15 and DOC-19: document declared category consumers, explicit durable inputs, coverage and bounded pagination (plan 324).
 * **Update**: Durable Workflows: record exact count semantics, bounded inspection parallelism and the passing million-row polling envelope (plan 325).

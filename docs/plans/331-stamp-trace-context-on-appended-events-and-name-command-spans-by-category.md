@@ -23,6 +23,11 @@ provenance:
       at: 2026-11-14T19:06:08Z
       mode: "update"
       note: "Apply review findings, reconcile ownership and acceptance gates, and verify available upstream releases."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-14T21:57:12Z
+      mode: "implement"
+      note: "Implement event creation context and category command spans with focused validation"
 ---
 
 # Stamp trace context on appended events and name command spans by category
@@ -57,20 +62,38 @@ With no tracer configured, nothing changes and nothing is added to the command p
 
 ## Progress
 
-- [ ] M1: `Keiro.Telemetry` exports `traceContextFromMetadata`, `stampTraceContext` and
+- [x] M1 (2026-11-14): `Keiro.Telemetry` exports `traceContextFromMetadata`, `stampTraceContext` and
   `creationLinkFromTraceContext`, with unit tests; `keiro-test` passes.
-- [ ] M2: Commands run with a tracer append events whose metadata carries the command span's
+- [x] M2 (2026-11-14): Commands run with a tracer append events whose metadata carries the command span's
   context; commands run without a tracer append byte-identical metadata to before.
-- [ ] M3: Command spans are named `command <category>`.
-- [ ] M4: Benchmark and retention gates pass against the baseline; the cost of stamping is
+- [x] M3 (2026-11-14): Command spans are named `command <category>`.
+- [x] M4 (2026-11-14): Benchmark and retention gates pass against the baseline; the cost of stamping is
   recorded here.
-- [ ] M5: A new ADR, the capability document, the semantic-conventions audit and the changelog
+- [x] M5 (2026-11-14): A new ADR, the capability document, the semantic-conventions audit and the changelog
   are updated; the parent MasterPlan is updated.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- All 804 core examples pass, including multi-event stamping in all four entry points,
+  ambient-span bypass without a configured tracer, explicit caller precedence and a real
+  optimistic conflict. All 22 retention/ownership examples pass; the finished-span probe now
+  executes the actual command span and metadata stamping with a large payload.
+- The first new 100-event batch benchmark refused its 1,000-call growth budget before Tasty
+  stabilized. It now uses the existing `commandBudget EmitLarge` (10,000 calls / 1,000,000
+  events), matching the accepted historical batch workload. The refused control is retained
+  in `keiro/bench/results/trace-event-stamping-v1/`.
+- The initial full timing comparison had one 27% traced-dispatch observation against a 25%
+  ceiling. Three alternating isolated pairs were −3.4% to +1.5%; the unchanged-source full
+  rerun passed all ten cells. Both observations are retained; no ceiling moved.
+- A further actual-domain probe found a real pre-existing ownership failure: lazy scalar
+  outcome attributes retained a large typed no-op payload until inspected. Explicitly forcing
+  the event count and decision text in the traced branch fixes it. Error classification and
+  the bounded rendered description are also forced before SDK ownership. The new probe fails
+  before the fix and passes afterward. Final focused checks pass 51 command and six ownership/traced-worker examples. All eight
+  affected timing cells pass the unchanged 25% ceiling; unaffected earlier evidence remains applicable.
+
+
 
 
 ## Decision Log
@@ -107,7 +130,24 @@ With no tracer configured, nothing changes and nothing is added to the command p
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete. All four command entry points capture context once before retries; metadata caller
+precedence, untraced behavior and replay identity remain covered. ADR-60 owns the durable
+creation-context contract. Strict ADR, capability, research, user and guide validation,
+extension policy and re-export policy pass.
+
+Evidence is retained in `keiro/bench/results/trace-event-stamping-v1/`, including source hashes,
+matched dependency versions, allocation CSV, refused/noisy observations, the real ownership
+red/green test and final focused checks. No-tracer allocation estimates vary by −0.06% to
++0.10% in affected cells. Per 100 events, the traced batch adds 97,162 B (one context capture),
+distinct-command workload adds 253,618 B (100 captures), and the one-stream workload adds
+4,282,345 B because existing history reads now parse metadata. Traced dispatch adds 197,940 B
+per 100 inputs. No new history query or capture per retry/event was introduced. Final affected
+times range from −9.2% to +5.2%; the full comparison reuses unchanged publisher rows. Ownership
+is checked independently by holding uninspected exported spans alive.
+
+The useful implementation lesson is to force bounded scalar values before giving them to a
+lazy SDK attribute constructor. The actual no-op reason probe established the failure and fix;
+subsequent boundary helpers must apply that rule to row/envelope projections too.
 
 
 ## Context and Orientation
@@ -273,7 +313,7 @@ nix develop -c cabal test keiro-test
 nix develop -c cabal test keiro-retention
 nix develop -c cabal bench keiro-bench --benchmark-options="-p command"
 nix develop -c just adr-validate
-nix develop -c just verify
+nix develop -c just verify # final integrated initiative gate
 ```
 
 Expected new test lines:
@@ -297,7 +337,8 @@ has no `traceparent`.
 A command against stream `counter-42` produces a span named `command counter` with
 `keiro.stream.name = "counter-42"`.
 
-`keiro-test`, `keiro-retention` and `just verify` pass. The benchmark comparison shows no
+`keiro-test`, `keiro-retention` and the affected documentation checks pass. The complete
+repository gate runs at initiative integration; unchanged checks reuse EP-1 evidence. The benchmark comparison shows no
 allocation change in no-tracer cells, and the tracer-path cost is recorded here with its
 explanation.
 

@@ -1,0 +1,9 @@
+All
+  tracing
+    process-manager
+      dispatch:        OK
+        32.2 ms ± 7.2 ms,  17 MB allocated, 303 KB copied,  28 MB peak memory
+      dispatch/tracer: OK
+        30.9 ms ± 2.6 ms,  19 MB allocated, 310 KB copied,  44 MB peak memory
+
+All 2 tests passed (7.81s)

@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-14
+* **Update**: RES-16: reconcile command spans and event creation metadata with the implemented runtime.
+
 ## 2026-10-14
 * **Update**: RES-18 outcome recorded as ADR-52.
 

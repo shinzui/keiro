@@ -7,23 +7,58 @@ module Retention.SpanOwnership (spec) where
 import Control.Concurrent (threadDelay)
 import Control.Exception (bracket, evaluate)
 import Control.Monad (forM, forM_, void)
+import Data.Aeson qualified as Aeson
+import Data.ByteString.Lazy qualified as Lazy
 import Data.IORef (readIORef, writeIORef)
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Keiro.Command qualified as Command
+import Keiro.Stream qualified as Stream
+import Keiro.Telemetry qualified as Telemetry
+import Keiro.Test.Postgres (Fixture, StoreRunner (..), withFreshResourceStore)
 import OpenTelemetry.Context.ThreadLocal qualified as Context
 import OpenTelemetry.Exporter.InMemory.Span (inMemoryListExporter)
 import OpenTelemetry.Trace.Core
+import Retention.Fixture (TargetCommand (..), retentionNoOpTargetStream)
 import System.Mem (performMajorGC)
 import System.Mem.Weak (Weak, deRefWeak, mkWeakPtr)
 import Test.Hspec
 
-spec :: Spec
-spec = describe "Span payload ownership" do
+spec :: Fixture -> Spec
+spec fixture = describe "Span payload ownership" do
   forM_ [False, True] \finished ->
     it (if finished then "collects payloads with finished spans retained" else "collects payloads with live spans retained") $
       probe finished False
   it "detects a span-owned payload and collects it after releasing spans" $
     probe True True
+  it "collects typed no-op payloads while their uninspected spans remain alive" $
+    withFreshResourceStore fixture $ \(_, runner) -> do
+      (processor, exported) <- inMemoryListExporter
+      bracket
+        (createTracerProvider [processor] emptyTracerProviderOptions)
+        (\provider -> void (shutdownTracerProvider provider Nothing))
+        $ \provider -> do
+          weak <- produceNoOpPayloads runner (makeTracer provider "keiro-retention" tracerOptions)
+          awaitCollection weak `shouldReturn` True
+          spans <- readIORef exported
+          length spans `shouldBe` 8
+
+{-# NOINLINE produceNoOpPayloads #-}
+produceNoOpPayloads :: StoreRunner -> Tracer -> IO [Weak Text]
+produceNoOpPayloads (StoreRunner runStore) tracer =
+  forM [1 .. 8 :: Int] $ \index -> do
+    payload <- evaluate (Text.replicate (128 * 1024) (Text.pack (show index)))
+    weak <- mkWeakPtr payload Nothing
+    let handler =
+          Command.DomainCommandHandler
+            { Command.eventStream = retentionNoOpTargetStream,
+              Command.classifySilent = const (Command.SilentNoOp payload)
+            }
+        options = Command.defaultRunCommandOptions {Command.tracer = Just tracer}
+    result <- runStore (Command.runDomainCommand options handler (Stream.stream ("ownership-noop-" <> Text.pack (show index))) (Credit 1))
+    case result of
+      Right (Right _) -> pure weak
+      _ -> fail "no-op ownership command failed"
 
 probe :: Bool -> Bool -> IO ()
 probe finished retainPayload = do
@@ -56,7 +91,13 @@ produce tracer finished retainPayload = do
     payload <- evaluate (Text.replicate (128 * 1024) (Text.pack (show index)))
     weak <- mkWeakPtr payload Nothing
     context <- Context.getContext
-    span <- createSpan tracer context "ownership" defaultSpanArguments
+    span <-
+      if finished && not retainPayload
+        then Telemetry.withCommandSpan (Just tracer) ("ownership-" <> Text.pack (show index)) Nothing $ \current -> do
+          stamped <- Telemetry.stampTraceContext (Just (Aeson.object ["payload" Aeson..= payload]))
+          _ <- evaluate (Lazy.length (Aeson.encode stamped))
+          maybe (fail "expected a recording command span") pure current
+        else createSpan tracer context "ownership" defaultSpanArguments
     -- Force only the bounded scalar that real helpers put on spans.
     size <- evaluate (Text.length payload)
     addAttribute span "payload.size" size

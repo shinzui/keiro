@@ -4,7 +4,7 @@ type: Capability
 description: "Emit bounded OpenTelemetry spans and metrics across commands, projections/rebuilds, dispatch, messaging, timers, workflows, and PGMQ jobs, with W3C propagation across durable boundaries."
 generated:
   by: openai/codex
-  at: "2026-08-15T00:00:00Z"
+  at: "2026-11-14T22:01:22Z"
 capabilityId: CAP-15
 provider: mori://shinzui/keiro
 status: shipped
@@ -17,6 +17,9 @@ interface:
   - Keiro.Telemetry
   - Keiro.PGMQ.Metrics
 evidence:
+  - kind: test
+    resource: keiro/test/Main.hs
+    proves: "All four command entry points stamp one creation context across a multi-event batch; retries preserve it, explicit caller context wins, and no configured tracer leaves metadata unchanged inside an ambient span."
   - kind: test
     resource: keiro/test/Main.hs
     proves: "The 'Keiro.Telemetry metrics', 'Keiro.Telemetry', 'Kiroku retry exhaustion observability', and 'Keiro.Workflow observability' describe blocks assert that spans and metrics carry the expected common surface across deliveries and handlers."
@@ -40,6 +43,10 @@ attribute surface and W3C trace context propagated through durable messaging
 boundaries. A consumer wires its own
 OTel exporter and gets end-to-end traces and operational metrics without having
 to instrument the framework internals.
+
+Traced commands record W3C creation context in event metadata once per run, before retries.
+Caller-supplied `traceparent` is preserved. Command span names are category-based (`command order`)
+with the full stream name retained as an attribute. Untraced commands do not read ambient context.
 
 Outcome-aware commands emit only `accepted`, `rejected`, or `no_op`; typed
 application reasons are deliberately excluded from attributes and metric

@@ -422,11 +422,14 @@ import OpenTelemetry.Trace
   )
 import OpenTelemetry.Trace.Core
   ( ImmutableSpan (..),
+    NewLink (..),
     Span,
     SpanContext (..),
     SpanHot (..),
     SpanKind,
+    defaultSpanArguments,
     getSpanContext,
+    inSpan',
   )
 import Paths_keiro qualified as Package
 import PreCanonicalRecoverySpec qualified
@@ -1852,6 +1855,9 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       fmap (^. #eventId) (Vector.toList recorded) `shouldBe` [supplied]
 
     it "retries an optimistic conflict after rehydrating the winning event" $ \storeHandle -> do
+      (processor, spansRef) <- inMemoryListExporter
+      provider <- createTracerProvider [processor] emptyTracerProviderOptions
+      let tracer = makeTracer provider "keiro-test" tracerOptions
       conflictInserted <- newIORef False
       let target = stream "counter-command-conflict" :: Stream CounterEventStream
           conflictStreamName = StreamName "counter-command-conflict"
@@ -1868,7 +1874,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
               case outcome of
                 Right _ -> pure ()
                 Left err -> expectationFailure ("failed to insert conflict event: " <> show err)
-          options = defaultRunCommandOptions & #beforeAppend .~ insertConflict
+          options = defaultRunCommandOptions & #beforeAppend .~ insertConflict & #tracer ?~ tracer
       result <-
         Store.runStoreIO storeHandle $
           runCommand options counterEventStream target (Add 2)
@@ -1882,6 +1888,12 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           Store.readStreamForward conflictStreamName (StreamVersion 0) 10
       traverse (decodeRecorded counterCodec) (Vector.toList recorded)
         `shouldBe` Right [CounterAdded 10, CounterAdded 2]
+
+      captured <- traverse captureSpan =<< readIORef spansRef
+      length captured `shouldBe` 1
+      forM_ captured $ \span -> forM_ (drop 1 (Vector.toList recorded)) $ \event ->
+        assertCreationContext (csContext span) (event ^. #metadata)
+      void (shutdownTracerProvider provider Nothing)
 
     it "reports true retry attempts and command conflict metrics when the retry budget is exhausted" $ \storeHandle -> do
       (exporter, metricsRef) <- inMemoryMetricExporter
@@ -2404,7 +2416,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       let sp = case spans of
             (s : _) -> s
             [] -> error "no command span captured"
-      csName sp `shouldBe` "counter-command-otel"
+      csName sp `shouldBe` "command counter"
       show (csKind sp) `shouldBe` "Internal"
       textAttr (csAttributes sp) "keiro.stream.name" `shouldBe` Just "counter-command-otel"
       textAttr (csAttributes sp) "db.system.name" `shouldBe` Just "postgresql"
@@ -2416,6 +2428,44 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         Unset -> pure ()
         Ok -> pure ()
         other -> expectationFailure ("expected Unset/Ok, got " <> show other)
+
+  describe "Keiro.Command creation context" $ around (withFreshResourceStore fixture) $ do
+    forM_ ["plain", "domain", "sql", "domain-sql"] $ \flavor ->
+      it ("stamps every event of one batch in the " <> flavor <> " entry point") $ \(_storeHandle, StoreRunner runner) -> do
+        (processor, spansRef) <- inMemoryListExporter
+        provider <- createTracerProvider [processor] emptyTracerProviderOptions
+        let tracer = makeTracer provider "keiro-test" tracerOptions
+            target = stream ("creation-" <> Text.pack flavor) :: Stream CounterEventStream
+            options = defaultRunCommandOptions & #tracer ?~ tracer & #metadata ?~ object ["audit" Aeson..= True]
+        Right (Right ()) <- runner $ case flavor of
+          "plain" -> void <$> runCommand options multiCounterEventStream target (Add 9)
+          "domain" -> void <$> runDomainCommand options multiCounterDomainHandler target (Add 9)
+          "sql" -> void <$> runCommandWithSqlEvents options multiCounterEventStream target (Add 9) (\_ _ -> pure ())
+          _ -> void <$> runDomainCommandWithSqlEvents options multiCounterDomainHandler target (Add 9) (\_ _ -> pure ())
+        Right recorded <- runner (Store.readStreamForward (streamName target) (StreamVersion 0) 10)
+        Vector.length recorded `shouldBe` 2
+        spans <- traverse captureSpan =<< readIORef spansRef
+        length spans `shouldBe` 1
+        forM_ spans $ \captured -> do
+          csName captured `shouldBe` "command creation"
+          forM_ recorded $ \event -> do
+            assertCreationContext (csContext captured) (event ^. #metadata)
+            case event ^. #metadata of
+              Just (Aeson.Object fields) -> KeyMap.lookup "audit" fields `shouldBe` Just (Aeson.Bool True)
+              other -> expectationFailure (show other)
+        void (shutdownTracerProvider provider Nothing)
+
+    it "does not capture an ambient span when the command tracer is absent" $ \(_storeHandle, StoreRunner runner) -> do
+      (processor, _) <- inMemoryListExporter
+      provider <- createTracerProvider [processor] emptyTracerProviderOptions
+      let tracer = makeTracer provider "keiro-test" tracerOptions
+          target = stream "creation-no-tracer" :: Stream CounterEventStream
+      inSpan' tracer "ambient" defaultSpanArguments $ \_ -> do
+        Right (Right _) <- runner (runCommand defaultRunCommandOptions counterEventStream target (Add 1))
+        pure ()
+      Right recorded <- runner (Store.readStreamForward (streamName target) (StreamVersion 0) 10)
+      fmap (Telemetry.traceContextFromMetadata . (^. #metadata)) (Vector.toList recorded) `shouldBe` [Nothing]
+      void (shutdownTracerProvider provider Nothing)
 
   describe "Keiro.Command enrichment parity" $ do
     let addMarker eventData = pure (eventData & #metadata %~ injectMarker)
@@ -10329,6 +10379,29 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       snd result `shouldBe` "ok"
       fst result `shouldSatisfy` isNothing
 
+    it "keeps unstamped, non-object and caller-parent metadata unchanged" $ do
+      let caller = Just (object ["traceparent" Aeson..= ("caller" :: Text), "audit" Aeson..= True])
+          ordinary = Just (object ["audit" Aeson..= True])
+      Telemetry.stampTraceContext Nothing `shouldReturn` Nothing
+      Telemetry.stampTraceContext ordinary `shouldReturn` ordinary
+      Telemetry.stampTraceContext (Just (Aeson.String "invalid metadata")) `shouldReturn` Just (Aeson.String "invalid metadata")
+      Telemetry.stampTraceContext caller `shouldReturn` caller
+      Telemetry.traceContextFromMetadata (Just (object ["traceparent" Aeson..= (7 :: Int)])) `shouldBe` Nothing
+      Telemetry.creationLinkFromTraceContext (TraceContext "malformed" Nothing) `shouldSatisfy` isNothing
+
+    it "round-trips the current creation context and preserves an explicit caller parent" $ do
+      (processor, _) <- inMemoryListExporter
+      provider <- createTracerProvider [processor] emptyTracerProviderOptions
+      let tracer = makeTracer provider "keiro-test" tracerOptions
+          caller = Just (object ["traceparent" Aeson..= ("caller" :: Text)])
+      inSpan' tracer "metadata" defaultSpanArguments $ \span -> do
+        expected <- getSpanContext span
+        stamped <- Telemetry.stampTraceContext (Just (object ["tracestate" Aeson..= ("orphan=value" :: Text)]))
+        assertCreationContext expected stamped
+        Telemetry.traceContextFromMetadata stamped `shouldSatisfy` maybe False (isNothing . (^. #tracestate))
+        Telemetry.stampTraceContext caller `shouldReturn` caller
+      void (shutdownTracerProvider provider Nothing)
+
     it "re-exports AttributeKeys whose textual payload matches the spec name" $ do
       attrKeyText Telemetry.messaging_operation_type `shouldBe` "messaging.operation.type"
       attrKeyText Telemetry.messaging_operation_name `shouldBe` "messaging.operation.name"
@@ -15530,6 +15603,14 @@ intAttr attrs name = case lookupAttribute attrs name of
 -- @spanHot :: IORef SpanHot@ field rather than directly on 'ImmutableSpan',
 -- so the tests read that reference once after the span ends and assert on
 -- this flat record.
+assertCreationContext :: SpanContext -> Maybe Aeson.Value -> Expectation
+assertCreationContext expected metadata =
+  case Telemetry.traceContextFromMetadata metadata >>= Telemetry.creationLinkFromTraceContext of
+    Nothing -> expectationFailure "expected a valid creation context"
+    Just link -> do
+      traceId (linkContext link) `shouldBe` traceId expected
+      spanId (linkContext link) `shouldBe` spanId expected
+
 data CapturedSpan = CapturedSpan
   { csName :: Text,
     csKind :: SpanKind,

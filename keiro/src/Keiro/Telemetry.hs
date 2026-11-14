@@ -33,6 +33,9 @@ module Keiro.Telemetry
 
     -- * W3C TraceContext bridge
     traceContextFromCurrentSpan,
+    traceContextFromMetadata,
+    stampTraceContext,
+    creationLinkFromTraceContext,
     traceContextFromHeaders,
     injectTraceContext,
 
@@ -186,6 +189,9 @@ module Keiro.Telemetry
   )
 where
 
+import Data.Aeson qualified as Aeson
+import Data.Aeson.Key qualified as Key
+import Data.Aeson.KeyMap qualified as KeyMap
 import Keiro.Inbox.Kafka (KafkaInboundRecord)
 import Keiro.Integration.Event
   ( IntegrationEvent,
@@ -197,6 +203,7 @@ import Keiro.Outbox.Kafka (KafkaProducerRecord)
 import Keiro.Prelude
 import Keiro.Workflow.Types (StepName (..), WorkflowId (..), WorkflowName (..))
 import Kiroku.Store.Observability (KirokuEvent (..))
+import Kiroku.Store.Types (CategoryName (..), StreamName (..), categoryName)
 import "base" Control.Exception (bracket)
 import "base" GHC.Stack (HasCallStack)
 import "bytestring" Data.ByteString qualified as ByteString
@@ -228,6 +235,7 @@ import "hs-opentelemetry-api" OpenTelemetry.Metric.Core
   )
 import "hs-opentelemetry-api" OpenTelemetry.Trace.Core
   ( InstrumentationLibrary (..),
+    NewLink (..),
     Span,
     SpanArguments (..),
     SpanKind (..),
@@ -406,8 +414,8 @@ withRemoteParent hs body =
           ts = fmap TE.encodeUtf8 (Prelude.lookup headerTraceState hsList)
        in decodeSpanContext tp ts
 
--- | Open an @Internal@ span around a command run, named after the resolved
--- stream identifier. Attributes capture the stream name and (when the
+-- | Open an @Internal@ span named @command <category>@ around a command run.
+-- The full resolved stream identifier remains an attribute. Attributes capture the stream name and (when the
 -- caller supplies it) the retry attempt number. The number of events
 -- appended is attached after a successful append by the caller via
 -- 'addAttribute span keiro_events_appended n'.
@@ -422,13 +430,14 @@ withCommandSpan ::
   m a
 withCommandSpan Nothing _ _ body = body Nothing
 withCommandSpan (Just tracer) streamName retryAttempt body =
-  inSpan' tracer streamName args $ \sp -> do
+  inSpan' tracer ("command " <> category) args $ \sp -> do
     addAttribute sp (unkey keiro_stream_name) streamName
     case retryAttempt of
       Nothing -> pure ()
       Just n -> addAttribute sp (unkey keiro_retry_attempt) n
     body (Just sp)
   where
+    CategoryName category = categoryName (StreamName streamName)
     args = defaultSpanArguments {kind = Internal}
 
 -- | Open an @Internal@ span around a workflow run (or a single step/resume when
@@ -482,6 +491,50 @@ traceContextFromCurrentSpan = do
             | ByteString.null tracestateBytes = Nothing
             | otherwise = Just (TE.decodeUtf8 tracestateBytes)
       pure (Just (TraceContext traceparent tracestate))
+
+-- | Read opaque W3C creation-context strings from event metadata. Validation
+-- belongs to the link decoder, so malformed context never fails domain work.
+traceContextFromMetadata :: Maybe Value -> Maybe TraceContext
+traceContextFromMetadata (Just (Aeson.Object fields)) = do
+  Aeson.String parent <- KeyMap.lookup traceParentMetadataKey fields
+  state <- case KeyMap.lookup traceStateMetadataKey fields of
+    Nothing -> Just Nothing
+    Just (Aeson.String value) -> Just (Just value)
+    _ -> Nothing
+  pure (TraceContext parent state)
+traceContextFromMetadata _ = Nothing
+
+traceParentMetadataKey, traceStateMetadataKey :: Key.Key
+traceParentMetadataKey = Key.fromText headerTraceParent
+traceStateMetadataKey = Key.fromText headerTraceState
+
+-- | Stamp the current creation context without overriding a caller's parent.
+-- Non-object metadata is left to the codec's existing validation. An orphaned
+-- caller tracestate is replaced with the captured context's matching state.
+stampTraceContext :: (MonadIO m) => Maybe Value -> m (Maybe Value)
+stampTraceContext original = case original of
+  Just (Aeson.Object fields)
+    | KeyMap.member traceParentMetadataKey fields -> pure original
+    | otherwise -> stamp fields
+  Nothing -> stamp KeyMap.empty
+  _ -> pure original
+  where
+    stamp fields = do
+      current <- traceContextFromCurrentSpan
+      pure $ case current of
+        Nothing -> original
+        Just (TraceContext parent state) ->
+          let withParent = KeyMap.insert traceParentMetadataKey (Aeson.String parent) (KeyMap.delete traceStateMetadataKey fields)
+              withState = maybe withParent (\value -> KeyMap.insert traceStateMetadataKey (Aeson.String value) withParent) state
+           in Just (Aeson.Object withState)
+
+-- | Decode and evaluate a span identity before it can be retained by a span.
+-- The resulting link owns no event, metadata object, or deferred record lookup.
+creationLinkFromTraceContext :: TraceContext -> Maybe NewLink
+creationLinkFromTraceContext (TraceContext parent state) =
+  case decodeSpanContext (Just (TE.encodeUtf8 parent)) (TE.encodeUtf8 <$> state) of
+    Nothing -> Nothing
+    Just context -> let !link = NewLink context mempty in Just link
 
 -- | Lift a 'TraceContext' out of a flat @[(Text, Text)]@ header list. This
 -- is the mirror image of 'integrationHeaders': it does not validate the

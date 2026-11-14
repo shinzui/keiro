@@ -1,0 +1,28 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+All
+  tracing
+    command
+      append-distinct-streams:        OK
+        17.8 ms ± 428 μs,  10 MB allocated, 147 KB copied,  31 MB peak memory,       same as baseline
+      append-distinct-streams/tracer: OK
+        17.5 ms ± 1.6 ms,  11 MB allocated, 152 KB copied,  42 MB peak memory,       same as baseline
+      append-one-stream:              OK
+        62.1 ms ± 3.8 ms,  83 MB allocated, 1.5 MB copied,  50 MB peak memory,       same as baseline
+      append-one-stream/tracer:       OK
+        66.3 ms ± 5.3 ms,  88 MB allocated, 1.7 MB copied,  51 MB peak memory,       same as baseline
+      append-batch:                   OK
+        1.78 ms ± 172 μs, 3.0 MB allocated,  32 KB copied,  51 MB peak memory,       same as baseline
+      append-batch/tracer:            OK
+        1.95 ms ± 175 μs, 3.1 MB allocated,  34 KB copied,  51 MB peak memory,       same as baseline
+    publish-backlog:                  OK
+      187  ms ±  16 ms, 231 MB allocated, 1.4 MB copied,  51 MB peak memory,       same as baseline
+    publish-backlog/tracer:           OK
+      184  ms ±  18 ms, 231 MB allocated, 1.4 MB copied,  51 MB peak memory,       same as baseline
+    process-manager
+      dispatch:                       OK
+        31.9 ms ± 1.1 ms,  17 MB allocated, 308 KB copied,  52 MB peak memory,       same as baseline
+      dispatch/tracer:                OK
+        32.6 ms ± 1.7 ms,  19 MB allocated, 315 KB copied,  75 MB peak memory,       same as baseline
+
+All 10 tests passed (34.51s)

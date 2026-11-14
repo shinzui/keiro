@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-14
+* **Update**: CAP-15: record command event creation context, category span names and no-tracer behavior.
+
 ## 2026-10-27
 * **Update**: Set CAP-20/CAP-21 introduction to 0.22.0.0, reconcile CAP-16 socket availability and the eight-package catalog, and replace superseded pending-interference wording with retained cohort acceptance.
 

@@ -18,7 +18,7 @@ main = do
   selected <- selectLegs
   withMigratedSuite \fixture ->
     hspec $ do
-      SpanOwnership.spec
+      SpanOwnership.spec fixture
       describe "Retention legs" $
         forM_ selected \leg ->
           it (Text.unpack leg.legName) $

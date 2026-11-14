@@ -1,0 +1,51 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-core-0.24.0.0 (lib) (configuration changed)
+ - keiro-migrations-0.24.0.0 (lib) (configuration changed)
+ - keiro-0.24.0.0 (lib) (configuration changed)
+ - keiro-test-support-0.24.0.0 (lib) (configuration changed)
+ - keiro-0.24.0.0 (bench:keiro-bench) (configuration changed)
+Configuring library for keiro-core-0.24.0.0...
+Configuring library for keiro-migrations-0.24.0.0...
+Preprocessing library for keiro-core-0.24.0.0...
+Building library for keiro-core-0.24.0.0...
+Preprocessing library for keiro-migrations-0.24.0.0...
+Building library for keiro-migrations-0.24.0.0...
+[1 of 5] Compiling Keiro.Migrations.Internal.Definition ( src/Keiro/Migrations/Internal/Definition.hs, /private/tmp/keiro-mp47-baseline/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.24.0.0/build/Keiro/Migrations/Internal/Definition.o, /private/tmp/keiro-mp47-baseline/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.24.0.0/build/Keiro/Migrations/Internal/Definition.dyn_o ) [Impure plugin forced recompilation]
+Configuring library for keiro-0.24.0.0...
+Configuring library for keiro-test-support-0.24.0.0...
+Preprocessing library for keiro-0.24.0.0...
+Building library for keiro-0.24.0.0...
+Preprocessing library for keiro-test-support-0.24.0.0...
+Building library for keiro-test-support-0.24.0.0...
+Configuring benchmark 'keiro-bench' for keiro-0.24.0.0...
+Preprocessing benchmark 'keiro-bench' for keiro-0.24.0.0...
+Building benchmark 'keiro-bench' for keiro-0.24.0.0...
+All
+  tracing
+    command
+      append-distinct-streams:        OK
+        18.5 ms ± 2.7 ms,  10 MB allocated, 136 KB copied,  29 MB peak memory
+      append-distinct-streams/tracer: OK
+        18.1 ms ± 2.4 ms,  11 MB allocated, 145 KB copied,  49 MB peak memory
+      append-one-stream:              OK
+        67.9 ms ± 6.8 ms,  84 MB allocated, 1.5 MB copied,  58 MB peak memory
+      append-one-stream/tracer:       OK
+        67.1 ms ± 5.2 ms,  84 MB allocated, 1.5 MB copied,  58 MB peak memory
+      append-batch:                   OK
+        1.79 ms ± 160 μs, 3.0 MB allocated,  32 KB copied,  58 MB peak memory
+      append-batch/tracer:            OK
+        1.78 ms ± 115 μs, 3.0 MB allocated,  32 KB copied,  58 MB peak memory
+    publish-backlog:                  OK
+      182  ms ± 6.7 ms, 231 MB allocated, 1.4 MB copied,  58 MB peak memory
+    publish-backlog/tracer:           OK
+      192  ms ± 8.1 ms, 231 MB allocated, 1.4 MB copied,  58 MB peak memory
+    process-manager
+      dispatch:                       OK
+        34.5 ms ± 9.6 ms,  18 MB allocated, 305 KB copied,  58 MB peak memory
+      dispatch/tracer:                OK
+        32.0 ms ± 2.7 ms,  19 MB allocated, 325 KB copied,  69 MB peak memory
+
+All 10 tests passed (42.43s)

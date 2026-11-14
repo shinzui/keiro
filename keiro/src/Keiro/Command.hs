@@ -153,6 +153,7 @@ import Keiro.Telemetry
     recordSnapshotSeedSkipped,
     recordSnapshotSeedVerificationFailed,
     recordSnapshotWriteFailures,
+    stampTraceContext,
     withCommandSpan,
   )
 import Kiroku.Store.Append (appendToStream)
@@ -901,10 +902,10 @@ runCommand ::
   ci ->
   Eff es (Either CommandError (CommandResult (EventStream phi rs s ci co)))
 runCommand options validatedEventStream targetStream command =
-  withCommandSpan (options ^. #tracer) (resolvedStreamName eventStream targetStream) Nothing $ \mSpan -> do
+  withCommandSpan (options ^. #tracer) (resolvedStreamName eventStream targetStream) Nothing $ \mSpan -> withStampedCommandMetadata options $ \stampedOptions -> do
     (outcome, attemptNo) <-
       domainCommandAttempts
-        options
+        stampedOptions
         (silentNoOpHandler validatedEventStream)
         targetStream
         command
@@ -930,10 +931,20 @@ runDomainCommand ::
   ci ->
   Eff es (Either CommandError (DomainCommandOutcome (EventStream phi rs s ci co) co rejection noOp))
 runDomainCommand options handler@DomainCommandHandler {eventStream = validatedEventStream} targetStream command =
-  withCommandSpan (options ^. #tracer) (resolvedStreamName (unvalidated validatedEventStream) targetStream) Nothing $ \mSpan -> do
-    (outcome, attemptNo) <- domainCommandAttempts options handler targetStream command mSpan
+  withCommandSpan (options ^. #tracer) (resolvedStreamName (unvalidated validatedEventStream) targetStream) Nothing $ \mSpan -> withStampedCommandMetadata options $ \stampedOptions -> do
+    (outcome, attemptNo) <- domainCommandAttempts stampedOptions handler targetStream command mSpan
     recordDomainCommandOutcome options mSpan attemptNo outcome
     pure outcome
+
+-- Capture once inside the command span, before any optimistic retry. With no
+-- configured tracer the original options and metadata pass through unchanged.
+withStampedCommandMetadata :: (MonadIO m) => RunCommandOptions -> (RunCommandOptions -> m a) -> m a
+withStampedCommandMetadata options body = case options ^. #tracer of
+  Nothing -> body options
+  Just _ -> do
+    metadata <- stampTraceContext (options ^. #metadata)
+    body (options & #metadata .~ metadata)
+{-# INLINE withStampedCommandMetadata #-}
 
 -- | The optimistic-concurrency attempt loop shared by the plain and
 -- transactional domain command runners: hydrate, detect a conflict fixpoint,
@@ -1095,10 +1106,10 @@ runCommandWithSqlEventsControlled ::
   ([(co, RecordedEvent)] -> AppendResult -> Tx.Transaction (SqlTransactionDecision a)) ->
   Eff es (Either CommandError (SqlCommandOutcome (EventStream phi rs s ci co) a))
 runCommandWithSqlEventsControlled options validatedEventStream targetStream command afterAppend =
-  withCommandSpan (options ^. #tracer) (resolvedStreamName eventStream targetStream) Nothing $ \mSpan -> do
+  withCommandSpan (options ^. #tracer) (resolvedStreamName eventStream targetStream) Nothing $ \mSpan -> withStampedCommandMetadata options $ \stampedOptions -> do
     (outcome, attemptNo) <-
       domainSqlCommandAttempts
-        options
+        stampedOptions
         (silentNoOpHandler validatedEventStream)
         targetStream
         command
@@ -1170,8 +1181,8 @@ runDomainCommandWithSqlEventsControlled ::
   ([(co, RecordedEvent)] -> AppendResult -> Tx.Transaction (SqlTransactionDecision a)) ->
   Eff es (Either CommandError (DomainSqlCommandOutcome (EventStream phi rs s ci co) co rejection noOp a))
 runDomainCommandWithSqlEventsControlled options handler@DomainCommandHandler {eventStream = validatedEventStream} targetStream command afterAppend =
-  withCommandSpan (options ^. #tracer) (resolvedStreamName (unvalidated validatedEventStream) targetStream) Nothing $ \mSpan -> do
-    (outcome, attemptNo) <- domainSqlCommandAttempts options handler targetStream command afterAppend mSpan
+  withCommandSpan (options ^. #tracer) (resolvedStreamName (unvalidated validatedEventStream) targetStream) Nothing $ \mSpan -> withStampedCommandMetadata options $ \stampedOptions -> do
+    (outcome, attemptNo) <- domainSqlCommandAttempts stampedOptions handler targetStream command afterAppend mSpan
     recordDomainSqlCommandOutcome options mSpan attemptNo outcome
     pure outcome
 
@@ -1312,11 +1323,15 @@ recordCommandOutcome (Just sp) eventsOf attemptNo result = do
   addAttribute sp (unkey db_system_name) ("postgresql" :: Text)
   addAttribute sp (unkey keiro_retry_attempt) (Prelude.fromIntegral attemptNo :: Int64)
   case result of
-    Right v ->
-      addAttribute sp (unkey keiro_events_appended) (Prelude.fromIntegral (eventsOf v) :: Int64)
+    Right v -> do
+      -- Attribute constructors can be lazy: keep the scalar, not its outcome.
+      let !count = Prelude.fromIntegral (eventsOf v) :: Int64
+      addAttribute sp (unkey keiro_events_appended) count
     Left err -> do
-      addAttribute sp (unkey error_type) (commandErrorClass err)
-      setStatus sp (Error (Text.take 256 (Text.pack (show err))))
+      let !errorClass = commandErrorClass err
+          !description = Text.pack (Prelude.take 256 (show err))
+      addAttribute sp (unkey error_type) errorClass
+      setStatus sp (Error description)
 
 recordDomainCommandOutcome ::
   (IOE :> es) =>
@@ -1362,8 +1377,9 @@ recordDomainDecision ::
   Eff es ()
 recordDomainDecision options mSpan domainDecision = do
   let decisionClass = domainDecisionClass domainDecision
-  for_ mSpan $ \sp ->
-    addAttribute sp (unkey keiro_command_decision) (commandDecisionClassText decisionClass)
+  for_ mSpan $ \sp -> do
+    let !decisionText = commandDecisionClassText decisionClass
+    addAttribute sp (unkey keiro_command_decision) decisionText
   recordCommandDecision (options ^. #metrics) decisionClass
 
 domainDecisionClass :: DomainDecision co rejection noOp -> CommandDecisionClass

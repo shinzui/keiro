@@ -1,0 +1,18 @@
+{
+  "baseline_commit": "ac14f8de",
+  "candidate_base_commit": "ac14f8de",
+  "candidate_sha256": {
+    "keiro/src/Keiro/Command.hs": "bb2c339ccfe7dd6cd01c9262e710aeb0fbcabeb7ae525d006de54deca45be424",
+    "keiro/src/Keiro/Telemetry.hs": "3e90ab325fa5c323bef90bb3d4c9456b1338d451fe06920916bf72f4c69ecfce",
+    "keiro/bench/Main.hs": "484efed53f84db8b4098e612fe932c6d13812964982873439640581293c809f6"
+  },
+  "before_binary_sha256": "a500b4927c20c2f982d3dbbe9c318b97299fb2c68a5be968ef4c18dbde8a8862",
+  "final_binary_sha256": "3a3f86b1f8cf35708c080fe77722e86995dca76e1f7fa5cf6bdf026cddc0a461",
+  "dependency_versions_identical": true,
+  "toolchain_reference": "../tracing-baseline-v1/environment.json",
+  "rts": [
+    "-N2",
+    "-T"
+  ],
+  "timing_ceiling_percent": 25
+}

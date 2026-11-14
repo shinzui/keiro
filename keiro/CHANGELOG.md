@@ -6,6 +6,21 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Command spans are named `command <category>` (for example `command counter`),
+  replacing the full stream name (`counter-42`). The full name remains in `keiro.stream.name`.
+
+### New Features
+
+- Commands with a configured tracer stamp event metadata with the command span's W3C
+  creation context once per run, preserving explicit caller context across retries.
+
+### Fixed
+
+- Retained command spans release typed outcome payloads before attribute inspection;
+  bounded outcome projections are forced before SDK ownership.
+
 ## 0.24.0.0 — 2026-11-05
 
 ### Breaking Changes

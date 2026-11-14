@@ -1,0 +1,36 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+All
+  tracing
+    command
+      append-distinct-streams:        {"events":600,"events_bytes":1343488,"label":"append-distinct-streams","prefix":"tracing-append-distinct-streams-","stream_events_bytes":2449408,"streams":600,"streams_bytes":1949696}
+OK
+        17.9 ms ±  27 ms,  10 MB allocated, 142 KB copied,  18 MB peak memory
+      append-distinct-streams/tracer: {"events":600,"events_bytes":2170880,"label":"append-distinct-streams/tracer","prefix":"tracing-append-distinct-streams/tracer-","stream_events_bytes":2686976,"streams":600,"streams_bytes":2187264}
+OK
+        18.0 ms ±  27 ms,  11 MB allocated, 141 KB copied,  18 MB peak memory
+      append-one-stream:              {"events":600,"events_bytes":2899968,"label":"append-one-stream","prefix":"tracing-append-one-stream-","stream_events_bytes":2908160,"streams":6,"streams_bytes":2195456}
+OK
+        69.5 ms ±  28 ms,  83 MB allocated, 1.6 MB copied,  18 MB peak memory
+      append-one-stream/tracer:       {"events":600,"events_bytes":3735552,"label":"append-one-stream/tracer","prefix":"tracing-append-one-stream/tracer-","stream_events_bytes":3137536,"streams":6,"streams_bytes":2195456}
+OK
+        71.0 ms ±  28 ms,  88 MB allocated, 1.6 MB copied,  18 MB peak memory
+      append-batch:                   {"events":3400,"events_bytes":7823360,"label":"append-batch","prefix":"tracing-append-batch-","stream_events_bytes":4431872,"streams":34,"streams_bytes":2220032}
+OK
+        2.19 ms ± 3.5 ms, 3.0 MB allocated,  27 KB copied,  22 MB peak memory
+      append-batch/tracer:            {"events":3400,"events_bytes":12574720,"label":"append-batch/tracer","prefix":"tracing-append-batch/tracer-","stream_events_bytes":5726208,"streams":34,"streams_bytes":2236416}
+OK
+        2.05 ms ± 3.9 ms, 3.1 MB allocated,  28 KB copied,  22 MB peak memory
+    publish-backlog:                  OK
+      192  ms ±  38 ms, 230 MB allocated, 1.4 MB copied,  22 MB peak memory
+    publish-backlog/tracer:           OK
+      197  ms ±  44 ms, 230 MB allocated, 1.3 MB copied,  22 MB peak memory
+    process-manager
+      dispatch:                       {"events":600,"events_bytes":1351680,"label":"dispatch","prefix":"bench-command-domain-process-manager:dispatch-","stream_events_bytes":2490368,"streams":600,"streams_bytes":2048000}
+OK
+        33.4 ms ±  27 ms,  17 MB allocated, 296 KB copied,  26 MB peak memory
+      dispatch/tracer:                {"events":600,"events_bytes":2187264,"label":"dispatch/tracer","prefix":"bench-command-domain-process-manager:dispatch/tracer-","stream_events_bytes":2744320,"streams":600,"streams_bytes":2408448}
+OK
+        39.4 ms ±  38 ms,  19 MB allocated, 308 KB copied,  26 MB peak memory
+
+All 10 tests passed (6.90s)

@@ -1,0 +1,31 @@
+diff --git a/keiro/bench/Main.hs b/keiro/bench/Main.hs
+index c0a39e2a..083c641a 100644
+--- a/keiro/bench/Main.hs
++++ b/keiro/bench/Main.hs
+@@ -1260,7 +1260,7 @@ runResetProbes outboxStore inboxStore producerStore = do
+ tracingBenchmarks :: Store.KirokuStore -> Store.KirokuStore -> StoreRunner -> Store.KirokuStore -> Tracer -> [Benchmark]
+ tracingBenchmarks store dispatchStore runner outboxStore tracer =
+   [ bgroup "tracing" $
+-      [selected (prepareCommandStore store) $ \_ -> bgroup "command" [commandCell distinct traced | distinct <- [True, False], traced <- [False, True]]]
++      [selected (prepareCommandStore store) $ \_ -> bgroup "command" ([commandCell distinct traced | distinct <- [True, False], traced <- [False, True]] <> [batchCommandCell traced | traced <- [False, True]])]
+         <> [publishCell traced | traced <- [False, True]]
+         <> [selected (prepareCommandStore dispatchStore) $ \_ -> bgroup "process-manager" [dispatchCell traced | traced <- [False, True]]]
+   ]
+@@ -1278,6 +1278,17 @@ tracingBenchmarks store dispatchStore runner outboxStore tracer =
+                 Right value | value ^. #eventsAppended == 1 -> pure ()
+                 other -> liftIO (fail (show other))
+        in selectedCounterWithCleanup label 100 (prepareCommand store label 100 1000 action) (\n -> workCountProbe store (Text.pack label) ("tracing-" <> Text.pack label <> "-") (n * if distinct then 100 else 1) (n * 100)) $ \counter -> bench label (nfIO (action counter))
++    batchCommandCell traced =
++      let label = "append-batch" <> suffix traced
++          action counter = do
++            iteration <- nextBoundedIteration label (commandBudget EmitLarge) counter
++            let target = stream ("tracing-" <> Text.pack label <> "-" <> Text.pack (show iteration))
++            runStoreChecked store $ do
++              result <- runCommand (options traced) legacyAcceptedLargeStream target EmitLarge
++              case result of
++                Right value | value ^. #eventsAppended == 100 -> pure ()
++                other -> liftIO (fail (show other))
++       in selectedCounterWithCleanup label 100 (prepareCommand store label 100 (commandBudget EmitLarge) action) (\n -> workCountProbe store (Text.pack label) ("tracing-" <> Text.pack label <> "-") n (n * 100)) $ \counter -> bench label (nfIO (action counter))
+     publishCell traced =
+       let label = "publish-backlog" <> suffix traced
+           action = do

@@ -2,7 +2,7 @@
 type: Runbook
 title: Operations
 description: Deploy and operate Keiro applications, workers, rebuilds, retries, and production checks.
-timestamp: 2026-11-05T15:15:59Z
+timestamp: 2026-11-14T22:01:22Z
 docId: DOC-15
 tags: [keiro, operations, deployment, runbook]
 generated:
@@ -507,6 +507,12 @@ At minimum, track:
 Keiro emits OpenTelemetry **spans** through `Keiro.Telemetry`: an `Internal` span around
 `runCommand` (opt-in via `RunCommandOptions.tracer`), a `Producer` span around outbox
 publishing, and `Consumer` spans parented via W3C trace headers.
+
+Command spans use `command <category>` names, such as `command order`; the complete stream
+name remains in `keiro.stream.name`. With `RunCommandOptions.tracer` configured, events carry
+that command span's `traceparent` and optional `tracestate` in their metadata. Capture happens
+once before retries, and an explicit caller `traceparent` wins. With no configured tracer,
+metadata stays unchanged even when an application span is active.
 
 Keiro also emits OpenTelemetry **metrics** through `Keiro.Telemetry`. Metrics are opt-in
 and no-op by default: build the instrument set once from an SDK `Meter`

@@ -2,7 +2,7 @@
 type: Research Document
 title: OpenTelemetry semantic-conventions audit
 description: Audit Keiro instrumentation sites against the OpenTelemetry semantic conventions and record gaps and actions.
-timestamp: "2026-08-09T16:55:05Z"
+timestamp: "2026-11-14T22:01:22Z"
 researchId: RES-16
 status: active
 scope: Keiro tracing and metrics instrumentation governed by OpenTelemetry semantic conventions.
@@ -19,11 +19,10 @@ and kind, the required, conditionally required, and recommended attributes
 `OpenTelemetry.SemanticConventions`), the spec section anchor in the
 generated module, and a gap-vs.-action line.
 
-The source of truth for the Haskell binding is
-
-```text
-/Users/shinzui/Keikaku/hub/haskell/hs-opentelemetry-project/hs-opentelemetry/semantic-conventions/src/OpenTelemetry/SemanticConventions.hs
-```
+The Haskell binding is owned by
+`mori://iand675/hs-opentelemetry/packages/hs-opentelemetry-semantic-conventions`, at
+project-relative `hs-opentelemetry/semantic-conventions/src/OpenTelemetry/SemanticConventions.hs`
+(the source-artifact URI is pending).
 
 (29,049 lines, `v1.40` of the upstream spec). Spec citations in this document
 point at the `-- $<anchor>` Haddock chunks inside that file.
@@ -283,9 +282,8 @@ open, application-level child spans are the user's responsibility.
 - `src/Keiro/Command.hs:286` — `runCommandWithSql`.
 - `src/Keiro/Command.hs:298` — `runCommandWithSqlEvents`.
 
-**Span name:** the resolved stream name —
-`(eventStream ^. #resolveStreamName) targetStream`. Example: a counter
-command targeting stream `counter-7` produces a span named `counter-7`.
+**Span name:** `command <category>`, using Kiroku's canonical prefix-before-dash rule.
+A command targeting `counter-7` produces `command counter`; the full name remains an attribute.
 
 **Span kind:** `Internal`.
 
@@ -325,20 +323,18 @@ command targeting stream `counter-7` produces a span named `counter-7`.
 - On exception escape: set `error.type = "exception"` and let
   `hs-opentelemetry-api`'s default exception recording attach the type.
 
-**Gap as of 2026-05-19:** No span emitted. The command runner is one of
-the highest-value places to add a span because every retry, every hydrate,
-and every snapshot read currently has no visible attribution.
-
-**Action:** Milestone 6 wraps each of the three `runCommand*` entry points
-in `Keiro.Telemetry.withCommandSpan`. The `Maybe Tracer` opt-in does not
-extend here — the helper degrades to a no-op under
-`hs-opentelemetry-api`'s noop tracer, so calling it unconditionally costs
-nothing in the no-tracer path.
+**Implemented (2026-11-14):** All four plain/domain and transactional entry points use
+`Keiro.Telemetry.withCommandSpan`. With a configured tracer, shared metadata stamping captures
+this span once before the retry loop and stamps every event in the accepted batch. Caller
+`traceparent` takes precedence, and non-object metadata retains the codec's validation error.
+With no configured tracer, the original metadata passes through without a context read.
+Creation metadata changes neither domain replay nor deterministic identifiers; producer
+adoption remains governed by ADR-59's immutable cutover.
 
 > **Follow-up:** Once `hasql-opentelemetry` is wired into `kiroku-store`,
 > the actual per-statement database spans appear as children of the
 > command span. That work is tracked under
-> `/Users/shinzui/Keikaku/bokuno/hasql-opentelemetry` and explicitly out
+> `mori://shinzui/hasql-opentelemetry` and explicitly out
 > of scope for this plan.
 
 
@@ -486,7 +482,7 @@ This table is the at-a-glance summary the Milestone 9 sweep will reconcile.
 | Outbox publish      | `send <destination>`           | Producer | `$attributes_messaging_trace_minimal` 27014  | Gap → M4                |
 | Inbox consume       | `process <destination>`        | Consumer | `$attributes_messaging_trace_minimal` 27014  | Gap → M5                |
 | Inbox process       | (inherits consumer span)       | Internal | n/a                                          | Closed transitively M5  |
-| Command run         | `<stream>`                     | Internal | `$span_db_client` 19833                      | Gap → M6                |
+| Command run         | `command <category>`                     | Internal | `$span_db_client` 19833                      | Gap → M6                |
 | Hydration           | `hydrate <stream>`             | Internal | n/a (bespoke)                                | Gap (follow-up)         |
 | Snapshot read/write | `snapshot.{read,write} <s>`    | Internal | n/a (bespoke)                                | Gap (follow-up)         |
 | Read-model rebuild  | `rebuild <read-model>`         | Internal | `$span_db_client` 19833                      | Gap (follow-up)         |

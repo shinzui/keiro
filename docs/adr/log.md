@@ -1,6 +1,12 @@
 # Bundle Update Log
 
 ## 2026-11-14
+
+* **Update**: ADR-60: force bounded scalar outcome projections after an actual retained-span no-op probe demonstrated payload retention.
+
+
+* **Update**: ADR-60: store command creation context in event metadata and correlate durable work through evaluated span identities.
+
 * **Update**: Accepted durable trace adoption, exact workflow wake attribution, and retained-span ownership constraints for MasterPlan 47.
 
 ## 2026-11-05
