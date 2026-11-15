@@ -2,6 +2,9 @@
 
 ## 2026-11-15
 
+* **Update**: Account for the full reference benchmark inventory when recovering missing historical timing rows; keep functional-only omissions blocking.
+
+
 * **Update**: Batch flagged benchmark confirmations into four bounded fixture lifecycles; recover only explicit known-inventory timeouts with two complete passing confirmations.
 
 

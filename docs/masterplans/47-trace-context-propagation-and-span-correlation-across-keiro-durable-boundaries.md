@@ -329,7 +329,7 @@ Historical CSVs and numerical ceilings remain unchanged. Full correctness, nativ
 Inbox remains inconclusive after disagreeing confirmations and an isolated timeout;
 all attempts are retained. The follow-up runner batches flagged cases into four
 bounded confirmation processes and requires two complete passing confirmations
-for any known-inventory initial timeout. Its 87 script controls pass; final release
+for any known-inventory initial timeout. Its 88 script controls pass; final release
 verification follows the frozen runner revision. Earlier archives and the successful staged-consumer proof are retained
 as historical evidence and require refresh for the corrected candidate.
 No benchmark waiver is being used; publication requires every corrected guard to pass. See the

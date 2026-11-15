@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Benchmark release gates require isolated fixed workloads and attributed baselines
 description: Release benchmark evidence uses isolated fixtures, fixed measured work, explicit growth bounds and reproducible baselines whose changes have attributed causes.
-timestamp: 2026-11-15T16:34:00Z
+timestamp: 2026-11-15T16:55:17Z
 docId: ADR-58
 status: Accepted
 date: 2026-10-21
@@ -78,6 +78,9 @@ measurements. Each missing required case must complete both confirmations; a
 timeout never supplies a passing observation. Incomplete reference measurements
 cannot enter the timing cache. Assertion failures, other execution failures and
 timeouts during confirmation block acceptance immediately.
+Candidate timeout accounting uses the complete reference inventory, including
+cases without historical budgets. Only missing historical rows are recoverable;
+timeouts in functional-only additions still block immediately.
 
 Retain all original measurements, confirmation commands/results, source and binary
 identities and dependency plans. Release receipts checksum these supplementary

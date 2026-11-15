@@ -12,7 +12,8 @@ import bench_guard as guard
 
 
 class AcceptanceControls(unittest.TestCase):
-    def exercise_guard(self, candidate_mean, reference_mean, case_count=1, initial_timeout=False):
+    def exercise_guard(self, candidate_mean, reference_mean, case_count=1, initial_timeout=False,
+                       extra_reference_case=False):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
@@ -34,8 +35,12 @@ class AcceptanceControls(unittest.TestCase):
 
         def measure(binary, cwd, pattern, target, stem, **kwargs):
             mean = candidate_mean if binary == candidate else reference_mean
-            values = {} if initial_timeout and stem == "candidate" else {
-                name: guard.Estimate(mean, 1) for name in names}
+            measured_names = names + (["All.inbox.extra"] if extra_reference_case else [])
+            if stem == "candidate":
+                self.assertEqual(kwargs["timeout_inventory"], set(measured_names))
+                self.assertEqual(kwargs["recoverable_names"], set(names))
+            values = {name: guard.Estimate(mean, 1) for name in measured_names
+                      if not (initial_timeout and stem == "candidate" and name == names[0])}
             (target / (stem + ".csv")).write_text(
                 "Name,Mean (ps),2*Stdev (ps)\n" + "".join(f"{name},{mean},1\n" for name in values))
             (target / (stem + ".log")).write_text("complete benchmark")
@@ -80,6 +85,12 @@ class AcceptanceControls(unittest.TestCase):
         self.assertIn("timed out", case["reason"])
         self.assertEqual([p["status"] for p in case["confirmation"]], ["passed", "passed"])
 
+    def test_timeout_inventory_includes_reference_cases_without_historical_budgets(self):
+        status, result, _ = self.exercise_guard(100, 100, initial_timeout=True, extra_reference_case=True)
+        self.assertEqual(status, 0)
+        self.assertEqual(len(result["cases"]), 1)
+        self.assertEqual(len(result["cases"]["All.inbox.case"]["confirmation"]), 2)
+
     def test_only_explicit_timeout_failures_can_supply_partial_measurements(self):
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp)
@@ -99,6 +110,10 @@ class AcceptanceControls(unittest.TestCase):
             (target / "partial.log").write_text("TIMEOUT\nTimed out after 10s\n1 out of 2 tests failed")
             with patch.object(guard, "run", side_effect=timeout_run), self.assertRaises(RuntimeError):
                 guard.measure("binary", target, "inbox", target, "partial", allow_timeouts=True, timeout_inventory={"case"})
+            (target / "partial.log").write_text("TIMEOUT\nTimed out after 10s\n1 out of 1 tests failed")
+            with patch.object(guard, "run", side_effect=timeout_run), self.assertRaises(RuntimeError):
+                guard.measure("binary", target, "inbox", target, "partial", allow_timeouts=True,
+                              timeout_inventory={"extra"}, recoverable_names={"historical"})
 
     def test_same_environment_comparison_accepts_common_historical_drift(self):
         # Both are far above the old 16us CSV, but the candidate adds no cost.

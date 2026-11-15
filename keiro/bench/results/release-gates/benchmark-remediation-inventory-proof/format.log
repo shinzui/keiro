@@ -1,0 +1,6 @@
+warning: Git tree '/Users/shinzui/Keikaku/bokuno/keiro' has uncommitted changes
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+traversed 7889 files
+emitted 412 files for processing
+formatted 0 files (0 changed) in 100ms

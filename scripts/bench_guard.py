@@ -176,7 +176,7 @@ def reference_binary(context):
 
 
 def measure(binary, cwd, pattern, target, stem, timeout=600, historical=None, allow_timeouts=False,
-            timeout_inventory=None):
+            timeout_inventory=None, recoverable_names=None):
     csv_path = target / (stem + ".csv")
     command = [str(binary), "-p", pattern, "-j1", "--time-mode", "wall", "--hide-progress",
                "--stdev", "5", "--timeout", "10s", "--csv", str(csv_path)]
@@ -196,7 +196,9 @@ def measure(binary, cwd, pattern, target, stem, timeout=600, historical=None, al
     recoverable = (allow_timeouts and timeout_only and timeout_inventory is not None
                    and int(failures[2]) == len(timeout_inventory)
                    and len(values) + int(failures[1]) == len(timeout_inventory)
-                   and values.keys() <= timeout_inventory)
+                   and values.keys() <= timeout_inventory
+                   and timeout_inventory - values.keys() <= (
+                       recoverable_names if recoverable_names is not None else timeout_inventory))
     record.update(status=status, timeout_only=timeout_only, recoverable=recoverable, finished=time.time())
     save(command_path, record)
     if status and not recoverable:
@@ -267,7 +269,7 @@ def guard(group, target):
     save(target / "sample.json", previous)
     ref = estimates(target / "reference.csv", allow_empty=True)
     values = measure(candidate, ROOT / "keiro", group, target, "candidate", historical=baseline,
-                     allow_timeouts=True, timeout_inventory=set(historical))
+                     allow_timeouts=True, timeout_inventory=set(ref), recoverable_names=set(historical))
     cases = {}
     for name in sorted(historical):
         case = (compare(values[name], ref[name]) if name in values and name in ref

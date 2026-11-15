@@ -24,6 +24,8 @@ excess cost in both is a regression; noisy, conflicting or unfinished comparison
 are inconclusive. Both block release, as do benchmark assertions and execution
 errors. Only a run whose failures are all explicitly reported timeouts may supply
 partial measurements; every missing case must complete both confirmations.
+Candidate recovery accounts for the complete reference inventory, including
+cases without historical budgets, and recovers only missing historical rows.
 Assertion failures and confirmation timeouts block immediately. Incomplete
 reference measurements never enter the timing cache. There is no retry-until-green loop.
 
