@@ -1,0 +1,20 @@
+{
+  "checked": "2026-11-15T17:48:30.649361+00:00",
+  "results": [
+    {
+      "url": "https://hackage.haskell.org/package/keiro-core.json",
+      "version": "0.25.0.0",
+      "status": "normal"
+    },
+    {
+      "url": "https://hackage.haskell.org/package/keiro-test-support.json",
+      "version": "0.25.0.0",
+      "status": "normal"
+    },
+    {
+      "url": "https://hackage.haskell.org/package/keiro-ops-http.json",
+      "version": "0.25.0.0",
+      "status": "normal"
+    }
+  ]
+}

@@ -330,7 +330,10 @@ All 88 script controls pass. Historical CSVs, workload quantities and numerical
 ceilings remain unchanged; no waiver is used. Earlier failed and interrupted
 attempts remain retained. All sixteen refreshed source/docs archives and the
 isolated staged-consumer build, migration and HTTP health proof pass.
-Publication is the remaining cross-plan gate. See the
+All eight packages and their documentation are published on Hackage, with eight
+annotated tags and the [GitHub release](https://github.com/shinzui/keiro/releases/tag/keiro-0.25.0.0).
+The Hackage-only consumer also builds all eight exact versions and passes fresh
+migration and HTTP health checks. All cross-plan gates are complete. See the
 [release status](../../keiro/bench/results/release-gates/0.25.0.0-release-status.md).
 
 Cross-plan gates not owned by a child plan:
@@ -340,7 +343,7 @@ Cross-plan gates not owned by a child plan:
   verified on Hackage and upstream tags (2026-11-14).
 - [x] Combined EP-4/EP-6 check: reaction schedules a timer, firing wakes a workflow, and exact
   wake/origin links survive a workflow snapshot and an unrelated later signal.
-- [ ] Keiro release with all six plans, passing the repository's release preflight including the
+- [x] Keiro 0.25.0.0 release with all six plans, passing the repository's release preflight including the
   benchmark gates of ADR-58 and the retention gate of ADR-48, with no unexplained change in the
   no-tracer cells.
 - [x] Initiative acceptance: in the `jitsurei` example with a tracer and the local trace
@@ -434,10 +437,15 @@ Implementation is complete across all six children, with correlated events, subs
 processing, outbox sends, timer fires and workflow resumes. Existing replay identities, producer
 digests and snapshot formats are preserved. The full verification, targeted review checks,
 recording allocation/timing measurements, retained-span probes and real backend graph are retained.
-The user approved the 0.25.0.0 release on 2026-11-14. Candidate `aefe288f` passes
-full correctness, native Nix checks and all six guards after the permanent
-benchmark correction. Sixteen refreshed archives and the isolated staged-consumer
-build, migration and HTTP health proof pass. All original failures, source controls,
-confirmation measurements and accepted receipts are retained. Publication follows
-final readiness validation. Thresholds and historical baselines are unchanged;
-no exception is used.
+The user-approved 0.25.0.0 release is published on Hackage and GitHub. Candidate
+`aefe288f` passes full correctness, native Nix checks and all six guards after the
+permanent benchmark correction. All eight annotated tags point to readiness
+evidence commit `7dbb1277`, which preserves that tested source. Sixteen refreshed
+archives, the staged consumer and the Hackage-only consumer all pass; both
+consumers apply migration `0033` and return healthy HTTP status without schema
+drift. All original failures, source controls, confirmation measurements and
+accepted receipts are retained. The initial published-consumer index-lag failure
+is also retained; a newer signed snapshot permits the successful Hackage-only
+proof. Thresholds and historical baselines remain unchanged, and no exception
+was used. Durable measurement and fixture-lifecycle decisions are recorded in
+ADR-58. All six children and every initiative integration/release gate are complete.

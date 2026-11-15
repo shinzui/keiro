@@ -126,6 +126,16 @@ reference for all eight cells. The extra diagnostic run passed; no benchmark sou
 new threshold was needed. Subsequent children use this accepted source checkpoint and the
 five timing samples, reusing unaffected checks per the Master's verification cadence.
 
+Release follow-up (2026-11-15): tracing fixtures now acquire only when selected and
+close before historical groups. ADR-58 records immutable source comparisons on the
+current machine and four bounded opposite-order confirmation processes per family.
+Known-inventory historical timeouts require two complete passing confirmations;
+assertions and functional-only omissions still block. All 88 script controls and
+the corrected six-guard release gate pass at `aefe288f`, with unchanged quantities,
+historical CSVs and numerical ceilings. The 0.25.0.0 release is published with both
+staged and Hackage-only consumer proofs. Original failed and interrupted evidence
+remains retained under `keiro/bench/results/release-gates/`.
+
 
 
 ## Context and Orientation

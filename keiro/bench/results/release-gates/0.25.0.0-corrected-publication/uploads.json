@@ -1,0 +1,88 @@
+{
+  "archives": [
+    {
+      "name": "keiro-core-0.25.0.0.tar.gz",
+      "sha256": "efee9b135e0b54b20e506441288334933653f1940ff4e816556e7733c32828e0",
+      "uploaded": 1794764590.99689
+    },
+    {
+      "name": "keiro-core-0.25.0.0-docs.tar.gz",
+      "sha256": "d5d0ff02f6153047bbf05ae2ce4eaf42bb6e2d4866c883f1cb658e876a9bac60",
+      "uploaded": 1794764592.538514
+    },
+    {
+      "name": "keiro-0.25.0.0.tar.gz",
+      "sha256": "c72dbea654af9e6f8c61bcf027b9767bdc533cdb98e71a96fa23c5baca1167fa",
+      "uploaded": 1794764594.848393
+    },
+    {
+      "name": "keiro-0.25.0.0-docs.tar.gz",
+      "sha256": "5de321d5688c009caf9242304141f5c62a09918c8b74d56b44adacead9b2a3ea",
+      "uploaded": 1794764596.951025
+    },
+    {
+      "name": "keiro-pgmq-0.25.0.0.tar.gz",
+      "sha256": "ce66c118375967fb9f22b86acac8ab37004bcb8d7cd7f1f0daf5f2c74b449c26",
+      "uploaded": 1794764597.250967
+    },
+    {
+      "name": "keiro-pgmq-0.25.0.0-docs.tar.gz",
+      "sha256": "de907c449381b7679a82799233ab0bf8400a238d437a6ad011f7db91379cf2f1",
+      "uploaded": 1794764597.646773
+    },
+    {
+      "name": "keiro-migrations-0.25.0.0.tar.gz",
+      "sha256": "7e5c960cf9841e877c871238d3effbb53788bcaa2158392254115991dfd5ccd8",
+      "uploaded": 1794764598.123059
+    },
+    {
+      "name": "keiro-migrations-0.25.0.0-docs.tar.gz",
+      "sha256": "2897aed6a97ad1bbc9419971a80780f7d804f13378f8cea93c9a49a164d60f74",
+      "uploaded": 1794764598.4416482
+    },
+    {
+      "name": "keiro-test-support-0.25.0.0.tar.gz",
+      "sha256": "8f8022d6ac1f7a64efcddfe48a086c545352c604c46b7467143131a7e9dd4c24",
+      "uploaded": 1794764598.715065
+    },
+    {
+      "name": "keiro-test-support-0.25.0.0-docs.tar.gz",
+      "sha256": "9247c261d5fccd048d61703e772444bae1072255e8c70a9bedc5ef6840c945cd",
+      "uploaded": 1794764599.092404
+    },
+    {
+      "name": "keiro-dsl-0.25.0.0.tar.gz",
+      "sha256": "1a05c1a14fb5da5b05ca557682b4ec60992ba717eca520a96719f122c1f202aa",
+      "uploaded": 1794764601.405087
+    },
+    {
+      "name": "keiro-dsl-0.25.0.0-docs.tar.gz",
+      "sha256": "d6e580dc4dacbe8f8fb47a8e51d06b8370e899f8fa1b7a6c8c05536b1fa71f44",
+      "uploaded": 1794764603.224925
+    },
+    {
+      "name": "keiro-ops-0.25.0.0.tar.gz",
+      "sha256": "811adf2e5e8565e2c498e7709eb1ce2478976adb5b5a801ec28c1fc5b8c685c0",
+      "uploaded": 1794764603.4990022
+    },
+    {
+      "name": "keiro-ops-0.25.0.0-docs.tar.gz",
+      "sha256": "343f75645c4401f378ac041c18c2f33520a7bad33cb2395d20cfd4e9b8547d2d",
+      "uploaded": 1794764603.977618
+    },
+    {
+      "name": "keiro-ops-http-0.25.0.0.tar.gz",
+      "sha256": "b05545687f7d16c66884b4a80c5f8a51e3a7edf6945b2591bb70ddf5fecef323",
+      "uploaded": 1794764604.388627
+    },
+    {
+      "name": "keiro-ops-http-0.25.0.0-docs.tar.gz",
+      "sha256": "bd5351e96ceacbf6521e61e037a26016489b446aeeebb009c5d0306478f312e3",
+      "uploaded": 1794764604.734903
+    }
+  ],
+  "finished": 1794764604.73552,
+  "status": "published",
+  "tag_commit": "7dbb1277f8eabd75fb18ec1b83ec19b441770e51",
+  "version": "0.25.0.0"
+}

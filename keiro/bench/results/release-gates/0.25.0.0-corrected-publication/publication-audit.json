@@ -1,0 +1,40 @@
+{
+  "finished": 1794765191.956156,
+  "github_release": "https://github.com/shinzui/keiro/releases/tag/keiro-0.25.0.0",
+  "published_packages": [
+    "keiro-core",
+    "keiro",
+    "keiro-pgmq",
+    "keiro-migrations",
+    "keiro-test-support",
+    "keiro-dsl",
+    "keiro-ops",
+    "keiro-ops-http"
+  ],
+  "sha256": {
+    "artifacts.json": "3debddcd0ed6b6e93dcf3fcf402890daf218b67a45696140f26743e44eca9148",
+    "artifacts.log": "b410db6d46741f196f41301cf1dce0dea9149606834de183ac8cd15b6eabe132",
+    "endpoint-diagnostics.json": "10f7981f043ce72ce6d862e195687858640b995d2d3b69085ca6062c037ded29",
+    "endpoints.json": "580121334e78191301e74a90a5c9fd542354d26d3b3a8bf958c8e184380eec73",
+    "github-release.json": "8710621ea09d997f4a01c14a1ac59b21a54cb99f14adbe84ebc33b3a18d854eb",
+    "index-snapshot-wait.json": "136a5a0eefb0a1d18933df7314e951bdc72ea4ac65e30a18d777907c76f1d2d9",
+    "published-index-attempt-1-transcript.log": "04545ba05af4ec622a261bba558dd1fd6ed2c24bb58e3508294847b521e7c363",
+    "published-index-attempt-1.log": "991d57999cb51952aca00cd185d72735b06f4874dbca49a70c6d32fca6f73fee",
+    "published-plan.json": "7d62522e5c1fc0f191803677551deb166af55d6685f79cf9ccd2cc41a9df4925",
+    "published-proof.log": "81e21be052d74c4ec893942363fb87152a7367908b77371b3b318de9253b44e5",
+    "published-registry-observation.json": "e6e8c7ae8370d3b6da49516900c5ec1e47d2b310e9a4e223850d8e004fec1a62",
+    "published-result.json": "41eec89344634e36d86902ebafea2b07381ebb1b9027fd3ee1b2ed5955208ba1",
+    "published-transcript.log": "c6442a36ce4d9121172c8e1c5fdf1e130bdbc56c2a5a45d76616bd7adeb7ebe4",
+    "ready.log": "f4c857625eec44afe7501d18e14056984a0392e8bd91be32cc98225cfd358f8a",
+    "staged-plan.json": "ea8d159123b6c2a2f2255b87d1508ba4c6e257cae37ecc7710d21e901b284265",
+    "staged-proof.log": "0bada97c0347914f02ccd7ce32d281b55f7361f22f642bbca99b903e9d0f60c8",
+    "staged-result.json": "c7d7d3986fd73b5582aebc136fd92ace6071eb343943c4679a2b3363f4edf5bd",
+    "staged-transcript.log": "0651b89f8fba5b533ab45f5a1a1cdebe9c37c1319a3d62f94d82393c7cab58d1",
+    "uploads.json": "f3ee685746b01507b328c9fa3a4bc50cd9a212c9453c8b7a465c072a5845a292",
+    "uploads.log": "591a8c60860a203a12a67d5f5c09c615006d253c0e95f4f17db91ae2b433d9df"
+  },
+  "source": "83bea2181f050d4480bba37e5dd223dbc67ea78feb49de58bc622c94fb62101b",
+  "status": "passed",
+  "tag_commit": "7dbb1277f8eabd75fb18ec1b83ec19b441770e51",
+  "version": "0.25.0.0"
+}
