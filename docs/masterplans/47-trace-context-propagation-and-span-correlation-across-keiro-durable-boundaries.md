@@ -429,4 +429,3 @@ digests and snapshot formats are preserved. The full verification, targeted revi
 recording allocation/timing measurements, retained-span probes and real backend graph are retained.
 The final release phase remains open pending the release workflow's initial version confirmation;
 no version bump, tags or publication have been performed for `0.25.0.0`.
-

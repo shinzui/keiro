@@ -1,0 +1,16 @@
+All
+  durable-tracing
+    timer-100:                   OK
+      18.2 ms ± 1.2 ms, 6.5 MB allocated, 139 KB copied,  17 MB peak memory
+    timer-100/tracer:            OK
+      19.1 ms ± 1.1 ms, 8.0 MB allocated, 152 KB copied,  25 MB peak memory
+    resume-snapshot-1:           OK
+      4.42 ms ± 464 μs, 3.0 MB allocated,  47 KB copied,  39 MB peak memory
+    resume-snapshot-1/tracer:    OK
+      5.27 ms ± 261 μs, 3.9 MB allocated,  57 KB copied,  48 MB peak memory
+    resume-snapshot-1000:        OK
+      8.73 ms ± 470 μs,  18 MB allocated, 560 KB copied,  53 MB peak memory
+    resume-snapshot-1000/tracer: OK
+      9.88 ms ± 817 μs,  19 MB allocated, 577 KB copied,  53 MB peak memory
+
+All 6 tests passed (23.16s)
