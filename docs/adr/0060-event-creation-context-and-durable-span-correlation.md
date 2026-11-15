@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Event creation context and durable span correlation
 description: Commands stamp W3C creation context once per run and durable consumers correlate through evaluated span identities without changing replay.
-timestamp: 2026-11-15T01:15:00Z
+timestamp: 2026-11-15T01:58:13Z
 docId: ADR-60
 status: Accepted
 date: 2026-11-14
@@ -82,7 +82,7 @@ transport scope. The exported Kafka helper is parent-and-link, preserving its pa
 behavior while adding the creation link; source adapters provide configurable policies.
 
 Timers persist request context in dedicated nullable columns, preserving explicit context.
-Effectful schedulers capture before SQL only under configured tracing. Firing opens a linked
+Effectful schedulers capture before SQL only under configured tracing. An untraced worker selects the original fire/mark path directly. Firing opens a linked
 root that covers the action and mark-fired; dispatched commands inherit this live scope.
 
 Workflow journal metadata uses the same stamping helpers. Existing append/signal/child/timer
@@ -91,7 +91,7 @@ captures metadata before leaving the child's live run span, then propagates afte
 Suspension writes the exact attribution hint under the existing step lock; it is independent
 of readiness and replay. ADR-59 defines lifecycle and rollback rules.
 
-A traced run reads the hint together with an indexed first-event reference, then fetches at
+The traced root includes generation/hint discovery and terminal checks. Generation and hint reads share the existing generation transaction; untraced entry keeps its original query path. A traced run reads the hint together with an indexed first-event reference, then fetches at
 most two events through normal Kiroku reads. Limit reference discovery before payload joins:
 the generic one-event forward query was observed sorting a whole journal before LIMIT. The
 bounded reference query preserves read hooks by loading payloads with `getEvent`. Validate

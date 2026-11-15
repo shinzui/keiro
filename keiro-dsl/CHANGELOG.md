@@ -6,6 +6,12 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Other Changes
+
+- Generated process timer constructors initialize `traceContext = Nothing` and
+  timer-worker options initialize `tracer = Nothing`. Regenerate with the matching
+  runtime cohort; DSL source semantics and language versions are unchanged.
+
 ## 0.24.0.0 — 2026-11-05
 
 No changes this release.

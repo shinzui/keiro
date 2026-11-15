@@ -2,6 +2,9 @@
 
 ## 2026-11-15
 
+* **Update**: ADR-60: distill traced entry transaction sharing and the direct untraced timer path after initiative review.
+
+
 * **Update**: Require indexed origin-reference discovery before payload joins; preserve read hooks and bounded resume work.
 
 

@@ -243,14 +243,20 @@ claimAndFireOne metrics options now fire = do
                   (timer ^. #timerId)
                   ("timer exceeded attempt ceiling of " <> Text.pack (show attemptCeiling))
               pure (Just timer)
-        _ ->
-          withTimerFireSpan (options ^. #tracer) (timer ^. #processManagerName) (case timer ^. #timerId of TimerId uuid -> UUID.toText uuid) (timer ^. #traceContext) $ \mSpan -> do
-            for_ mSpan $ \sp -> do
-              let !lag = realToFrac (now `diffUTCTime` (timer ^. #fireAt)) * 1000 :: Double
-              addAttribute sp "keiro.timer.fire_lag" lag
-            fired <- fire timer
-            for_ fired (\eventId -> void (markTimerFired (timer ^. #timerId) eventId))
-            pure (Just timer)
+        _ -> case options ^. #tracer of
+          Nothing -> fireAndMark timer
+          Just tracer ->
+            withTimerFireSpan (Just tracer) (timer ^. #processManagerName) (case timer ^. #timerId of TimerId uuid -> UUID.toText uuid) (timer ^. #traceContext) $ \mSpan -> do
+              for_ mSpan $ \sp -> do
+                let !lag = realToFrac (now `diffUTCTime` (timer ^. #fireAt)) * 1000 :: Double
+                addAttribute sp "keiro.timer.fire_lag" lag
+              fireAndMark timer
+  where
+    -- Keep the original fire/mark path when tracing is disabled.
+    fireAndMark timer = do
+      fired <- fire timer
+      for_ fired (\eventId -> void (markTimerFired (timer ^. #timerId) eventId))
+      pure (Just timer)
 
 -- | Claim and fire up to @limit@ timers due at @now@ in one pass, returning how
 -- many were processed.

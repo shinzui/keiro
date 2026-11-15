@@ -110,8 +110,10 @@ produceDurablePayloads (StoreRunner runStore) tracer = fmap concat $ forM [1 .. 
   Right events <- runStore (Store.readStreamForward (Workflow.workflowGenerationStreamName name wid 0) (Store.StreamVersion 0) 1)
   Right (Just timer) <- runStore (Timer.lookupTimer (Timer.TimerId (UUID.fromWords 0 0 0 (fromIntegral index))))
   let event = Vector.head events
-  eventWeak <- mkWeakPtr (event.payload) Nothing
-  timerWeak <- mkWeakPtr (timer.payload) Nothing
+  eventPayload <- evaluate (event.payload)
+  timerPayload <- evaluate (timer.payload)
+  eventWeak <- mkWeakPtr eventPayload Nothing
+  timerWeak <- mkWeakPtr timerPayload Nothing
   Telemetry.withWorkflowSpan (Just tracer) name wid Nothing $ \sp ->
     Telemetry.recordWorkflowResumeLinks sp (Telemetry.traceContextFromMetadata event.metadata) (Telemetry.traceContextFromMetadata event.metadata)
   Telemetry.withTimerFireSpan (Just tracer) timer.processManagerName (case timer.timerId of Timer.TimerId uuid -> UUID.toText uuid) timer.traceContext (const (pure ()))

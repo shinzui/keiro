@@ -65,10 +65,10 @@ fire span linked to the command.
   schema snapshot is regenerated; a nullable workflow trace-await hint is added; migration tests pass.
 - [x] M2: Timers store a supplied trace context, Keiro's own scheduling call sites supply it
   when a tracer is configured, and the timer worker opens a linked span per fired timer.
-- [ ] M3: Workflow journal appends are stamped with the current context, and a resumed run's
+- [x] M3: Workflow journal appends are stamped with the current context, and a resumed run's
   span links to the exact awaited step and the journal origin, including with snapshots.
 - [ ] M4: Benchmark and retention gates pass; costs recorded.
-- [ ] M5: Documents and the correlation ADR updated; parent MasterPlan updated.
+- [x] M5: Documents and the correlation ADR updated; parent MasterPlan updated.
 
 
 ## Surprises & Discoveries
@@ -123,11 +123,15 @@ fire span linked to the command.
 
 ## Outcomes & Retrospective
 
-M1 and M2 are accepted. Timer verification passes 28 cases, including actual command scheduling, stored creation context, root fire links, dispatched child command parenting and event stamping. The migration suite passes all 42 cases; existing timer/workflow rows upgrade with null tracing fields.
+M1, M2, M3 and M5 are accepted. Timer verification passes 28 cases, including actual command scheduling, stored creation context, root fire links, dispatched child command parenting and event stamping. The migration suite passes all 42 cases; existing timer/workflow rows upgrade with null tracing fields.
 
 Before the indexed-origin refinement, six focused integration scenarios and all 159 existing workflow cases passed. The combined scenario now uses a real command and Kiroku subscription reaction to schedule the workflow's timer and dispatch a second command, then resumes beyond a snapshot and an unrelated event. A failed resume restores ambient context and preserves exact attribution for retry. Signal metadata remains idempotent, child completion carries the ended child span's captured context, and invalid/foreign/mismatched evidence is omitted.
 
-All eight finite ownership probes and both new retention legs pass (10 cases). Actual PostgreSQL-decoded timer/journal payloads collect while exported spans remain reachable. Both 1,500-operation legs end Bounded. Final integrated verification and post-refinement measurements remain outstanding.
+All eight finite ownership probes and both new retention legs pass (10 cases). Actual PostgreSQL-decoded timer/journal payloads collect while exported spans remain reachable. Both 1,500-operation legs end Bounded. Full `just verify` passed at `3bc78fab`: 828 core, 898 DSL, 30 retention, 83 PGMQ (two pre-existing pending), 61 ops, HTTP/example suites, all mutation proofs, migrations and strict documentation/policy checks. After review, the bounded reference query explicitly qualifies Kiroku tables, the timer worker selects its original untraced fire/mark path, and fetched payloads are forced before taking weak references. Six durable scenarios, all 28 timer cases and 10 focused retention/ownership cases pass on that refinement. Timer/workflow legs end Bounded at 566/1,122 B per operation and 0.54/1.07 MiB growth respectively.
+
+The real `jitsurei tracing` demo passed against a migrated disposable database and the local VictoriaTraces backend. The retained backend proof checks 10 spans in six traces: request command → linked processing → dispatched command child → linked root send, and processing → linked root timer → root workflow resume with origin/wake links. Source-stream reads have global position zero, so the example obtains the source event's global coordinate via `getEvent` before applying the immutable producer cutoff. Inherited exporter tenant headers were cleared for the local backend; its SDK endpoint is a prefix because this exporter appends `/v1/traces`.
+
+Five matched serial measurement pairs and final evidence packaging remain outstanding. No historical release guard or numerical ceiling changed.
 
 
 

@@ -608,10 +608,8 @@ runWorkflowWith options name wid action = withWorkflowSpan (options ^. #tracer) 
                 _ -> Nothing
         recordWorkflowResumeLinks sp originContext wakeContext
     runActive gen sp traceHint =
-      -- EP-44: maintain the process-wide live-run count and sample the
-      -- @keiro.workflow.active@ gauge on both entry and exit, and open the
-      -- whole-run @workflow \<name\>@ span (step 'Nothing'). The body is
-      -- unchanged from EP-41 except for the journal-length recording below.
+      -- Maintain the live-run count around active work. The root span already
+      -- covers generation/hint discovery and terminal checks at run entry.
       bracket_
         (liftIO (atomicModifyIORef' activeCountRef (\n -> (n + 1, ()))) >> sampleActive)
         (liftIO (atomicModifyIORef' activeCountRef (\n -> (n - 1, ()))) >> sampleActive)

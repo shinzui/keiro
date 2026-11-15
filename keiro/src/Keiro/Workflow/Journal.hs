@@ -261,9 +261,9 @@ readWorkflowTraceResume name wid =
         """
         SELECT w.trace_awaited_step, first.event_id, s.stream_id, first.stream_version
         FROM keiro.keiro_workflows w
-        LEFT JOIN streams s ON s.stream_name = $4 AND s.deleted_at IS NULL
+        LEFT JOIN kiroku.streams s ON s.stream_name = $4 AND s.deleted_at IS NULL
         LEFT JOIN LATERAL (
-          SELECT se.event_id, se.stream_version FROM stream_events se
+          SELECT se.event_id, se.stream_version FROM kiroku.stream_events se
           WHERE se.stream_id = s.stream_id AND se.stream_version > 0
             AND se.stream_version >= s.truncate_before
           ORDER BY se.stream_version ASC LIMIT 1
