@@ -1,0 +1,570 @@
+Cloning into '/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/src/codd-a2add0cb9aa6b19935f10abf77974da666f76aff8ee59265d24ea84d1b521ef8'...
+From https://github.com/mzabani/codd
+ * tag                 v0.1.8     -> FETCH_HEAD
+HEAD is now at 29478ff4 Prepare for v0.1.8 release
+Resolving dependencies...
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-migrations-0.21.0.0 (lib) (first run)
+ - kiroku-store-0.11.0.1 (lib) (requires build)
+ - shibuya-core-0.10.0.1 (lib) (requires build)
+ - keiro-test-support-0.21.0.0 (lib) (first run)
+ - keiro-core-0.21.0.0 (lib) (first run)
+ - keiro-0.21.0.0 (lib) (first run)
+ - keiro-0.21.0.0 (bench:keiro-bench) (first run)
+Starting     shibuya-core-0.10.0.1 (lib)
+Configuring library for keiro-migrations-0.21.0.0...
+Starting     kiroku-store-0.11.0.1 (lib)
+Building     shibuya-core-0.10.0.1 (lib)
+Building     kiroku-store-0.11.0.1 (lib)
+Preprocessing library for keiro-migrations-0.21.0.0...
+Building library for keiro-migrations-0.21.0.0...
+[1 of 5] Compiling Keiro.Migrations.Internal.Definition ( src/Keiro/Migrations/Internal/Definition.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.21.0.0/build/Keiro/Migrations/Internal/Definition.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.21.0.0/build/Keiro/Migrations/Internal/Definition.dyn_o )
+[2 of 5] Compiling Keiro.Migrations ( src/Keiro/Migrations.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.21.0.0/build/Keiro/Migrations.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.21.0.0/build/Keiro/Migrations.dyn_o )
+[3 of 5] Compiling Keiro.Migrations.Internal.EmbedFile ( src/Keiro/Migrations/Internal/EmbedFile.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.21.0.0/build/Keiro/Migrations/Internal/EmbedFile.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.21.0.0/build/Keiro/Migrations/Internal/EmbedFile.dyn_o )
+[4 of 5] Compiling Keiro.Migrations.History.Codd ( src/Keiro/Migrations/History/Codd.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.21.0.0/build/Keiro/Migrations/History/Codd.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.21.0.0/build/Keiro/Migrations/History/Codd.dyn_o )
+[5 of 5] Compiling Keiro.Migrations.SchemaCheck ( src/Keiro/Migrations/SchemaCheck.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.21.0.0/build/Keiro/Migrations/SchemaCheck.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.21.0.0/build/Keiro/Migrations/SchemaCheck.dyn_o )
+Installing   shibuya-core-0.10.0.1 (lib)
+Completed    shibuya-core-0.10.0.1 (lib)
+Installing   kiroku-store-0.11.0.1 (lib)
+Completed    kiroku-store-0.11.0.1 (lib)
+Configuring library for keiro-core-0.21.0.0...
+Configuring library for keiro-test-support-0.21.0.0...
+Preprocessing library for keiro-test-support-0.21.0.0...
+Preprocessing library for keiro-core-0.21.0.0...
+Building library for keiro-test-support-0.21.0.0...
+Building library for keiro-core-0.21.0.0...
+[1 of 2] Compiling Keiro.Test.Postgres ( src/Keiro/Test/Postgres.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-test-support-0.21.0.0/build/Keiro/Test/Postgres.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-test-support-0.21.0.0/build/Keiro/Test/Postgres.dyn_o )
+[ 1 of 16] Compiling Keiro.Codec.Base16Bytes ( src/Keiro/Codec/Base16Bytes.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Codec/Base16Bytes.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Codec/Base16Bytes.dyn_o )
+[ 2 of 16] Compiling Keiro.Codec.CalendarDay ( src/Keiro/Codec/CalendarDay.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Codec/CalendarDay.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Codec/CalendarDay.dyn_o )
+[ 3 of 16] Compiling Keiro.Codec.IdDomain ( src/Keiro/Codec/IdDomain.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Codec/IdDomain.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Codec/IdDomain.dyn_o )
+[2 of 2] Compiling Keiro.Test.ReplayCompatibility ( src/Keiro/Test/ReplayCompatibility.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-test-support-0.21.0.0/build/Keiro/Test/ReplayCompatibility.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-test-support-0.21.0.0/build/Keiro/Test/ReplayCompatibility.dyn_o )
+[ 4 of 16] Compiling Keiro.Codec.Nominal ( src/Keiro/Codec/Nominal.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Codec/Nominal.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Codec/Nominal.dyn_o )
+[ 5 of 16] Compiling Keiro.Codec.Refined ( src/Keiro/Codec/Refined.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Codec/Refined.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Codec/Refined.dyn_o )
+[ 6 of 16] Compiling Keiro.Codec.Structural ( src/Keiro/Codec/Structural.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Codec/Structural.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Codec/Structural.dyn_o )
+[ 7 of 16] Compiling Keiro.Codec.Structural.Generic ( src/Keiro/Codec/Structural/Generic.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Codec/Structural/Generic.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Codec/Structural/Generic.dyn_o )
+[ 8 of 16] Compiling Keiro.Codec.TextSet ( src/Keiro/Codec/TextSet.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Codec/TextSet.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Codec/TextSet.dyn_o )
+[ 9 of 16] Compiling Keiro.Prelude    ( src/Keiro/Prelude.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Prelude.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Prelude.dyn_o )
+[10 of 16] Compiling Keiro.Integration.Event ( src/Keiro/Integration/Event.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Integration/Event.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Integration/Event.dyn_o )
+[11 of 16] Compiling Keiro.Codec      ( src/Keiro/Codec.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Codec.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Codec.dyn_o )
+[12 of 16] Compiling Keiro.Schema     ( src/Keiro/Schema.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Schema.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Schema.dyn_o )
+[13 of 16] Compiling Keiro.Stream     ( src/Keiro/Stream.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Stream.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Stream.dyn_o )
+[14 of 16] Compiling Keiro.EventStream ( src/Keiro/EventStream.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/EventStream.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/EventStream.dyn_o )
+[15 of 16] Compiling Keiro.Snapshot.Policy ( src/Keiro/Snapshot/Policy.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Snapshot/Policy.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/Snapshot/Policy.dyn_o )
+[16 of 16] Compiling Keiro.EventStream.Validate ( src/Keiro/EventStream/Validate.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/EventStream/Validate.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.21.0.0/build/Keiro/EventStream/Validate.dyn_o )
+Configuring library for keiro-0.21.0.0...
+Preprocessing library for keiro-0.21.0.0...
+Building library for keiro-0.21.0.0...
+[ 1 of 74] Compiling Keiro.Command.Domain ( src/Keiro/Command/Domain.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Command/Domain.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Command/Domain.dyn_o )
+[ 2 of 74] Compiling Keiro.Connection ( src/Keiro/Connection.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Connection.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Connection.dyn_o )
+[ 3 of 74] Compiling Keiro.DeadLetter.Replay ( src/Keiro/DeadLetter/Replay.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/DeadLetter/Replay.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/DeadLetter/Replay.dyn_o )
+[ 4 of 74] Compiling Keiro.DeadLetter.Schema ( src/Keiro/DeadLetter/Schema.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/DeadLetter/Schema.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/DeadLetter/Schema.dyn_o )
+[ 5 of 74] Compiling Keiro.DeadLetter ( src/Keiro/DeadLetter.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/DeadLetter.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/DeadLetter.dyn_o )
+[ 6 of 74] Compiling Keiro.DeterministicId ( src/Keiro/DeterministicId.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/DeterministicId.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/DeterministicId.dyn_o )
+[ 7 of 74] Compiling Keiro.Inbox.Types ( src/Keiro/Inbox/Types.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Inbox/Types.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Inbox/Types.dyn_o )
+[ 8 of 74] Compiling Keiro.Inbox.Schema ( src/Keiro/Inbox/Schema.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Inbox/Schema.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Inbox/Schema.dyn_o )
+[ 9 of 74] Compiling Keiro.Inbox.Kafka ( src/Keiro/Inbox/Kafka.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Inbox/Kafka.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Inbox/Kafka.dyn_o )
+[10 of 74] Compiling Keiro.Inspection.Cursor ( src/Keiro/Inspection/Cursor.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Inspection/Cursor.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Inspection/Cursor.dyn_o )
+[11 of 74] Compiling Keiro.Outbox.Rejection ( src/Keiro/Outbox/Rejection.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Outbox/Rejection.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Outbox/Rejection.dyn_o )
+[12 of 74] Compiling Keiro.Outbox.Types ( src/Keiro/Outbox/Types.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Outbox/Types.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Outbox/Types.dyn_o )
+[13 of 74] Compiling Keiro.Outbox.Kafka ( src/Keiro/Outbox/Kafka.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Outbox/Kafka.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Outbox/Kafka.dyn_o )
+[14 of 74] Compiling Keiro.Projection.Catalog.Preimage ( src/Keiro/Projection/Catalog/Preimage.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Projection/Catalog/Preimage.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Projection/Catalog/Preimage.dyn_o )
+[15 of 74] Compiling Keiro.Projection.Types ( src/Keiro/Projection/Types.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Projection/Types.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Projection/Types.dyn_o )
+[16 of 74] Compiling Keiro.ReadModel.Schema ( src/Keiro/ReadModel/Schema.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReadModel/Schema.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReadModel/Schema.dyn_o )
+[17 of 74] Compiling Keiro.ReplayDigest ( src/Keiro/ReplayDigest.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReplayDigest.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReplayDigest.dyn_o )
+[18 of 74] Compiling Keiro.Outbox.Identity ( src/Keiro/Outbox/Identity.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Outbox/Identity.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Outbox/Identity.dyn_o )
+[19 of 74] Compiling Keiro.Outbox.Schema ( src/Keiro/Outbox/Schema.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Outbox/Schema.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Outbox/Schema.dyn_o )
+[20 of 74] Compiling Keiro.Snapshot.Codec ( src/Keiro/Snapshot/Codec.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Snapshot/Codec.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Snapshot/Codec.dyn_o )
+[21 of 74] Compiling Keiro.Snapshot.Schema ( src/Keiro/Snapshot/Schema.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Snapshot/Schema.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Snapshot/Schema.dyn_o )
+[22 of 74] Compiling Keiro.Snapshot   ( src/Keiro/Snapshot.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Snapshot.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Snapshot.dyn_o )
+[23 of 74] Compiling Keiro.Subscription.Shard.Schema ( src/Keiro/Subscription/Shard/Schema.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Subscription/Shard/Schema.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Subscription/Shard/Schema.dyn_o )
+[24 of 74] Compiling Keiro.Subscription.Shard ( src/Keiro/Subscription/Shard.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Subscription/Shard.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Subscription/Shard.dyn_o )
+[25 of 74] Compiling Keiro.Subscription.Shard.Worker ( src/Keiro/Subscription/Shard/Worker.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Subscription/Shard/Worker.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Subscription/Shard/Worker.dyn_o )
+[26 of 74] Compiling Keiro.Timer.Types ( src/Keiro/Timer/Types.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Timer/Types.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Timer/Types.dyn_o )
+[27 of 74] Compiling Keiro.Timer.Schema ( src/Keiro/Timer/Schema.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Timer/Schema.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Timer/Schema.dyn_o )
+src/Keiro/Timer/Schema.hs:82:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Data.List.NonEmpty’ is redundant
+      except perhaps to import instances from ‘Data.List.NonEmpty’
+    To import instances alone, use: import Data.List.NonEmpty()
+   |
+82 | import Data.List.NonEmpty (NonEmpty (..))
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[28 of 74] Compiling Keiro.Wake       ( src/Keiro/Wake.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Wake.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Wake.dyn_o )
+[29 of 74] Compiling Keiro.Workflow.Awakeable.Schema ( src/Keiro/Workflow/Awakeable/Schema.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Awakeable/Schema.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Awakeable/Schema.dyn_o )
+[30 of 74] Compiling Keiro.Workflow.Child.Schema ( src/Keiro/Workflow/Child/Schema.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Child/Schema.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Child/Schema.dyn_o )
+[31 of 74] Compiling Keiro.Workflow.Instance.Schema ( src/Keiro/Workflow/Instance/Schema.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Instance/Schema.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Instance/Schema.dyn_o )
+[32 of 74] Compiling Keiro.Workflow.Inspection.Query ( src/Keiro/Workflow/Inspection/Query.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Inspection/Query.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Inspection/Query.dyn_o )
+[33 of 74] Compiling Keiro.Workflow.Types ( src/Keiro/Workflow/Types.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Types.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Types.dyn_o )
+[34 of 74] Compiling Keiro.Workflow.Snapshot ( src/Keiro/Workflow/Snapshot.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Snapshot.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Snapshot.dyn_o )
+[35 of 74] Compiling Keiro.Workflow.Schema ( src/Keiro/Workflow/Schema.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Schema.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Schema.dyn_o )
+[36 of 74] Compiling Keiro.Workflow.Journal ( src/Keiro/Workflow/Journal.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Journal.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Journal.dyn_o )
+[37 of 74] Compiling Keiro.Workflow.Gc ( src/Keiro/Workflow/Gc.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Gc.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Gc.dyn_o )
+[38 of 74] Compiling Keiro.Workflow.Child.Cancel ( src/Keiro/Workflow/Child/Cancel.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Child/Cancel.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Child/Cancel.dyn_o )
+[39 of 74] Compiling Keiro.Workflow.Instance ( src/Keiro/Workflow/Instance.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Instance.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Instance.dyn_o )
+src/Keiro/Workflow/Instance.hs:867:30: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘argument’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Workflow/Instance.hs:65:1-20
+      (and originally defined in ‘Control.Lens.Setter’)
+    |
+867 |     parameter template value argument = (\n -> Text.replace "?" ("$" <> number n) template, 1, const argument >$< E.param (E.nonNullable value))
+    |                              ^^^^^^^^
+
+src/Keiro/Workflow/Instance.hs:894:50: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Workflow/Instance.hs:65:1-20
+      (and originally defined in ‘Control.Lens.Indexed’)
+    |
+894 |     (next, predicates, filterParams) = foldl' (\(index, clauses, encoders) (render, width, encoder) -> (index + width, clauses <> [render index], encoders <> encoder)) (1, [], mempty) filters
+    |                                                  ^^^^^
+
+[40 of 74] Compiling Keiro.Workflow.Inspection ( src/Keiro/Workflow/Inspection.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Inspection.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Inspection.dyn_o )
+src/Keiro/Workflow/Inspection.hs:110:30: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         listWorkflowInstancesPage :: forall (es :: [Effectful.Internal.Effect.Effect]).
+                                      (IOE :> es, Store :> es) =>
+                                      WorkflowListQuery
+                                      -> Eff es (Either InspectionError WorkflowListPage)
+    |
+110 | listWorkflowInstancesPage :: (IOE :> es, Store :> es) => WorkflowListQuery -> Eff es (Either InspectionError WorkflowListPage)
+    |                              ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Workflow/Inspection.hs:228:28: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         readWorkflowJournalPage :: forall (es :: [Effectful.Internal.Effect.Effect]).
+                                    (IOE :> es, Store :> es) =>
+                                    WorkflowName
+                                    -> WorkflowId
+                                    -> DetailPageQuery
+                                    -> Eff es (Either InspectionError WorkflowJournalPage)
+    |
+228 | readWorkflowJournalPage :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> DetailPageQuery -> Eff es (Either InspectionError WorkflowJournalPage)
+    |                            ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Workflow/Inspection.hs:239:22: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         loadStepIndexPage :: forall (es :: [Effectful.Internal.Effect.Effect]).
+                              (IOE :> es, Store :> es) =>
+                              WorkflowName
+                              -> WorkflowId
+                              -> DetailPageQuery
+                              -> Eff es (Either InspectionError WorkflowStepPage)
+    |
+239 | loadStepIndexPage :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> DetailPageQuery -> Eff es (Either InspectionError WorkflowStepPage)
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Workflow/Inspection.hs:249:29: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         listWorkflowChildrenPage :: forall (es :: [Effectful.Internal.Effect.Effect]).
+                                     (IOE :> es, Store :> es) =>
+                                     WorkflowName
+                                     -> WorkflowId
+                                     -> OwnerPageQuery
+                                     -> Eff es (Either InspectionError WorkflowChildPage)
+    |
+249 | listWorkflowChildrenPage :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> OwnerPageQuery -> Eff es (Either InspectionError WorkflowChildPage)
+    |                             ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Workflow/Inspection.hs:258:31: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         listWorkflowAwakeablesPage :: forall (es :: [Effectful.Internal.Effect.Effect]).
+                                       (IOE :> es, Store :> es) =>
+                                       WorkflowName
+                                       -> WorkflowId
+                                       -> OwnerPageQuery
+                                       -> Eff es (Either InspectionError WorkflowAwakeablePage)
+    |
+258 | listWorkflowAwakeablesPage :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> OwnerPageQuery -> Eff es (Either InspectionError WorkflowAwakeablePage)
+    |                               ^^^^^^^^^^^^^^^^^^^^^^^^
+
+[41 of 74] Compiling Keiro.Workflow.Awakeable.Internal.Identity ( src/Keiro/Workflow/Awakeable/Internal/Identity.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Awakeable/Internal/Identity.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Awakeable/Internal/Identity.dyn_o )
+[42 of 74] Compiling Keiro.Telemetry  ( src/Keiro/Telemetry.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Telemetry.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Telemetry.dyn_o )
+[43 of 74] Compiling Keiro.Workflow   ( src/Keiro/Workflow.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow.dyn_o )
+[44 of 74] Compiling Keiro.Workflow.Child ( src/Keiro/Workflow/Child.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Child.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Child.dyn_o )
+[45 of 74] Compiling Keiro.Workflow.Resume ( src/Keiro/Workflow/Resume.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Resume.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Resume.dyn_o )
+[46 of 74] Compiling Keiro.Workflow.Awakeable ( src/Keiro/Workflow/Awakeable.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Awakeable.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Awakeable.dyn_o )
+[47 of 74] Compiling Keiro.Workflow.Awakeable.Compatibility ( src/Keiro/Workflow/Awakeable/Compatibility.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Awakeable/Compatibility.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Awakeable/Compatibility.dyn_o )
+[48 of 74] Compiling Keiro.Timer      ( src/Keiro/Timer.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Timer.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Timer.dyn_o )
+[49 of 74] Compiling Keiro.Workflow.Sleep ( src/Keiro/Workflow/Sleep.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Sleep.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Workflow/Sleep.dyn_o )
+[50 of 74] Compiling Keiro.ReadModel  ( src/Keiro/ReadModel.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReadModel.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReadModel.dyn_o )
+[51 of 74] Compiling Keiro.Projection.Catalog ( src/Keiro/Projection/Catalog.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Projection/Catalog.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Projection/Catalog.dyn_o )
+src/Keiro/Projection/Catalog.hs:534:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘arguments’
+    Record selection and update using this field will be partial.
+    |
+534 |         arguments :: ![SqlFunctionArgument],
+    |         ^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:536:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘privateImplementation’
+    Record selection and update using this field will be partial.
+    |
+536 |         privateImplementation :: !QualifiedFunction,
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:537:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘privateImplementationVersion’
+    Record selection and update using this field will be partial.
+    |
+537 |         privateImplementationVersion :: !Int,
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1100:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilitySubscriptionId’
+    Record selection and update using this field will be partial.
+     |
+1100 |         capabilitySubscriptionId :: !SubscriptionId,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1101:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilitySubscriptionName’
+    Record selection and update using this field will be partial.
+     |
+1101 |         capabilitySubscriptionName :: !Text,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1102:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilitySourceId’
+    Record selection and update using this field will be partial.
+     |
+1102 |         capabilitySourceId :: !SourceId,
+     |         ^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1103:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilityCheckpointOnMissing’
+    Record selection and update using this field will be partial.
+     |
+1103 |         capabilityCheckpointOnMissing :: !MissingCheckpointPolicy,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1104:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilityDedupKeyId’
+    Record selection and update using this field will be partial.
+     |
+1104 |         capabilityDedupKeyId :: !DedupKeyId,
+     |         ^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1105:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilityDedupName’
+    Record selection and update using this field will be partial.
+     |
+1105 |         capabilityDedupName :: !Text
+     |         ^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:3412:29: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘argument’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Projection/Catalog.hs:194:1-20
+      (and originally defined in ‘Control.Lens.Setter’)
+     |
+3412 | sqlFunctionArgumentPreimage argument =
+     |                             ^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:3582:20: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘argument’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Projection/Catalog.hs:194:1-20
+      (and originally defined in ‘Control.Lens.Setter’)
+     |
+3582 |     renderArgument argument = argument ^. #argumentName <> ":" <> renderQualifiedType (argument ^. #argumentType)
+     |                    ^^^^^^^^
+
+[52 of 74] Compiling Keiro.ReadModel.External ( src/Keiro/ReadModel/External.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReadModel/External.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReadModel/External.dyn_o )
+[53 of 74] Compiling Keiro.ReadModel.Rebuild.Group ( src/Keiro/ReadModel/Rebuild/Group.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReadModel/Rebuild/Group.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReadModel/Rebuild/Group.dyn_o )
+[54 of 74] Compiling Keiro.ReadModel.Rebuild.Stream ( src/Keiro/ReadModel/Rebuild/Stream.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReadModel/Rebuild/Stream.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReadModel/Rebuild/Stream.dyn_o )
+[55 of 74] Compiling Keiro.ReadModel.Rebuild.Status ( src/Keiro/ReadModel/Rebuild/Status.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReadModel/Rebuild/Status.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReadModel/Rebuild/Status.dyn_o )
+[56 of 74] Compiling Keiro.ReadModel.Rebuild.Runner ( src/Keiro/ReadModel/Rebuild/Runner.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReadModel/Rebuild/Runner.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReadModel/Rebuild/Runner.dyn_o )
+[57 of 74] Compiling Keiro.ReadModel.Rebuild.Versioned ( src/Keiro/ReadModel/Rebuild/Versioned.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReadModel/Rebuild/Versioned.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReadModel/Rebuild/Versioned.dyn_o )
+[58 of 74] Compiling Keiro.ReadModel.Rebuild ( src/Keiro/ReadModel/Rebuild.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReadModel/Rebuild.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReadModel/Rebuild.dyn_o )
+[59 of 74] Compiling Keiro.Projection.Catalog.Operations ( src/Keiro/Projection/Catalog/Operations.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Projection/Catalog/Operations.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Projection/Catalog/Operations.dyn_o )
+[60 of 74] Compiling Keiro.Outbox     ( src/Keiro/Outbox.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Outbox.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Outbox.dyn_o )
+[61 of 74] Compiling Keiro.Inbox      ( src/Keiro/Inbox.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Inbox.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Inbox.dyn_o )
+[62 of 74] Compiling Keiro.Command    ( src/Keiro/Command.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Command.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Command.dyn_o )
+[63 of 74] Compiling Keiro.ReplayAudit ( src/Keiro/ReplayAudit.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReplayAudit.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ReplayAudit.dyn_o )
+src/Keiro/ReplayAudit.hs:141:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘streamVersion’
+    Record selection and update using this field will be partial.
+    |
+141 |       { streamVersion :: !StreamVersion,
+    |         ^^^^^^^^^^^^^
+
+src/Keiro/ReplayAudit.hs:142:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘digest’
+    Record selection and update using this field will be partial.
+    |
+142 |         digest :: !(Maybe Text)
+    |         ^^^^^^
+
+src/Keiro/ReplayAudit.hs:145:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘commandError’
+    Record selection and update using this field will be partial.
+    |
+145 |       { commandError :: !CommandError
+    |         ^^^^^^^^^^^^
+
+src/Keiro/ReplayAudit.hs:148:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘seedVersion’
+    Record selection and update using this field will be partial.
+    |
+148 |       { seedVersion :: !StreamVersion,
+    |         ^^^^^^^^^^^
+
+src/Keiro/ReplayAudit.hs:149:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘seededDigest’
+    Record selection and update using this field will be partial.
+    |
+149 |         seededDigest :: !Text,
+    |         ^^^^^^^^^^^^
+
+src/Keiro/ReplayAudit.hs:150:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘fullDigest’
+    Record selection and update using this field will be partial.
+    |
+150 |         fullDigest :: !Text
+    |         ^^^^^^^^^^
+
+[64 of 74] Compiling Keiro.Projection ( src/Keiro/Projection.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Projection.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Projection.dyn_o )
+[65 of 74] Compiling Keiro.ProcessManager.Provenance ( src/Keiro/ProcessManager/Provenance.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ProcessManager/Provenance.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ProcessManager/Provenance.dyn_o )
+src/Keiro/ProcessManager/Provenance.hs:14:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Control.Monad’ is redundant
+      except perhaps to import instances from ‘Control.Monad’
+    To import instances alone, use: import Control.Monad()
+   |
+14 | import Control.Monad (unless)
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/ProcessManager/Provenance.hs:79:67: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager/Provenance.hs:24:1-34
+      (and originally defined in ‘Control.Lens.Indexed’)
+   |
+79 |       "dispatched" .= [object ["i" .= index, "target" .= name] | (index, StreamName name) <- provenance.dispatched],
+   |                                                                   ^^^^^
+
+src/Keiro/ProcessManager/Provenance.hs:111:17: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager/Provenance.hs:24:1-34
+      (and originally defined in ‘Control.Lens.Indexed’)
+    |
+111 |                 index <- entry .: "i"
+    |                 ^^^^^
+
+[66 of 74] Compiling Keiro.ProcessManager ( src/Keiro/ProcessManager.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ProcessManager.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ProcessManager.dyn_o )
+src/Keiro/ProcessManager.hs:539:78: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager.hs:168:1-20
+      (and originally defined in ‘Control.Lens.Indexed’)
+    |
+539 |                 dispatched = [(index, resolveTarget (command ^. #target)) | (index, command) <- zip [0 ..] (action ^. #commands)],
+    |                                                                              ^^^^^
+
+[67 of 74] Compiling Keiro.Router.Selection ( src/Keiro/Router/Selection.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Router/Selection.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Router/Selection.dyn_o )
+[68 of 74] Compiling Keiro.Router     ( src/Keiro/Router.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Router.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Router.dyn_o )
+[69 of 74] Compiling Keiro.ProcessManager.Reaction ( src/Keiro/ProcessManager/Reaction.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ProcessManager/Reaction.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ProcessManager/Reaction.dyn_o )
+src/Keiro/ProcessManager/Reaction.hs:126:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘command’
+    Record selection and update using this field will be partial.
+    |
+126 |       { command :: !ci,
+    |         ^^^^^^^
+
+src/Keiro/ProcessManager/Reaction.hs:127:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘followUps’
+    Record selection and update using this field will be partial.
+    |
+127 |         followUps :: ![FollowUp targetCi],
+    |         ^^^^^^^^^
+
+src/Keiro/ProcessManager/Reaction.hs:128:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘onAccepted’
+    Record selection and update using this field will be partial.
+    |
+128 |         onAccepted :: ![FollowUp targetCi]
+    |         ^^^^^^^^^^
+
+src/Keiro/ProcessManager/Reaction.hs:489:18: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         runTimerPhase :: forall (es :: [Effectful.Internal.Effect.Effect])
+                                 targetCi.
+                          (IOE :> es, Store :> es) =>
+                          [FollowUp targetCi] -> Eff es ReactionTimerEffects
+    |
+489 | runTimerPhase :: (IOE :> es, Store :> es) => [FollowUp targetCi] -> Eff es ReactionTimerEffects
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/ProcessManager/Reaction.hs:549:3: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         recoverWitness :: forall (es :: [Effectful.Internal.Effect.Effect])
+                                  phi (rs :: [Keiki.Core.Slot]) s ci co.
+                           (IOE :> es, Store :> es) =>
+                           ValidatedEventStream phi rs s ci co
+                           -> StreamName -> EventId -> Eff es (Either ReactionError ())
+    |
+549 |   (IOE :> es, Store :> es) =>
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+[70 of 74] Compiling Keiro.Inspection.Aggregate ( src/Keiro/Inspection/Aggregate.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Inspection/Aggregate.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Inspection/Aggregate.dyn_o )
+src/Keiro/Inspection/Aggregate.hs:249:11: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘folded’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Inspection/Aggregate.hs:57:1-34
+      (and originally defined in ‘Control.Lens.Fold’)
+    |
+249 |           folded <- if isJust info.deletedAt then pure (Right Nothing) else fmap (fmap Just) (hydrateWithSource inspectionRunCommandOptions (unvalidated inspector.eventStream) target)
+    |           ^^^^^^
+
+src/Keiro/Inspection/Aggregate.hs:381:19: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘view’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Inspection/Aggregate.hs:57:1-34
+      (and originally defined in ‘Control.Lens.Getter’)
+    |
+381 | aggregateViewJson view =
+    |                   ^^^^
+
+[71 of 74] Compiling Keiro.ProcessManager.Inspect ( src/Keiro/ProcessManager/Inspect.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ProcessManager/Inspect.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/ProcessManager/Inspect.dyn_o )
+src/Keiro/ProcessManager/Inspect.hs:231:19: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager/Inspect.hs:54:1-34
+      (and originally defined in ‘Control.Lens.Indexed’)
+    |
+231 |     probe record (index, target) = do
+    |                   ^^^^^
+
+src/Keiro/ProcessManager/Inspect.hs:294:24: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘view’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager/Inspect.hs:54:1-34
+      (and originally defined in ‘Control.Lens.Getter’)
+    |
+294 | processManagerViewJson view =
+    |                        ^^^^
+
+[72 of 74] Compiling Keiro.Inbox.Delegated ( src/Keiro/Inbox/Delegated.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Inbox/Delegated.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro/Inbox/Delegated.dyn_o )
+[73 of 74] Compiling Paths_keiro      ( /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/autogen/Paths_keiro.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Paths_keiro.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Paths_keiro.dyn_o )
+[74 of 74] Compiling Keiro            ( src/Keiro.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/build/Keiro.dyn_o )
+Configuring benchmark 'keiro-bench' for keiro-0.21.0.0...
+Preprocessing benchmark 'keiro-bench' for keiro-0.21.0.0...
+Building benchmark 'keiro-bench' for keiro-0.21.0.0...
+[ 1 of 10] Compiling BenchSetup       ( bench/BenchSetup.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/BenchSetup.o )
+[ 2 of 10] Compiling CommandProbe     ( bench/CommandProbe.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/CommandProbe.o )
+[ 3 of 10] Compiling GuardedCatalogFixture ( test/GuardedCatalogFixture.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/GuardedCatalogFixture.o )
+test/GuardedCatalogFixture.hs:26:28: warning: [GHC-38856] [-Wunused-imports]
+    The import of ‘EventType’
+    from module ‘Kiroku.Store.Types’ is redundant
+   |
+26 | import Kiroku.Store.Types (EventType (..), RecordedEvent)
+   |                            ^^^^^^^^^^^^^^
+
+test/GuardedCatalogFixture.hs:189:8: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘applyEvent’ shadows the existing binding
+      imported from ‘Keiki.Core’ at test/GuardedCatalogFixture.hs:14:1-17
+    |
+189 | replay applyEvent = Replayable (replayAdapterFromCodec noteCodec applyEvent)
+    |        ^^^^^^^^^^
+
+[ 4 of 10] Compiling GuardedCatalogExample ( test/GuardedCatalogExample.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/GuardedCatalogExample.o )
+[ 5 of 10] Compiling GuardedCatalogWorkload ( bench/GuardedCatalogWorkload.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/GuardedCatalogWorkload.o )
+bench/GuardedCatalogWorkload.hs:155:36: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘head’ shadows the existing binding
+      imported from ‘Prelude’ at bench/GuardedCatalogWorkload.hs:33:1-14
+      (and originally defined in ‘ghc-internal-9.1204.0:GHC.Internal.List’)
+    |
+155 |   (identityRows, events, richRows, head, cursor) <- facts runner
+    |                                    ^^^^
+
+bench/GuardedCatalogWorkload.hs:164:14: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘request’ shadows the existing binding
+      bound at bench/GuardedCatalogWorkload.hs:161:7
+    |
+164 |         Just request -> do
+    |              ^^^^^^^
+
+bench/GuardedCatalogWorkload.hs:197:7: warning: [GHC-81995] [-Wunused-do-bind]
+    A do-notation statement discarded a result of type
+      ‘Store.SubscriptionCheckpointResetReport’
+    Suggested fix:
+      Suppress this warning by saying
+        ‘_ <- checked
+                runner
+                (Store.runTransaction
+                   (Store.resetSubscriptionCheckpointsTx
+                      (Store.SubscriptionName "note-rich-worker" :| []) next))’
+    |
+197 |       checked runner (Store.runTransaction (Store.resetSubscriptionCheckpointsTx (Store.SubscriptionName "note-rich-worker" :| []) next))
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+bench/GuardedCatalogWorkload.hs:208:5: warning: [GHC-81995] [-Wunused-do-bind]
+    A do-notation statement discarded a result of type
+      ‘Store.SubscriptionCheckpointResetReport’
+    Suggested fix:
+      Suppress this warning by saying
+        ‘_ <- checked
+                runner
+                (Store.runTransaction
+                   (Store.resetSubscriptionCheckpointsTx
+                      (Store.SubscriptionName "note-rich-worker" :| []) next))’
+    |
+208 |     checked runner (Store.runTransaction (Store.resetSubscriptionCheckpointsTx (Store.SubscriptionName "note-rich-worker" :| []) next))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+bench/GuardedCatalogWorkload.hs:211:1: warning: [GHC-38417] [-Wmissing-signatures]
+    Top-level binding with no type signature:
+      facts :: StoreRunner -> IO (Int64, Int64, Int64, Int64, Int64)
+    |
+211 | facts runner =
+    | ^^^^^
+
+[ 6 of 10] Compiling GuardedCatalogBench ( bench/GuardedCatalogBench.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/GuardedCatalogBench.o )
+bench/GuardedCatalogBench.hs:104:146: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘chosen’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at bench/GuardedCatalogBench.hs:20:1-20
+      (and originally defined in ‘lens-5.3.6:Control.Lens.Lens’)
+    |
+104 |             sustainedResults <- forM [("control", Ordinary, sustained {duplicatePercent = 0}), ("duplicates", IndexedGuard, sustained)] \(label, chosen, config) -> do
+    |                                                                                                                                                  ^^^^^^
+
+bench/GuardedCatalogBench.hs:220:1: warning: [GHC-38417] [-Wmissing-signatures]
+    Top-level binding with no type signature:
+      originalSample :: (ToJSON a, FromJSON b) =>
+                        FilePath -> FilePath -> FilePath -> a -> IO b
+    |
+220 | originalSample output executable prefix config = do
+    | ^^^^^^^^^^^^^^
+
+bench/GuardedCatalogBench.hs:249:47: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘sample’ shadows the existing binding
+      defined at bench/GuardedCatalogBench.hs:151:1
+    |
+249 |     latencies value = [latencyMicros sample | sample <- samples value, if label == "mixed" || label == "fixed-arrival" then cohort sample == "ordinary" else True]
+    |                                               ^^^^^^
+
+bench/GuardedCatalogBench.hs:256:1: warning: [GHC-38417] [-Wmissing-signatures]
+    Top-level binding with no type signature:
+      sampleWithStorage :: FilePath
+                           -> FilePath -> Workload -> Mode -> IO Measurements
+    |
+256 | sampleWithStorage output name config mode = withMigratedBenchmarkSuite \fixture -> withFreshResourceStore fixture \(_, runner) -> do
+    | ^^^^^^^^^^^^^^^^^
+
+bench/GuardedCatalogBench.hs:260:9: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘snapshot’ shadows the existing binding
+      bound at bench/GuardedCatalogBench.hs:259:7
+    |
+260 |         snapshot <-
+    |         ^^^^^^^^
+
+bench/GuardedCatalogBench.hs:291:68: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘sample’ shadows the existing binding
+      defined at bench/GuardedCatalogBench.hs:151:1
+    |
+291 | minute n result = result {elapsedSeconds = 60, samples = [sample | sample <- samples result, completedSeconds sample >= fromIntegral (n * 60), completedSeconds sample < fromIntegral ((n + 1) * 60)]}
+    |                                                                    ^^^^^^
+
+[ 7 of 10] Compiling InboxDelegatedBench ( bench/InboxDelegatedBench.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/InboxDelegatedBench.o )
+[ 8 of 10] Compiling ProducerIdentityBench ( bench/ProducerIdentityBench.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/ProducerIdentityBench.o )
+[ 9 of 10] Compiling ReadModelBench   ( bench/ReadModelBench.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/ReadModelBench.o )
+[10 of 10] Compiling Main             ( bench/Main.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/Main.o )
+[11 of 11] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench

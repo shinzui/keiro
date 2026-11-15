@@ -1,0 +1,11 @@
+Name,Mean (ps),2*Stdev (ps)
+All.read-model-lifecycle.serving-binding.legacy-three,74967749,5248754
+All.read-model-lifecycle.serving-binding.versioned-three,90526354,44552562
+All.read-model-lifecycle.promotion.three-target-end-to-end,16240787499,4939627892
+All.read-model-lifecycle.repair.10,482223046,31103180
+All.read-model-lifecycle.repair.100,2758187500,236743696
+All.read-model-lifecycle.repair.1000,31680712499,1720151182
+All.read-model-reads.status.list-1000-synthetic-groups,8617479687,218987920
+All.read-model-reads.status.lookup-among-1000-synthetic-groups,67213793,3693770
+All.read-model-reads.guarded.all-rows-100,194320996,19202670
+All.read-model-reads.guarded.keyed-10000,78130297,6211312

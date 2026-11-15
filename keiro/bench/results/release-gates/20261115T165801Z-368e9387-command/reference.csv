@@ -1,0 +1,16 @@
+Name,Mean (ps),2*Stdev (ps)
+All.command.legacy.accepted-1,284395849,154002412
+All.command.control.accepted-1,287614721,96528914
+All.command.domain-warmup.accepted-1,297372558,17633054
+All.command.domain.accepted-1,329587548,163451654
+All.command.legacy.accepted-large,3079171484,1198850376
+All.command.domain.accepted-large,2570153515,1559143816
+All.command.legacy.no-op,30169091,1698560
+All.command.domain.rejected,30935986,1200576
+All.command.domain.no-op,36303796,12482400
+All.command.domain.router-fanout.10,5937401562,1260223454
+All.command.domain.router-fanout.100,115708037500,116560857096
+All.command.domain.router-fanout.1000,2433465800011,1218958469872
+All.command.domain.process-manager-fanout.10,28644625000,2591602784
+All.command.domain.process-manager-fanout.100,149293974998,90217852084
+All.command.domain.process-manager-fanout.1000,282853449990,26013967692

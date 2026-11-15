@@ -1,0 +1,9 @@
+{
+  "manifest": "keiro/bench/results/release-gates/20261115T165801Z-368e9387-manifest.json",
+  "sha256": "52466d855cd3aadfc1b91a37474d635ed93981ebcbcc34ecf90ff1951007ed13",
+  "candidate": "aefe288f3feb2e644514b30eae6dee0ea3e088d5",
+  "identity": "b7586cdca765eb26aec0e44241dd7fe8ca403fa6a179609c4d43042a6de082ac",
+  "stages": 7,
+  "supplementary_files_verified": 72,
+  "status": "passed"
+}

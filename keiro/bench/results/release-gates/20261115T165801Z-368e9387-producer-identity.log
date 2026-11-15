@@ -1,0 +1,40 @@
+{"identity": "fb0e3a2f75bf7d264b34ab0dba44f953b0a805775230183383348639166e2796", "command": ["scripts/bench-regression.sh", "producer-identity"]}
+##### guard producer-identity 2026-11-15T17:17:48Z
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.25.0.0 (bench:keiro-bench) (ephemeral targets)
+Preprocessing benchmark 'keiro-bench' for keiro-0.25.0.0...
+Building benchmark 'keiro-bench' for keiro-0.25.0.0...
+Running 1 benchmarks...
+Benchmark keiro-bench: RUNNING...
+All
+  producer-identity
+    derive-v1:                              OK
+      693  ns ±  14 ns
+    legacy-fresh-1000:                      OK
+      54.6 ms ± 5.8 ms
+    deterministic-fresh-1000:               {"batch":true,"ceiling":1.1,"median_ratio":1.0486531634996867,"pairs_ns_legacy_deterministic":[[55674000,56304000],[55798000,59604000],[62523000,59683000],[55266000,59216000],[59415000,57286000],[55388000,59751000],[56162000,54370000],[57977000,59965000],[56625000,56629000],[56306000,56392000],[54649000,66307000],[60996000,71141000],[58601000,61579000],[57468000,60264000],[58009000,62538000]],"phase":"producer-fresh-ratio"}
+OK
+      59.0 ms ± 303 μs
+    deterministic-fresh-and-replay-1000:    OK
+      299  ms ± 791 μs
+    trace-policy-legacy-1000:               OK
+      56.8 ms ± 783 μs
+    trace-policy-derived-1000:              OK
+      59.5 ms ± 1.8 ms
+    trace-policy-pre-cutover-1000:          OK
+      58.2 ms ± 5.3 ms
+    trace-policy-explicit-1000:             OK
+      58.0 ms ± 388 μs
+    legacy-single-tx-per-event-1000:        OK
+      103  ms ± 3.4 ms
+    deterministic-single-tx-per-event-1000: {"batch":false,"ceiling":1.1,"median_ratio":0.9298212380733991,"pairs_ns_legacy_deterministic":[[99875000,89285000],[100828000,89772000],[94289000,89938000],[96723000,91482000],[92429000,91409000],[106756000,98254000],[114519000,102865000],[118712000,96428000],[124716000,96284000],[98833000,96765000],[101874000,94818000],[109205000,94911000],[100818000,95423000],[104918000,97608000],[100301000,93262000]],"phase":"producer-fresh-ratio"}
+OK
+      97.3 ms ± 1.3 ms
+
+All 10 tests passed (451.98s)
+Benchmark keiro-bench: FINISH
+##### guard summary 2026-11-15T17:25:24Z
+GUARD(producer-identity)=0
+BENCH_REGRESSION=PASSED
+STAGE_EXIT=0

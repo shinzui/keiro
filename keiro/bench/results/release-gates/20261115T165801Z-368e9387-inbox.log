@@ -1,0 +1,9 @@
+{"identity": "31232ac17b8f90caec87f0adbd26f0a0f4e35a384022077f3bbc137bd10482c7", "command": ["scripts/bench-regression.sh", "inbox"]}
+##### guard inbox 2026-11-15T17:25:44Z
++ cabal build keiro:bench:keiro-bench
++ /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.25.0.0/b/keiro-bench/build/keiro-bench/keiro-bench -p inbox -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --csv /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261115T165801Z-368e9387-inbox/candidate.csv --baseline /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/baseline-inbox.csv +RTS -N2 -RTS
+PERFORMANCE(inbox)=PASSED cases=38 evidence=/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261115T165801Z-368e9387-inbox
+##### guard summary 2026-11-15T17:29:38Z
+GUARD(inbox)=0
+BENCH_REGRESSION=PASSED
+STAGE_EXIT=0

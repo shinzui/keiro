@@ -1,0 +1,13 @@
+{"identity": "2d5f95bb983205d619e3164e7c2058090a7c0926f0213e881c0a969bceb77a0b", "command": ["scripts/bench-regression.sh", "command"]}
+##### guard command 2026-11-15T17:29:39Z
++ cabal build keiro:bench:keiro-bench
++ /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.25.0.0/b/keiro-bench/build/keiro-bench/keiro-bench -p command -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --csv /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261115T165801Z-368e9387-command/candidate.csv --baseline /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/baseline-command.csv +RTS -N2 -RTS
++ /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.25.0.0/b/keiro-bench/build/keiro-bench/keiro-bench -p $0 == "All.command.domain.router-fanout.100" -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --csv /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261115T165801Z-368e9387-command/confirm-0-candidate.csv +RTS -N2 -RTS
++ /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench -p $0 == "All.command.domain.router-fanout.100" -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --csv /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261115T165801Z-368e9387-command/confirm-0-reference.csv +RTS -N2 -RTS
++ /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench -p $0 == "All.command.domain.router-fanout.100" -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --csv /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261115T165801Z-368e9387-command/confirm-1-reference.csv +RTS -N2 -RTS
++ /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.25.0.0/b/keiro-bench/build/keiro-bench/keiro-bench -p $0 == "All.command.domain.router-fanout.100" -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --csv /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261115T165801Z-368e9387-command/confirm-1-candidate.csv +RTS -N2 -RTS
+PERFORMANCE(command)=PASSED cases=15 evidence=/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261115T165801Z-368e9387-command
+##### guard summary 2026-11-15T17:31:33Z
+GUARD(command)=0
+BENCH_REGRESSION=PASSED
+STAGE_EXIT=0

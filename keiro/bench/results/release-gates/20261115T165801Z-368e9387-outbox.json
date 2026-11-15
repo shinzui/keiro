@@ -1,0 +1,32 @@
+{
+  "artifacts": {
+    "keiro/bench/results/release-gates/20261115T165801Z-368e9387-outbox/build.log": "93f2cc8c7d53c06af39a68763ebe9b90cdad67acf2781e0aede0d12f837100ea",
+    "keiro/bench/results/release-gates/20261115T165801Z-368e9387-outbox/candidate-command.json": "eb884e73fdab0e39317abcb9857f5554a4c0227cba309e7cfdb7d48c908842ee",
+    "keiro/bench/results/release-gates/20261115T165801Z-368e9387-outbox/candidate.csv": "3d25b4ab9a9b4c6bffbe7011a572d7a0394e7ca6bd20e09f91ffed52bc5f4e28",
+    "keiro/bench/results/release-gates/20261115T165801Z-368e9387-outbox/candidate.log": "2cb2e61f0ab9f9569337fef148e6fbbccbec8dcf1d3a23c215beb479e0331155",
+    "keiro/bench/results/release-gates/20261115T165801Z-368e9387-outbox/reference-build.log": "84616d6710007edef008c24a5b84690849302eec2bc1e0eb31b9b10dfa60df93",
+    "keiro/bench/results/release-gates/20261115T165801Z-368e9387-outbox/reference-command.json": "560e122067b8bd00a4b8b36de59b62f96d70eb0ab0bc8fbafd4d8ca13e2d85f3",
+    "keiro/bench/results/release-gates/20261115T165801Z-368e9387-outbox/reference-plan.json": "67441c31996430b592ba3db7849370f2b570b0757ef3d595c9c4ca046b4bf53b",
+    "keiro/bench/results/release-gates/20261115T165801Z-368e9387-outbox/reference.csv": "a51ec13b598c38a43ad475a4ed4ff5d94cb1b3053185df35c6996fabdbd22271",
+    "keiro/bench/results/release-gates/20261115T165801Z-368e9387-outbox/reference.json": "8a45808f256d11906016858693be2993715babc36cd25a974bf97c9498a87da0",
+    "keiro/bench/results/release-gates/20261115T165801Z-368e9387-outbox/reference.log": "0708f7ba5f2e498f7e1fcd80c4522a6fbb99943ebecd0f6094fac946e23b1c77",
+    "keiro/bench/results/release-gates/20261115T165801Z-368e9387-outbox/result.json": "a783e1d2077064fb800d614f24b4e17a751a3605708c3db3e250034664241f05",
+    "keiro/bench/results/release-gates/20261115T165801Z-368e9387-outbox/sample.json": "d5daaf6371d69c682e4d40e885866bd605f294b2508b8a78a2b770510babe4b6"
+  },
+  "command": [
+    "scripts/bench-regression.sh",
+    "outbox"
+  ],
+  "finished": 1794763544.5324008,
+  "identity": "8fe5ae57fe786c8d3f45de919681c7fccf6867350e6a6522bac0245961b86a23",
+  "load_average": [
+    6.94580078125,
+    6.25927734375,
+    7.12744140625
+  ],
+  "log": "keiro/bench/results/release-gates/20261115T165801Z-368e9387-outbox.log",
+  "log_sha256": "7f93cf4feecdd942645780f1381edaff99fa52dc711a0779291dab37b22cc8a4",
+  "schema": 1,
+  "started": 1794763525.179744,
+  "status": 0
+}

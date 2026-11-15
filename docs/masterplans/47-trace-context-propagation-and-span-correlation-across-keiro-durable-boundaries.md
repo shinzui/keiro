@@ -321,18 +321,16 @@ manager/command/event chain passes with metadata, links and child parenting. EP-
 timer and workflow creation contexts persist, exact wake/origin correlation survives snapshots,
 and retained-span ownership and five matched measurement pairs satisfy the bounded-work reading rule.
 
-All six implementation plans are Complete. The approved `0.25.0.0` candidate now includes
-the permanent benchmark correction at `1184f1ba`: selection-scoped tracing fixtures and
-automatic comparisons against the immutable original recording source on this machine.
-Historical CSVs and numerical ceilings remain unchanged. Full correctness, native
-`nix flake check`, producer identity, outbox, command, projection and read-model pass.
-Inbox remains inconclusive after disagreeing confirmations and an isolated timeout;
-all attempts are retained. The follow-up runner batches flagged cases into four
-bounded confirmation processes and requires two complete passing confirmations
-for any known-inventory initial timeout. Its 88 script controls pass; final release
-verification follows the frozen runner revision. Earlier archives and the successful staged-consumer proof are retained
-as historical evidence and require refresh for the corrected candidate.
-No benchmark waiver is being used; publication requires every corrected guard to pass. See the
+All six implementation plans are Complete. The approved `0.25.0.0` candidate at
+`aefe288f` passes full correctness, native `nix flake check` and all six benchmark
+guards in accepted manifest `20261115T165801Z-368e9387`. The permanent benchmark
+correction scopes tracing fixtures to selected cases, compares immutable original
+recording source on this machine, and batches bounded opposite-order confirmations.
+All 88 script controls pass. Historical CSVs, workload quantities and numerical
+ceilings remain unchanged; no waiver is used. Earlier failed and interrupted
+attempts remain retained. All sixteen refreshed source/docs archives and the
+isolated staged-consumer build, migration and HTTP health proof pass.
+Publication is the remaining cross-plan gate. See the
 [release status](../../keiro/bench/results/release-gates/0.25.0.0-release-status.md).
 
 Cross-plan gates not owned by a child plan:
@@ -436,10 +434,10 @@ Implementation is complete across all six children, with correlated events, subs
 processing, outbox sends, timer fires and workflow resumes. Existing replay identities, producer
 digests and snapshot formats are preserved. The full verification, targeted review checks,
 recording allocation/timing measurements, retained-span probes and real backend graph are retained.
-The user approved the 0.25.0.0 release on 2026-11-14. The prepared candidate passes
-full correctness and native Nix checks. Sixteen source/docs archives and the isolated
-staged-consumer build, migration and HTTP health proof pass. Three historical guards retain
-seven red cases after the bounded rerun; all original and resumed evidence plus the focused
-released-version comparison are retained. The user requested investigation and a permanent benchmark correction. No exception
-is being used. Release remains pending the corrected source-pinned gate and refreshed
-archive/consumer evidence. Thresholds and baselines are unchanged.
+The user approved the 0.25.0.0 release on 2026-11-14. Candidate `aefe288f` passes
+full correctness, native Nix checks and all six guards after the permanent
+benchmark correction. Sixteen refreshed archives and the isolated staged-consumer
+build, migration and HTTP health proof pass. All original failures, source controls,
+confirmation measurements and accepted receipts are retained. Publication follows
+final readiness validation. Thresholds and historical baselines are unchanged;
+no exception is used.

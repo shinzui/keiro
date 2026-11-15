@@ -1,0 +1,132 @@
+All
+  inbox
+    single-full:       OK
+      163  ms ±  11 ms, 31% more than baseline
+    single-nometrics:  OK
+      150  ms ± 4.3 ms, 23% more than baseline
+    batch-100:         OK
+      73.9 ms ±  10 ms, 35% more than baseline
+    single-slim:       OK
+      148  ms ±  11 ms, 22% more than baseline
+    downstream
+      table-downstream-single
+        fresh
+          metrics-off: OK
+            538  ms ±  38 ms, 23% more than baseline
+          metrics-on:  OK
+            521  ms ±  28 ms, 20% more than baseline
+        repeated-key
+          metrics-off: OK
+            188  ms ±  10 ms, 15% more than baseline
+          metrics-on:  OK
+            195  ms ±  16 ms, 18% more than baseline
+        all-duplicate
+          metrics-off: OK
+            188  ms ±  16 ms, 14% more than baseline
+          metrics-on:  OK
+            190  ms ±  19 ms
+      delegated-single
+        fresh
+          metrics-off: OK
+            459  ms ±  19 ms, 22% more than baseline
+          metrics-on:  OK
+            458  ms ±  34 ms, 16% more than baseline
+        repeated-key
+          metrics-off: OK
+            32.7 ms ± 3.5 ms, 33% more than baseline
+          metrics-on:  OK
+            31.3 ms ± 2.8 ms, 22% more than baseline
+        all-duplicate
+          metrics-off: OK
+            29.3 ms ± 902 μs, 24% more than baseline
+          metrics-on:  OK
+            30.3 ms ± 2.5 ms
+      delegated-direct-single
+        fresh
+          metrics-off: OK
+            462  ms ±  15 ms, 22% more than baseline
+          metrics-on:  OK
+            464  ms ±  30 ms
+        repeated-key
+          metrics-off: OK
+            30.2 ms ± 2.6 ms
+          metrics-on:  OK
+            30.4 ms ± 2.9 ms
+        all-duplicate
+          metrics-off: OK
+            30.4 ms ± 1.2 ms
+          metrics-on:  OK
+            30.6 ms ± 2.0 ms
+      table-downstream-batch-100
+        fresh
+          metrics-off: OK
+            377  ms ±  27 ms, 32% more than baseline
+          metrics-on:  OK
+            367  ms ±  34 ms
+        repeated-key
+          metrics-off: OK
+            3.39 ms ± 1.4 ms, 74% more than baseline
+          metrics-on:  OK
+            3.81 ms ± 333 μs, 27% more than baseline
+        all-duplicate
+          metrics-off: OK
+            2.11 ms ± 164 μs, 17% more than baseline
+          metrics-on:  OK
+            3.37 ms ± 256 μs, 19% more than baseline
+      delegated-batch-100
+        fresh
+          metrics-off: OK
+            449  ms ±  32 ms, 14% more than baseline
+          metrics-on:  OK
+            458  ms ±  30 ms
+        repeated-key
+          metrics-off: OK
+            656  μs ±  64 μs, 26% more than baseline
+          metrics-on:  OK
+            2.10 ms ± 360 μs, 38% more than baseline
+        all-duplicate
+          metrics-off: OK
+            413  μs ±  29 μs, 41% more than baseline
+          metrics-on:  OK
+            1.60 ms ±  88 μs, 19% more than baseline
+      table-downstream-batch-1000
+        fresh
+          metrics-off: OK
+            530  ms ±  18 ms, 30% more than baseline
+          metrics-on:  OK
+            513  ms ±  39 ms
+        repeated-key
+          metrics-off: OK
+            748  μs ±  50 μs, 29% more than baseline
+          metrics-on:  OK
+            1.84 ms ± 152 μs, 18% more than baseline
+        all-duplicate
+          metrics-off: OK
+            390  μs ±  26 μs, 23% more than baseline
+          metrics-on:  OK
+            1.49 ms ± 128 μs, 16% more than baseline
+      delegated-batch-1000
+        fresh
+          metrics-off: OK
+            461  ms ±  42 ms, 17% more than baseline
+          metrics-on:  OK
+            476  ms ±  44 ms
+        repeated-key
+          metrics-off: OK
+            343  μs ±  18 μs, 26% more than baseline
+          metrics-on:  OK
+            1.48 ms ± 108 μs, 14% more than baseline
+        all-duplicate
+          metrics-off: OK
+            98.8 μs ± 3.4 μs, 15% more than baseline
+          metrics-on:  OK
+            1.20 ms ± 108 μs, 12% more than baseline
+      delegated-history-duplicate
+        events-10:     OK
+          28.9 ms ± 1.0 ms, 21% more than baseline
+        events-1000:   OK
+          28.4 ms ± 906 μs, 20% more than baseline
+        events-100000: OK
+          29.0 ms ± 2.5 ms, 22% more than baseline
+
+All 49 tests passed (229.77s)

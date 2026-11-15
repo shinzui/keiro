@@ -1,0 +1,9 @@
+{"identity": "de5afab170b2d023887d9451e693995738423305d953a4e9defa5f4d6935ddb5", "command": ["scripts/bench-regression.sh", "projection"]}
+##### guard projection 2026-11-15T17:31:34Z
++ cabal build keiro:bench:keiro-bench
++ /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.25.0.0/b/keiro-bench/build/keiro-bench/keiro-bench -p projection -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --csv /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261115T165801Z-368e9387-projection/candidate.csv --baseline /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/baseline-projection.csv +RTS -N2 -RTS
+PERFORMANCE(projection)=PASSED cases=12 evidence=/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261115T165801Z-368e9387-projection
+##### guard summary 2026-11-15T17:32:22Z
+GUARD(projection)=0
+BENCH_REGRESSION=PASSED
+STAGE_EXIT=0
