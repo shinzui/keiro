@@ -6,6 +6,8 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+## 0.25.0.0 — 2026-11-14
+
 ### Breaking Changes
 
 - `TimerRequest` and `TimerRow` add strict `traceContext`; use `Nothing` for legacy behavior.
@@ -42,7 +44,7 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 - Commands with a configured tracer stamp event metadata with the command span's W3C
   creation context once per run, preserving explicit caller context across retries.
 
-### Fixed
+### Bug Fixes
 
 - Retained command spans release typed outcome payloads before attribute inspection;
   bounded outcome projections are forced before SDK ownership.

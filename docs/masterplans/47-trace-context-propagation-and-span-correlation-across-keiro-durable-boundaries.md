@@ -324,7 +324,7 @@ and retained-span ownership and five matched measurement pairs satisfy the bound
 All six implementation plans are Complete. Full `just verify` passes at `3bc78fab`, followed
 by focused review checks at `412721f4` and a stronger distinct-row ownership probe. Current-version
 release preflight passes. The versioned release gate, readiness/artifact/consumer checks and
-publication remain outstanding; the shared major release proposal is `0.25.0.0` from `0.24.0.0`.
+publication remain outstanding; the user approved shared major release `0.25.0.0` from `0.24.0.0` on 2026-11-14.
 
 Cross-plan gates not owned by a child plan:
 
@@ -427,5 +427,5 @@ Implementation is complete across all six children, with correlated events, subs
 processing, outbox sends, timer fires and workflow resumes. Existing replay identities, producer
 digests and snapshot formats are preserved. The full verification, targeted review checks,
 recording allocation/timing measurements, retained-span probes and real backend graph are retained.
-The final release phase remains open pending the release workflow's initial version confirmation;
-no version bump, tags or publication have been performed for `0.25.0.0`.
+The user approved the 0.25.0.0 release on 2026-11-14. Release preparation and the
+required gates are in progress; publication remains conditional on their success.

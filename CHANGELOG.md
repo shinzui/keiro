@@ -6,6 +6,8 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+## 0.25.0.0 — 2026-11-14
+
 ### Breaking Changes
 
 - Durable tracing: category-based command span names, explicit producer trace policy,
@@ -19,6 +21,9 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   wake/origin links across snapshots. Migration `0033` stores timer context and workflow
   attribution hints. Untraced paths remain opt-in-free; replay identities stay unchanged.
 
+### Bug Fixes
+
+- **keiro**: Release typed command outcome payloads before retained-span attribute inspection.
 
 ## 0.24.0.0 — 2026-11-05
 

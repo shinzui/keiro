@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## 0.25.0.0 — 2026-11-14
+
+### Other Changes
+
+- Version and internal dependency bounds align with the shared release.
+
 ## 0.24.0.0 — 2026-11-05
 
 ### New Features

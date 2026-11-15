@@ -4,9 +4,9 @@ edge.
 
 ## The package set moves together
 
-Keiro publishes seven packages under **one shared version**: `keiro-core`,
+Keiro publishes eight packages under **one shared version**: `keiro-core`,
 `keiro`, `keiro-pgmq`, `keiro-migrations`, `keiro-test-support`, `keiro-dsl`,
-and `keiro-ops`. They are released as a set and their internal bounds are locked
+`keiro-ops`, and `keiro-ops-http`. They are released as a set and their internal bounds are locked
 to each other, so a project cannot hold `keiro` at one release and
 `keiro-migrations` at another. An edge labelled `0.12.0.0 -> 0.13.0.0` therefore
 moves **every** Keiro package this project depends on.

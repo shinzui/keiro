@@ -6,7 +6,7 @@
 > heard of Kiroku — still crosses Kiroku's edges, exactly once, in the right
 > order.
 
-**Version:** `0.13.0`
+**Version:** `0.14.0`
 
 **Kind:** Blueprint migration (run with `seihou agent migrate`, not
 `seihou agent run` — this blueprint declares no baseline and applies no modules)
@@ -18,6 +18,9 @@ Bump the Keiro dependency first, then migrate the source up to it:
 ```sh
 seihou install https://github.com/shinzui/keiro.git   --module keiro-upgrade
 seihou install https://github.com/shinzui/kiroku.git  --module kiroku-upgrade
+
+seihou install https://github.com/shinzui/shibuya-pgmq-adapter.git --module shibuya-pgmq-adapter-upgrade
+seihou install https://github.com/shinzui/kiroku.git --module shibuya-kiroku-adapter-upgrade
 
 seihou agent --debug migrate keiro-upgrade --from 0.12.0.0   # preview
 seihou agent migrate keiro-upgrade --from 0.12.0.0           # run
@@ -48,6 +51,7 @@ cannot roll them back; version control is the undo.
 | `0.21.0.0` | `0.22.0.0` | `kiroku-upgrade` `0.11.0.1 -> 0.12.0.0` |
 | `0.22.0.0` | `0.23.0.0` | `kiroku-upgrade` `0.12.0.0 -> 0.13.0.0` |
 | `0.23.0.0` | `0.24.0.0` | — |
+| `0.24.0.0` | `0.25.0.0` | `shibuya-pgmq-adapter-upgrade` 0.18 → 0.19; `shibuya-kiroku-adapter-upgrade` 0.7.0.1 → 0.8 |
 
 Gaps between edges are deliberate and legal: they mean no agent intervention was
 needed in that interval. Edges are append-only — an edge stays correct for as

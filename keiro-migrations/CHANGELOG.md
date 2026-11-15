@@ -6,11 +6,12 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.25.0.0 — 2026-11-14
+
 ### New Features
 
 - Migration `0033` adds nullable timer `traceparent`/`tracestate` columns and the
   advisory workflow `trace_awaited_step` hint. Legacy named-column writes remain compatible.
-
 
 ## 0.24.0.0 — 2026-11-05
 

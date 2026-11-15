@@ -163,7 +163,11 @@ def blueprint_preflight(root=ROOT):
     selected = [m for m in blueprint["migrations"] if key(previous) <= key(m["from"]) and key(m["to"]) <= key(current)]
     # Seihou reads installed artifacts, not our checkout. Preview from a disposable
     # project-local module directory; never replace the user's installed copies.
-    owners = {"kiroku-upgrade": "mori://shinzui/kiroku"}
+    owners = {
+        "kiroku-upgrade": "mori://shinzui/kiroku",
+        "shibuya-kiroku-adapter-upgrade": "mori://shinzui/kiroku",
+        "shibuya-pgmq-adapter-upgrade": "mori://shinzui/shibuya-pgmq-adapter",
+    }
     with tempfile.TemporaryDirectory(prefix="keiro-blueprint-preflight-") as scratch:
         preview = Path(scratch)
         modules = preview / ".seihou/modules"

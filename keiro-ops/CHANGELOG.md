@@ -6,6 +6,12 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.25.0.0 — 2026-11-14
+
+### Other Changes
+
+- Version and internal dependency bounds align with the shared release.
+
 ## 0.24.0.0 — 2026-11-05
 
 ### Breaking Changes

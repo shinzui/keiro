@@ -6,6 +6,8 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.25.0.0 — 2026-11-14
+
 ### Other Changes
 
 - Generated process timer constructors initialize `traceContext = Nothing` and

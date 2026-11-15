@@ -9,6 +9,7 @@ edit. What to edit is in the edge prompt.
 
 | Keiro | `kiroku-store` | `kiroku-store-migrations` | `keiki` | `shibuya-core` |
 |---|---|---|---|---|
+| 0.25.0.0 | `^>=0.13.0.1` | `^>=0.7.3.0` | `>=0.9 && <0.10` | `^>=0.13.0.1` |
 | 0.24.0.0 | `^>=0.13.0.1` | `^>=0.7.3.0` | `>=0.9 && <0.10` | `^>=0.12.0.0` |
 | 0.23.0.0 | `^>=0.13.0.1` | `^>=0.7.3.0` | `>=0.9 && <0.10` | `^>=0.12.0.0` |
 | 0.22.0.0 | `^>=0.12.0.0` | `^>=0.7.2.0` | `>=0.9 && <0.10` | `^>=0.12.0.0` |
@@ -100,3 +101,10 @@ shells on **17 and 18**. A project deploying on PostgreSQL 17 should treat
 Kiroku's 17 coverage as the authority for anything in the `kiroku` schema, and
 should not assume Keiro's suites would have caught a 17-specific defect — the
 `0010` payload bug is exactly one that they did not.
+
+Keiro 0.25.0.0 requires adapter `^>=0.19.0.0` from
+mori://shinzui/shibuya-pgmq-adapter/packages/shibuya-pgmq-adapter and adapter
+`^>=0.8.0.0` from mori://shinzui/kiroku/packages/shibuya-kiroku-adapter.
+The framework plan contains 50 migrations (17 Store plus 33 Keiro); apply new
+Keiro migration `0033` before starting upgraded timer or workflow workers.
+The two adapter upgrade edges cover Shibuya 0.13 configuration and trace shape.
