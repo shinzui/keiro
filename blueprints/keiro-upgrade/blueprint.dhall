@@ -118,16 +118,7 @@ in  S.Blueprint::{
         , from = "0.23.0.0"
         , to = "0.24.0.0"
         , prompt = ./migrations/0.23.0.0-to-0.24.0.0.md as Text
-        }
-      ]
-    , tags =
-      [ "haskell"
-      , "postgresql"
-      , "event-sourcing"
-      , "keiro"
-      , "kiroku"
-      , "migration"
-      , S.BlueprintMigration::{
+        }      , S.BlueprintMigration::{
         , from = "0.24.0.0"
         , to = "0.25.0.0"
         , prompt = ./migrations/0.24.0.0-to-0.25.0.0.md as Text
@@ -144,5 +135,14 @@ in  S.Blueprint::{
             }
           ]
         }
+      ]
+    , tags =
+      [ "haskell"
+      , "postgresql"
+      , "event-sourcing"
+      , "keiro"
+      , "kiroku"
+      , "migration"
+
       ]
     }
