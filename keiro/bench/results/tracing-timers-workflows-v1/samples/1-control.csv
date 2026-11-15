@@ -1,0 +1,7 @@
+Name,Mean (ps),2*Stdev (ps),Allocated,Copied,Peak Memory
+All.durable-tracing.timer-100,17578862498,1070685252,6393669,141346,17825792
+All.durable-tracing.timer-100/tracer,19546737500,1909490256,6398376,141936,19922944
+All.durable-tracing.resume-snapshot-1,4194789062,414476160,3070653,47943,27262976
+All.durable-tracing.resume-snapshot-1/tracer,4406594531,311292106,3121450,48535,41943040
+All.durable-tracing.resume-snapshot-1000,8597784374,448862696,19289426,571576,53477376
+All.durable-tracing.resume-snapshot-1000/tracer,8648190624,743394774,19360825,572592,54525952

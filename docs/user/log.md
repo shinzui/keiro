@@ -2,6 +2,9 @@
 
 ## 2026-11-15
 
+* **Update**: DOC-11: clarify that producer cutoffs require a real global event position, not the zero reported by source-stream reads.
+
+
 * **Update**: DOC-14: document additive tracing migration 0033 and old-code rollback hint clearing.
 
 

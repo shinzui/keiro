@@ -1,0 +1,23 @@
+{
+  "candidate": "3bc78fab",
+  "backend": "VictoriaTraces via local Jaeger API",
+  "request_trace": "3b4bb4b6a11fb880d4363740ff6e209b",
+  "request_url": "http://localhost:16686/trace/3b4bb4b6a11fb880d4363740ff6e209b",
+  "spans": 10,
+  "traces": 6,
+  "verified": [
+    "request command creation to linked processing",
+    "processing to dispatched packing command child",
+    "packing command creation to linked root outbox send",
+    "processing to linked root timer fire",
+    "timer wake and journal origin to linked root workflow resume"
+  ],
+  "trace_urls": [
+    "http://localhost:16686/trace/071f0e74bb34e8e3ffe92b2d3227df24",
+    "http://localhost:16686/trace/7796d1d4bab4a88d137756ea72d4f799",
+    "http://localhost:16686/trace/8bbe27cd1e3108f536c8b157022cf4b5",
+    "http://localhost:16686/trace/8b2013b4c952c4fa2487c7ae0ecbdf19",
+    "http://localhost:16686/trace/3b4bb4b6a11fb880d4363740ff6e209b",
+    "http://localhost:16686/trace/04a494ad1f2c011c457a4d2d8532bc1e"
+  ]
+}

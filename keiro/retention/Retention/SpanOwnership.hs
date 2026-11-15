@@ -79,7 +79,7 @@ spec fixture = describe "Span payload ownership" do
           weak <- produceDurablePayloads runner (makeTracer provider "durable-ownership" tracerOptions)
           awaitCollection weak `shouldReturn` True
           spans <- readIORef exported
-          length spans `shouldBe` 24
+          length spans `shouldBe` 32
 
   forM_ [ParentAndLink, LinkOnly] $ \policy ->
     it ("collects subscription envelopes and lazy scalar attributes under " <> show policy) $ do
@@ -104,20 +104,26 @@ produceDurablePayloads (StoreRunner runStore) tracer = fmap concat $ forM [1 .. 
       request = Timer.TimerRequest (Timer.TimerId (UUID.fromWords 0 0 0 (fromIntegral index))) "ownership" "one" now payload Nothing
   Telemetry.withWorkflowSpan (Just tracer) name wid Nothing $ \_ -> do
     Right () <- runStore (Workflow.appendJournalEntryTraced (Just tracer) name wid (Workflow.StepRecorded "origin" payload now))
+    inSpan' tracer "ownership wake" defaultSpanArguments $ \_ -> do
+      Right () <- runStore (Workflow.appendJournalEntryTraced (Just tracer) name wid (Workflow.StepRecorded "wake" payload now))
+      pure ()
     captured <- Timer.captureTimerTraceContext (Just tracer) request
     Right () <- runStore (Store.runTransaction (Timer.scheduleTimerTx captured))
     pure ()
-  Right events <- runStore (Store.readStreamForward (Workflow.workflowGenerationStreamName name wid 0) (Store.StreamVersion 0) 1)
+  Right events <- runStore (Store.readStreamForward (Workflow.workflowGenerationStreamName name wid 0) (Store.StreamVersion 0) 2)
   Right (Just timer) <- runStore (Timer.lookupTimer (Timer.TimerId (UUID.fromWords 0 0 0 (fromIntegral index))))
   let event = Vector.head events
+      wake = events Vector.! 1
   eventPayload <- evaluate (event.payload)
+  wakePayload <- evaluate (wake.payload)
   timerPayload <- evaluate (timer.payload)
   eventWeak <- mkWeakPtr eventPayload Nothing
+  wakeWeak <- mkWeakPtr wakePayload Nothing
   timerWeak <- mkWeakPtr timerPayload Nothing
   Telemetry.withWorkflowSpan (Just tracer) name wid Nothing $ \sp ->
-    Telemetry.recordWorkflowResumeLinks sp (Telemetry.traceContextFromMetadata event.metadata) (Telemetry.traceContextFromMetadata event.metadata)
+    Telemetry.recordWorkflowResumeLinks sp (Telemetry.traceContextFromMetadata event.metadata) (Telemetry.traceContextFromMetadata wake.metadata)
   Telemetry.withTimerFireSpan (Just tracer) timer.processManagerName (case timer.timerId of Timer.TimerId uuid -> UUID.toText uuid) timer.traceContext (const (pure ()))
-  pure [eventWeak, timerWeak]
+  pure [eventWeak, wakeWeak, timerWeak]
 
 {-# NOINLINE produceSubscriptionPayloads #-}
 produceSubscriptionPayloads :: Tracer -> TraceCorrelation -> IO [Weak Text]

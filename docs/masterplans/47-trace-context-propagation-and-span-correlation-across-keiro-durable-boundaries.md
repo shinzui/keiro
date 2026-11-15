@@ -176,7 +176,7 @@ revises ADR-1.
 | 3 | Derive outbox creation context from source events and link it from the send span | docs/plans/332-derive-outbox-creation-context-from-source-events-and-link-it-from-the-send-span.md | EP-1, EP-2 | None | Complete |
 | 4 | Open linked processing spans in subscription workers and the inbox consumer helper | docs/plans/333-open-linked-processing-spans-in-subscription-workers-and-the-inbox-consumer-helper.md | EP-1, EP-2, EP-5 | None | Complete |
 | 5 | Align keiro-pgmq job spans with Shibuya 0.13 and expose the correlation policy | docs/plans/334-align-keiro-pgmq-job-spans-with-shibuya-0-13-and-expose-the-correlation-policy.md | EP-1, Shibuya gate, PGMQ adapter gate | None | Complete |
-| 6 | Persist trace context on timers and workflow journals and link it on fire and resume | docs/plans/335-persist-trace-context-on-timers-and-workflow-journals-and-link-it-on-fire-and-resume.md | EP-1, EP-2 | EP-4 | In Progress |
+| 6 | Persist trace context on timers and workflow journals and link it on fire and resume | docs/plans/335-persist-trace-context-on-timers-and-workflow-journals-and-link-it-on-fire-and-resume.md | EP-1, EP-2 | EP-4 | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -317,25 +317,34 @@ registry discovery, terminology and the complete repository verification gate. E
 matched benchmark evidence. EP-3 is Complete with immutable producer adoption, bounded root batch links and
 accepted performance/ownership evidence. EP-5 is Complete with released dependency alignment and both-path job correlation/ownership.
 EP-4 is Complete: all subscription workers correlate, and the real command/event/Kiroku/
-manager/command/event chain passes with metadata, links and child parenting. EP-6 is In Progress.
-The combined command/worker/timer/workflow check and final full gate remain outstanding.
+manager/command/event chain passes with metadata, links and child parenting. EP-6 is Complete:
+timer and workflow creation contexts persist, exact wake/origin correlation survives snapshots,
+and retained-span ownership and five matched measurement pairs satisfy the bounded-work reading rule.
+
+All six implementation plans are Complete. Full `just verify` passes at `3bc78fab`, followed
+by focused review checks at `412721f4` and a stronger distinct-row ownership probe. Current-version
+release preflight passes. The versioned release gate, readiness/artifact/consumer checks and
+publication remain outstanding; the shared major release proposal is `0.25.0.0` from `0.24.0.0`.
 
 Cross-plan gates not owned by a child plan:
 
 - [x] Shibuya gate: `shibuya-core` 0.13.0.1 verified on Hackage and upstream tag (2026-11-14).
 - [x] Adapter gate: `shibuya-pgmq-adapter` 0.19.0.0 and `shibuya-kiroku-adapter` 0.8.0.0
   verified on Hackage and upstream tags (2026-11-14).
-- [ ] Combined EP-4/EP-6 check: reaction schedules a timer, firing wakes a workflow, and exact
+- [x] Combined EP-4/EP-6 check: reaction schedules a timer, firing wakes a workflow, and exact
   wake/origin links survive a workflow snapshot and an unrelated later signal.
 - [ ] Keiro release with all six plans, passing the repository's release preflight including the
   benchmark gates of ADR-58 and the retention gate of ADR-48, with no unexplained change in the
   no-tracer cells.
-- [ ] Initiative acceptance: in the `jitsurei` example with a tracer and the local trace
+- [x] Initiative acceptance: in the `jitsurei` example with a tracer and the local trace
   backend, one request can be followed from its command span, by links, through a process
   manager reaction, a second command, an outbox send and a workflow resume.
 
 
 ## Surprises & Discoveries
+
+- EP-6's generic one-event origin read sorted/joined all 1,001 journal events before LIMIT. Indexed reference discovery alongside the trace hint, followed by normal event reads, preserves read hooks and keeps evidence retrieval independent of snapshot size. Five matched pairs show about 0.12 ms added per traced resume at both tested history sizes; ADR-59/60 retain the durable rule.
+- The combined integration gate and real backend demonstration pass. The latter retains ten spans in six traces with explicit creation links across request, fulfillment processing, dispatched packing, send, timer and workflow resume. See `keiro/bench/results/tracing-timers-workflows-v1/backend-proof.json`.
 
 - EP-2's retained-span no-op probe exposed lazy SDK attribute values retaining typed business
   payloads through outcome projections. Force scalar projections before SDK ownership; later
@@ -361,6 +370,11 @@ Cross-plan gates not owned by a child plan:
 
 
 ## Decision Log
+
+- Decision (2026-11-15 UTC): Accept EP-6's explained constant tracing cost under the existing reading rule; keep historical release guards unchanged.
+  Rationale: Five paired recordings show untraced time changes of 1.8–7.6% and bounded, measured nullable-schema allocation. Traced resumes add 0.121/0.119 ms at 1/1,000 steps (+27.85%/+13.67%). The new short-workload 25% trial is retained as refusing diagnostic evidence, not silently converted to a passing guard. This initiative requires attribution and bounded work; no historical ceiling or guard is relaxed.
+- Decision (2026-11-15 UTC): Distill the completed implementation into ADR-1, ADR-59 and ADR-60.
+  Rationale: Review of all six child Decision Logs and Outcomes found durable rules for shared helper ownership, immutable producer adoption, explicit tracing enablement, scalar ownership, root/link scope, exact snapshot-independent attribution and rollback. Those records now own them; execution details stay in child plans and receipts.
 
 - Decision (2026-11-14): Run the complete repository gate for the unchanged-runtime baseline
   and again for the integrated final candidate. Between them, accept children using their
@@ -409,4 +423,10 @@ Cross-plan gates not owned by a child plan:
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Implementation is complete across all six children, with correlated events, subscription/job
+processing, outbox sends, timer fires and workflow resumes. Existing replay identities, producer
+digests and snapshot formats are preserved. The full verification, targeted review checks,
+recording allocation/timing measurements, retained-span probes and real backend graph are retained.
+The final release phase remains open pending the release workflow's initial version confirmation;
+no version bump, tags or publication have been performed for `0.25.0.0`.
+

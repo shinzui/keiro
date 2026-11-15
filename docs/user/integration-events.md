@@ -7,7 +7,7 @@ tags: [keiro, integration-events, messaging]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:05:10Z
-timestamp: 2026-11-15T00:08:55Z
+timestamp: 2026-11-15T02:05:00Z
 ---
 
 # Integration Events
@@ -237,6 +237,10 @@ A canonical producer can derive missing draft context from that durable event us
 an immutable `DeriveTraceAfter` cutoff; the default examples use `PreserveDraftTrace`.
 Follow [the adoption procedure](outbox.md#trace-policy-adoption) before enabling it.
 Derivation is deterministic and independent of the enqueuing worker's tracer.
+Use an event carrying its real global position, as delivered by a subscription or
+`getEvent`. [Kiroku source-stream reads](mori://shinzui/kiroku/packages/kiroku-store) report global position zero; they cannot establish
+eligibility above a cutoff. The `jitsurei tracing` example resolves that global coordinate
+before enqueueing.
 The publisher links its root batch span to stored creation contexts and sends those
 same contexts in Kafka headers. Explicit draft context is preserved. Trace headers
 remain part of producer equality, so changing them on replay is a content conflict.

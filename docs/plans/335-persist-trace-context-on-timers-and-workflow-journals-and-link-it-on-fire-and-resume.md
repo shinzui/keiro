@@ -67,7 +67,7 @@ fire span linked to the command.
   when a tracer is configured, and the timer worker opens a linked span per fired timer.
 - [x] M3: Workflow journal appends are stamped with the current context, and a resumed run's
   span links to the exact awaited step and the journal origin, including with snapshots.
-- [ ] M4: Benchmark and retention gates pass; costs recorded.
+- [x] M4: Benchmark and retention gates pass; costs recorded.
 - [x] M5: Documents and the correlation ADR updated; parent MasterPlan updated.
 
 
@@ -131,7 +131,11 @@ All eight finite ownership probes and both new retention legs pass (10 cases). A
 
 The real `jitsurei tracing` demo passed against a migrated disposable database and the local VictoriaTraces backend. The retained backend proof checks 10 spans in six traces: request command → linked processing → dispatched command child → linked root send, and processing → linked root timer → root workflow resume with origin/wake links. Source-stream reads have global position zero, so the example obtains the source event's global coordinate via `getEvent` before applying the immutable producer cutoff. Inherited exporter tenant headers were cleared for the local backend; its SDK endpoint is a prefix because this exporter appends `/v1/traces`.
 
-Five matched serial measurement pairs and final evidence packaging remain outstanding. No historical release guard or numerical ceiling changed.
+Complete. Five serial control/candidate pairs at runtime checkpoint `412721f4` have matching dependency versions; source/binary hashes, raw samples, medians, refusing diagnostics, workload rules, backend proof and original verification logs are retained in `keiro/bench/results/tracing-timers-workflows-v1/`. Every control timing reproduces its own median within 8.3%.
+
+Median no-tracer timing changes are +1.77%/+2.68% for ten short/long-snapshot resumes and +7.63% for 100 timer schedule/fire pairs. Added no-tracer allocation is about 0.8–1.1 KB per resume (including two nullable hint writes) and 3.87 KB per timer schedule/fire pair (new slots and SQL columns/parameters). Traced timers add 20.18 KB per pair versus control, including schema cost, context capture, span and link work. Traced resumes add about 99–100 KB each and 0.121/0.119 ms at 1/1,000 steps respectively: the same bounded evidence reads instead of a history scan. The short traced-resume increase is +27.85%; the exploratory 25% refusal remains explicit, while the parent reading rule accepts explained additive tracing work. No historical release guard or numerical ceiling changed.
+
+The final ownership case exercises distinct fetched origin and wake rows with forced payload keys while 32 spans remain retained; all eight ownership cases pass. Current-version release preflight also passes, including package, upstream/dependency, blueprint, corpus and strict-document checks. Release version approval, versioned preparation, the full release-gate/readiness workflow and publication remain parent-initiative work; this child is Complete.
 
 
 
