@@ -1,0 +1,56 @@
+{
+  "started": "2026-11-15T13:36:09.850259+00:00",
+  "previous_commit": "382192a9053d23e1cad54d03e43a038a79107c7a",
+  "candidate_commit": "e5fd4a4c75b05691acfd53ee39d079ac75b02edf",
+  "binary_sha256": {
+    "previous": "d26da7170ba00c08410920d9e1427b32b1d1c7d95bb3a5fff9034c57f207c7ed",
+    "candidate": "44f6acc1ba20256d9b22d85a842884c5d805eeb022092d23d9d1013a076b9ba7"
+  },
+  "scope": "One serial previous/candidate pair of the existing legacy no-op case; diagnostic only",
+  "runs": [
+    {
+      "name": "previous",
+      "command": [
+        "/private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/b/keiro-bench/build/keiro-bench/keiro-bench",
+        "-p",
+        "legacy.no-op",
+        "-j1",
+        "--time-mode",
+        "wall",
+        "--hide-progress",
+        "--stdev",
+        "5",
+        "--timeout",
+        "10s",
+        "--csv",
+        "/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/0.25.0.0-noop-control/previous.csv",
+        "+RTS",
+        "-N2",
+        "-RTS"
+      ],
+      "status": 0
+    },
+    {
+      "name": "candidate",
+      "command": [
+        "/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.25.0.0/b/keiro-bench/build/keiro-bench/keiro-bench",
+        "-p",
+        "legacy.no-op",
+        "-j1",
+        "--time-mode",
+        "wall",
+        "--hide-progress",
+        "--stdev",
+        "5",
+        "--timeout",
+        "10s",
+        "--csv",
+        "/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/0.25.0.0-noop-control/candidate.csv",
+        "+RTS",
+        "-N2",
+        "-RTS"
+      ],
+      "status": 0
+    }
+  ]
+}

@@ -324,8 +324,12 @@ and retained-span ownership and five matched measurement pairs satisfy the bound
 All six implementation plans are Complete. Full `just verify` passes at `3bc78fab`, followed
 by focused review checks at `412721f4` and a stronger distinct-row ownership probe. The approved `0.25.0.0` candidate at `0d0f87cb` passes release preflight, the full
 correctness stage and native `nix flake check`. Producer identity and outbox guards pass;
-inbox, command, projection and read-model historical guards fail under recorded competing
-load. Attribution remains unresolved and publication is blocked. See the
+the first historical guard run failed under recorded competing load. A bounded rerun
+passes read-model, leaving seven failed cases across inbox, command and projection.
+All sixteen archives and an isolated staged-consumer build, migration and HTTP health check
+pass. A focused released-0.24/candidate no-op comparison measures 23.433/23.050 us;
+this limited observation shows that case also exceeds baseline in the released version.
+Publication remains blocked pending the maintainer decision on a benchmark exception. See the
 [release status](../../keiro/bench/results/release-gates/0.25.0.0-release-status.md).
 
 Cross-plan gates not owned by a child plan:
@@ -430,6 +434,8 @@ processing, outbox sends, timer fires and workflow resumes. Existing replay iden
 digests and snapshot formats are preserved. The full verification, targeted review checks,
 recording allocation/timing measurements, retained-span probes and real backend graph are retained.
 The user approved the 0.25.0.0 release on 2026-11-14. The prepared candidate passes
-full correctness and native Nix checks, but four historical benchmark guards are red.
-Their original evidence and competing-load observations are retained. Publication remains
-blocked pending passing guards; thresholds and baselines are unchanged.
+full correctness and native Nix checks. Sixteen source/docs archives and the isolated
+staged-consumer build, migration and HTTP health proof pass. Three historical guards retain
+seven red cases after the bounded rerun; all original and resumed evidence plus the focused
+released-version comparison are retained. Publication awaits an explicit maintainer decision
+on the requested benchmark exception. Thresholds and baselines are unchanged.

@@ -1,0 +1,2020 @@
+Downloading the latest package list from hackage.haskell.org
+Package list of hackage.haskell.org has been updated.
+The index-state is set to 2026-11-15T13:05:12Z.
+Resolving dependencies...
+Build profile: -w ghc-9.12.4 -O1
+In order, the following would be built (use -v for more details):
+ - keiro-dsl-0.25.0.0 (lib:generated-haskell-language-internal) (requires build)
+ - network-3.2.14.0 (lib) (requires download & build)
+ - wai-3.2.5 (lib) (requires download & build)
+ - streaming-commons-0.2.3.1 (lib) (requires download & build)
+ - streamly-0.11.1 (lib) (requires download & build)
+ - simple-sendfile-0.2.33 (lib) (requires download & build)
+ - recv-0.1.3 (lib) (requires download & build)
+ - iproute-1.7.15 (lib) (requires download & build)
+ - http-semantics-0.4.2 (lib) (requires download & build)
+ - websockets-0.13.0.0 (lib) (requires download & build)
+ - shibuya-core-0.13.0.1 (lib) (requires download & build)
+ - postgresql-binary-0.15.0.1 (lib) (requires download & build)
+ - http2-5.4.14 (lib) (requires download & build)
+ - wai-websockets-3.0.1.2 (lib) (requires download & build)
+ - hasql-1.10.3.7 (lib) (requires download & build)
+ - warp-3.4.21 (lib) (requires download & build)
+ - ephemeral-pg-0.3.1.0 (lib) (requires download & build)
+ - hasql-transaction-1.2.3.1 (lib) (requires download & build)
+ - hasql-pool-1.4.2.3 (lib) (requires download & build)
+ - pgmq-hasql-0.7.0.0 (lib) (requires download & build)
+ - pg-migrate-1.2.0.0 (lib) (requires download & build)
+ - hasql-notifications-0.2.5.0 (lib) (requires download & build)
+ - pgmq-effectful-0.7.0.0 (lib) (requires download & build)
+ - pg-migrate-embed-1.2.0.0 (lib) (requires download & build)
+ - kiroku-store-0.13.0.2 (lib) (requires download & build)
+ - shibuya-pgmq-adapter-0.19.0.0 (lib) (requires download & build)
+ - pgmq-config-0.7.0.0 (lib) (requires download & build)
+ - pg-migrate-cli-1.2.0.0 (lib) (requires download & build)
+ - keiro-core-0.25.0.0 (lib) (requires build)
+ - pg-migrate-import-codd-1.2.0.0 (lib) (requires download & build)
+ - keiro-pgmq-0.25.0.0 (lib) (requires build)
+ - keiro-dsl-0.25.0.0 (lib) (requires build)
+ - keiro-0.25.0.0 (lib) (requires build)
+ - kiroku-store-migrations-0.7.3.0 (lib) (requires download & build)
+ - keiro-migrations-0.25.0.0 (lib) (requires build)
+ - keiro-test-support-0.25.0.0 (lib) (requires build)
+ - keiro-ops-0.25.0.0 (lib) (requires build)
+ - keiro-ops-http-0.25.0.0 (lib) (requires build)
+ - release-consumer-0.1.0.0 (exe:release-consumer) (first run)
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-dsl-0.25.0.0 (lib:generated-haskell-language-internal) (requires build)
+ - network-3.2.14.0 (lib) (requires download & build)
+ - wai-3.2.5 (lib) (requires download & build)
+ - streaming-commons-0.2.3.1 (lib) (requires download & build)
+ - streamly-0.11.1 (lib) (requires download & build)
+ - simple-sendfile-0.2.33 (lib) (requires download & build)
+ - recv-0.1.3 (lib) (requires download & build)
+ - iproute-1.7.15 (lib) (requires download & build)
+ - http-semantics-0.4.2 (lib) (requires download & build)
+ - websockets-0.13.0.0 (lib) (requires download & build)
+ - shibuya-core-0.13.0.1 (lib) (requires download & build)
+ - postgresql-binary-0.15.0.1 (lib) (requires download & build)
+ - http2-5.4.14 (lib) (requires download & build)
+ - wai-websockets-3.0.1.2 (lib) (requires download & build)
+ - hasql-1.10.3.7 (lib) (requires download & build)
+ - warp-3.4.21 (lib) (requires download & build)
+ - ephemeral-pg-0.3.1.0 (lib) (requires download & build)
+ - hasql-transaction-1.2.3.1 (lib) (requires download & build)
+ - hasql-pool-1.4.2.3 (lib) (requires download & build)
+ - pgmq-hasql-0.7.0.0 (lib) (requires download & build)
+ - pg-migrate-1.2.0.0 (lib) (requires download & build)
+ - hasql-notifications-0.2.5.0 (lib) (requires download & build)
+ - pgmq-effectful-0.7.0.0 (lib) (requires download & build)
+ - pg-migrate-embed-1.2.0.0 (lib) (requires download & build)
+ - kiroku-store-0.13.0.2 (lib) (requires download & build)
+ - shibuya-pgmq-adapter-0.19.0.0 (lib) (requires download & build)
+ - pgmq-config-0.7.0.0 (lib) (requires download & build)
+ - pg-migrate-cli-1.2.0.0 (lib) (requires download & build)
+ - keiro-core-0.25.0.0 (lib) (requires build)
+ - pg-migrate-import-codd-1.2.0.0 (lib) (requires download & build)
+ - keiro-pgmq-0.25.0.0 (lib) (requires build)
+ - keiro-dsl-0.25.0.0 (lib) (requires build)
+ - keiro-0.25.0.0 (lib) (requires build)
+ - kiroku-store-migrations-0.7.3.0 (lib) (requires download & build)
+ - keiro-migrations-0.25.0.0 (lib) (requires build)
+ - keiro-test-support-0.25.0.0 (lib) (requires build)
+ - keiro-ops-0.25.0.0 (lib) (requires build)
+ - keiro-ops-http-0.25.0.0 (lib) (requires build)
+ - release-consumer-0.1.0.0 (exe:release-consumer) (first run)
+Downloading  network-3.2.14.0
+Downloaded   network-3.2.14.0
+Downloading  iproute-1.7.15
+Configuring library 'generated-haskell-language-internal' for keiro-dsl-0.25.0.0...
+Downloaded   iproute-1.7.15
+Downloading  simple-sendfile-0.2.33
+Downloaded   simple-sendfile-0.2.33
+Downloading  recv-0.1.3
+Downloaded   recv-0.1.3
+Downloading  streamly-0.11.1
+Downloaded   streamly-0.11.1
+Downloading  http-semantics-0.4.2
+Downloaded   http-semantics-0.4.2
+Downloading  http2-5.4.14
+Downloaded   http2-5.4.14
+Downloading  streaming-commons-0.2.3.1
+Downloaded   streaming-commons-0.2.3.1
+Downloading  wai-3.2.5
+Downloaded   wai-3.2.5
+Downloading  warp-3.4.21
+Downloaded   warp-3.4.21
+Downloading  shibuya-core-0.13.0.1
+Downloaded   shibuya-core-0.13.0.1
+Downloading  postgresql-binary-0.15.0.1
+Downloaded   postgresql-binary-0.15.0.1
+Downloading  hasql-1.10.3.7
+Downloaded   hasql-1.10.3.7
+Downloading  hasql-pool-1.4.2.3
+Downloaded   hasql-pool-1.4.2.3
+Downloading  hasql-notifications-0.2.5.0
+Downloaded   hasql-notifications-0.2.5.0
+Downloading  hasql-transaction-1.2.3.1
+Downloaded   hasql-transaction-1.2.3.1
+Downloading  pg-migrate-1.2.0.0
+Downloaded   pg-migrate-1.2.0.0
+Downloading  pg-migrate-embed-1.2.0.0
+Downloaded   pg-migrate-embed-1.2.0.0
+Downloading  pg-migrate-cli-1.2.0.0
+Preprocessing library 'generated-haskell-language-internal' for keiro-dsl-0.25.0.0...
+Building library 'generated-haskell-language-internal' for keiro-dsl-0.25.0.0...
+[1 of 1] Compiling Keiro.Dsl.GeneratedHaskellLanguage ( internal/Keiro/Dsl/GeneratedHaskellLanguage.hs, dist/build/generated-haskell-language-internal/Keiro/Dsl/GeneratedHaskellLanguage.o, dist/build/generated-haskell-language-internal/Keiro/Dsl/GeneratedHaskellLanguage.dyn_o )
+Downloaded   pg-migrate-cli-1.2.0.0
+Downloading  pg-migrate-import-codd-1.2.0.0
+Downloaded   pg-migrate-import-codd-1.2.0.0
+Downloading  kiroku-store-migrations-0.7.3.0
+Downloaded   kiroku-store-migrations-0.7.3.0
+Downloading  pgmq-hasql-0.7.0.0
+Installing internal library generated-haskell-language-internal in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/kr-dsl-0.25.0.0-7a3acd1e/lib
+Downloaded   pgmq-hasql-0.7.0.0
+Downloading  pgmq-effectful-0.7.0.0
+Downloaded   pgmq-effectful-0.7.0.0
+Downloading  pgmq-config-0.7.0.0
+Downloaded   pgmq-config-0.7.0.0
+Downloading  ephemeral-pg-0.3.1.0
+Downloaded   ephemeral-pg-0.3.1.0
+Downloading  shibuya-pgmq-adapter-0.19.0.0
+Downloaded   shibuya-pgmq-adapter-0.19.0.0
+Downloading  kiroku-store-0.13.0.2
+Downloaded   kiroku-store-0.13.0.2
+Downloading  websockets-0.13.0.0
+Downloaded   websockets-0.13.0.0
+Downloading  wai-websockets-3.0.1.2
+Downloaded   wai-websockets-3.0.1.2
+Configuring library for network-3.2.14.0...
+configure: WARNING: unrecognized options: --with-compiler
+checking build system type... aarch64-apple-darwin27.2.0
+checking host system type... aarch64-apple-darwin27.2.0
+checking for gcc... /nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc
+checking whether the C compiler works... yes
+checking for C compiler default output file name... a.out
+checking for suffix of executables... 
+checking whether we are cross compiling... no
+checking for suffix of object files... o
+checking whether the compiler supports GNU C... yes
+checking whether /nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc accepts -g... yes
+checking for /nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc option to enable C23 features... -std=gnu23
+checking for an ANSI C-conforming const... yes
+checking for stdio.h... yes
+checking for stdlib.h... yes
+checking for string.h... yes
+checking for inttypes.h... yes
+checking for stdint.h... yes
+checking for strings.h... yes
+checking for sys/stat.h... yes
+checking for sys/types.h... yes
+checking for unistd.h... yes
+checking for limits.h... yes
+checking for stdlib.h... (cached) yes
+checking for unistd.h... (cached) yes
+checking for sys/types.h... (cached) yes
+checking for fcntl.h... yes
+checking for sys/uio.h... yes
+checking for sys/socket.h... yes
+checking for netinet/in.h... yes
+checking for netinet/tcp.h... yes
+checking for sys/un.h... yes
+checking for arpa/inet.h... yes
+checking for netdb.h... yes
+checking for net/if.h... yes
+checking for netioapi.h... no
+checking for struct ucred... no
+checking for gai_strerror... yes
+checking for gethostent... yes
+checking for accept4... no
+checking for getpeereid... yes
+checking for /nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc -std=gnu23 options to detect undeclared functions... none needed
+checking for /nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc -std=gnu23 options to ignore future-version functions... -Werror=unguarded-availability-new
+checking whether AI_ADDRCONFIG is declared... yes
+checking whether AI_ALL is declared... yes
+checking whether AI_NUMERICSERV is declared... yes
+checking whether AI_V4MAPPED is declared... yes
+checking whether IPV6_V6ONLY is declared... yes
+checking whether IPPROTO_IP is declared... yes
+checking whether IPPROTO_TCP is declared... yes
+checking whether IPPROTO_IPV6 is declared... yes
+checking whether SO_PEERCRED is declared... no
+checking whether IP_DONTFRAG is declared... yes
+checking whether IP_MTU_DISCOVER is declared... no
+checking for struct msghdr.msg_control... yes
+checking for struct msghdr.msg_accrights... no
+checking for struct sockaddr.sa_len... yes
+configure: creating ./network.buildinfo
+configure: creating ./config.status
+config.status: creating include/HsNetworkConfig.h
+configure: WARNING: unrecognized options: --with-compiler
+Preprocessing library for network-3.2.14.0...
+Building library for network-3.2.14.0...
+[ 1 of 31] Compiling Network.Socket.Imports ( Network/Socket/Imports.hs, dist/build/Network/Socket/Imports.o, dist/build/Network/Socket/Imports.dyn_o )
+[ 2 of 31] Compiling Network.Socket.If ( Network/Socket/If.hs, dist/build/Network/Socket/If.o, dist/build/Network/Socket/If.dyn_o )
+[ 3 of 31] Compiling Network.Socket.Flag ( dist/build/Network/Socket/Flag.hs, dist/build/Network/Socket/Flag.o, dist/build/Network/Socket/Flag.dyn_o )
+[ 4 of 31] Compiling Network.Socket.Cbits ( dist/build/Network/Socket/Cbits.hs, dist/build/Network/Socket/Cbits.o, dist/build/Network/Socket/Cbits.dyn_o )
+[ 5 of 31] Compiling Network.Socket.Fcntl ( Network/Socket/Fcntl.hs, dist/build/Network/Socket/Fcntl.o, dist/build/Network/Socket/Fcntl.dyn_o )
+[ 6 of 31] Compiling Network.Socket.Posix.IOVec ( dist/build/Network/Socket/Posix/IOVec.hs, dist/build/Network/Socket/Posix/IOVec.o, dist/build/Network/Socket/Posix/IOVec.dyn_o )
+[ 7 of 31] Compiling Network.Socket.ReadShow ( Network/Socket/ReadShow.hs, dist/build/Network/Socket/ReadShow.o, dist/build/Network/Socket/ReadShow.dyn_o )
+[ 8 of 31] Compiling Network.Socket.Types ( dist/build/Network/Socket/Types.hs, dist/build/Network/Socket/Types.o, dist/build/Network/Socket/Types.dyn_o )
+[ 9 of 31] Compiling Network.Socket.STM ( Network/Socket/STM.hs, dist/build/Network/Socket/STM.o, dist/build/Network/Socket/STM.dyn_o )
+[10 of 31] Compiling Network.Socket.Posix.Cmsg ( dist/build/Network/Socket/Posix/Cmsg.hs, dist/build/Network/Socket/Posix/Cmsg.o, dist/build/Network/Socket/Posix/Cmsg.dyn_o )
+[11 of 31] Compiling Network.Socket.Internal ( Network/Socket/Internal.hs, dist/build/Network/Socket/Internal.o, dist/build/Network/Socket/Internal.dyn_o )
+[12 of 31] Compiling Network.Socket.Posix.MsgHdr ( dist/build/Network/Socket/Posix/MsgHdr.hs, dist/build/Network/Socket/Posix/MsgHdr.o, dist/build/Network/Socket/Posix/MsgHdr.dyn_o )
+[13 of 31] Compiling Network.Socket.Posix.CmsgHdr ( dist/build/Network/Socket/Posix/CmsgHdr.hs, dist/build/Network/Socket/Posix/CmsgHdr.o, dist/build/Network/Socket/Posix/CmsgHdr.dyn_o )
+[14 of 31] Compiling Network.Socket.Options ( dist/build/Network/Socket/Options.hs, dist/build/Network/Socket/Options.o, dist/build/Network/Socket/Options.dyn_o )
+[15 of 31] Compiling Network.Socket.Syscall ( Network/Socket/Syscall.hs, dist/build/Network/Socket/Syscall.o, dist/build/Network/Socket/Syscall.dyn_o )
+[16 of 31] Compiling Network.Socket.Name ( Network/Socket/Name.hs, dist/build/Network/Socket/Name.o, dist/build/Network/Socket/Name.dyn_o )
+[17 of 31] Compiling Network.Socket.Info ( dist/build/Network/Socket/Info.hs, dist/build/Network/Socket/Info.o, dist/build/Network/Socket/Info.dyn_o )
+[18 of 31] Compiling Network.Socket.Posix.HostName ( dist/build/Network/Socket/Posix/HostName.hs, dist/build/Network/Socket/Posix/HostName.o, dist/build/Network/Socket/Posix/HostName.dyn_o )
+[19 of 31] Compiling Network.Socket.Handle ( Network/Socket/Handle.hs, dist/build/Network/Socket/Handle.o, dist/build/Network/Socket/Handle.dyn_o )
+[20 of 31] Compiling Network.Socket.ByteString.Internal ( Network/Socket/ByteString/Internal.hs, dist/build/Network/Socket/ByteString/Internal.o, dist/build/Network/Socket/ByteString/Internal.dyn_o )
+[21 of 31] Compiling Network.Socket.Buffer ( dist/build/Network/Socket/Buffer.hs, dist/build/Network/Socket/Buffer.o, dist/build/Network/Socket/Buffer.dyn_o )
+[22 of 31] Compiling Network.Socket.Unix ( dist/build/Network/Socket/Unix.hs, dist/build/Network/Socket/Unix.o, dist/build/Network/Socket/Unix.dyn_o )
+[23 of 31] Compiling Network.Socket.Wait ( Network/Socket/Wait.hs, dist/build/Network/Socket/Wait.o, dist/build/Network/Socket/Wait.dyn_o )
+[24 of 31] Compiling Network.Socket.SockAddr ( Network/Socket/SockAddr.hs, dist/build/Network/Socket/SockAddr.o, dist/build/Network/Socket/SockAddr.dyn_o )
+[25 of 31] Compiling Network.Socket.Shutdown ( Network/Socket/Shutdown.hs, dist/build/Network/Socket/Shutdown.o, dist/build/Network/Socket/Shutdown.dyn_o )
+[26 of 31] Compiling Network.Socket.ByteString.IO ( dist/build/Network/Socket/ByteString/IO.hs, dist/build/Network/Socket/ByteString/IO.o, dist/build/Network/Socket/ByteString/IO.dyn_o )
+[27 of 31] Compiling Network.Socket.ByteString.Lazy.Posix ( Network/Socket/ByteString/Lazy/Posix.hs, dist/build/Network/Socket/ByteString/Lazy/Posix.o, dist/build/Network/Socket/ByteString/Lazy/Posix.dyn_o )
+[28 of 31] Compiling Network.Socket.ByteString ( Network/Socket/ByteString.hs, dist/build/Network/Socket/ByteString.o, dist/build/Network/Socket/ByteString.dyn_o )
+[29 of 31] Compiling Network.Socket.Address ( Network/Socket/Address.hs, dist/build/Network/Socket/Address.o, dist/build/Network/Socket/Address.dyn_o )
+[30 of 31] Compiling Network.Socket   ( Network/Socket.hs, dist/build/Network/Socket.o, dist/build/Network/Socket.dyn_o )
+[31 of 31] Compiling Network.Socket.ByteString.Lazy ( Network/Socket/ByteString/Lazy.hs, dist/build/Network/Socket/ByteString/Lazy.o, dist/build/Network/Socket/ByteString/Lazy.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/ntwrk-3.2.14.0-f8fefe2d/lib
+Configuring library for wai-3.2.5...
+Preprocessing library for wai-3.2.5...
+Building library for wai-3.2.5...
+[1 of 2] Compiling Network.Wai.Internal ( Network/Wai/Internal.hs, dist/build/Network/Wai/Internal.o, dist/build/Network/Wai/Internal.dyn_o )
+[2 of 2] Compiling Network.Wai      ( Network/Wai.hs, dist/build/Network/Wai.o, dist/build/Network/Wai.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/w-3.2.5-f91a3774/lib
+Configuring library for streaming-commons-0.2.3.1...
+Warning: [git-protocol] Cloning over git:// might lead to an arbitrary code
+execution vulnerability. Furthermore, popular forges like GitHub do not
+support it. Use https:// or ssh:// instead.
+Preprocessing library for streaming-commons-0.2.3.1...
+Building library for streaming-commons-0.2.3.1...
+[ 1 of 11] Compiling Data.Streaming.ByteString.Builder.Buffer ( Data/Streaming/ByteString/Builder/Buffer.hs, dist/build/Data/Streaming/ByteString/Builder/Buffer.o, dist/build/Data/Streaming/ByteString/Builder/Buffer.dyn_o )
+[ 2 of 11] Compiling Data.Streaming.ByteString.Builder ( Data/Streaming/ByteString/Builder.hs, dist/build/Data/Streaming/ByteString/Builder.o, dist/build/Data/Streaming/ByteString/Builder.dyn_o )
+[ 3 of 11] Compiling Data.Streaming.FileRead ( Data/Streaming/FileRead.hs, dist/build/Data/Streaming/FileRead.o, dist/build/Data/Streaming/FileRead.dyn_o )
+[ 4 of 11] Compiling Data.Streaming.Filesystem ( Data/Streaming/Filesystem.hs, dist/build/Data/Streaming/Filesystem.o, dist/build/Data/Streaming/Filesystem.dyn_o )
+[ 5 of 11] Compiling Data.Streaming.Network.Internal ( Data/Streaming/Network/Internal.hs, dist/build/Data/Streaming/Network/Internal.o, dist/build/Data/Streaming/Network/Internal.dyn_o )
+[ 6 of 11] Compiling Data.Streaming.Network ( Data/Streaming/Network.hs, dist/build/Data/Streaming/Network.o, dist/build/Data/Streaming/Network.dyn_o )
+[ 7 of 11] Compiling Data.Streaming.Process.Internal ( Data/Streaming/Process/Internal.hs, dist/build/Data/Streaming/Process/Internal.o, dist/build/Data/Streaming/Process/Internal.dyn_o )
+[ 8 of 11] Compiling Data.Streaming.Process ( Data/Streaming/Process.hs, dist/build/Data/Streaming/Process.o, dist/build/Data/Streaming/Process.dyn_o )
+[ 9 of 11] Compiling Data.Streaming.Text ( Data/Streaming/Text.hs, dist/build/Data/Streaming/Text.o, dist/build/Data/Streaming/Text.dyn_o )
+[10 of 11] Compiling Data.Streaming.Zlib.Lowlevel ( Data/Streaming/Zlib/Lowlevel.hs, dist/build/Data/Streaming/Zlib/Lowlevel.o, dist/build/Data/Streaming/Zlib/Lowlevel.dyn_o )
+Data/Streaming/Zlib/Lowlevel.hs:105:1: warning: [GHC-53633] [-Woverlapping-patterns]
+    Pattern match is redundant
+    In an equation for ‘wbToInt’: wbToInt _ = ...
+    |
+105 | wbToInt _ = 15
+    | ^^^^^^^^^^^^^^
+
+[11 of 11] Compiling Data.Streaming.Zlib ( Data/Streaming/Zlib.hs, dist/build/Data/Streaming/Zlib.o, dist/build/Data/Streaming/Zlib.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/strmng-cmmns-0.2.3.1-43d6d49a/lib
+Configuring library for streamly-0.11.1...
+checking for gcc... /nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc
+checking whether the C compiler works... yes
+checking for C compiler default output file name... a.out
+checking for suffix of executables... 
+checking whether we are cross compiling... no
+checking for suffix of object files... o
+checking whether the compiler supports GNU C... yes
+checking whether /nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc accepts -g... yes
+checking for /nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc option to enable C11 features... none needed
+checking for /nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc options needed to detect all undeclared functions... none needed
+checking whether IN_MASK_CREATE is declared... no
+checking whether IN_EXCL_UNLINK is declared... no
+checking whether kFSEventStreamCreateFlagFileEvents is declared... yes
+checking whether kFSEventStreamCreateFlagFullHistory is declared... yes
+checking whether kFSEventStreamEventFlagItemCloned is declared... yes
+checking whether kFSEventStreamEventFlagItemIsHardlink is declared... yes
+configure: creating ./config.status
+config.status: creating src/config.h
+Preprocessing library for streamly-0.11.1...
+Building library for streamly-0.11.1...
+<no location info>: warning: [GHC-42258] [-Wunused-packages]
+    The following packages were specified via -package or -package-id flags,
+    but were not needed for compilation:
+      - directory-1.3.10.1 (exposed by flag -package-id directory-1.3.10.1-648c)
+
+[ 1 of 75] Compiling Streamly.Data.Array.Foreign ( src/Streamly/Data/Array/Foreign.hs, dist/build/Streamly/Data/Array/Foreign.o, dist/build/Streamly/Data/Array/Foreign.dyn_o )
+[ 2 of 75] Compiling Streamly.Data.Fold.Tee ( src/Streamly/Data/Fold/Tee.hs, dist/build/Streamly/Data/Fold/Tee.o, dist/build/Streamly/Data/Fold/Tee.dyn_o )
+[ 3 of 75] Compiling Streamly.Internal.Control.Concurrent ( src/Streamly/Internal/Control/Concurrent.hs, dist/build/Streamly/Internal/Control/Concurrent.o, dist/build/Streamly/Internal/Control/Concurrent.dyn_o )
+[ 4 of 75] Compiling Streamly.Internal.Control.ForkLifted ( src/Streamly/Internal/Control/ForkLifted.hs, dist/build/Streamly/Internal/Control/ForkLifted.o, dist/build/Streamly/Internal/Control/ForkLifted.dyn_o )
+[ 5 of 75] Compiling Streamly.Internal.Data.Atomics ( src/Streamly/Internal/Data/Atomics.hs, dist/build/Streamly/Internal/Data/Atomics.o, dist/build/Streamly/Internal/Data/Atomics.dyn_o )
+[ 6 of 75] Compiling Streamly.Internal.Data.Channel.Types ( src/Streamly/Internal/Data/Channel/Types.hs, dist/build/Streamly/Internal/Data/Channel/Types.o, dist/build/Streamly/Internal/Data/Channel/Types.dyn_o )
+[ 7 of 75] Compiling Streamly.Internal.Data.Channel.Dispatcher ( src/Streamly/Internal/Data/Channel/Dispatcher.hs, dist/build/Streamly/Internal/Data/Channel/Dispatcher.o, dist/build/Streamly/Internal/Data/Channel/Dispatcher.dyn_o )
+[ 8 of 75] Compiling Streamly.Internal.Data.Channel.Worker ( src/Streamly/Internal/Data/Channel/Worker.hs, dist/build/Streamly/Internal/Data/Channel/Worker.o, dist/build/Streamly/Internal/Data/Channel/Worker.dyn_o )
+[ 9 of 75] Compiling Streamly.Internal.Data.Channel ( src/Streamly/Internal/Data/Channel.hs, dist/build/Streamly/Internal/Data/Channel.o, dist/build/Streamly/Internal/Data/Channel.dyn_o )
+[10 of 75] Compiling Streamly.Internal.Data.Cont ( src/Streamly/Internal/Data/Cont.hs, dist/build/Streamly/Internal/Data/Cont.o, dist/build/Streamly/Internal/Data/Cont.dyn_o )
+[11 of 75] Compiling Streamly.Internal.Data.Fold.Channel.Type ( src/Streamly/Internal/Data/Fold/Channel/Type.hs, dist/build/Streamly/Internal/Data/Fold/Channel/Type.o, dist/build/Streamly/Internal/Data/Fold/Channel/Type.dyn_o )
+[12 of 75] Compiling Streamly.Internal.Data.Fold.Channel ( src/Streamly/Internal/Data/Fold/Channel.hs, dist/build/Streamly/Internal/Data/Fold/Channel.o, dist/build/Streamly/Internal/Data/Fold/Channel.dyn_o )
+[13 of 75] Compiling Streamly.Internal.Data.Fold.Concurrent ( src/Streamly/Internal/Data/Fold/Concurrent.hs, dist/build/Streamly/Internal/Data/Fold/Concurrent.o, dist/build/Streamly/Internal/Data/Fold/Concurrent.dyn_o )
+[14 of 75] Compiling Streamly.Internal.Data.Fold.Time ( src/Streamly/Internal/Data/Fold/Time.hs, dist/build/Streamly/Internal/Data/Fold/Time.o, dist/build/Streamly/Internal/Data/Fold/Time.dyn_o )
+[15 of 75] Compiling Streamly.Internal.Data.IOFinalizer.Lifted ( src/Streamly/Internal/Data/IOFinalizer/Lifted.hs, dist/build/Streamly/Internal/Data/IOFinalizer/Lifted.o, dist/build/Streamly/Internal/Data/IOFinalizer/Lifted.dyn_o )
+[16 of 75] Compiling Streamly.Internal.Data.IsMap.HashMap ( src/Streamly/Internal/Data/IsMap/HashMap.hs, dist/build/Streamly/Internal/Data/IsMap/HashMap.o, dist/build/Streamly/Internal/Data/IsMap/HashMap.dyn_o )
+[17 of 75] Compiling Streamly.Internal.Data.SVar.Worker ( src/Streamly/Internal/Data/SVar/Worker.hs, dist/build/Streamly/Internal/Data/SVar/Worker.o, dist/build/Streamly/Internal/Data/SVar/Worker.dyn_o )
+[18 of 75] Compiling Streamly.Internal.Data.SVar.Dispatch ( src/Streamly/Internal/Data/SVar/Dispatch.hs, dist/build/Streamly/Internal/Data/SVar/Dispatch.o, dist/build/Streamly/Internal/Data/SVar/Dispatch.dyn_o )
+[19 of 75] Compiling Streamly.Internal.Data.SVar.Pull ( src/Streamly/Internal/Data/SVar/Pull.hs, dist/build/Streamly/Internal/Data/SVar/Pull.o, dist/build/Streamly/Internal/Data/SVar/Pull.dyn_o )
+[20 of 75] Compiling Streamly.Internal.Data.SVar ( src/Streamly/Internal/Data/SVar.hs, dist/build/Streamly/Internal/Data/SVar.o, dist/build/Streamly/Internal/Data/SVar.dyn_o )
+[21 of 75] Compiling Streamly.Internal.Data.Fold.SVar ( src/Streamly/Internal/Data/Fold/SVar.hs, dist/build/Streamly/Internal/Data/Fold/SVar.o, dist/build/Streamly/Internal/Data/Fold/SVar.dyn_o )
+[22 of 75] Compiling Streamly.Internal.Data.Fold.Prelude ( src/Streamly/Internal/Data/Fold/Prelude.hs, dist/build/Streamly/Internal/Data/Fold/Prelude.o, dist/build/Streamly/Internal/Data/Fold/Prelude.dyn_o )
+[23 of 75] Compiling Streamly.Data.Fold.Prelude ( src/Streamly/Data/Fold/Prelude.hs, dist/build/Streamly/Data/Fold/Prelude.o, dist/build/Streamly/Data/Fold/Prelude.dyn_o )
+[24 of 75] Compiling Streamly.Internal.Data.Scanl.Concurrent ( src/Streamly/Internal/Data/Scanl/Concurrent.hs, dist/build/Streamly/Internal/Data/Scanl/Concurrent.o, dist/build/Streamly/Internal/Data/Scanl/Concurrent.dyn_o )
+[25 of 75] Compiling Streamly.Internal.Data.Scanl.Prelude ( src/Streamly/Internal/Data/Scanl/Prelude.hs, dist/build/Streamly/Internal/Data/Scanl/Prelude.o, dist/build/Streamly/Internal/Data/Scanl/Prelude.dyn_o )
+[26 of 75] Compiling Streamly.Data.Scanl.Prelude ( src/Streamly/Data/Scanl/Prelude.hs, dist/build/Streamly/Data/Scanl/Prelude.o, dist/build/Streamly/Data/Scanl/Prelude.dyn_o )
+[27 of 75] Compiling Streamly.Internal.Data.Stream.Channel.Type ( src/Streamly/Internal/Data/Stream/Channel/Type.hs, dist/build/Streamly/Internal/Data/Stream/Channel/Type.o, dist/build/Streamly/Internal/Data/Stream/Channel/Type.dyn_o )
+[28 of 75] Compiling Streamly.Internal.Data.Stream.Channel.Dispatcher ( src/Streamly/Internal/Data/Stream/Channel/Dispatcher.hs, dist/build/Streamly/Internal/Data/Stream/Channel/Dispatcher.o, dist/build/Streamly/Internal/Data/Stream/Channel/Dispatcher.dyn_o )
+[29 of 75] Compiling Streamly.Internal.Data.Stream.Channel.Operations ( src/Streamly/Internal/Data/Stream/Channel/Operations.hs, dist/build/Streamly/Internal/Data/Stream/Channel/Operations.o, dist/build/Streamly/Internal/Data/Stream/Channel/Operations.dyn_o )
+[30 of 75] Compiling Streamly.Internal.Data.Stream.Channel.Consumer ( src/Streamly/Internal/Data/Stream/Channel/Consumer.hs, dist/build/Streamly/Internal/Data/Stream/Channel/Consumer.o, dist/build/Streamly/Internal/Data/Stream/Channel/Consumer.dyn_o )
+[31 of 75] Compiling Streamly.Internal.Data.Stream.Channel.Interleave ( src/Streamly/Internal/Data/Stream/Channel/Interleave.hs, dist/build/Streamly/Internal/Data/Stream/Channel/Interleave.o, dist/build/Streamly/Internal/Data/Stream/Channel/Interleave.dyn_o )
+[32 of 75] Compiling Streamly.Internal.Data.Stream.Channel.Append ( src/Streamly/Internal/Data/Stream/Channel/Append.hs, dist/build/Streamly/Internal/Data/Stream/Channel/Append.o, dist/build/Streamly/Internal/Data/Stream/Channel/Append.dyn_o )
+[33 of 75] Compiling Streamly.Internal.Data.Stream.Channel ( src/Streamly/Internal/Data/Stream/Channel.hs, dist/build/Streamly/Internal/Data/Stream/Channel.o, dist/build/Streamly/Internal/Data/Stream/Channel.dyn_o )
+[34 of 75] Compiling Streamly.Internal.Data.Stream.Common ( src/Streamly/Internal/Data/Stream/Common.hs, dist/build/Streamly/Internal/Data/Stream/Common.o, dist/build/Streamly/Internal/Data/Stream/Common.dyn_o )
+[35 of 75] Compiling Streamly.Internal.Data.Stream.Concurrent ( src/Streamly/Internal/Data/Stream/Concurrent.hs, dist/build/Streamly/Internal/Data/Stream/Concurrent.o, dist/build/Streamly/Internal/Data/Stream/Concurrent.dyn_o )
+[36 of 75] Compiling Streamly.Internal.Data.Stream.Lifted ( src/Streamly/Internal/Data/Stream/Lifted.hs, dist/build/Streamly/Internal/Data/Stream/Lifted.o, dist/build/Streamly/Internal/Data/Stream/Lifted.dyn_o )
+[37 of 75] Compiling Streamly.Internal.Data.Stream.MkType ( src/Streamly/Internal/Data/Stream/MkType.hs, dist/build/Streamly/Internal/Data/Stream/MkType.o, dist/build/Streamly/Internal/Data/Stream/MkType.dyn_o )
+[38 of 75] Compiling Streamly.Data.Stream.MkType ( src/Streamly/Data/Stream/MkType.hs, dist/build/Streamly/Data/Stream/MkType.o, dist/build/Streamly/Data/Stream/MkType.dyn_o )
+[39 of 75] Compiling Streamly.Internal.Data.Stream.Serial ( src/Streamly/Internal/Data/Stream/Serial.hs, dist/build/Streamly/Internal/Data/Stream/Serial.o, dist/build/Streamly/Internal/Data/Stream/Serial.dyn_o )
+[40 of 75] Compiling Streamly.Internal.Data.Stream.SVar.Generate ( src/Streamly/Internal/Data/Stream/SVar/Generate.hs, dist/build/Streamly/Internal/Data/Stream/SVar/Generate.o, dist/build/Streamly/Internal/Data/Stream/SVar/Generate.dyn_o )
+[41 of 75] Compiling Streamly.Internal.Data.Stream.SVar.Eliminate ( src/Streamly/Internal/Data/Stream/SVar/Eliminate.hs, dist/build/Streamly/Internal/Data/Stream/SVar/Eliminate.o, dist/build/Streamly/Internal/Data/Stream/SVar/Eliminate.dyn_o )
+[42 of 75] Compiling Streamly.Internal.Data.Stream.SVar ( src/Streamly/Internal/Data/Stream/SVar.hs, dist/build/Streamly/Internal/Data/Stream/SVar.o, dist/build/Streamly/Internal/Data/Stream/SVar.dyn_o )
+[43 of 75] Compiling Streamly.Internal.Data.Stream.Parallel ( src/Streamly/Internal/Data/Stream/Parallel.hs, dist/build/Streamly/Internal/Data/Stream/Parallel.o, dist/build/Streamly/Internal/Data/Stream/Parallel.dyn_o )
+[44 of 75] Compiling Streamly.Internal.Data.Stream.Async ( src/Streamly/Internal/Data/Stream/Async.hs, dist/build/Streamly/Internal/Data/Stream/Async.o, dist/build/Streamly/Internal/Data/Stream/Async.dyn_o )
+[45 of 75] Compiling Streamly.Internal.Data.Stream.Ahead ( src/Streamly/Internal/Data/Stream/Ahead.hs, dist/build/Streamly/Internal/Data/Stream/Ahead.o, dist/build/Streamly/Internal/Data/Stream/Ahead.dyn_o )
+[46 of 75] Compiling Streamly.Internal.Data.Stream.Time ( src/Streamly/Internal/Data/Stream/Time.hs, dist/build/Streamly/Internal/Data/Stream/Time.o, dist/build/Streamly/Internal/Data/Stream/Time.dyn_o )
+[47 of 75] Compiling Streamly.Internal.Data.Stream.Prelude ( src/Streamly/Internal/Data/Stream/Prelude.hs, dist/build/Streamly/Internal/Data/Stream/Prelude.o, dist/build/Streamly/Internal/Data/Stream/Prelude.dyn_o )
+[48 of 75] Compiling Streamly.Data.Stream.Prelude ( src/Streamly/Data/Stream/Prelude.hs, dist/build/Streamly/Data/Stream/Prelude.o, dist/build/Streamly/Data/Stream/Prelude.dyn_o )
+[49 of 75] Compiling Streamly.Internal.Data.Stream.Zip ( src/Streamly/Internal/Data/Stream/Zip.hs, dist/build/Streamly/Internal/Data/Stream/Zip.o, dist/build/Streamly/Internal/Data/Stream/Zip.dyn_o )
+[50 of 75] Compiling Streamly.Internal.Data.Stream.ZipAsync ( src/Streamly/Internal/Data/Stream/ZipAsync.hs, dist/build/Streamly/Internal/Data/Stream/ZipAsync.o, dist/build/Streamly/Internal/Data/Stream/ZipAsync.dyn_o )
+[51 of 75] Compiling Streamly.Internal.Data.Stream.IsStream.Type ( src/Streamly/Internal/Data/Stream/IsStream/Type.hs, dist/build/Streamly/Internal/Data/Stream/IsStream/Type.o, dist/build/Streamly/Internal/Data/Stream/IsStream/Type.dyn_o )
+[52 of 75] Compiling Streamly.Internal.Data.Stream.IsStream.Lift ( src/Streamly/Internal/Data/Stream/IsStream/Lift.hs, dist/build/Streamly/Internal/Data/Stream/IsStream/Lift.o, dist/build/Streamly/Internal/Data/Stream/IsStream/Lift.dyn_o )
+[53 of 75] Compiling Streamly.Internal.Data.Stream.IsStream.Exception ( src/Streamly/Internal/Data/Stream/IsStream/Exception.hs, dist/build/Streamly/Internal/Data/Stream/IsStream/Exception.o, dist/build/Streamly/Internal/Data/Stream/IsStream/Exception.dyn_o )
+[54 of 75] Compiling Streamly.Internal.Data.Stream.IsStream.Enumeration ( src/Streamly/Internal/Data/Stream/IsStream/Enumeration.hs, dist/build/Streamly/Internal/Data/Stream/IsStream/Enumeration.o, dist/build/Streamly/Internal/Data/Stream/IsStream/Enumeration.dyn_o )
+[55 of 75] Compiling Streamly.Internal.Data.Stream.IsStream.Combinators ( src/Streamly/Internal/Data/Stream/IsStream/Combinators.hs, dist/build/Streamly/Internal/Data/Stream/IsStream/Combinators.o, dist/build/Streamly/Internal/Data/Stream/IsStream/Combinators.dyn_o )
+[56 of 75] Compiling Streamly.Internal.Data.Stream.IsStream.Common ( src/Streamly/Internal/Data/Stream/IsStream/Common.hs, dist/build/Streamly/Internal/Data/Stream/IsStream/Common.o, dist/build/Streamly/Internal/Data/Stream/IsStream/Common.dyn_o )
+[57 of 75] Compiling Streamly.Internal.Data.Stream.IsStream.Transform ( src/Streamly/Internal/Data/Stream/IsStream/Transform.hs, dist/build/Streamly/Internal/Data/Stream/IsStream/Transform.o, dist/build/Streamly/Internal/Data/Stream/IsStream/Transform.dyn_o )
+[58 of 75] Compiling Streamly.Internal.Data.Stream.IsStream.Generate ( src/Streamly/Internal/Data/Stream/IsStream/Generate.hs, dist/build/Streamly/Internal/Data/Stream/IsStream/Generate.o, dist/build/Streamly/Internal/Data/Stream/IsStream/Generate.dyn_o )
+[59 of 75] Compiling Streamly.Internal.Data.Stream.IsStream.Eliminate ( src/Streamly/Internal/Data/Stream/IsStream/Eliminate.hs, dist/build/Streamly/Internal/Data/Stream/IsStream/Eliminate.o, dist/build/Streamly/Internal/Data/Stream/IsStream/Eliminate.dyn_o )
+[60 of 75] Compiling Streamly.Internal.Data.Stream.IsStream.Expand ( src/Streamly/Internal/Data/Stream/IsStream/Expand.hs, dist/build/Streamly/Internal/Data/Stream/IsStream/Expand.o, dist/build/Streamly/Internal/Data/Stream/IsStream/Expand.dyn_o )
+[61 of 75] Compiling Streamly.Internal.Data.Stream.IsStream.Reduce ( src/Streamly/Internal/Data/Stream/IsStream/Reduce.hs, dist/build/Streamly/Internal/Data/Stream/IsStream/Reduce.o, dist/build/Streamly/Internal/Data/Stream/IsStream/Reduce.dyn_o )
+[62 of 75] Compiling Streamly.Internal.Data.Stream.IsStream.Top ( src/Streamly/Internal/Data/Stream/IsStream/Top.hs, dist/build/Streamly/Internal/Data/Stream/IsStream/Top.o, dist/build/Streamly/Internal/Data/Stream/IsStream/Top.dyn_o )
+[63 of 75] Compiling Streamly.Internal.Data.Stream.IsStream ( src/Streamly/Internal/Data/Stream/IsStream.hs, dist/build/Streamly/Internal/Data/Stream/IsStream.o, dist/build/Streamly/Internal/Data/Stream/IsStream.dyn_o )
+[64 of 75] Compiling Streamly.Internal.Data.Unfold.Exception ( src/Streamly/Internal/Data/Unfold/Exception.hs, dist/build/Streamly/Internal/Data/Unfold/Exception.o, dist/build/Streamly/Internal/Data/Unfold/Exception.dyn_o )
+[65 of 75] Compiling Streamly.Internal.Data.Unfold.SVar ( src/Streamly/Internal/Data/Unfold/SVar.hs, dist/build/Streamly/Internal/Data/Unfold/SVar.o, dist/build/Streamly/Internal/Data/Unfold/SVar.dyn_o )
+[66 of 75] Compiling Streamly.Internal.Data.Unfold.Prelude ( src/Streamly/Internal/Data/Unfold/Prelude.hs, dist/build/Streamly/Internal/Data/Unfold/Prelude.o, dist/build/Streamly/Internal/Data/Unfold/Prelude.dyn_o )
+[67 of 75] Compiling Streamly.Internal.FileSystem.Event.Darwin ( src/Streamly/Internal/FileSystem/Event/Darwin.hs, dist/build/Streamly/Internal/FileSystem/Event/Darwin.o, dist/build/Streamly/Internal/FileSystem/Event/Darwin.dyn_o )
+[68 of 75] Compiling Streamly.Internal.FileSystem.Event ( src/Streamly/Internal/FileSystem/Event.hs, dist/build/Streamly/Internal/FileSystem/Event.o, dist/build/Streamly/Internal/FileSystem/Event.dyn_o )
+[69 of 75] Compiling Streamly.Internal.Network.Socket ( src/Streamly/Internal/Network/Socket.hs, dist/build/Streamly/Internal/Network/Socket.o, dist/build/Streamly/Internal/Network/Socket.dyn_o )
+[70 of 75] Compiling Streamly.Internal.Network.Inet.TCP ( src/Streamly/Internal/Network/Inet/TCP.hs, dist/build/Streamly/Internal/Network/Inet/TCP.o, dist/build/Streamly/Internal/Network/Inet/TCP.dyn_o )
+[71 of 75] Compiling Streamly.Internal.Unicode.Char ( src/Streamly/Internal/Unicode/Char.hs, dist/build/Streamly/Internal/Unicode/Char.o, dist/build/Streamly/Internal/Unicode/Char.dyn_o )
+[72 of 75] Compiling Streamly.Internal.Unicode.Utf8 ( src/Streamly/Internal/Unicode/Utf8.hs, dist/build/Streamly/Internal/Unicode/Utf8.o, dist/build/Streamly/Internal/Unicode/Utf8.dyn_o )
+[73 of 75] Compiling Streamly.Network.Inet.TCP ( src/Streamly/Network/Inet/TCP.hs, dist/build/Streamly/Network/Inet/TCP.o, dist/build/Streamly/Network/Inet/TCP.dyn_o )
+[74 of 75] Compiling Streamly.Network.Socket ( src/Streamly/Network/Socket.hs, dist/build/Streamly/Network/Socket.o, dist/build/Streamly/Network/Socket.dyn_o )
+[75 of 75] Compiling Streamly.Prelude ( src/Streamly/Prelude.hs, dist/build/Streamly/Prelude.o, dist/build/Streamly/Prelude.dyn_o )
+<<ghc: 124094364296 bytes, 1756 GCs, 146229291/241880832 avg/max bytes residency (21 samples), 677M in use, 0.002 INIT (0.002 elapsed), 32.905 MUT (57.326 elapsed), 8.346 GC (8.466 elapsed) :ghc>>
+<<ghc: 359728824 bytes, 45 GCs, 16973889/45296056 avg/max bytes residency (6 samples), 101M in use, 0.002 INIT (0.002 elapsed), 0.094 MUT (0.274 elapsed), 0.109 GC (0.118 elapsed) :ghc>>
+<<ghc: 359689376 bytes, 45 GCs, 16971774/45293528 avg/max bytes residency (6 samples), 101M in use, 0.002 INIT (0.002 elapsed), 0.096 MUT (0.258 elapsed), 0.112 GC (0.122 elapsed) :ghc>>
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/strmly-0.11.1-90de5136/lib
+Configuring library for simple-sendfile-0.2.33...
+Preprocessing library for simple-sendfile-0.2.33...
+Building library for simple-sendfile-0.2.33...
+[1 of 4] Compiling Network.Sendfile.IOVec ( dist/build/Network/Sendfile/IOVec.hs, dist/build/Network/Sendfile/IOVec.o, dist/build/Network/Sendfile/IOVec.dyn_o )
+[2 of 4] Compiling Network.Sendfile.Types ( Network/Sendfile/Types.hs, dist/build/Network/Sendfile/Types.o, dist/build/Network/Sendfile/Types.dyn_o )
+[3 of 4] Compiling Network.Sendfile.BSD ( dist/build/Network/Sendfile/BSD.hs, dist/build/Network/Sendfile/BSD.o, dist/build/Network/Sendfile/BSD.dyn_o )
+[4 of 4] Compiling Network.Sendfile ( Network/Sendfile.hs, dist/build/Network/Sendfile.o, dist/build/Network/Sendfile.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/smpl-sndfl-0.2.33-4c40ca44/lib
+Configuring library for recv-0.1.3...
+Preprocessing library for recv-0.1.3...
+Building library for recv-0.1.3...
+[1 of 4] Compiling Network.Socket.BufferPool.Types ( Network/Socket/BufferPool/Types.hs, dist/build/Network/Socket/BufferPool/Types.o, dist/build/Network/Socket/BufferPool/Types.dyn_o )
+[2 of 4] Compiling Network.Socket.BufferPool.Buffer ( Network/Socket/BufferPool/Buffer.hs, dist/build/Network/Socket/BufferPool/Buffer.o, dist/build/Network/Socket/BufferPool/Buffer.dyn_o )
+[3 of 4] Compiling Network.Socket.BufferPool.Recv ( Network/Socket/BufferPool/Recv.hs, dist/build/Network/Socket/BufferPool/Recv.o, dist/build/Network/Socket/BufferPool/Recv.dyn_o )
+[4 of 4] Compiling Network.Socket.BufferPool ( Network/Socket/BufferPool.hs, dist/build/Network/Socket/BufferPool.o, dist/build/Network/Socket/BufferPool.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/rcv-0.1.3-a22746f9/lib
+Configuring library for iproute-1.7.15...
+Warning: [git-protocol] Cloning over git:// might lead to an arbitrary code
+execution vulnerability. Furthermore, popular forges like GitHub do not
+support it. Use https:// or ssh:// instead.
+Preprocessing library for iproute-1.7.15...
+Building library for iproute-1.7.15...
+[1 of 9] Compiling Data.IP.Addr     ( Data/IP/Addr.hs, dist/build/Data/IP/Addr.o, dist/build/Data/IP/Addr.dyn_o )
+Data/IP/Addr.hs:11:19: warning: [GHC-38856] [-Wunused-imports]
+    The import of ‘foldl'’ from module ‘Data.List’ is redundant
+   |
+11 | import Data.List (foldl', intersperse)
+   |                   ^^^^^^
+
+Data/IP/Addr.hs:35:30: warning: [GHC-90584] [-Wderiving-typeable]
+    • Deriving ‘Typeable’ has no effect: all types now auto-derive Typeable
+    • In the data declaration for ‘IP’
+   |
+35 |     deriving (Data, Generic, Typeable)
+   |                              ^^^^^^^^
+
+Data/IP/Addr.hs:85:48: warning: [GHC-90584] [-Wderiving-typeable]
+    • Deriving ‘Typeable’ has no effect: all types now auto-derive Typeable
+    • In the newtype declaration for ‘IPv4’
+   |
+85 |     deriving (Eq, Ord, Bounded, Data, Generic, Typeable)
+   |                                                ^^^^^^^^
+
+Data/IP/Addr.hs:106:48: warning: [GHC-90584] [-Wderiving-typeable]
+    • Deriving ‘Typeable’ has no effect: all types now auto-derive Typeable
+    • In the newtype declaration for ‘IPv6’
+    |
+106 |     deriving (Eq, Ord, Bounded, Data, Generic, Typeable)
+    |                                                ^^^^^^^^
+
+Data/IP/Addr.hs:679:5: warning: [GHC-62161] [-Wincomplete-uni-patterns]
+    Pattern match(es) are non-exhaustive
+    In a pattern binding:
+        Patterns of type ‘[Int]’ not matched:
+            []
+            [_]
+            [_, _]
+            [_, _, _]
+            ...
+    |
+679 |     [i1, i2, i3, i4] = fromIPv4 ip
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[2 of 9] Compiling Data.IP.Builder  ( Data/IP/Builder.hs, dist/build/Data/IP/Builder.o, dist/build/Data/IP/Builder.dyn_o )
+[3 of 9] Compiling Data.IP.Mask     ( Data/IP/Mask.hs, dist/build/Data/IP/Mask.o, dist/build/Data/IP/Mask.dyn_o )
+[4 of 9] Compiling Data.IP.Range    ( Data/IP/Range.hs, dist/build/Data/IP/Range.o, dist/build/Data/IP/Range.dyn_o )
+Data/IP/Range.hs:32:39: warning: [GHC-90584] [-Wderiving-typeable]
+    • Deriving ‘Typeable’ has no effect: all types now auto-derive Typeable
+    • In the data declaration for ‘IPRange’
+   |
+32 |     deriving (Eq, Ord, Data, Generic, Typeable)
+   |                                       ^^^^^^^^
+
+Data/IP/Range.hs:60:39: warning: [GHC-90584] [-Wderiving-typeable]
+    • Deriving ‘Typeable’ has no effect: all types now auto-derive Typeable
+    • In the data declaration for ‘AddrRange’
+   |
+60 |     deriving (Eq, Ord, Data, Generic, Typeable)
+   |                                       ^^^^^^^^
+
+[5 of 9] Compiling Data.IP.Op       ( Data/IP/Op.hs, dist/build/Data/IP/Op.o, dist/build/Data/IP/Op.dyn_o )
+Data/IP/Op.hs:103:5: warning: [GHC-62161] [-Wincomplete-uni-patterns]
+    Pattern match(es) are non-exhaustive
+    In a pattern binding:
+        Patterns of type ‘[Int]’ not matched:
+            []
+            [_]
+            [_, _]
+            [_, _, _]
+            ...
+    |
+103 |     [i1, i2, i3, i4] = fromIPv4 ip
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[6 of 9] Compiling Data.IP.Internal ( Data/IP/Internal.hs, dist/build/Data/IP/Internal.o, dist/build/Data/IP/Internal.dyn_o )
+[7 of 9] Compiling Data.IP          ( Data/IP.hs, dist/build/Data/IP.o, dist/build/Data/IP.dyn_o )
+[8 of 9] Compiling Data.IP.RouteTable.Internal ( Data/IP/RouteTable/Internal.hs, dist/build/Data/IP/RouteTable/Internal.o, dist/build/Data/IP/RouteTable/Internal.dyn_o )
+Data/IP/RouteTable/Internal.hs:16:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Data.Foldable’ is redundant
+      except perhaps to import instances from ‘Data.Foldable’
+    To import instances alone, use: import Data.Foldable()
+   |
+16 | import Data.Foldable (Foldable (..))
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[9 of 9] Compiling Data.IP.RouteTable ( Data/IP/RouteTable.hs, dist/build/Data/IP/RouteTable.o, dist/build/Data/IP/RouteTable.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/prt-1.7.15-6f58cac2/lib
+Configuring library for http-semantics-0.4.2...
+Preprocessing library for http-semantics-0.4.2...
+Building library for http-semantics-0.4.2...
+[ 1 of 14] Compiling Network.HTTP.Semantics.ReadN ( Network/HTTP/Semantics/ReadN.hs, dist/build/Network/HTTP/Semantics/ReadN.o, dist/build/Network/HTTP/Semantics/ReadN.dyn_o )
+[ 2 of 14] Compiling Network.HTTP.Semantics.Token ( Network/HTTP/Semantics/Token.hs, dist/build/Network/HTTP/Semantics/Token.o, dist/build/Network/HTTP/Semantics/Token.dyn_o )
+[ 3 of 14] Compiling Network.HTTP.Semantics.Header ( Network/HTTP/Semantics/Header.hs, dist/build/Network/HTTP/Semantics/Header.o, dist/build/Network/HTTP/Semantics/Header.dyn_o )
+[ 4 of 14] Compiling Network.HTTP.Semantics.Trailer ( Network/HTTP/Semantics/Trailer.hs, dist/build/Network/HTTP/Semantics/Trailer.o, dist/build/Network/HTTP/Semantics/Trailer.dyn_o )
+[ 5 of 14] Compiling Network.HTTP.Semantics.Types ( Network/HTTP/Semantics/Types.hs, dist/build/Network/HTTP/Semantics/Types.o, dist/build/Network/HTTP/Semantics/Types.dyn_o )
+[ 6 of 14] Compiling Network.HTTP.Semantics.Server.Internal ( Network/HTTP/Semantics/Server/Internal.hs, dist/build/Network/HTTP/Semantics/Server/Internal.o, dist/build/Network/HTTP/Semantics/Server/Internal.dyn_o )
+[ 7 of 14] Compiling Network.HTTP.Semantics.Client.Internal ( Network/HTTP/Semantics/Client/Internal.hs, dist/build/Network/HTTP/Semantics/Client/Internal.o, dist/build/Network/HTTP/Semantics/Client/Internal.dyn_o )
+[ 8 of 14] Compiling Network.HTTP.Semantics ( Network/HTTP/Semantics.hs, dist/build/Network/HTTP/Semantics.o, dist/build/Network/HTTP/Semantics.dyn_o )
+[ 9 of 14] Compiling Network.HTTP.Semantics.Status ( Network/HTTP/Semantics/Status.hs, dist/build/Network/HTTP/Semantics/Status.o, dist/build/Network/HTTP/Semantics/Status.dyn_o )
+[10 of 14] Compiling Network.HTTP.Semantics.File ( Network/HTTP/Semantics/File.hs, dist/build/Network/HTTP/Semantics/File.o, dist/build/Network/HTTP/Semantics/File.dyn_o )
+[11 of 14] Compiling Network.HTTP.Semantics.Server ( Network/HTTP/Semantics/Server.hs, dist/build/Network/HTTP/Semantics/Server.o, dist/build/Network/HTTP/Semantics/Server.dyn_o )
+[12 of 14] Compiling Network.HTTP.Semantics.Client ( Network/HTTP/Semantics/Client.hs, dist/build/Network/HTTP/Semantics/Client.o, dist/build/Network/HTTP/Semantics/Client.dyn_o )
+[13 of 14] Compiling Network.HTTP.Semantics.FillBuf ( Network/HTTP/Semantics/FillBuf.hs, dist/build/Network/HTTP/Semantics/FillBuf.o, dist/build/Network/HTTP/Semantics/FillBuf.dyn_o )
+[14 of 14] Compiling Network.HTTP.Semantics.IO ( Network/HTTP/Semantics/IO.hs, dist/build/Network/HTTP/Semantics/IO.o, dist/build/Network/HTTP/Semantics/IO.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/http-smntcs-0.4.2-e6bad2f5/lib
+Configuring library for websockets-0.13.0.0...
+Preprocessing library for websockets-0.13.0.0...
+Building library for websockets-0.13.0.0...
+[ 1 of 17] Compiling Network.WebSockets.Connection.Options ( src/Network/WebSockets/Connection/Options.hs, dist/build/Network/WebSockets/Connection/Options.o, dist/build/Network/WebSockets/Connection/Options.dyn_o )
+src/Network/WebSockets/Connection/Options.hs:18:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Data.Monoid’ is redundant
+      except perhaps to import instances from ‘Data.Monoid’
+    To import instances alone, use: import Data.Monoid()
+   |
+18 | import           Data.Monoid (Monoid (..))
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[ 2 of 17] Compiling Network.WebSockets.Extensions.Description ( src/Network/WebSockets/Extensions/Description.hs, dist/build/Network/WebSockets/Extensions/Description.o, dist/build/Network/WebSockets/Extensions/Description.dyn_o )
+src/Network/WebSockets/Extensions/Description.hs:13:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Control.Applicative’ is redundant
+      except perhaps to import instances from ‘Control.Applicative’
+    To import instances alone, use: import Control.Applicative()
+   |
+13 | import           Control.Applicative              ((*>), (<*))
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Network/WebSockets/Extensions/Description.hs:17:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Data.Monoid’ is redundant
+      except perhaps to import instances from ‘Data.Monoid’
+    To import instances alone, use: import Data.Monoid()
+   |
+17 | import           Data.Monoid                      (mconcat, mappend)
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[ 3 of 17] Compiling Network.WebSockets.Http ( src/Network/WebSockets/Http.hs, dist/build/Network/WebSockets/Http.o, dist/build/Network/WebSockets/Http.dyn_o )
+src/Network/WebSockets/Http.hs:36:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Control.Applicative’ is redundant
+      except perhaps to import instances from ‘Control.Applicative’
+    To import instances alone, use: import Control.Applicative()
+   |
+36 | import           Control.Applicative                       (pure, (*>), (<$>),
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^...
+
+src/Network/WebSockets/Http.hs:47:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Data.Monoid’ is redundant
+      except perhaps to import instances from ‘Data.Monoid’
+    To import instances alone, use: import Data.Monoid()
+   |
+47 | import           Data.Monoid                               (mappend, mconcat)
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Network/WebSockets/Http.hs:109:21: warning: [GHC-90584] [-Wderiving-typeable]
+    • Deriving ‘Typeable’ has no effect: all types now auto-derive Typeable
+    • In the data declaration for ‘HandshakeException’
+    |
+109 |     deriving (Show, Typeable)
+    |                     ^^^^^^^^
+
+[ 4 of 17] Compiling Network.WebSockets.Hybi13.Mask ( src/Network/WebSockets/Hybi13/Mask.hs, dist/build/Network/WebSockets/Hybi13/Mask.o, dist/build/Network/WebSockets/Hybi13/Mask.dyn_o )
+[ 5 of 17] Compiling Network.WebSockets.Types ( src/Network/WebSockets/Types.hs, dist/build/Network/WebSockets/Types.o, dist/build/Network/WebSockets/Types.dyn_o )
+src/Network/WebSockets/Types.hs:163:25: warning: [GHC-90584] [-Wderiving-typeable]
+    • Deriving ‘Typeable’ has no effect: all types now auto-derive Typeable
+    • In the data declaration for ‘ConnectionException’
+    |
+163 |     deriving (Eq, Show, Typeable)
+    |                         ^^^^^^^^
+
+[ 6 of 17] Compiling Network.WebSockets.Stream ( src/Network/WebSockets/Stream.hs, dist/build/Network/WebSockets/Stream.o, dist/build/Network/WebSockets/Stream.dyn_o )
+[ 7 of 17] Compiling Network.WebSockets.Hybi13.Demultiplex ( src/Network/WebSockets/Hybi13/Demultiplex.hs, dist/build/Network/WebSockets/Hybi13/Demultiplex.o, dist/build/Network/WebSockets/Hybi13/Demultiplex.dyn_o )
+src/Network/WebSockets/Hybi13/Demultiplex.hs:22:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Data.Monoid’ is redundant
+      except perhaps to import instances from ‘Data.Monoid’
+    To import instances alone, use: import Data.Monoid()
+   |
+22 | import           Data.Monoid                           (mappend)
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Network/WebSockets/Hybi13/Demultiplex.hs:55:21: warning: [GHC-90584] [-Wderiving-typeable]
+    • Deriving ‘Typeable’ has no effect: all types now auto-derive Typeable
+    • In the data declaration for ‘DemultiplexException’
+   |
+55 |     deriving (Show, Typeable)
+   |                     ^^^^^^^^
+
+[ 8 of 17] Compiling Network.WebSockets.Hybi13 ( src/Network/WebSockets/Hybi13.hs, dist/build/Network/WebSockets/Hybi13.o, dist/build/Network/WebSockets/Hybi13.dyn_o )
+src/Network/WebSockets/Hybi13.hs:21:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Control.Applicative’ is redundant
+      except perhaps to import instances from ‘Control.Applicative’
+    To import instances alone, use: import Control.Applicative()
+   |
+21 | import           Control.Applicative                   (pure, (<$>))
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Network/WebSockets/Hybi13.hs:37:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Data.Monoid’ is redundant
+      except perhaps to import instances from ‘Data.Monoid’
+    To import instances alone, use: import Data.Monoid()
+   |
+37 | import           Data.Monoid                           (mappend, mconcat,
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^...
+
+src/Network/WebSockets/Hybi13.hs:258:21: warning: [GHC-63394] [-Wx-partial]
+    In the use of ‘head’
+    (imported from Prelude, but defined in GHC.Internal.List):
+    "This is a partial function, it throws an error on empty lists. Use pattern matching, 'Data.List.uncons' or 'Data.Maybe.listToMaybe' instead. Consider refactoring to use "Data.List.NonEmpty"."
+    |
+258 |     versionNumber = head headerVersions
+    |                     ^^^^
+
+[ 9 of 17] Compiling Network.WebSockets.Protocol ( src/Network/WebSockets/Protocol.hs, dist/build/Network/WebSockets/Protocol.o, dist/build/Network/WebSockets/Protocol.dyn_o )
+[10 of 17] Compiling Network.WebSockets.Extensions ( src/Network/WebSockets/Extensions.hs, dist/build/Network/WebSockets/Extensions.o, dist/build/Network/WebSockets/Extensions.dyn_o )
+[11 of 17] Compiling Network.WebSockets.Extensions.StrictUnicode ( src/Network/WebSockets/Extensions/StrictUnicode.hs, dist/build/Network/WebSockets/Extensions/StrictUnicode.o, dist/build/Network/WebSockets/Extensions/StrictUnicode.dyn_o )
+[12 of 17] Compiling Network.WebSockets.Extensions.PermessageDeflate ( src/Network/WebSockets/Extensions/PermessageDeflate.hs, dist/build/Network/WebSockets/Extensions/PermessageDeflate.o, dist/build/Network/WebSockets/Extensions/PermessageDeflate.dyn_o )
+src/Network/WebSockets/Extensions/PermessageDeflate.hs:17:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Control.Applicative’ is redundant
+      except perhaps to import instances from ‘Control.Applicative’
+    To import instances alone, use: import Control.Applicative()
+   |
+17 | import           Control.Applicative                       ((<$>))
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[13 of 17] Compiling Network.WebSockets.Connection ( src/Network/WebSockets/Connection.hs, dist/build/Network/WebSockets/Connection.o, dist/build/Network/WebSockets/Connection.dyn_o )
+src/Network/WebSockets/Connection.hs:48:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Control.Applicative’ is redundant
+      except perhaps to import instances from ‘Control.Applicative’
+    To import instances alone, use: import Control.Applicative()
+   |
+48 | import           Control.Applicative                             ((<$>))
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[14 of 17] Compiling Network.WebSockets.Connection.PingPong ( src/Network/WebSockets/Connection/PingPong.hs, dist/build/Network/WebSockets/Connection/PingPong.o, dist/build/Network/WebSockets/Connection/PingPong.dyn_o )
+[15 of 17] Compiling Network.WebSockets.Server ( src/Network/WebSockets/Server.hs, dist/build/Network/WebSockets/Server.o, dist/build/Network/WebSockets/Server.dyn_o )
+[16 of 17] Compiling Network.WebSockets.Client ( src/Network/WebSockets/Client.hs, dist/build/Network/WebSockets/Client.o, dist/build/Network/WebSockets/Client.dyn_o )
+src/Network/WebSockets/Client.hs:22:58: warning: [GHC-38856] [-Wunused-imports]
+    The import of ‘finally’
+    from module ‘Control.Exception’ is redundant
+   |
+22 | import           Control.Exception             (bracket, finally, throwIO)
+   |                                                          ^^^^^^^
+
+[17 of 17] Compiling Network.WebSockets ( src/Network/WebSockets.hs, dist/build/Network/WebSockets.o, dist/build/Network/WebSockets.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/wbsckts-0.13.0.0-3b37e45e/lib
+Configuring library for shibuya-core-0.13.0.1...
+Preprocessing library for shibuya-core-0.13.0.1...
+Building library for shibuya-core-0.13.0.1...
+[ 1 of 34] Compiling Shibuya.Core.Lease ( src/Shibuya/Core/Lease.hs, dist/build/Shibuya/Core/Lease.o, dist/build/Shibuya/Core/Lease.dyn_o )
+[ 2 of 34] Compiling Shibuya.Internal.Runner.KeyedScheduler ( src/Shibuya/Internal/Runner/KeyedScheduler.hs, dist/build/Shibuya/Internal/Runner/KeyedScheduler.o, dist/build/Shibuya/Internal/Runner/KeyedScheduler.dyn_o )
+[ 3 of 34] Compiling Shibuya.Internal.Runner.Pause ( src/Shibuya/Internal/Runner/Pause.hs, dist/build/Shibuya/Internal/Runner/Pause.o, dist/build/Shibuya/Internal/Runner/Pause.dyn_o )
+[ 4 of 34] Compiling Shibuya.Prelude  ( src/Shibuya/Prelude.hs, dist/build/Shibuya/Prelude.o, dist/build/Shibuya/Prelude.dyn_o )
+[ 5 of 34] Compiling Shibuya.Core.Types ( src/Shibuya/Core/Types.hs, dist/build/Shibuya/Core/Types.o, dist/build/Shibuya/Core/Types.dyn_o )
+[ 6 of 34] Compiling Shibuya.Core.Metrics ( src/Shibuya/Core/Metrics.hs, dist/build/Shibuya/Core/Metrics.o, dist/build/Shibuya/Core/Metrics.dyn_o )
+[ 7 of 34] Compiling Shibuya.Internal.Runner.Master ( src/Shibuya/Internal/Runner/Master.hs, dist/build/Shibuya/Internal/Runner/Master.o, dist/build/Shibuya/Internal/Runner/Master.dyn_o )
+[ 8 of 34] Compiling Shibuya.Core.Error ( src/Shibuya/Core/Error.hs, dist/build/Shibuya/Core/Error.o, dist/build/Shibuya/Core/Error.dyn_o )
+[ 9 of 34] Compiling Shibuya.Policy   ( src/Shibuya/Policy.hs, dist/build/Shibuya/Policy.o, dist/build/Shibuya/Policy.dyn_o )
+[10 of 34] Compiling Shibuya.Core.Ack ( src/Shibuya/Core/Ack.hs, dist/build/Shibuya/Core/Ack.o, dist/build/Shibuya/Core/Ack.dyn_o )
+[11 of 34] Compiling Shibuya.Internal.Runner.Halt ( src/Shibuya/Internal/Runner/Halt.hs, dist/build/Shibuya/Internal/Runner/Halt.o, dist/build/Shibuya/Internal/Runner/Halt.dyn_o )
+[12 of 34] Compiling Shibuya.Core.Retry ( src/Shibuya/Core/Retry.hs, dist/build/Shibuya/Core/Retry.o, dist/build/Shibuya/Core/Retry.dyn_o )
+[13 of 34] Compiling Shibuya.Core.AckHandle ( src/Shibuya/Core/AckHandle.hs, dist/build/Shibuya/Core/AckHandle.o, dist/build/Shibuya/Core/AckHandle.dyn_o )
+[14 of 34] Compiling Shibuya.Core.Ingested ( src/Shibuya/Core/Ingested.hs, dist/build/Shibuya/Core/Ingested.o, dist/build/Shibuya/Core/Ingested.dyn_o )
+[15 of 34] Compiling Shibuya.Handler  ( src/Shibuya/Handler.hs, dist/build/Shibuya/Handler.o, dist/build/Shibuya/Handler.dyn_o )
+[16 of 34] Compiling Shibuya.Batch    ( src/Shibuya/Batch.hs, dist/build/Shibuya/Batch.o, dist/build/Shibuya/Batch.dyn_o )
+[17 of 34] Compiling Shibuya.Internal.Runner.Batcher ( src/Shibuya/Internal/Runner/Batcher.hs, dist/build/Shibuya/Internal/Runner/Batcher.o, dist/build/Shibuya/Internal/Runner/Batcher.dyn_o )
+[18 of 34] Compiling Shibuya.Stream   ( src/Shibuya/Stream.hs, dist/build/Shibuya/Stream.o, dist/build/Shibuya/Stream.dyn_o )
+[19 of 34] Compiling Shibuya.Telemetry.Effect ( src/Shibuya/Telemetry/Effect.hs, dist/build/Shibuya/Telemetry/Effect.o, dist/build/Shibuya/Telemetry/Effect.dyn_o )
+[20 of 34] Compiling Shibuya.Internal.Runner.Finalize ( src/Shibuya/Internal/Runner/Finalize.hs, dist/build/Shibuya/Internal/Runner/Finalize.o, dist/build/Shibuya/Internal/Runner/Finalize.dyn_o )
+[21 of 34] Compiling Shibuya.Telemetry.Propagation ( src/Shibuya/Telemetry/Propagation.hs, dist/build/Shibuya/Telemetry/Propagation.o, dist/build/Shibuya/Telemetry/Propagation.dyn_o )
+[22 of 34] Compiling Shibuya.Telemetry.Semantic ( src/Shibuya/Telemetry/Semantic.hs, dist/build/Shibuya/Telemetry/Semantic.o, dist/build/Shibuya/Telemetry/Semantic.dyn_o )
+[23 of 34] Compiling Shibuya.Telemetry.Correlation ( src/Shibuya/Telemetry/Correlation.hs, dist/build/Shibuya/Telemetry/Correlation.o, dist/build/Shibuya/Telemetry/Correlation.dyn_o )
+[24 of 34] Compiling Shibuya.Telemetry.Process ( src/Shibuya/Telemetry/Process.hs, dist/build/Shibuya/Telemetry/Process.o, dist/build/Shibuya/Telemetry/Process.dyn_o )
+[25 of 34] Compiling Shibuya.Adapter  ( src/Shibuya/Adapter.hs, dist/build/Shibuya/Adapter.o, dist/build/Shibuya/Adapter.dyn_o )
+[26 of 34] Compiling Shibuya.Adapter.Mock ( src/Shibuya/Adapter/Mock.hs, dist/build/Shibuya/Adapter/Mock.o, dist/build/Shibuya/Adapter/Mock.dyn_o )
+[27 of 34] Compiling Shibuya.Telemetry ( src/Shibuya/Telemetry.hs, dist/build/Shibuya/Telemetry.o, dist/build/Shibuya/Telemetry.dyn_o )
+[28 of 34] Compiling Shibuya.Internal.Runner.Ingester ( src/Shibuya/Internal/Runner/Ingester.hs, dist/build/Shibuya/Internal/Runner/Ingester.o, dist/build/Shibuya/Internal/Runner/Ingester.dyn_o )
+[29 of 34] Compiling Shibuya.Internal.Runner.BatchProcessor ( src/Shibuya/Internal/Runner/BatchProcessor.hs, dist/build/Shibuya/Internal/Runner/BatchProcessor.o, dist/build/Shibuya/Internal/Runner/BatchProcessor.dyn_o )
+[30 of 34] Compiling Shibuya.Internal.Runner.Supervised ( src/Shibuya/Internal/Runner/Supervised.hs, dist/build/Shibuya/Internal/Runner/Supervised.o, dist/build/Shibuya/Internal/Runner/Supervised.dyn_o )
+[31 of 34] Compiling Shibuya.Internal.App ( src/Shibuya/Internal/App.hs, dist/build/Shibuya/Internal/App.o, dist/build/Shibuya/Internal/App.dyn_o )
+[32 of 34] Compiling Shibuya.App      ( src/Shibuya/App.hs, dist/build/Shibuya/App.o, dist/build/Shibuya/App.dyn_o )
+[33 of 34] Compiling Shibuya          ( src/Shibuya.hs, dist/build/Shibuya.o, dist/build/Shibuya.dyn_o )
+[34 of 34] Compiling Shibuya.Core     ( src/Shibuya/Core.hs, dist/build/Shibuya/Core.o, dist/build/Shibuya/Core.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/shby-cr-0.13.0.1-c9c12d60/lib
+Configuring library for postgresql-binary-0.15.0.1...
+Preprocessing library for postgresql-binary-0.15.0.1...
+Building library for postgresql-binary-0.15.0.1...
+[ 1 of 11] Compiling PostgreSQL.Binary.Prelude ( library/PostgreSQL/Binary/Prelude.hs, dist/build/PostgreSQL/Binary/Prelude.o, dist/build/PostgreSQL/Binary/Prelude.dyn_o )
+[ 2 of 11] Compiling PostgreSQL.Binary.Numeric ( library/PostgreSQL/Binary/Numeric.hs, dist/build/PostgreSQL/Binary/Numeric.o, dist/build/PostgreSQL/Binary/Numeric.dyn_o )
+[ 3 of 11] Compiling PostgreSQL.Binary.Integral ( library/PostgreSQL/Binary/Integral.hs, dist/build/PostgreSQL/Binary/Integral.o, dist/build/PostgreSQL/Binary/Integral.dyn_o )
+[ 4 of 11] Compiling PostgreSQL.Binary.Inet ( library/PostgreSQL/Binary/Inet.hs, dist/build/PostgreSQL/Binary/Inet.o, dist/build/PostgreSQL/Binary/Inet.dyn_o )
+[ 5 of 11] Compiling PostgreSQL.Binary.BuilderPrim ( library/PostgreSQL/Binary/BuilderPrim.hs, dist/build/PostgreSQL/Binary/BuilderPrim.o, dist/build/PostgreSQL/Binary/BuilderPrim.dyn_o )
+[ 6 of 11] Compiling PostgreSQL.Binary.Range ( library/PostgreSQL/Binary/Range.hs, dist/build/PostgreSQL/Binary/Range.o, dist/build/PostgreSQL/Binary/Range.dyn_o )
+[ 7 of 11] Compiling PostgreSQL.Binary.Time ( library/PostgreSQL/Binary/Time.hs, dist/build/PostgreSQL/Binary/Time.o, dist/build/PostgreSQL/Binary/Time.dyn_o )
+[ 8 of 11] Compiling PostgreSQL.Binary.Interval ( library/PostgreSQL/Binary/Interval.hs, dist/build/PostgreSQL/Binary/Interval.o, dist/build/PostgreSQL/Binary/Interval.dyn_o )
+[ 9 of 11] Compiling PostgreSQL.Binary.Encoding.Builders ( library/PostgreSQL/Binary/Encoding/Builders.hs, dist/build/PostgreSQL/Binary/Encoding/Builders.o, dist/build/PostgreSQL/Binary/Encoding/Builders.dyn_o )
+[10 of 11] Compiling PostgreSQL.Binary.Encoding ( library/PostgreSQL/Binary/Encoding.hs, dist/build/PostgreSQL/Binary/Encoding.o, dist/build/PostgreSQL/Binary/Encoding.dyn_o )
+[11 of 11] Compiling PostgreSQL.Binary.Decoding ( library/PostgreSQL/Binary/Decoding.hs, dist/build/PostgreSQL/Binary/Decoding.o, dist/build/PostgreSQL/Binary/Decoding.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/pstgrsql-bnry-0.15.0.1-dcef39ab/lib
+Configuring library for http2-5.4.14...
+Preprocessing library for http2-5.4.14...
+Building library for http2-5.4.14...
+[ 1 of 49] Compiling Imports          ( Imports.hs, dist/build/Imports.o, dist/build/Imports.dyn_o )
+[ 2 of 49] Compiling Network.HPACK.Builder ( Network/HPACK/Builder.hs, dist/build/Network/HPACK/Builder.o, dist/build/Network/HPACK/Builder.dyn_o )
+[ 3 of 49] Compiling Network.HPACK.Huffman.Bit ( Network/HPACK/Huffman/Bit.hs, dist/build/Network/HPACK/Huffman/Bit.o, dist/build/Network/HPACK/Huffman/Bit.dyn_o )
+[ 4 of 49] Compiling Network.HPACK.Huffman.ByteString ( Network/HPACK/Huffman/ByteString.hs, dist/build/Network/HPACK/Huffman/ByteString.o, dist/build/Network/HPACK/Huffman/ByteString.dyn_o )
+[ 5 of 49] Compiling Network.HPACK.Huffman.Params ( Network/HPACK/Huffman/Params.hs, dist/build/Network/HPACK/Huffman/Params.o, dist/build/Network/HPACK/Huffman/Params.dyn_o )
+[ 6 of 49] Compiling Network.HPACK.Huffman.Table ( Network/HPACK/Huffman/Table.hs, dist/build/Network/HPACK/Huffman/Table.o, dist/build/Network/HPACK/Huffman/Table.dyn_o )
+[ 7 of 49] Compiling Network.HPACK.Huffman.Encode ( Network/HPACK/Huffman/Encode.hs, dist/build/Network/HPACK/Huffman/Encode.o, dist/build/Network/HPACK/Huffman/Encode.dyn_o )
+[ 8 of 49] Compiling Network.HPACK.Huffman.Tree ( Network/HPACK/Huffman/Tree.hs, dist/build/Network/HPACK/Huffman/Tree.o, dist/build/Network/HPACK/Huffman/Tree.dyn_o )
+[ 9 of 49] Compiling Network.HPACK.Token ( Network/HPACK/Token.hs, dist/build/Network/HPACK/Token.o, dist/build/Network/HPACK/Token.dyn_o )
+[10 of 49] Compiling Network.HPACK.Types ( Network/HPACK/Types.hs, dist/build/Network/HPACK/Types.o, dist/build/Network/HPACK/Types.dyn_o )
+[11 of 49] Compiling Network.HPACK.Table.Entry ( Network/HPACK/Table/Entry.hs, dist/build/Network/HPACK/Table/Entry.o, dist/build/Network/HPACK/Table/Entry.dyn_o )
+[12 of 49] Compiling Network.HPACK.Table.Static ( Network/HPACK/Table/Static.hs, dist/build/Network/HPACK/Table/Static.o, dist/build/Network/HPACK/Table/Static.dyn_o )
+[13 of 49] Compiling Network.HPACK.Table.RevIndex ( Network/HPACK/Table/RevIndex.hs, dist/build/Network/HPACK/Table/RevIndex.o, dist/build/Network/HPACK/Table/RevIndex.dyn_o )
+[14 of 49] Compiling Network.HPACK.Huffman.Decode ( Network/HPACK/Huffman/Decode.hs, dist/build/Network/HPACK/Huffman/Decode.o, dist/build/Network/HPACK/Huffman/Decode.dyn_o )
+[15 of 49] Compiling Network.HPACK.Huffman ( Network/HPACK/Huffman.hs, dist/build/Network/HPACK/Huffman.o, dist/build/Network/HPACK/Huffman.dyn_o )
+[16 of 49] Compiling Network.HPACK.Table.Dynamic ( Network/HPACK/Table/Dynamic.hs, dist/build/Network/HPACK/Table/Dynamic.o, dist/build/Network/HPACK/Table/Dynamic.dyn_o )
+[17 of 49] Compiling Network.HPACK.Table ( Network/HPACK/Table.hs, dist/build/Network/HPACK/Table.o, dist/build/Network/HPACK/Table.dyn_o )
+[18 of 49] Compiling Network.HPACK.HeaderBlock.Integer ( Network/HPACK/HeaderBlock/Integer.hs, dist/build/Network/HPACK/HeaderBlock/Integer.o, dist/build/Network/HPACK/HeaderBlock/Integer.dyn_o )
+[19 of 49] Compiling Network.HPACK.HeaderBlock.Encode ( Network/HPACK/HeaderBlock/Encode.hs, dist/build/Network/HPACK/HeaderBlock/Encode.o, dist/build/Network/HPACK/HeaderBlock/Encode.dyn_o )
+[20 of 49] Compiling Network.HPACK.HeaderBlock.Decode ( Network/HPACK/HeaderBlock/Decode.hs, dist/build/Network/HPACK/HeaderBlock/Decode.o, dist/build/Network/HPACK/HeaderBlock/Decode.dyn_o )
+[21 of 49] Compiling Network.HPACK.Internal ( Network/HPACK/Internal.hs, dist/build/Network/HPACK/Internal.o, dist/build/Network/HPACK/Internal.dyn_o )
+[22 of 49] Compiling Network.HPACK.HeaderBlock ( Network/HPACK/HeaderBlock.hs, dist/build/Network/HPACK/HeaderBlock.o, dist/build/Network/HPACK/HeaderBlock.dyn_o )
+[23 of 49] Compiling Network.HPACK    ( Network/HPACK.hs, dist/build/Network/HPACK.o, dist/build/Network/HPACK.dyn_o )
+[24 of 49] Compiling Network.HTTP2.Frame.Types ( Network/HTTP2/Frame/Types.hs, dist/build/Network/HTTP2/Frame/Types.o, dist/build/Network/HTTP2/Frame/Types.dyn_o )
+[25 of 49] Compiling Network.HTTP2.Frame.Encode ( Network/HTTP2/Frame/Encode.hs, dist/build/Network/HTTP2/Frame/Encode.o, dist/build/Network/HTTP2/Frame/Encode.dyn_o )
+[26 of 49] Compiling Network.HTTP2.Frame.Decode ( Network/HTTP2/Frame/Decode.hs, dist/build/Network/HTTP2/Frame/Decode.o, dist/build/Network/HTTP2/Frame/Decode.dyn_o )
+[27 of 49] Compiling Network.HTTP2.Frame ( Network/HTTP2/Frame.hs, dist/build/Network/HTTP2/Frame.o, dist/build/Network/HTTP2/Frame.dyn_o )
+[28 of 49] Compiling Network.HTTP2.H2.EncodeFrame ( Network/HTTP2/H2/EncodeFrame.hs, dist/build/Network/HTTP2/H2/EncodeFrame.o, dist/build/Network/HTTP2/H2/EncodeFrame.dyn_o )
+[29 of 49] Compiling Network.HTTP2.H2.Settings ( Network/HTTP2/H2/Settings.hs, dist/build/Network/HTTP2/H2/Settings.o, dist/build/Network/HTTP2/H2/Settings.dyn_o )
+[30 of 49] Compiling Network.HTTP2.H2.Types ( Network/HTTP2/H2/Types.hs, dist/build/Network/HTTP2/H2/Types.o, dist/build/Network/HTTP2/H2/Types.dyn_o )
+[31 of 49] Compiling Network.HTTP2.H2.StreamTable ( Network/HTTP2/H2/StreamTable.hs, dist/build/Network/HTTP2/H2/StreamTable.o, dist/build/Network/HTTP2/H2/StreamTable.dyn_o )
+[32 of 49] Compiling Network.HTTP2.H2.Stream ( Network/HTTP2/H2/Stream.hs, dist/build/Network/HTTP2/H2/Stream.o, dist/build/Network/HTTP2/H2/Stream.dyn_o )
+[33 of 49] Compiling Network.HTTP2.H2.Queue ( Network/HTTP2/H2/Queue.hs, dist/build/Network/HTTP2/H2/Queue.o, dist/build/Network/HTTP2/H2/Queue.dyn_o )
+[34 of 49] Compiling Network.HTTP2.H2.Context ( Network/HTTP2/H2/Context.hs, dist/build/Network/HTTP2/H2/Context.o, dist/build/Network/HTTP2/H2/Context.dyn_o )
+[35 of 49] Compiling Network.HTTP2.H2.Sync ( Network/HTTP2/H2/Sync.hs, dist/build/Network/HTTP2/H2/Sync.o, dist/build/Network/HTTP2/H2/Sync.dyn_o )
+[36 of 49] Compiling Network.HTTP2.H2.OutBodyIface ( Network/HTTP2/H2/OutBodyIface.hs, dist/build/Network/HTTP2/H2/OutBodyIface.o, dist/build/Network/HTTP2/H2/OutBodyIface.dyn_o )
+[37 of 49] Compiling Network.HTTP2.H2.HPACK ( Network/HTTP2/H2/HPACK.hs, dist/build/Network/HTTP2/H2/HPACK.o, dist/build/Network/HTTP2/H2/HPACK.dyn_o )
+[38 of 49] Compiling Network.HTTP2.H2.Config ( Network/HTTP2/H2/Config.hs, dist/build/Network/HTTP2/H2/Config.o, dist/build/Network/HTTP2/H2/Config.dyn_o )
+[39 of 49] Compiling Network.HTTP2.H2.Window ( Network/HTTP2/H2/Window.hs, dist/build/Network/HTTP2/H2/Window.o, dist/build/Network/HTTP2/H2/Window.dyn_o )
+[40 of 49] Compiling Network.HTTP2.H2.Sender ( Network/HTTP2/H2/Sender.hs, dist/build/Network/HTTP2/H2/Sender.o, dist/build/Network/HTTP2/H2/Sender.dyn_o )
+[41 of 49] Compiling Network.HTTP2.H2.Receiver ( Network/HTTP2/H2/Receiver.hs, dist/build/Network/HTTP2/H2/Receiver.o, dist/build/Network/HTTP2/H2/Receiver.dyn_o )
+[42 of 49] Compiling Network.HTTP2.H2 ( Network/HTTP2/H2.hs, dist/build/Network/HTTP2/H2.o, dist/build/Network/HTTP2/H2.dyn_o )
+[43 of 49] Compiling Network.HTTP2.Client.Run ( Network/HTTP2/Client/Run.hs, dist/build/Network/HTTP2/Client/Run.o, dist/build/Network/HTTP2/Client/Run.dyn_o )
+[44 of 49] Compiling Network.HTTP2.Client.Internal ( Network/HTTP2/Client/Internal.hs, dist/build/Network/HTTP2/Client/Internal.o, dist/build/Network/HTTP2/Client/Internal.dyn_o )
+[45 of 49] Compiling Network.HTTP2.Client ( Network/HTTP2/Client.hs, dist/build/Network/HTTP2/Client.o, dist/build/Network/HTTP2/Client.dyn_o )
+[46 of 49] Compiling Network.HTTP2.Server.Worker ( Network/HTTP2/Server/Worker.hs, dist/build/Network/HTTP2/Server/Worker.o, dist/build/Network/HTTP2/Server/Worker.dyn_o )
+[47 of 49] Compiling Network.HTTP2.Server.Run ( Network/HTTP2/Server/Run.hs, dist/build/Network/HTTP2/Server/Run.o, dist/build/Network/HTTP2/Server/Run.dyn_o )
+[48 of 49] Compiling Network.HTTP2.Server.Internal ( Network/HTTP2/Server/Internal.hs, dist/build/Network/HTTP2/Server/Internal.o, dist/build/Network/HTTP2/Server/Internal.dyn_o )
+[49 of 49] Compiling Network.HTTP2.Server ( Network/HTTP2/Server.hs, dist/build/Network/HTTP2/Server.o, dist/build/Network/HTTP2/Server.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/http2-5.4.14-65c4ef11/lib
+Configuring library for wai-websockets-3.0.1.2...
+Warning: [git-protocol] Cloning over git:// might lead to an arbitrary code
+execution vulnerability. Furthermore, popular forges like GitHub do not
+support it. Use https:// or ssh:// instead.
+Preprocessing library for wai-websockets-3.0.1.2...
+Building library for wai-websockets-3.0.1.2...
+[1 of 1] Compiling Network.Wai.Handler.WebSockets ( Network/Wai/Handler/WebSockets.hs, dist/build/Network/Wai/Handler/WebSockets.o, dist/build/Network/Wai/Handler/WebSockets.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/w-wbsckts-3.0.1.2-a1215a8c/lib
+Configuring library for hasql-1.10.3.7...
+Preprocessing library for hasql-1.10.3.7...
+Building library for hasql-1.10.3.7...
+[ 1 of 50] Compiling Hasql.Codecs.RequestingOid.LookingUp ( src/library/Hasql/Codecs/RequestingOid/LookingUp.hs, dist/build/Hasql/Codecs/RequestingOid/LookingUp.o, dist/build/Hasql/Codecs/RequestingOid/LookingUp.dyn_o )
+[ 2 of 50] Compiling Hasql.Platform.Prelude.Text ( src/library/Hasql/Platform/Prelude/Text.hs, dist/build/Hasql/Platform/Prelude/Text.o, dist/build/Hasql/Platform/Prelude/Text.dyn_o )
+[ 3 of 50] Compiling Hasql.Platform.Prelude ( src/library/Hasql/Platform/Prelude.hs, dist/build/Hasql/Platform/Prelude.o, dist/build/Hasql/Platform/Prelude.dyn_o )
+[ 4 of 50] Compiling Hasql.Connection.Config ( src/library/Hasql/Connection/Config.hs, dist/build/Hasql/Connection/Config.o, dist/build/Hasql/Connection/Config.dyn_o )
+[ 5 of 50] Compiling Hasql.Connection.Settings ( src/library/Hasql/Connection/Settings.hs, dist/build/Hasql/Connection/Settings.o, dist/build/Hasql/Connection/Settings.dyn_o )
+[ 6 of 50] Compiling Hasql.Codecs.Vocab.TypeInfo ( src/library/Hasql/Codecs/Vocab/TypeInfo.hs, dist/build/Hasql/Codecs/Vocab/TypeInfo.o, dist/build/Hasql/Codecs/Vocab/TypeInfo.dyn_o )
+[ 7 of 50] Compiling Hasql.Codecs.Vocab.QualifiedTypeName ( src/library/Hasql/Codecs/Vocab/QualifiedTypeName.hs, dist/build/Hasql/Codecs/Vocab/QualifiedTypeName.o, dist/build/Hasql/Codecs/Vocab/QualifiedTypeName.dyn_o )
+[ 8 of 50] Compiling Hasql.Codecs.Vocab.TypeRef ( src/library/Hasql/Codecs/Vocab/TypeRef.hs, dist/build/Hasql/Codecs/Vocab/TypeRef.o, dist/build/Hasql/Codecs/Vocab/TypeRef.dyn_o )
+[ 9 of 50] Compiling Hasql.Codecs.Vocab.ParamMeta ( src/library/Hasql/Codecs/Vocab/ParamMeta.hs, dist/build/Hasql/Codecs/Vocab/ParamMeta.o, dist/build/Hasql/Codecs/Vocab/ParamMeta.dyn_o )
+[10 of 50] Compiling Hasql.Codecs.Vocab.OidCache ( src/library/Hasql/Codecs/Vocab/OidCache.hs, dist/build/Hasql/Codecs/Vocab/OidCache.o, dist/build/Hasql/Codecs/Vocab/OidCache.dyn_o )
+[11 of 50] Compiling Hasql.Codecs.Vocab ( src/library/Hasql/Codecs/Vocab.hs, dist/build/Hasql/Codecs/Vocab.o, dist/build/Hasql/Codecs/Vocab.dyn_o )
+[12 of 50] Compiling Hasql.Codecs.RequestingOid ( src/library/Hasql/Codecs/RequestingOid.hs, dist/build/Hasql/Codecs/RequestingOid.o, dist/build/Hasql/Codecs/RequestingOid.dyn_o )
+[13 of 50] Compiling Hasql.Codecs.Encoders.Value ( src/library/Hasql/Codecs/Encoders/Value.hs, dist/build/Hasql/Codecs/Encoders/Value.o, dist/build/Hasql/Codecs/Encoders/Value.dyn_o )
+[14 of 50] Compiling Hasql.Codecs.Encoders.NullableOrNot ( src/library/Hasql/Codecs/Encoders/NullableOrNot.hs, dist/build/Hasql/Codecs/Encoders/NullableOrNot.o, dist/build/Hasql/Codecs/Encoders/NullableOrNot.dyn_o )
+[15 of 50] Compiling Hasql.Codecs.Encoders.Params ( src/library/Hasql/Codecs/Encoders/Params.hs, dist/build/Hasql/Codecs/Encoders/Params.o, dist/build/Hasql/Codecs/Encoders/Params.dyn_o )
+[16 of 50] Compiling Hasql.Codecs.Encoders.Composite ( src/library/Hasql/Codecs/Encoders/Composite.hs, dist/build/Hasql/Codecs/Encoders/Composite.o, dist/build/Hasql/Codecs/Encoders/Composite.dyn_o )
+[17 of 50] Compiling Hasql.Codecs.Encoders.Array ( src/library/Hasql/Codecs/Encoders/Array.hs, dist/build/Hasql/Codecs/Encoders/Array.o, dist/build/Hasql/Codecs/Encoders/Array.dyn_o )
+[18 of 50] Compiling Hasql.Codecs.Encoders ( src/library/Hasql/Codecs/Encoders.hs, dist/build/Hasql/Codecs/Encoders.o, dist/build/Hasql/Codecs/Encoders.dyn_o )
+[19 of 50] Compiling Hasql.Encoders   ( src/library/Hasql/Encoders.hs, dist/build/Hasql/Encoders.o, dist/build/Hasql/Encoders.dyn_o )
+[20 of 50] Compiling Hasql.Codecs.Decoders.Value ( src/library/Hasql/Codecs/Decoders/Value.hs, dist/build/Hasql/Codecs/Decoders/Value.o, dist/build/Hasql/Codecs/Decoders/Value.dyn_o )
+[21 of 50] Compiling Hasql.Codecs.Decoders.NullableOrNot ( src/library/Hasql/Codecs/Decoders/NullableOrNot.hs, dist/build/Hasql/Codecs/Decoders/NullableOrNot.o, dist/build/Hasql/Codecs/Decoders/NullableOrNot.dyn_o )
+[22 of 50] Compiling Hasql.Codecs.Decoders.Composite ( src/library/Hasql/Codecs/Decoders/Composite.hs, dist/build/Hasql/Codecs/Decoders/Composite.o, dist/build/Hasql/Codecs/Decoders/Composite.dyn_o )
+[23 of 50] Compiling Hasql.Codecs.Decoders.Array ( src/library/Hasql/Codecs/Decoders/Array.hs, dist/build/Hasql/Codecs/Decoders/Array.o, dist/build/Hasql/Codecs/Decoders/Array.dyn_o )
+[24 of 50] Compiling Hasql.Codecs.Decoders ( src/library/Hasql/Codecs/Decoders.hs, dist/build/Hasql/Codecs/Decoders.o, dist/build/Hasql/Codecs/Decoders.dyn_o )
+[25 of 50] Compiling Hasql.Pq.Ffi     ( src/library/Hasql/Pq/Ffi.hs, dist/build/Hasql/Pq/Ffi.o, dist/build/Hasql/Pq/Ffi.dyn_o )
+[26 of 50] Compiling Hasql.Pq.Mappings ( dist/build/Hasql/Pq/Mappings.hs, dist/build/Hasql/Pq/Mappings.o, dist/build/Hasql/Pq/Mappings.dyn_o )
+[27 of 50] Compiling Hasql.Pq         ( src/library/Hasql/Pq.hs, dist/build/Hasql/Pq.o, dist/build/Hasql/Pq.dyn_o )
+[28 of 50] Compiling Hasql.Engine.Structures.StatementCache ( src/library/Hasql/Engine/Structures/StatementCache.hs, dist/build/Hasql/Engine/Structures/StatementCache.o, dist/build/Hasql/Engine/Structures/StatementCache.dyn_o )
+[29 of 50] Compiling Hasql.Engine.Structures.ConnectionState ( src/library/Hasql/Engine/Structures/ConnectionState.hs, dist/build/Hasql/Engine/Structures/ConnectionState.o, dist/build/Hasql/Engine/Structures/ConnectionState.dyn_o )
+[30 of 50] Compiling Hasql.Connection.ServerVersion ( src/library/Hasql/Connection/ServerVersion.hs, dist/build/Hasql/Connection/ServerVersion.o, dist/build/Hasql/Connection/ServerVersion.dyn_o )
+[31 of 50] Compiling Hasql.Comms.Send ( src/library/Hasql/Comms/Send.hs, dist/build/Hasql/Comms/Send.o, dist/build/Hasql/Comms/Send.dyn_o )
+[32 of 50] Compiling Hasql.Comms.RowReader ( src/library/Hasql/Comms/RowReader.hs, dist/build/Hasql/Comms/RowReader.o, dist/build/Hasql/Comms/RowReader.dyn_o )
+[33 of 50] Compiling Hasql.Comms.RowDecoder ( src/library/Hasql/Comms/RowDecoder.hs, dist/build/Hasql/Comms/RowDecoder.o, dist/build/Hasql/Comms/RowDecoder.dyn_o )
+[34 of 50] Compiling Hasql.Engine.Decoders.Row ( src/library/Hasql/Engine/Decoders/Row.hs, dist/build/Hasql/Engine/Decoders/Row.o, dist/build/Hasql/Engine/Decoders/Row.dyn_o )
+[35 of 50] Compiling Hasql.Comms.ResultDecoder ( src/library/Hasql/Comms/ResultDecoder.hs, dist/build/Hasql/Comms/ResultDecoder.o, dist/build/Hasql/Comms/ResultDecoder.dyn_o )
+[36 of 50] Compiling Hasql.Engine.Decoders.Result ( src/library/Hasql/Engine/Decoders/Result.hs, dist/build/Hasql/Engine/Decoders/Result.o, dist/build/Hasql/Engine/Decoders/Result.dyn_o )
+[37 of 50] Compiling Hasql.Decoders   ( src/library/Hasql/Decoders.hs, dist/build/Hasql/Decoders.o, dist/build/Hasql/Decoders.dyn_o )
+[38 of 50] Compiling Hasql.Engine.Statement ( src/library/Hasql/Engine/Statement.hs, dist/build/Hasql/Engine/Statement.o, dist/build/Hasql/Engine/Statement.dyn_o )
+[39 of 50] Compiling Hasql.Comms.Recv ( src/library/Hasql/Comms/Recv.hs, dist/build/Hasql/Comms/Recv.o, dist/build/Hasql/Comms/Recv.dyn_o )
+[40 of 50] Compiling Hasql.Comms.Roundtrip ( src/library/Hasql/Comms/Roundtrip.hs, dist/build/Hasql/Comms/Roundtrip.o, dist/build/Hasql/Comms/Roundtrip.dyn_o )
+[41 of 50] Compiling Hasql.Engine.Errors ( src/library/Hasql/Engine/Errors.hs, dist/build/Hasql/Engine/Errors.o, dist/build/Hasql/Engine/Errors.dyn_o )
+[42 of 50] Compiling Hasql.Errors     ( src/library/Hasql/Errors.hs, dist/build/Hasql/Errors.o, dist/build/Hasql/Errors.dyn_o )
+[43 of 50] Compiling Hasql.Engine.PqProcedures.SelectTypeInfo ( src/library/Hasql/Engine/PqProcedures/SelectTypeInfo.hs, dist/build/Hasql/Engine/PqProcedures/SelectTypeInfo.o, dist/build/Hasql/Engine/PqProcedures/SelectTypeInfo.dyn_o )
+[44 of 50] Compiling Hasql.Engine.Contexts.Pipeline ( src/library/Hasql/Engine/Contexts/Pipeline.hs, dist/build/Hasql/Engine/Contexts/Pipeline.o, dist/build/Hasql/Engine/Contexts/Pipeline.dyn_o )
+[45 of 50] Compiling Hasql.Pipeline   ( src/library/Hasql/Pipeline.hs, dist/build/Hasql/Pipeline.o, dist/build/Hasql/Pipeline.dyn_o )
+[46 of 50] Compiling Hasql.Engine.Contexts.Session ( src/library/Hasql/Engine/Contexts/Session.hs, dist/build/Hasql/Engine/Contexts/Session.o, dist/build/Hasql/Engine/Contexts/Session.dyn_o )
+[47 of 50] Compiling Hasql.Comms.Session ( src/library/Hasql/Comms/Session.hs, dist/build/Hasql/Comms/Session.o, dist/build/Hasql/Comms/Session.dyn_o )
+[48 of 50] Compiling Hasql.Connection ( src/library/Hasql/Connection.hs, dist/build/Hasql/Connection.o, dist/build/Hasql/Connection.dyn_o )
+[49 of 50] Compiling Hasql.Session    ( src/library/Hasql/Session.hs, dist/build/Hasql/Session.o, dist/build/Hasql/Session.dyn_o )
+[50 of 50] Compiling Hasql.Statement  ( src/library/Hasql/Statement.hs, dist/build/Hasql/Statement.o, dist/build/Hasql/Statement.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/hsql-1.10.3.7-57003dec/lib
+Configuring library for warp-3.4.21...
+Preprocessing library for warp-3.4.21...
+Building library for warp-3.4.21...
+[ 1 of 35] Compiling Network.Wai.Handler.Warp.Counter ( Network/Wai/Handler/Warp/Counter.hs, dist/build/Network/Wai/Handler/Warp/Counter.o, dist/build/Network/Wai/Handler/Warp/Counter.dyn_o )
+[ 2 of 35] Compiling Network.Wai.Handler.Warp.Date ( Network/Wai/Handler/Warp/Date.hs, dist/build/Network/Wai/Handler/Warp/Date.o, dist/build/Network/Wai/Handler/Warp/Date.dyn_o )
+[ 3 of 35] Compiling Network.Wai.Handler.Warp.HashMap ( Network/Wai/Handler/Warp/HashMap.hs, dist/build/Network/Wai/Handler/Warp/HashMap.o, dist/build/Network/Wai/Handler/Warp/HashMap.dyn_o )
+[ 4 of 35] Compiling Network.Wai.Handler.Warp.Imports ( Network/Wai/Handler/Warp/Imports.hs, dist/build/Network/Wai/Handler/Warp/Imports.o, dist/build/Network/Wai/Handler/Warp/Imports.dyn_o )
+[ 5 of 35] Compiling Network.Wai.Handler.Warp.FileInfoCache ( Network/Wai/Handler/Warp/FileInfoCache.hs, dist/build/Network/Wai/Handler/Warp/FileInfoCache.o, dist/build/Network/Wai/Handler/Warp/FileInfoCache.dyn_o )
+[ 6 of 35] Compiling Network.Wai.Handler.Warp.MultiMap ( Network/Wai/Handler/Warp/MultiMap.hs, dist/build/Network/Wai/Handler/Warp/MultiMap.o, dist/build/Network/Wai/Handler/Warp/MultiMap.dyn_o )
+[ 7 of 35] Compiling Network.Wai.Handler.Warp.FdCache ( Network/Wai/Handler/Warp/FdCache.hs, dist/build/Network/Wai/Handler/Warp/FdCache.o, dist/build/Network/Wai/Handler/Warp/FdCache.dyn_o )
+[ 8 of 35] Compiling Network.Wai.Handler.Warp.PackInt ( Network/Wai/Handler/Warp/PackInt.hs, dist/build/Network/Wai/Handler/Warp/PackInt.o, dist/build/Network/Wai/Handler/Warp/PackInt.dyn_o )
+[ 9 of 35] Compiling Network.Wai.Handler.Warp.ReadInt ( Network/Wai/Handler/Warp/ReadInt.hs, dist/build/Network/Wai/Handler/Warp/ReadInt.o, dist/build/Network/Wai/Handler/Warp/ReadInt.dyn_o )
+[10 of 35] Compiling Network.Wai.Handler.Warp.ResponseHeader ( Network/Wai/Handler/Warp/ResponseHeader.hs, dist/build/Network/Wai/Handler/Warp/ResponseHeader.o, dist/build/Network/Wai/Handler/Warp/ResponseHeader.dyn_o )
+[11 of 35] Compiling Network.Wai.Handler.Warp.ShuttingDown ( Network/Wai/Handler/Warp/ShuttingDown.hs, dist/build/Network/Wai/Handler/Warp/ShuttingDown.o, dist/build/Network/Wai/Handler/Warp/ShuttingDown.dyn_o )
+[12 of 35] Compiling Network.Wai.Handler.Warp.Types ( Network/Wai/Handler/Warp/Types.hs, dist/build/Network/Wai/Handler/Warp/Types.o, dist/build/Network/Wai/Handler/Warp/Types.dyn_o )
+[13 of 35] Compiling Network.Wai.Handler.Warp.RequestHeader ( Network/Wai/Handler/Warp/RequestHeader.hs, dist/build/Network/Wai/Handler/Warp/RequestHeader.o, dist/build/Network/Wai/Handler/Warp/RequestHeader.dyn_o )
+[14 of 35] Compiling Network.Wai.Handler.Warp.Header ( Network/Wai/Handler/Warp/Header.hs, dist/build/Network/Wai/Handler/Warp/Header.o, dist/build/Network/Wai/Handler/Warp/Header.dyn_o )
+[15 of 35] Compiling Network.Wai.Handler.Warp.File ( Network/Wai/Handler/Warp/File.hs, dist/build/Network/Wai/Handler/Warp/File.o, dist/build/Network/Wai/Handler/Warp/File.dyn_o )
+[16 of 35] Compiling Network.Wai.Handler.Warp.HTTP2.Types ( Network/Wai/Handler/Warp/HTTP2/Types.hs, dist/build/Network/Wai/Handler/Warp/HTTP2/Types.o, dist/build/Network/Wai/Handler/Warp/HTTP2/Types.dyn_o )
+[17 of 35] Compiling Network.Wai.Handler.Warp.Conduit ( Network/Wai/Handler/Warp/Conduit.hs, dist/build/Network/Wai/Handler/Warp/Conduit.o, dist/build/Network/Wai/Handler/Warp/Conduit.dyn_o )
+[18 of 35] Compiling Network.Wai.Handler.Warp.Buffer ( Network/Wai/Handler/Warp/Buffer.hs, dist/build/Network/Wai/Handler/Warp/Buffer.o, dist/build/Network/Wai/Handler/Warp/Buffer.dyn_o )
+[19 of 35] Compiling Network.Wai.Handler.Warp.SendFile ( Network/Wai/Handler/Warp/SendFile.hs, dist/build/Network/Wai/Handler/Warp/SendFile.o, dist/build/Network/Wai/Handler/Warp/SendFile.dyn_o )
+[20 of 35] Compiling Network.Wai.Handler.Warp.HTTP2.File ( Network/Wai/Handler/Warp/HTTP2/File.hs, dist/build/Network/Wai/Handler/Warp/HTTP2/File.o, dist/build/Network/Wai/Handler/Warp/HTTP2/File.dyn_o )
+[21 of 35] Compiling Network.Wai.Handler.Warp.IO ( Network/Wai/Handler/Warp/IO.hs, dist/build/Network/Wai/Handler/Warp/IO.o, dist/build/Network/Wai/Handler/Warp/IO.dyn_o )
+[22 of 35] Compiling Network.Wai.Handler.Warp.Windows ( Network/Wai/Handler/Warp/Windows.hs, dist/build/Network/Wai/Handler/Warp/Windows.o, dist/build/Network/Wai/Handler/Warp/Windows.dyn_o )
+[23 of 35] Compiling Paths_warp       ( dist/build/autogen/Paths_warp.hs, dist/build/Paths_warp.o, dist/build/Paths_warp.dyn_o )
+[24 of 35] Compiling Network.Wai.Handler.Warp.Settings ( Network/Wai/Handler/Warp/Settings.hs, dist/build/Network/Wai/Handler/Warp/Settings.o, dist/build/Network/Wai/Handler/Warp/Settings.dyn_o )
+[25 of 35] Compiling Network.Wai.Handler.Warp.Response ( Network/Wai/Handler/Warp/Response.hs, dist/build/Network/Wai/Handler/Warp/Response.o, dist/build/Network/Wai/Handler/Warp/Response.dyn_o )
+[26 of 35] Compiling Network.Wai.Handler.Warp.Request ( Network/Wai/Handler/Warp/Request.hs, dist/build/Network/Wai/Handler/Warp/Request.o, dist/build/Network/Wai/Handler/Warp/Request.dyn_o )
+[27 of 35] Compiling Network.Wai.Handler.Warp.HTTP2.Request ( Network/Wai/Handler/Warp/HTTP2/Request.hs, dist/build/Network/Wai/Handler/Warp/HTTP2/Request.o, dist/build/Network/Wai/Handler/Warp/HTTP2/Request.dyn_o )
+[28 of 35] Compiling Network.Wai.Handler.Warp.HTTP2.Response ( Network/Wai/Handler/Warp/HTTP2/Response.hs, dist/build/Network/Wai/Handler/Warp/HTTP2/Response.o, dist/build/Network/Wai/Handler/Warp/HTTP2/Response.dyn_o )
+[29 of 35] Compiling Network.Wai.Handler.Warp.HTTP2.PushPromise ( Network/Wai/Handler/Warp/HTTP2/PushPromise.hs, dist/build/Network/Wai/Handler/Warp/HTTP2/PushPromise.o, dist/build/Network/Wai/Handler/Warp/HTTP2/PushPromise.dyn_o )
+[30 of 35] Compiling Network.Wai.Handler.Warp.HTTP2 ( Network/Wai/Handler/Warp/HTTP2.hs, dist/build/Network/Wai/Handler/Warp/HTTP2.o, dist/build/Network/Wai/Handler/Warp/HTTP2.dyn_o )
+[31 of 35] Compiling Network.Wai.Handler.Warp.HTTP1 ( Network/Wai/Handler/Warp/HTTP1.hs, dist/build/Network/Wai/Handler/Warp/HTTP1.o, dist/build/Network/Wai/Handler/Warp/HTTP1.dyn_o )
+[32 of 35] Compiling Network.Wai.Handler.Warp.Run ( Network/Wai/Handler/Warp/Run.hs, dist/build/Network/Wai/Handler/Warp/Run.o, dist/build/Network/Wai/Handler/Warp/Run.dyn_o )
+[33 of 35] Compiling Network.Wai.Handler.Warp.WithApplication ( Network/Wai/Handler/Warp/WithApplication.hs, dist/build/Network/Wai/Handler/Warp/WithApplication.o, dist/build/Network/Wai/Handler/Warp/WithApplication.dyn_o )
+[34 of 35] Compiling Network.Wai.Handler.Warp.Internal ( Network/Wai/Handler/Warp/Internal.hs, dist/build/Network/Wai/Handler/Warp/Internal.o, dist/build/Network/Wai/Handler/Warp/Internal.dyn_o )
+[35 of 35] Compiling Network.Wai.Handler.Warp ( Network/Wai/Handler/Warp.hs, dist/build/Network/Wai/Handler/Warp.o, dist/build/Network/Wai/Handler/Warp.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/wrp-3.4.21-a2d63703/lib
+Configuring library for ephemeral-pg-0.3.1.0...
+Preprocessing library for ephemeral-pg-0.3.1.0...
+Building library for ephemeral-pg-0.3.1.0...
+[ 1 of 18] Compiling EphemeralPg.Config ( src/EphemeralPg/Config.hs, dist/build/EphemeralPg/Config.o, dist/build/EphemeralPg/Config.dyn_o )
+[ 2 of 18] Compiling EphemeralPg.Database ( src/EphemeralPg/Database.hs, dist/build/EphemeralPg/Database.o, dist/build/EphemeralPg/Database.dyn_o )
+[ 3 of 18] Compiling EphemeralPg.Error ( src/EphemeralPg/Error.hs, dist/build/EphemeralPg/Error.o, dist/build/EphemeralPg/Error.dyn_o )
+[ 4 of 18] Compiling EphemeralPg.Internal.CopyOnWrite ( src/EphemeralPg/Internal/CopyOnWrite.hs, dist/build/EphemeralPg/Internal/CopyOnWrite.o, dist/build/EphemeralPg/Internal/CopyOnWrite.dyn_o )
+[ 5 of 18] Compiling EphemeralPg.Internal.Cache ( src/EphemeralPg/Internal/Cache.hs, dist/build/EphemeralPg/Internal/Cache.o, dist/build/EphemeralPg/Internal/Cache.dyn_o )
+[ 6 of 18] Compiling EphemeralPg.Internal.Except ( src/EphemeralPg/Internal/Except.hs, dist/build/EphemeralPg/Internal/Except.o, dist/build/EphemeralPg/Internal/Except.dyn_o )
+[ 7 of 18] Compiling EphemeralPg.Internal.Directory ( src/EphemeralPg/Internal/Directory.hs, dist/build/EphemeralPg/Internal/Directory.o, dist/build/EphemeralPg/Internal/Directory.dyn_o )
+[ 8 of 18] Compiling EphemeralPg.Internal.Instance ( src/EphemeralPg/Internal/Instance.hs, dist/build/EphemeralPg/Internal/Instance.o, dist/build/EphemeralPg/Internal/Instance.dyn_o )
+[ 9 of 18] Compiling EphemeralPg.Internal.Port ( src/EphemeralPg/Internal/Port.hs, dist/build/EphemeralPg/Internal/Port.o, dist/build/EphemeralPg/Internal/Port.dyn_o )
+[10 of 18] Compiling EphemeralPg.Internal.ProcessIdentity ( src/EphemeralPg/Internal/ProcessIdentity.hs, dist/build/EphemeralPg/Internal/ProcessIdentity.o, dist/build/EphemeralPg/Internal/ProcessIdentity.dyn_o )
+[11 of 18] Compiling EphemeralPg.Internal.Sweep ( src/EphemeralPg/Internal/Sweep.hs, dist/build/EphemeralPg/Internal/Sweep.o, dist/build/EphemeralPg/Internal/Sweep.dyn_o )
+[12 of 18] Compiling EphemeralPg.Process ( src/EphemeralPg/Process.hs, dist/build/EphemeralPg/Process.o, dist/build/EphemeralPg/Process.dyn_o )
+[13 of 18] Compiling EphemeralPg.Dump ( src/EphemeralPg/Dump.hs, dist/build/EphemeralPg/Dump.o, dist/build/EphemeralPg/Dump.dyn_o )
+[14 of 18] Compiling EphemeralPg.Process.CreateDb ( src/EphemeralPg/Process/CreateDb.hs, dist/build/EphemeralPg/Process/CreateDb.o, dist/build/EphemeralPg/Process/CreateDb.dyn_o )
+[15 of 18] Compiling EphemeralPg.Process.InitDb ( src/EphemeralPg/Process/InitDb.hs, dist/build/EphemeralPg/Process/InitDb.o, dist/build/EphemeralPg/Process/InitDb.dyn_o )
+[16 of 18] Compiling EphemeralPg.Process.Postgres ( src/EphemeralPg/Process/Postgres.hs, dist/build/EphemeralPg/Process/Postgres.o, dist/build/EphemeralPg/Process/Postgres.dyn_o )
+[17 of 18] Compiling EphemeralPg      ( src/EphemeralPg.hs, dist/build/EphemeralPg.o, dist/build/EphemeralPg.dyn_o )
+[18 of 18] Compiling EphemeralPg.Snapshot ( src/EphemeralPg/Snapshot.hs, dist/build/EphemeralPg/Snapshot.o, dist/build/EphemeralPg/Snapshot.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/phmrl-pg-0.3.1.0-9bdcd00e/lib
+Configuring library for hasql-transaction-1.2.3.1...
+Preprocessing library for hasql-transaction-1.2.3.1...
+Building library for hasql-transaction-1.2.3.1...
+[1 of 8] Compiling Hasql.Transaction.Private.Prelude ( src/library/Hasql/Transaction/Private/Prelude.hs, dist/build/Hasql/Transaction/Private/Prelude.o, dist/build/Hasql/Transaction/Private/Prelude.dyn_o )
+[2 of 8] Compiling Hasql.Transaction.Config ( src/library/Hasql/Transaction/Config.hs, dist/build/Hasql/Transaction/Config.o, dist/build/Hasql/Transaction/Config.dyn_o )
+[3 of 8] Compiling Hasql.Transaction.Private.SQL ( src/library/Hasql/Transaction/Private/SQL.hs, dist/build/Hasql/Transaction/Private/SQL.o, dist/build/Hasql/Transaction/Private/SQL.dyn_o )
+[4 of 8] Compiling Hasql.Transaction.Private.Statements ( src/library/Hasql/Transaction/Private/Statements.hs, dist/build/Hasql/Transaction/Private/Statements.o, dist/build/Hasql/Transaction/Private/Statements.dyn_o )
+[5 of 8] Compiling Hasql.Transaction.Private.Sessions ( src/library/Hasql/Transaction/Private/Sessions.hs, dist/build/Hasql/Transaction/Private/Sessions.o, dist/build/Hasql/Transaction/Private/Sessions.dyn_o )
+[6 of 8] Compiling Hasql.Transaction.Private.Transaction ( src/library/Hasql/Transaction/Private/Transaction.hs, dist/build/Hasql/Transaction/Private/Transaction.o, dist/build/Hasql/Transaction/Private/Transaction.dyn_o )
+[7 of 8] Compiling Hasql.Transaction ( src/library/Hasql/Transaction.hs, dist/build/Hasql/Transaction.o, dist/build/Hasql/Transaction.dyn_o )
+[8 of 8] Compiling Hasql.Transaction.Sessions ( src/library/Hasql/Transaction/Sessions.hs, dist/build/Hasql/Transaction/Sessions.o, dist/build/Hasql/Transaction/Sessions.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/hsql-trnsctn-1.2.3.1-c82fdaaf/lib
+Configuring library for hasql-pool-1.4.2.3...
+Preprocessing library for hasql-pool-1.4.2.3...
+Building library for hasql-pool-1.4.2.3...
+[1 of 8] Compiling Hasql.Pool.Prelude ( src/library/Hasql/Pool/Prelude.hs, dist/build/Hasql/Pool/Prelude.o, dist/build/Hasql/Pool/Prelude.dyn_o )
+[2 of 8] Compiling Hasql.Pool.Observation ( src/library/Hasql/Pool/Observation.hs, dist/build/Hasql/Pool/Observation.o, dist/build/Hasql/Pool/Observation.dyn_o )
+[3 of 8] Compiling Hasql.Pool.Config.Defaults ( src/library/Hasql/Pool/Config/Defaults.hs, dist/build/Hasql/Pool/Config/Defaults.o, dist/build/Hasql/Pool/Config/Defaults.dyn_o )
+[4 of 8] Compiling Hasql.Pool.Config.Config ( src/library/Hasql/Pool/Config/Config.hs, dist/build/Hasql/Pool/Config/Config.o, dist/build/Hasql/Pool/Config/Config.dyn_o )
+[5 of 8] Compiling Hasql.Pool.Config.Setting ( src/library/Hasql/Pool/Config/Setting.hs, dist/build/Hasql/Pool/Config/Setting.o, dist/build/Hasql/Pool/Config/Setting.dyn_o )
+[6 of 8] Compiling Hasql.Pool.Config ( src/library/Hasql/Pool/Config.hs, dist/build/Hasql/Pool/Config.o, dist/build/Hasql/Pool/Config.dyn_o )
+[7 of 8] Compiling Hasql.Pool.SessionErrorDestructors ( src/library/Hasql/Pool/SessionErrorDestructors.hs, dist/build/Hasql/Pool/SessionErrorDestructors.o, dist/build/Hasql/Pool/SessionErrorDestructors.dyn_o )
+[8 of 8] Compiling Hasql.Pool       ( src/library/Hasql/Pool.hs, dist/build/Hasql/Pool.o, dist/build/Hasql/Pool.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/hsql-pl-1.4.2.3-65ffa42c/lib
+Configuring library for pgmq-hasql-0.7.0.0...
+Preprocessing library for pgmq-hasql-0.7.0.0...
+Building library for pgmq-hasql-0.7.0.0...
+[ 1 of 13] Compiling Pgmq.Hasql.Prelude
+[ 2 of 13] Compiling Pgmq.Hasql.Quasi
+[ 3 of 13] Compiling Pgmq.Hasql.Statements.Types
+[ 4 of 13] Compiling Pgmq.Hasql.Encoders
+[ 5 of 13] Compiling Pgmq.Hasql.Decoders
+[ 6 of 13] Compiling Pgmq.Hasql.Statements.TopicManagement
+[ 7 of 13] Compiling Pgmq.Hasql.Statements.QueueObservability
+[ 8 of 13] Compiling Pgmq.Hasql.Statements.QueueManagement
+[ 9 of 13] Compiling Pgmq.Hasql.Statements.Message
+[10 of 13] Compiling Pgmq.Hasql.Statements.Inspection
+[11 of 13] Compiling Pgmq.Hasql.Statements
+[12 of 13] Compiling Pgmq.Hasql.Sessions
+[13 of 13] Compiling Pgmq
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/pgmq-hsql-0.7.0.0-c9b15c7e/lib
+Configuring library for pg-migrate-1.2.0.0...
+Preprocessing library for pg-migrate-1.2.0.0...
+Building library for pg-migrate-1.2.0.0...
+[ 1 of 23] Compiling Paths_pg_migrate ( dist/build/autogen/Paths_pg_migrate.hs, dist/build/Paths_pg_migrate.o, dist/build/Paths_pg_migrate.dyn_o )
+[ 2 of 23] Compiling PgMigrate.Prelude ( src/PgMigrate/Prelude.hs, dist/build/PgMigrate/Prelude.o, dist/build/PgMigrate/Prelude.dyn_o )
+[ 3 of 23] Compiling Database.PostgreSQL.Migrate.Types ( src/Database/PostgreSQL/Migrate/Types.hs, dist/build/Database/PostgreSQL/Migrate/Types.o, dist/build/Database/PostgreSQL/Migrate/Types.dyn_o )
+[ 4 of 23] Compiling Database.PostgreSQL.Migrate.Sql.Scanner ( src/Database/PostgreSQL/Migrate/Sql/Scanner.hs, dist/build/Database/PostgreSQL/Migrate/Sql/Scanner.o, dist/build/Database/PostgreSQL/Migrate/Sql/Scanner.dyn_o )
+[ 5 of 23] Compiling Database.PostgreSQL.Migrate.Sql ( src/Database/PostgreSQL/Migrate/Sql.hs, dist/build/Database/PostgreSQL/Migrate/Sql.o, dist/build/Database/PostgreSQL/Migrate/Sql.dyn_o )
+[ 6 of 23] Compiling Database.PostgreSQL.Migrate.Plan ( src/Database/PostgreSQL/Migrate/Plan.hs, dist/build/Database/PostgreSQL/Migrate/Plan.o, dist/build/Database/PostgreSQL/Migrate/Plan.dyn_o )
+[ 7 of 23] Compiling Database.PostgreSQL.Migrate.Definition ( src/Database/PostgreSQL/Migrate/Definition.hs, dist/build/Database/PostgreSQL/Migrate/Definition.o, dist/build/Database/PostgreSQL/Migrate/Definition.dyn_o )
+[ 8 of 23] Compiling Database.PostgreSQL.Migrate.Ledger.Types ( src/Database/PostgreSQL/Migrate/Ledger/Types.hs, dist/build/Database/PostgreSQL/Migrate/Ledger/Types.o, dist/build/Database/PostgreSQL/Migrate/Ledger/Types.dyn_o )
+[ 9 of 23] Compiling Database.PostgreSQL.Migrate.Runner.Types ( src/Database/PostgreSQL/Migrate/Runner/Types.hs, dist/build/Database/PostgreSQL/Migrate/Runner/Types.o, dist/build/Database/PostgreSQL/Migrate/Runner/Types.dyn_o )
+[10 of 23] Compiling Database.PostgreSQL.Migrate.Runner.Lock ( src/Database/PostgreSQL/Migrate/Runner/Lock.hs, dist/build/Database/PostgreSQL/Migrate/Runner/Lock.o, dist/build/Database/PostgreSQL/Migrate/Runner/Lock.dyn_o )
+[11 of 23] Compiling Database.PostgreSQL.Migrate.Runner.Connection ( src/Database/PostgreSQL/Migrate/Runner/Connection.hs, dist/build/Database/PostgreSQL/Migrate/Runner/Connection.o, dist/build/Database/PostgreSQL/Migrate/Runner/Connection.dyn_o )
+[12 of 23] Compiling Database.PostgreSQL.Migrate.History.Types ( src/Database/PostgreSQL/Migrate/History/Types.hs, dist/build/Database/PostgreSQL/Migrate/History/Types.o, dist/build/Database/PostgreSQL/Migrate/History/Types.dyn_o )
+[13 of 23] Compiling Database.PostgreSQL.Migrate.History.Validation ( src/Database/PostgreSQL/Migrate/History/Validation.hs, dist/build/Database/PostgreSQL/Migrate/History/Validation.o, dist/build/Database/PostgreSQL/Migrate/History/Validation.dyn_o )
+[14 of 23] Compiling Database.PostgreSQL.Migrate.Repair.Types ( src/Database/PostgreSQL/Migrate/Repair/Types.hs, dist/build/Database/PostgreSQL/Migrate/Repair/Types.o, dist/build/Database/PostgreSQL/Migrate/Repair/Types.dyn_o )
+[15 of 23] Compiling Database.PostgreSQL.Migrate.Ledger.Sql ( src/Database/PostgreSQL/Migrate/Ledger/Sql.hs, dist/build/Database/PostgreSQL/Migrate/Ledger/Sql.o, dist/build/Database/PostgreSQL/Migrate/Ledger/Sql.dyn_o )
+[16 of 23] Compiling Database.PostgreSQL.Migrate.Ledger.Migrations ( src/Database/PostgreSQL/Migrate/Ledger/Migrations.hs, dist/build/Database/PostgreSQL/Migrate/Ledger/Migrations.o, dist/build/Database/PostgreSQL/Migrate/Ledger/Migrations.dyn_o )
+[17 of 23] Compiling Database.PostgreSQL.Migrate.Ledger ( src/Database/PostgreSQL/Migrate/Ledger.hs, dist/build/Database/PostgreSQL/Migrate/Ledger.o, dist/build/Database/PostgreSQL/Migrate/Ledger.dyn_o )
+[18 of 23] Compiling Database.PostgreSQL.Migrate.Runner ( src/Database/PostgreSQL/Migrate/Runner.hs, dist/build/Database/PostgreSQL/Migrate/Runner.o, dist/build/Database/PostgreSQL/Migrate/Runner.dyn_o )
+[19 of 23] Compiling Database.PostgreSQL.Migrate.Repair ( src/Database/PostgreSQL/Migrate/Repair.hs, dist/build/Database/PostgreSQL/Migrate/Repair.o, dist/build/Database/PostgreSQL/Migrate/Repair.dyn_o )
+[20 of 23] Compiling Database.PostgreSQL.Migrate.Internal ( src/Database/PostgreSQL/Migrate/Internal.hs, dist/build/Database/PostgreSQL/Migrate/Internal.o, dist/build/Database/PostgreSQL/Migrate/Internal.dyn_o )
+[21 of 23] Compiling Database.PostgreSQL.Migrate.Inspection ( src/Database/PostgreSQL/Migrate/Inspection.hs, dist/build/Database/PostgreSQL/Migrate/Inspection.o, dist/build/Database/PostgreSQL/Migrate/Inspection.dyn_o )
+[22 of 23] Compiling Database.PostgreSQL.Migrate.History ( src/Database/PostgreSQL/Migrate/History.hs, dist/build/Database/PostgreSQL/Migrate/History.o, dist/build/Database/PostgreSQL/Migrate/History.dyn_o )
+[23 of 23] Compiling Database.PostgreSQL.Migrate ( src/Database/PostgreSQL/Migrate.hs, dist/build/Database/PostgreSQL/Migrate.o, dist/build/Database/PostgreSQL/Migrate.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/pg-mgrt-1.2.0.0-b6280106/lib
+Configuring library for hasql-notifications-0.2.5.0...
+Preprocessing library for hasql-notifications-0.2.5.0...
+Building library for hasql-notifications-0.2.5.0...
+[1 of 1] Compiling Hasql.Notifications ( src/Hasql/Notifications.hs, dist/build/Hasql/Notifications.o, dist/build/Hasql/Notifications.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/hsql-ntfctns-0.2.5.0-f7c7cf6c/lib
+Configuring library for pgmq-effectful-0.7.0.0...
+Preprocessing library for pgmq-effectful-0.7.0.0...
+Building library for pgmq-effectful-0.7.0.0...
+[1 of 6] Compiling Pgmq.Effectful.Effect
+[2 of 6] Compiling Pgmq.Effectful.Interpreter
+[3 of 6] Compiling Pgmq.Effectful.Telemetry
+[4 of 6] Compiling Pgmq.Effectful.Interpreter.Traced
+[5 of 6] Compiling Pgmq.Effectful.Traced
+[6 of 6] Compiling Pgmq.Effectful
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/pgmq-ffctfl-0.7.0.0-7f623074/lib
+Configuring library for pg-migrate-embed-1.2.0.0...
+Preprocessing library for pg-migrate-embed-1.2.0.0...
+Building library for pg-migrate-embed-1.2.0.0...
+[1 of 5] Compiling Database.PostgreSQL.Migrate.Embed.Manifest ( src/Database/PostgreSQL/Migrate/Embed/Manifest.hs, dist/build/Database/PostgreSQL/Migrate/Embed/Manifest.o, dist/build/Database/PostgreSQL/Migrate/Embed/Manifest.dyn_o )
+[2 of 5] Compiling Database.PostgreSQL.Migrate.Embed.Authoring ( src/Database/PostgreSQL/Migrate/Embed/Authoring.hs, dist/build/Database/PostgreSQL/Migrate/Embed/Authoring.o, dist/build/Database/PostgreSQL/Migrate/Embed/Authoring.dyn_o )
+[3 of 5] Compiling Database.PostgreSQL.Migrate.Embed.Internal ( src/Database/PostgreSQL/Migrate/Embed/Internal.hs, dist/build/Database/PostgreSQL/Migrate/Embed/Internal.o, dist/build/Database/PostgreSQL/Migrate/Embed/Internal.dyn_o )
+[4 of 5] Compiling Database.PostgreSQL.Migrate.Embed ( src/Database/PostgreSQL/Migrate/Embed.hs, dist/build/Database/PostgreSQL/Migrate/Embed.o, dist/build/Database/PostgreSQL/Migrate/Embed.dyn_o )
+[5 of 5] Compiling Database.PostgreSQL.Migrate.Embed.RecompilePlugin ( src/Database/PostgreSQL/Migrate/Embed/RecompilePlugin.hs, dist/build/Database/PostgreSQL/Migrate/Embed/RecompilePlugin.o, dist/build/Database/PostgreSQL/Migrate/Embed/RecompilePlugin.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/pg-mgrt-mbd-1.2.0.0-161796ad/lib
+Configuring library for kiroku-store-0.13.0.2...
+Preprocessing library for kiroku-store-0.13.0.2...
+Building library for kiroku-store-0.13.0.2...
+[ 1 of 35] Compiling Kiroku.Store.Types ( src/Kiroku/Store/Types.hs, dist/build/Kiroku/Store/Types.o, dist/build/Kiroku/Store/Types.dyn_o )
+[ 2 of 35] Compiling Kiroku.Store.Settings ( src/Kiroku/Store/Settings.hs, dist/build/Kiroku/Store/Settings.o, dist/build/Kiroku/Store/Settings.dyn_o )
+[ 3 of 35] Compiling Kiroku.Store.Subscription.Fsm ( src/Kiroku/Store/Subscription/Fsm.hs, dist/build/Kiroku/Store/Subscription/Fsm.o, dist/build/Kiroku/Store/Subscription/Fsm.dyn_o )
+[ 4 of 35] Compiling Kiroku.Store.Subscription.Types ( src/Kiroku/Store/Subscription/Types.hs, dist/build/Kiroku/Store/Subscription/Types.o, dist/build/Kiroku/Store/Subscription/Types.dyn_o )
+[ 5 of 35] Compiling Kiroku.Store.Subscription.DeadLetter.SQL ( src/Kiroku/Store/Subscription/DeadLetter/SQL.hs, dist/build/Kiroku/Store/Subscription/DeadLetter/SQL.o, dist/build/Kiroku/Store/Subscription/DeadLetter/SQL.dyn_o )
+[ 6 of 35] Compiling Kiroku.Store.Subscription.CheckpointInventory.SQL ( src/Kiroku/Store/Subscription/CheckpointInventory/SQL.hs, dist/build/Kiroku/Store/Subscription/CheckpointInventory/SQL.o, dist/build/Kiroku/Store/Subscription/CheckpointInventory/SQL.dyn_o )
+[ 7 of 35] Compiling Kiroku.Store.SQL ( src/Kiroku/Store/SQL.hs, dist/build/Kiroku/Store/SQL.o, dist/build/Kiroku/Store/SQL.dyn_o )
+[ 8 of 35] Compiling Kiroku.Store.Subscription.Checkpoint.SQL ( src/Kiroku/Store/Subscription/Checkpoint/SQL.hs, dist/build/Kiroku/Store/Subscription/Checkpoint/SQL.o, dist/build/Kiroku/Store/Subscription/Checkpoint/SQL.dyn_o )
+[ 9 of 35] Compiling Kiroku.Store.Subscription.Checkpoint ( src/Kiroku/Store/Subscription/Checkpoint.hs, dist/build/Kiroku/Store/Subscription/Checkpoint.o, dist/build/Kiroku/Store/Subscription/Checkpoint.dyn_o )
+[10 of 35] Compiling Kiroku.Store.HistoryRetention.Types ( src/Kiroku/Store/HistoryRetention/Types.hs, dist/build/Kiroku/Store/HistoryRetention/Types.o, dist/build/Kiroku/Store/HistoryRetention/Types.dyn_o )
+[11 of 35] Compiling Kiroku.Store.HistoryRetention.SQL ( src/Kiroku/Store/HistoryRetention/SQL.hs, dist/build/Kiroku/Store/HistoryRetention/SQL.o, dist/build/Kiroku/Store/HistoryRetention/SQL.dyn_o )
+[12 of 35] Compiling Kiroku.Store.HistoryRetention.Internal ( src/Kiroku/Store/HistoryRetention/Internal.hs, dist/build/Kiroku/Store/HistoryRetention/Internal.o, dist/build/Kiroku/Store/HistoryRetention/Internal.dyn_o )
+[13 of 35] Compiling Kiroku.Store.Compaction.Types ( src/Kiroku/Store/Compaction/Types.hs, dist/build/Kiroku/Store/Compaction/Types.o, dist/build/Kiroku/Store/Compaction/Types.dyn_o )
+[14 of 35] Compiling Kiroku.Store.Observability ( src/Kiroku/Store/Observability.hs, dist/build/Kiroku/Store/Observability.o, dist/build/Kiroku/Store/Observability.dyn_o )
+[15 of 35] Compiling Kiroku.Store.Subscription.EventPublisher ( src/Kiroku/Store/Subscription/EventPublisher.hs, dist/build/Kiroku/Store/Subscription/EventPublisher.o, dist/build/Kiroku/Store/Subscription/EventPublisher.dyn_o )
+[16 of 35] Compiling Kiroku.Store.Subscription.Worker ( src/Kiroku/Store/Subscription/Worker.hs, dist/build/Kiroku/Store/Subscription/Worker.o, dist/build/Kiroku/Store/Subscription/Worker.dyn_o )
+[17 of 35] Compiling Kiroku.Store.Notification ( src/Kiroku/Store/Notification.hs, dist/build/Kiroku/Store/Notification.o, dist/build/Kiroku/Store/Notification.dyn_o )
+[18 of 35] Compiling Kiroku.Store.Connection ( src/Kiroku/Store/Connection.hs, dist/build/Kiroku/Store/Connection.o, dist/build/Kiroku/Store/Connection.dyn_o )
+[19 of 35] Compiling Kiroku.Store.Effect.Resource ( src/Kiroku/Store/Effect/Resource.hs, dist/build/Kiroku/Store/Effect/Resource.o, dist/build/Kiroku/Store/Effect/Resource.dyn_o )
+[20 of 35] Compiling Kiroku.Store.Error ( src/Kiroku/Store/Error.hs, dist/build/Kiroku/Store/Error.o, dist/build/Kiroku/Store/Error.dyn_o )
+[21 of 35] Compiling Kiroku.Store.Compaction.SQL ( src/Kiroku/Store/Compaction/SQL.hs, dist/build/Kiroku/Store/Compaction/SQL.o, dist/build/Kiroku/Store/Compaction/SQL.dyn_o )
+[22 of 35] Compiling Kiroku.Store.Compaction.Internal ( src/Kiroku/Store/Compaction/Internal.hs, dist/build/Kiroku/Store/Compaction/Internal.o, dist/build/Kiroku/Store/Compaction/Internal.dyn_o )
+[23 of 35] Compiling Kiroku.Store.Effect ( src/Kiroku/Store/Effect.hs, dist/build/Kiroku/Store/Effect.o, dist/build/Kiroku/Store/Effect.dyn_o )
+[24 of 35] Compiling Kiroku.Store.Transaction ( src/Kiroku/Store/Transaction.hs, dist/build/Kiroku/Store/Transaction.o, dist/build/Kiroku/Store/Transaction.dyn_o )
+[25 of 35] Compiling Kiroku.Store.Subscription ( src/Kiroku/Store/Subscription.hs, dist/build/Kiroku/Store/Subscription.o, dist/build/Kiroku/Store/Subscription.dyn_o )
+src/Kiroku/Store/Subscription.hs:277:51: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘member’ shadows the existing binding
+      imported from ‘Kiroku.Store.Subscription.Types’ at src/Kiroku/Store/Subscription.hs:39:1-38
+      (and originally defined
+         at src/Kiroku/Store/Subscription/Types.hs:595:1-6)
+    |
+277 | initializeSubscriptionCheckpoint subscriptionName member policy =
+    |                                                   ^^^^^^
+
+[26 of 35] Compiling Kiroku.Store.Subscription.Stream ( src/Kiroku/Store/Subscription/Stream.hs, dist/build/Kiroku/Store/Subscription/Stream.o, dist/build/Kiroku/Store/Subscription/Stream.dyn_o )
+[27 of 35] Compiling Kiroku.Store.Subscription.Effect ( src/Kiroku/Store/Subscription/Effect.hs, dist/build/Kiroku/Store/Subscription/Effect.o, dist/build/Kiroku/Store/Subscription/Effect.dyn_o )
+[28 of 35] Compiling Kiroku.Store.Read ( src/Kiroku/Store/Read.hs, dist/build/Kiroku/Store/Read.o, dist/build/Kiroku/Store/Read.dyn_o )
+[29 of 35] Compiling Kiroku.Store.Link ( src/Kiroku/Store/Link.hs, dist/build/Kiroku/Store/Link.o, dist/build/Kiroku/Store/Link.dyn_o )
+[30 of 35] Compiling Kiroku.Store.Lifecycle ( src/Kiroku/Store/Lifecycle.hs, dist/build/Kiroku/Store/Lifecycle.o, dist/build/Kiroku/Store/Lifecycle.dyn_o )
+[31 of 35] Compiling Kiroku.Store.HistoryRetention ( src/Kiroku/Store/HistoryRetention.hs, dist/build/Kiroku/Store/HistoryRetention.o, dist/build/Kiroku/Store/HistoryRetention.dyn_o )
+[32 of 35] Compiling Kiroku.Store.Compaction ( src/Kiroku/Store/Compaction.hs, dist/build/Kiroku/Store/Compaction.o, dist/build/Kiroku/Store/Compaction.dyn_o )
+[33 of 35] Compiling Kiroku.Store.Causation ( src/Kiroku/Store/Causation.hs, dist/build/Kiroku/Store/Causation.o, dist/build/Kiroku/Store/Causation.dyn_o )
+[34 of 35] Compiling Kiroku.Store.Append ( src/Kiroku/Store/Append.hs, dist/build/Kiroku/Store/Append.o, dist/build/Kiroku/Store/Append.dyn_o )
+[35 of 35] Compiling Kiroku.Store     ( src/Kiroku/Store.hs, dist/build/Kiroku/Store.o, dist/build/Kiroku/Store.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/krk-str-0.13.0.2-197095c1/lib
+Configuring library for shibuya-pgmq-adapter-0.19.0.0...
+Preprocessing library for shibuya-pgmq-adapter-0.19.0.0...
+Building library for shibuya-pgmq-adapter-0.19.0.0...
+[1 of 6] Compiling Shibuya.Adapter.Pgmq.Config ( src/Shibuya/Adapter/Pgmq/Config.hs, dist/build/Shibuya/Adapter/Pgmq/Config.o, dist/build/Shibuya/Adapter/Pgmq/Config.dyn_o )
+[2 of 6] Compiling Shibuya.Adapter.Pgmq.Convert ( src/Shibuya/Adapter/Pgmq/Convert.hs, dist/build/Shibuya/Adapter/Pgmq/Convert.o, dist/build/Shibuya/Adapter/Pgmq/Convert.dyn_o )
+[3 of 6] Compiling Shibuya.Adapter.Pgmq.DeadLetter.Internal ( src/Shibuya/Adapter/Pgmq/DeadLetter/Internal.hs, dist/build/Shibuya/Adapter/Pgmq/DeadLetter/Internal.o, dist/build/Shibuya/Adapter/Pgmq/DeadLetter/Internal.dyn_o )
+[4 of 6] Compiling Shibuya.Adapter.Pgmq.DeadLetter ( src/Shibuya/Adapter/Pgmq/DeadLetter.hs, dist/build/Shibuya/Adapter/Pgmq/DeadLetter.o, dist/build/Shibuya/Adapter/Pgmq/DeadLetter.dyn_o )
+[5 of 6] Compiling Shibuya.Adapter.Pgmq.Internal ( src/Shibuya/Adapter/Pgmq/Internal.hs, dist/build/Shibuya/Adapter/Pgmq/Internal.o, dist/build/Shibuya/Adapter/Pgmq/Internal.dyn_o )
+[6 of 6] Compiling Shibuya.Adapter.Pgmq ( src/Shibuya/Adapter/Pgmq.hs, dist/build/Shibuya/Adapter/Pgmq.o, dist/build/Shibuya/Adapter/Pgmq.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/shby-pgmq-dptr-0.19.0.0-f1439f3a/lib
+Configuring library for pgmq-config-0.7.0.0...
+Preprocessing library for pgmq-config-0.7.0.0...
+Building library for pgmq-config-0.7.0.0...
+[1 of 4] Compiling Pgmq.Config.Types
+[2 of 4] Compiling Pgmq.Config.Reconcile
+[3 of 4] Compiling Pgmq.Config.Effectful
+[4 of 4] Compiling Pgmq.Config
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/pgmq-cnfg-0.7.0.0-a0f2f872/lib
+Configuring library for pg-migrate-cli-1.2.0.0...
+Preprocessing library for pg-migrate-cli-1.2.0.0...
+Building library for pg-migrate-cli-1.2.0.0...
+[1 of 8] Compiling PgMigrate.CLI.Prelude ( src/PgMigrate/CLI/Prelude.hs, dist/build/PgMigrate/CLI/Prelude.o, dist/build/PgMigrate/CLI/Prelude.dyn_o )
+[2 of 8] Compiling Database.PostgreSQL.Migrate.CLI.Types ( src/Database/PostgreSQL/Migrate/CLI/Types.hs, dist/build/Database/PostgreSQL/Migrate/CLI/Types.o, dist/build/Database/PostgreSQL/Migrate/CLI/Types.dyn_o )
+[3 of 8] Compiling Database.PostgreSQL.Migrate.CLI.Parser ( src/Database/PostgreSQL/Migrate/CLI/Parser.hs, dist/build/Database/PostgreSQL/Migrate/CLI/Parser.o, dist/build/Database/PostgreSQL/Migrate/CLI/Parser.dyn_o )
+[4 of 8] Compiling Database.PostgreSQL.Migrate.CLI.Outcome ( src/Database/PostgreSQL/Migrate/CLI/Outcome.hs, dist/build/Database/PostgreSQL/Migrate/CLI/Outcome.o, dist/build/Database/PostgreSQL/Migrate/CLI/Outcome.dyn_o )
+[5 of 8] Compiling Database.PostgreSQL.Migrate.CLI.Text ( src/Database/PostgreSQL/Migrate/CLI/Text.hs, dist/build/Database/PostgreSQL/Migrate/CLI/Text.o, dist/build/Database/PostgreSQL/Migrate/CLI/Text.dyn_o )
+[6 of 8] Compiling Database.PostgreSQL.Migrate.CLI.Json ( src/Database/PostgreSQL/Migrate/CLI/Json.hs, dist/build/Database/PostgreSQL/Migrate/CLI/Json.o, dist/build/Database/PostgreSQL/Migrate/CLI/Json.dyn_o )
+[7 of 8] Compiling Database.PostgreSQL.Migrate.CLI.Handler ( src/Database/PostgreSQL/Migrate/CLI/Handler.hs, dist/build/Database/PostgreSQL/Migrate/CLI/Handler.o, dist/build/Database/PostgreSQL/Migrate/CLI/Handler.dyn_o )
+[8 of 8] Compiling Database.PostgreSQL.Migrate.CLI ( src/Database/PostgreSQL/Migrate/CLI.hs, dist/build/Database/PostgreSQL/Migrate/CLI.o, dist/build/Database/PostgreSQL/Migrate/CLI.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/pg-mgrt-cl-1.2.0.0-acd1a9ea/lib
+Configuring library for keiro-core-0.25.0.0...
+Preprocessing library for keiro-core-0.25.0.0...
+Building library for keiro-core-0.25.0.0...
+[ 1 of 16] Compiling Keiro.Codec.Base16Bytes ( src/Keiro/Codec/Base16Bytes.hs, dist/build/Keiro/Codec/Base16Bytes.o, dist/build/Keiro/Codec/Base16Bytes.dyn_o )
+[ 2 of 16] Compiling Keiro.Codec.CalendarDay ( src/Keiro/Codec/CalendarDay.hs, dist/build/Keiro/Codec/CalendarDay.o, dist/build/Keiro/Codec/CalendarDay.dyn_o )
+[ 3 of 16] Compiling Keiro.Codec.IdDomain ( src/Keiro/Codec/IdDomain.hs, dist/build/Keiro/Codec/IdDomain.o, dist/build/Keiro/Codec/IdDomain.dyn_o )
+[ 4 of 16] Compiling Keiro.Codec.Nominal ( src/Keiro/Codec/Nominal.hs, dist/build/Keiro/Codec/Nominal.o, dist/build/Keiro/Codec/Nominal.dyn_o )
+[ 5 of 16] Compiling Keiro.Codec.Refined ( src/Keiro/Codec/Refined.hs, dist/build/Keiro/Codec/Refined.o, dist/build/Keiro/Codec/Refined.dyn_o )
+[ 6 of 16] Compiling Keiro.Codec.Structural ( src/Keiro/Codec/Structural.hs, dist/build/Keiro/Codec/Structural.o, dist/build/Keiro/Codec/Structural.dyn_o )
+[ 7 of 16] Compiling Keiro.Codec.Structural.Generic ( src/Keiro/Codec/Structural/Generic.hs, dist/build/Keiro/Codec/Structural/Generic.o, dist/build/Keiro/Codec/Structural/Generic.dyn_o )
+[ 8 of 16] Compiling Keiro.Codec.TextSet ( src/Keiro/Codec/TextSet.hs, dist/build/Keiro/Codec/TextSet.o, dist/build/Keiro/Codec/TextSet.dyn_o )
+[ 9 of 16] Compiling Keiro.Prelude    ( src/Keiro/Prelude.hs, dist/build/Keiro/Prelude.o, dist/build/Keiro/Prelude.dyn_o )
+[10 of 16] Compiling Keiro.Integration.Event ( src/Keiro/Integration/Event.hs, dist/build/Keiro/Integration/Event.o, dist/build/Keiro/Integration/Event.dyn_o )
+[11 of 16] Compiling Keiro.Codec      ( src/Keiro/Codec.hs, dist/build/Keiro/Codec.o, dist/build/Keiro/Codec.dyn_o )
+[12 of 16] Compiling Keiro.Schema     ( src/Keiro/Schema.hs, dist/build/Keiro/Schema.o, dist/build/Keiro/Schema.dyn_o )
+[13 of 16] Compiling Keiro.Stream     ( src/Keiro/Stream.hs, dist/build/Keiro/Stream.o, dist/build/Keiro/Stream.dyn_o )
+[14 of 16] Compiling Keiro.EventStream ( src/Keiro/EventStream.hs, dist/build/Keiro/EventStream.o, dist/build/Keiro/EventStream.dyn_o )
+[15 of 16] Compiling Keiro.Snapshot.Policy ( src/Keiro/Snapshot/Policy.hs, dist/build/Keiro/Snapshot/Policy.o, dist/build/Keiro/Snapshot/Policy.dyn_o )
+[16 of 16] Compiling Keiro.EventStream.Validate ( src/Keiro/EventStream/Validate.hs, dist/build/Keiro/EventStream/Validate.o, dist/build/Keiro/EventStream/Validate.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/kr-cr-0.25.0.0-8735d7ac/lib
+Configuring library for pg-migrate-import-codd-1.2.0.0...
+Preprocessing library for pg-migrate-import-codd-1.2.0.0...
+Building library for pg-migrate-import-codd-1.2.0.0...
+[1 of 8] Compiling PgMigrate.History.Codd.Prelude ( src/PgMigrate/History/Codd/Prelude.hs, dist/build/PgMigrate/History/Codd/Prelude.o, dist/build/PgMigrate/History/Codd/Prelude.dyn_o )
+[2 of 8] Compiling Database.PostgreSQL.Migrate.History.Codd.Types ( src/Database/PostgreSQL/Migrate/History/Codd/Types.hs, dist/build/Database/PostgreSQL/Migrate/History/Codd/Types.o, dist/build/Database/PostgreSQL/Migrate/History/Codd/Types.dyn_o )
+[3 of 8] Compiling Database.PostgreSQL.Migrate.History.Codd.Parser ( src/Database/PostgreSQL/Migrate/History/Codd/Parser.hs, dist/build/Database/PostgreSQL/Migrate/History/Codd/Parser.o, dist/build/Database/PostgreSQL/Migrate/History/Codd/Parser.dyn_o )
+[4 of 8] Compiling Database.PostgreSQL.Migrate.History.Codd.Manifest ( src/Database/PostgreSQL/Migrate/History/Codd/Manifest.hs, dist/build/Database/PostgreSQL/Migrate/History/Codd/Manifest.o, dist/build/Database/PostgreSQL/Migrate/History/Codd/Manifest.dyn_o )
+[5 of 8] Compiling Database.PostgreSQL.Migrate.History.Codd.Ledger ( src/Database/PostgreSQL/Migrate/History/Codd/Ledger.hs, dist/build/Database/PostgreSQL/Migrate/History/Codd/Ledger.o, dist/build/Database/PostgreSQL/Migrate/History/Codd/Ledger.dyn_o )
+[6 of 8] Compiling Database.PostgreSQL.Migrate.History.Codd.Import ( src/Database/PostgreSQL/Migrate/History/Codd/Import.hs, dist/build/Database/PostgreSQL/Migrate/History/Codd/Import.o, dist/build/Database/PostgreSQL/Migrate/History/Codd/Import.dyn_o )
+[7 of 8] Compiling Database.PostgreSQL.Migrate.History.Codd.Internal ( src/Database/PostgreSQL/Migrate/History/Codd/Internal.hs, dist/build/Database/PostgreSQL/Migrate/History/Codd/Internal.o, dist/build/Database/PostgreSQL/Migrate/History/Codd/Internal.dyn_o )
+[8 of 8] Compiling Database.PostgreSQL.Migrate.History.Codd ( src/Database/PostgreSQL/Migrate/History/Codd.hs, dist/build/Database/PostgreSQL/Migrate/History/Codd.o, dist/build/Database/PostgreSQL/Migrate/History/Codd.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/pg-mgrt-mprt-cdd-1.2.0.0-4a5e9496/lib
+Configuring library for keiro-pgmq-0.25.0.0...
+Preprocessing library for keiro-pgmq-0.25.0.0...
+Building library for keiro-pgmq-0.25.0.0...
+[1 of 6] Compiling Keiro.PGMQ.Codec ( src/Keiro/PGMQ/Codec.hs, dist/build/Keiro/PGMQ/Codec.o, dist/build/Keiro/PGMQ/Codec.dyn_o )
+[2 of 6] Compiling Keiro.PGMQ.Runtime ( src/Keiro/PGMQ/Runtime.hs, dist/build/Keiro/PGMQ/Runtime.o, dist/build/Keiro/PGMQ/Runtime.dyn_o )
+[3 of 6] Compiling Keiro.PGMQ.Job   ( src/Keiro/PGMQ/Job.hs, dist/build/Keiro/PGMQ/Job.o, dist/build/Keiro/PGMQ/Job.dyn_o )
+[4 of 6] Compiling Keiro.PGMQ.Metrics ( src/Keiro/PGMQ/Metrics.hs, dist/build/Keiro/PGMQ/Metrics.o, dist/build/Keiro/PGMQ/Metrics.dyn_o )
+[5 of 6] Compiling Keiro.PGMQ.Dlq   ( src/Keiro/PGMQ/Dlq.hs, dist/build/Keiro/PGMQ/Dlq.o, dist/build/Keiro/PGMQ/Dlq.dyn_o )
+[6 of 6] Compiling Keiro.PGMQ       ( src/Keiro/PGMQ.hs, dist/build/Keiro/PGMQ.o, dist/build/Keiro/PGMQ.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/kr-pgmq-0.25.0.0-5cd7e91f/lib
+Configuring library for keiro-dsl-0.25.0.0...
+Preprocessing library for keiro-dsl-0.25.0.0...
+Building library for keiro-dsl-0.25.0.0...
+[ 1 of 79] Compiling Keiro.Dsl.Grammar ( src/Keiro/Dsl/Grammar.hs, dist/build/Keiro/Dsl/Grammar.o, dist/build/Keiro/Dsl/Grammar.dyn_o )
+[ 2 of 79] Compiling Keiro.Dsl.FieldIdentity ( src/Keiro/Dsl/FieldIdentity.hs, dist/build/Keiro/Dsl/FieldIdentity.o, dist/build/Keiro/Dsl/FieldIdentity.dyn_o )
+[ 3 of 79] Compiling Keiro.Dsl.CanonicalEncoding ( src/Keiro/Dsl/CanonicalEncoding.hs, dist/build/Keiro/Dsl/CanonicalEncoding.o, dist/build/Keiro/Dsl/CanonicalEncoding.dyn_o )
+src/Keiro/Dsl/CanonicalEncoding.hs:166:5: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘list’ shadows the existing binding
+      imported from ‘Prettyprinter’ at src/Keiro/Dsl/CanonicalEncoding.hs:28:1-20
+      (and originally defined in ‘Prettyprinter.Internal’)
+    |
+166 |     list values = scalar (T.concat values)
+    |     ^^^^
+
+[ 4 of 79] Compiling Keiro.Dsl.AggregateGenerationPlan ( src/Keiro/Dsl/AggregateGenerationPlan.hs, dist/build/Keiro/Dsl/AggregateGenerationPlan.o, dist/build/Keiro/Dsl/AggregateGenerationPlan.dyn_o )
+[ 5 of 79] Compiling Keiro.Dsl.HaskellName ( src/Keiro/Dsl/HaskellName.hs, dist/build/Keiro/Dsl/HaskellName.o, dist/build/Keiro/Dsl/HaskellName.dyn_o )
+[ 6 of 79] Compiling Keiro.Dsl.HaskellImport ( src/Keiro/Dsl/HaskellImport.hs, dist/build/Keiro/Dsl/HaskellImport.o, dist/build/Keiro/Dsl/HaskellImport.dyn_o )
+[ 7 of 79] Compiling Keiro.Dsl.LanguageVersion ( src/Keiro/Dsl/LanguageVersion.hs, dist/build/Keiro/Dsl/LanguageVersion.o, dist/build/Keiro/Dsl/LanguageVersion.dyn_o )
+[ 8 of 79] Compiling Keiro.Dsl.PrettyPrint ( src/Keiro/Dsl/PrettyPrint.hs, dist/build/Keiro/Dsl/PrettyPrint.o, dist/build/Keiro/Dsl/PrettyPrint.dyn_o )
+[ 9 of 79] Compiling Keiro.Dsl.ProjectionSupply ( src/Keiro/Dsl/ProjectionSupply.hs, dist/build/Keiro/Dsl/ProjectionSupply.o, dist/build/Keiro/Dsl/ProjectionSupply.dyn_o )
+[10 of 79] Compiling Keiro.Dsl.ReadModelShape ( src/Keiro/Dsl/ReadModelShape.hs, dist/build/Keiro/Dsl/ReadModelShape.o, dist/build/Keiro/Dsl/ReadModelShape.dyn_o )
+[11 of 79] Compiling Keiro.Dsl.RuntimePackage ( src/Keiro/Dsl/RuntimePackage.hs, dist/build/Keiro/Dsl/RuntimePackage.o, dist/build/Keiro/Dsl/RuntimePackage.dyn_o )
+[12 of 79] Compiling Keiro.Dsl.SidecarNames ( src/Keiro/Dsl/SidecarNames.hs, dist/build/Keiro/Dsl/SidecarNames.o, dist/build/Keiro/Dsl/SidecarNames.dyn_o )
+[13 of 79] Compiling Keiro.Dsl.Skeleton ( src/Keiro/Dsl/Skeleton.hs, dist/build/Keiro/Dsl/Skeleton.o, dist/build/Keiro/Dsl/Skeleton.dyn_o )
+[14 of 79] Compiling Keiro.Dsl.Source ( src/Keiro/Dsl/Source.hs, dist/build/Keiro/Dsl/Source.o, dist/build/Keiro/Dsl/Source.dyn_o )
+[15 of 79] Compiling Keiro.Dsl.SourceIndex ( src/Keiro/Dsl/SourceIndex.hs, dist/build/Keiro/Dsl/SourceIndex.o, dist/build/Keiro/Dsl/SourceIndex.dyn_o )
+[16 of 79] Compiling Keiro.Dsl.Syntax ( src/Keiro/Dsl/Syntax.hs, dist/build/Keiro/Dsl/Syntax.o, dist/build/Keiro/Dsl/Syntax.dyn_o )
+[17 of 79] Compiling Keiro.Dsl.Frontend.Internal ( src/Keiro/Dsl/Frontend/Internal.hs, dist/build/Keiro/Dsl/Frontend/Internal.o, dist/build/Keiro/Dsl/Frontend/Internal.dyn_o )
+src/Keiro/Dsl/Frontend/Internal.hs:286:41: warning: [GHC-02256] [-Wambiguous-fields]
+    Ambiguous record update with parent type constructor ‘ProcessNode’.
+    This type-directed disambiguation mechanism will not be supported by -XDuplicateRecordFields in future releases of GHC.
+    Consider disambiguating using module qualification instead.
+    |
+286 |   NProcess process -> NProcess process {loc = loc}
+    |                                         ^^^^^^^^^
+
+[18 of 79] Compiling Keiro.Dsl.Parser.Core ( src/Keiro/Dsl/Parser/Core.hs, dist/build/Keiro/Dsl/Parser/Core.o, dist/build/Keiro/Dsl/Parser/Core.dyn_o )
+[19 of 79] Compiling Keiro.Dsl.Parser.Workflow ( src/Keiro/Dsl/Parser/Workflow.hs, dist/build/Keiro/Dsl/Parser/Workflow.o, dist/build/Keiro/Dsl/Parser/Workflow.dyn_o )
+[20 of 79] Compiling Keiro.Dsl.Parser.ProjectionCatalog ( src/Keiro/Dsl/Parser/ProjectionCatalog.hs, dist/build/Keiro/Dsl/Parser/ProjectionCatalog.o, dist/build/Keiro/Dsl/Parser/ProjectionCatalog.dyn_o )
+[21 of 79] Compiling Keiro.Dsl.Parser.Preamble ( src/Keiro/Dsl/Parser/Preamble.hs, dist/build/Keiro/Dsl/Parser/Preamble.o, dist/build/Keiro/Dsl/Parser/Preamble.dyn_o )
+[22 of 79] Compiling Keiro.Dsl.Parser.Mapped ( src/Keiro/Dsl/Parser/Mapped.hs, dist/build/Keiro/Dsl/Parser/Mapped.o, dist/build/Keiro/Dsl/Parser/Mapped.dyn_o )
+[23 of 79] Compiling Keiro.Dsl.Parser.ReadModel ( src/Keiro/Dsl/Parser/ReadModel.hs, dist/build/Keiro/Dsl/Parser/ReadModel.o, dist/build/Keiro/Dsl/Parser/ReadModel.dyn_o )
+[24 of 79] Compiling Keiro.Dsl.Parser.Queue ( src/Keiro/Dsl/Parser/Queue.hs, dist/build/Keiro/Dsl/Parser/Queue.o, dist/build/Keiro/Dsl/Parser/Queue.dyn_o )
+[25 of 79] Compiling Keiro.Dsl.Parser.Integration ( src/Keiro/Dsl/Parser/Integration.hs, dist/build/Keiro/Dsl/Parser/Integration.o, dist/build/Keiro/Dsl/Parser/Integration.dyn_o )
+[26 of 79] Compiling Keiro.Dsl.Parser.Expression ( src/Keiro/Dsl/Parser/Expression.hs, dist/build/Keiro/Dsl/Parser/Expression.o, dist/build/Keiro/Dsl/Parser/Expression.dyn_o )
+[27 of 79] Compiling Keiro.Dsl.Parser.Declaration ( src/Keiro/Dsl/Parser/Declaration.hs, dist/build/Keiro/Dsl/Parser/Declaration.o, dist/build/Keiro/Dsl/Parser/Declaration.dyn_o )
+[28 of 79] Compiling Keiro.Dsl.Parser.Coordination ( src/Keiro/Dsl/Parser/Coordination.hs, dist/build/Keiro/Dsl/Parser/Coordination.o, dist/build/Keiro/Dsl/Parser/Coordination.dyn_o )
+[29 of 79] Compiling Keiro.Dsl.Parser.Aggregate ( src/Keiro/Dsl/Parser/Aggregate.hs, dist/build/Keiro/Dsl/Parser/Aggregate.o, dist/build/Keiro/Dsl/Parser/Aggregate.dyn_o )
+[30 of 79] Compiling Keiro.Dsl.Parser.Document ( src/Keiro/Dsl/Parser/Document.hs, dist/build/Keiro/Dsl/Parser/Document.o, dist/build/Keiro/Dsl/Parser/Document.dyn_o )
+[31 of 79] Compiling Keiro.Dsl.Frontend ( src/Keiro/Dsl/Frontend.hs, dist/build/Keiro/Dsl/Frontend.o, dist/build/Keiro/Dsl/Frontend.dyn_o )
+[32 of 79] Compiling Keiro.Dsl.Parser ( src/Keiro/Dsl/Parser.hs, dist/build/Keiro/Dsl/Parser.o, dist/build/Keiro/Dsl/Parser.dyn_o )
+[33 of 79] Compiling Keiro.Dsl.TransitionFamily ( src/Keiro/Dsl/TransitionFamily.hs, dist/build/Keiro/Dsl/TransitionFamily.o, dist/build/Keiro/Dsl/TransitionFamily.dyn_o )
+[34 of 79] Compiling Keiro.Dsl.TypeGraph ( src/Keiro/Dsl/TypeGraph.hs, dist/build/Keiro/Dsl/TypeGraph.o, dist/build/Keiro/Dsl/TypeGraph.dyn_o )
+[35 of 79] Compiling Keiro.Dsl.SemanticContract ( src/Keiro/Dsl/SemanticContract.hs, dist/build/Keiro/Dsl/SemanticContract.o, dist/build/Keiro/Dsl/SemanticContract.dyn_o )
+[36 of 79] Compiling Keiro.Dsl.IdDomain ( src/Keiro/Dsl/IdDomain.hs, dist/build/Keiro/Dsl/IdDomain.o, dist/build/Keiro/Dsl/IdDomain.dyn_o )
+[37 of 79] Compiling Keiro.Dsl.ReadModelQueryContract ( src/Keiro/Dsl/ReadModelQueryContract.hs, dist/build/Keiro/Dsl/ReadModelQueryContract.o, dist/build/Keiro/Dsl/ReadModelQueryContract.dyn_o )
+[38 of 79] Compiling Keiro.Dsl.NominalType ( src/Keiro/Dsl/NominalType.hs, dist/build/Keiro/Dsl/NominalType.o, dist/build/Keiro/Dsl/NominalType.dyn_o )
+[39 of 79] Compiling Keiro.Dsl.MappedConsumer ( src/Keiro/Dsl/MappedConsumer.hs, dist/build/Keiro/Dsl/MappedConsumer.o, dist/build/Keiro/Dsl/MappedConsumer.dyn_o )
+[40 of 79] Compiling Keiro.Dsl.ConsumerTypePlan ( src/Keiro/Dsl/ConsumerTypePlan.hs, dist/build/Keiro/Dsl/ConsumerTypePlan.o, dist/build/Keiro/Dsl/ConsumerTypePlan.dyn_o )
+[41 of 79] Compiling Keiro.Dsl.MappedCodecPlan ( src/Keiro/Dsl/MappedCodecPlan.hs, dist/build/Keiro/Dsl/MappedCodecPlan.o, dist/build/Keiro/Dsl/MappedCodecPlan.dyn_o )
+[42 of 79] Compiling Keiro.Dsl.AggregateType ( src/Keiro/Dsl/AggregateType.hs, dist/build/Keiro/Dsl/AggregateType.o, dist/build/Keiro/Dsl/AggregateType.dyn_o )
+[43 of 79] Compiling Keiro.Dsl.RouterSelection ( src/Keiro/Dsl/RouterSelection.hs, dist/build/Keiro/Dsl/RouterSelection.o, dist/build/Keiro/Dsl/RouterSelection.dyn_o )
+[44 of 79] Compiling Keiro.Dsl.SemanticImpact ( src/Keiro/Dsl/SemanticImpact.hs, dist/build/Keiro/Dsl/SemanticImpact.o, dist/build/Keiro/Dsl/SemanticImpact.dyn_o )
+src/Keiro/Dsl/SemanticImpact.hs:742:17: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘key’ shadows the existing binding
+      bound at src/Keiro/Dsl/SemanticImpact.hs:695:27
+    |
+742 |       RKeyedMap key value -> "Map[" <> (.name) key <> "](" <> expressionPresentation value <> ")"
+    |                 ^^^
+
+[45 of 79] Compiling Keiro.Dsl.ProjectionMappedImpact ( src/Keiro/Dsl/ProjectionMappedImpact.hs, dist/build/Keiro/Dsl/ProjectionMappedImpact.o, dist/build/Keiro/Dsl/ProjectionMappedImpact.dyn_o )
+[46 of 79] Compiling Keiro.Dsl.ProcessReaction ( src/Keiro/Dsl/ProcessReaction.hs, dist/build/Keiro/Dsl/ProcessReaction.o, dist/build/Keiro/Dsl/ProcessReaction.dyn_o )
+[47 of 79] Compiling Keiro.Dsl.CoordinationImpact ( src/Keiro/Dsl/CoordinationImpact.hs, dist/build/Keiro/Dsl/CoordinationImpact.o, dist/build/Keiro/Dsl/CoordinationImpact.dyn_o )
+[48 of 79] Compiling Keiro.Dsl.Expression ( src/Keiro/Dsl/Expression.hs, dist/build/Keiro/Dsl/Expression.o, dist/build/Keiro/Dsl/Expression.dyn_o )
+src/Keiro/Dsl/Expression.hs:359:27: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘expected’ shadows the existing binding
+      bound at src/Keiro/Dsl/Expression.hs:330:13
+    |
+359 |           resolveOrdinary expected = case resolveScalarExpr environment (ExpectScalarType expected) expression of
+    |                           ^^^^^^^^
+
+[49 of 79] Compiling Keiro.Dsl.ExplainBindings ( src/Keiro/Dsl/ExplainBindings.hs, dist/build/Keiro/Dsl/ExplainBindings.o, dist/build/Keiro/Dsl/ExplainBindings.dyn_o )
+[50 of 79] Compiling Keiro.Dsl.EventOutput ( src/Keiro/Dsl/EventOutput.hs, dist/build/Keiro/Dsl/EventOutput.o, dist/build/Keiro/Dsl/EventOutput.dyn_o )
+[51 of 79] Compiling Keiro.Dsl.FoldEvidence ( src/Keiro/Dsl/FoldEvidence.hs, dist/build/Keiro/Dsl/FoldEvidence.o, dist/build/Keiro/Dsl/FoldEvidence.dyn_o )
+[52 of 79] Compiling Keiro.Dsl.FoldFingerprint ( src/Keiro/Dsl/FoldFingerprint.hs, dist/build/Keiro/Dsl/FoldFingerprint.o, dist/build/Keiro/Dsl/FoldFingerprint.dyn_o )
+[53 of 79] Compiling Keiro.Dsl.ReplayImpact ( src/Keiro/Dsl/ReplayImpact.hs, dist/build/Keiro/Dsl/ReplayImpact.o, dist/build/Keiro/Dsl/ReplayImpact.dyn_o )
+[54 of 79] Compiling Keiro.Dsl.BehaviorCoverage ( src/Keiro/Dsl/BehaviorCoverage.hs, dist/build/Keiro/Dsl/BehaviorCoverage.o, dist/build/Keiro/Dsl/BehaviorCoverage.dyn_o )
+[55 of 79] Compiling Keiro.Dsl.BehaviorSourceMap ( src/Keiro/Dsl/BehaviorSourceMap.hs, dist/build/Keiro/Dsl/BehaviorSourceMap.o, dist/build/Keiro/Dsl/BehaviorSourceMap.dyn_o )
+[56 of 79] Compiling Keiro.Dsl.Validate ( src/Keiro/Dsl/Validate.hs, dist/build/Keiro/Dsl/Validate.o, dist/build/Keiro/Dsl/Validate.dyn_o )
+[57 of 79] Compiling Keiro.Dsl.MappedDiff ( src/Keiro/Dsl/MappedDiff.hs, dist/build/Keiro/Dsl/MappedDiff.o, dist/build/Keiro/Dsl/MappedDiff.dyn_o )
+[58 of 79] Compiling Keiro.Dsl.Diff   ( src/Keiro/Dsl/Diff.hs, dist/build/Keiro/Dsl/Diff.o, dist/build/Keiro/Dsl/Diff.dyn_o )
+[59 of 79] Compiling Keiro.Dsl.DiffReport ( src/Keiro/Dsl/DiffReport.hs, dist/build/Keiro/Dsl/DiffReport.o, dist/build/Keiro/Dsl/DiffReport.dyn_o )
+[60 of 79] Compiling Keiro.Dsl.Coverage ( src/Keiro/Dsl/Coverage.hs, dist/build/Keiro/Dsl/Coverage.o, dist/build/Keiro/Dsl/Coverage.dyn_o )
+[61 of 79] Compiling Keiro.Dsl.CodecCompare ( src/Keiro/Dsl/CodecCompare.hs, dist/build/Keiro/Dsl/CodecCompare.o, dist/build/Keiro/Dsl/CodecCompare.dyn_o )
+[62 of 79] Compiling Paths_keiro_dsl  ( dist/build/autogen/Paths_keiro_dsl.hs, dist/build/Paths_keiro_dsl.o, dist/build/Paths_keiro_dsl.dyn_o )
+[63 of 79] Compiling Keiro.Dsl.Scaffold ( src/Keiro/Dsl/Scaffold.hs, dist/build/Keiro/Dsl/Scaffold.o, dist/build/Keiro/Dsl/Scaffold.dyn_o )
+src/Keiro/Dsl/Scaffold.hs:2948:15: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘shapeModule’ shadows the existing binding
+      defined at src/Keiro/Dsl/Scaffold.hs:1406:1
+     |
+2948 |       | Just (shapeModule, entries) <- spec.rootEnum =
+     |               ^^^^^^^^^^^
+
+src/Keiro/Dsl/Scaffold.hs:2975:25: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘shapeModule’ shadows the existing binding
+      defined at src/Keiro/Dsl/Scaffold.hs:1406:1
+     |
+2975 |     renderedConstructor shapeModule constructor = renderReferenceOrDie importPlan (HaskellReference shapeModule constructor ConstructorNamespace RequireQualified)
+     |                         ^^^^^^^^^^^
+
+src/Keiro/Dsl/Scaffold.hs:2977:15: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘shapeModule’ shadows the existing binding
+      defined at src/Keiro/Dsl/Scaffold.hs:1406:1
+     |
+2977 |       | Just (shapeModule, entries) <- spec.rootEnum =
+     |               ^^^^^^^^^^^
+
+src/Keiro/Dsl/Scaffold.hs:3028:15: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘shapeModule’ shadows the existing binding
+      defined at src/Keiro/Dsl/Scaffold.hs:1406:1
+     |
+3028 |       | Just (shapeModule, entries) <- spec.rootEnum =
+     |               ^^^^^^^^^^^
+
+[64 of 79] Compiling Keiro.Dsl.WorkspaceRecord ( src/Keiro/Dsl/WorkspaceRecord.hs, dist/build/Keiro/Dsl/WorkspaceRecord.o, dist/build/Keiro/Dsl/WorkspaceRecord.dyn_o )
+[65 of 79] Compiling Keiro.Dsl.StructuralConformance ( src/Keiro/Dsl/StructuralConformance.hs, dist/build/Keiro/Dsl/StructuralConformance.o, dist/build/Keiro/Dsl/StructuralConformance.dyn_o )
+[66 of 79] Compiling Keiro.Dsl.ScaffoldRecord ( src/Keiro/Dsl/ScaffoldRecord.hs, dist/build/Keiro/Dsl/ScaffoldRecord.o, dist/build/Keiro/Dsl/ScaffoldRecord.dyn_o )
+[67 of 79] Compiling Keiro.Dsl.Manifest ( src/Keiro/Dsl/Manifest.hs, dist/build/Keiro/Dsl/Manifest.o, dist/build/Keiro/Dsl/Manifest.dyn_o )
+[68 of 79] Compiling Keiro.Dsl.HaskellSourceMove ( src/Keiro/Dsl/HaskellSourceMove.hs, dist/build/Keiro/Dsl/HaskellSourceMove.o, dist/build/Keiro/Dsl/HaskellSourceMove.dyn_o )
+[69 of 79] Compiling Keiro.Dsl.Goldens ( src/Keiro/Dsl/Goldens.hs, dist/build/Keiro/Dsl/Goldens.o, dist/build/Keiro/Dsl/Goldens.dyn_o )
+[70 of 79] Compiling Keiro.Dsl.Harness ( src/Keiro/Dsl/Harness.hs, dist/build/Keiro/Dsl/Harness.o, dist/build/Keiro/Dsl/Harness.dyn_o )
+[71 of 79] Compiling Keiro.Dsl.ServiceHarness ( src/Keiro/Dsl/ServiceHarness.hs, dist/build/Keiro/Dsl/ServiceHarness.o, dist/build/Keiro/Dsl/ServiceHarness.dyn_o )
+[72 of 79] Compiling Keiro.Dsl.ConformancePackage ( src/Keiro/Dsl/ConformancePackage.hs, dist/build/Keiro/Dsl/ConformancePackage.o, dist/build/Keiro/Dsl/ConformancePackage.dyn_o )
+[73 of 79] Compiling Keiro.Dsl.SidecarMigration ( src/Keiro/Dsl/SidecarMigration.hs, dist/build/Keiro/Dsl/SidecarMigration.o, dist/build/Keiro/Dsl/SidecarMigration.dyn_o )
+[74 of 79] Compiling Keiro.Dsl.ScaffoldRun ( src/Keiro/Dsl/ScaffoldRun.hs, dist/build/Keiro/Dsl/ScaffoldRun.o, dist/build/Keiro/Dsl/ScaffoldRun.dyn_o )
+[75 of 79] Compiling Keiro.Dsl.WorkspaceAdoption ( src/Keiro/Dsl/WorkspaceAdoption.hs, dist/build/Keiro/Dsl/WorkspaceAdoption.o, dist/build/Keiro/Dsl/WorkspaceAdoption.dyn_o )
+[76 of 79] Compiling Keiro.Dsl.Workspace ( src/Keiro/Dsl/Workspace.hs, dist/build/Keiro/Dsl/Workspace.o, dist/build/Keiro/Dsl/Workspace.dyn_o )
+[77 of 79] Compiling Keiro.Dsl.WorkspaceScaffold ( src/Keiro/Dsl/WorkspaceScaffold.hs, dist/build/Keiro/Dsl/WorkspaceScaffold.o, dist/build/Keiro/Dsl/WorkspaceScaffold.dyn_o )
+[78 of 79] Compiling Keiro.Dsl.WorkspaceDiff ( src/Keiro/Dsl/WorkspaceDiff.hs, dist/build/Keiro/Dsl/WorkspaceDiff.o, dist/build/Keiro/Dsl/WorkspaceDiff.dyn_o )
+[79 of 79] Compiling Keiro.Dsl.CheckReport ( src/Keiro/Dsl/CheckReport.hs, dist/build/Keiro/Dsl/CheckReport.o, dist/build/Keiro/Dsl/CheckReport.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/kr-dsl-0.25.0.0-6a580e9a/lib
+Configuring library for keiro-0.25.0.0...
+Preprocessing library for keiro-0.25.0.0...
+Building library for keiro-0.25.0.0...
+[ 1 of 75] Compiling Keiro.Command.Domain ( src/Keiro/Command/Domain.hs, dist/build/Keiro/Command/Domain.o, dist/build/Keiro/Command/Domain.dyn_o )
+[ 2 of 75] Compiling Keiro.Connection ( src/Keiro/Connection.hs, dist/build/Keiro/Connection.o, dist/build/Keiro/Connection.dyn_o )
+[ 3 of 75] Compiling Keiro.DeadLetter.Replay ( src/Keiro/DeadLetter/Replay.hs, dist/build/Keiro/DeadLetter/Replay.o, dist/build/Keiro/DeadLetter/Replay.dyn_o )
+[ 4 of 75] Compiling Keiro.DeadLetter.Schema ( src/Keiro/DeadLetter/Schema.hs, dist/build/Keiro/DeadLetter/Schema.o, dist/build/Keiro/DeadLetter/Schema.dyn_o )
+[ 5 of 75] Compiling Keiro.DeadLetter ( src/Keiro/DeadLetter.hs, dist/build/Keiro/DeadLetter.o, dist/build/Keiro/DeadLetter.dyn_o )
+[ 6 of 75] Compiling Keiro.DeterministicId ( src/Keiro/DeterministicId.hs, dist/build/Keiro/DeterministicId.o, dist/build/Keiro/DeterministicId.dyn_o )
+[ 7 of 75] Compiling Keiro.Inbox.Types ( src/Keiro/Inbox/Types.hs, dist/build/Keiro/Inbox/Types.o, dist/build/Keiro/Inbox/Types.dyn_o )
+[ 8 of 75] Compiling Keiro.Inbox.Schema ( src/Keiro/Inbox/Schema.hs, dist/build/Keiro/Inbox/Schema.o, dist/build/Keiro/Inbox/Schema.dyn_o )
+[ 9 of 75] Compiling Keiro.Inbox.Kafka ( src/Keiro/Inbox/Kafka.hs, dist/build/Keiro/Inbox/Kafka.o, dist/build/Keiro/Inbox/Kafka.dyn_o )
+[10 of 75] Compiling Keiro.Inspection.Cursor ( src/Keiro/Inspection/Cursor.hs, dist/build/Keiro/Inspection/Cursor.o, dist/build/Keiro/Inspection/Cursor.dyn_o )
+[11 of 75] Compiling Keiro.Outbox.Rejection ( src/Keiro/Outbox/Rejection.hs, dist/build/Keiro/Outbox/Rejection.o, dist/build/Keiro/Outbox/Rejection.dyn_o )
+[12 of 75] Compiling Keiro.Outbox.Types ( src/Keiro/Outbox/Types.hs, dist/build/Keiro/Outbox/Types.o, dist/build/Keiro/Outbox/Types.dyn_o )
+[13 of 75] Compiling Keiro.Outbox.Kafka ( src/Keiro/Outbox/Kafka.hs, dist/build/Keiro/Outbox/Kafka.o, dist/build/Keiro/Outbox/Kafka.dyn_o )
+[14 of 75] Compiling Keiro.Projection.Catalog.Preimage ( src/Keiro/Projection/Catalog/Preimage.hs, dist/build/Keiro/Projection/Catalog/Preimage.o, dist/build/Keiro/Projection/Catalog/Preimage.dyn_o )
+[15 of 75] Compiling Keiro.Inspection.Consumers ( src/Keiro/Inspection/Consumers.hs, dist/build/Keiro/Inspection/Consumers.o, dist/build/Keiro/Inspection/Consumers.dyn_o )
+src/Keiro/Inspection/Consumers.hs:19:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Data.List’ is redundant
+      except perhaps to import instances from ‘Data.List’
+    To import instances alone, use: import Data.List()
+   |
+19 | import Data.List (foldl')
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[16 of 75] Compiling Keiro.Projection.Types ( src/Keiro/Projection/Types.hs, dist/build/Keiro/Projection/Types.o, dist/build/Keiro/Projection/Types.dyn_o )
+[17 of 75] Compiling Keiro.ReadModel.Schema ( src/Keiro/ReadModel/Schema.hs, dist/build/Keiro/ReadModel/Schema.o, dist/build/Keiro/ReadModel/Schema.dyn_o )
+[18 of 75] Compiling Keiro.ReplayDigest ( src/Keiro/ReplayDigest.hs, dist/build/Keiro/ReplayDigest.o, dist/build/Keiro/ReplayDigest.dyn_o )
+[19 of 75] Compiling Keiro.Outbox.Identity ( src/Keiro/Outbox/Identity.hs, dist/build/Keiro/Outbox/Identity.o, dist/build/Keiro/Outbox/Identity.dyn_o )
+[20 of 75] Compiling Keiro.Outbox.Schema ( src/Keiro/Outbox/Schema.hs, dist/build/Keiro/Outbox/Schema.o, dist/build/Keiro/Outbox/Schema.dyn_o )
+[21 of 75] Compiling Keiro.Snapshot.Codec ( src/Keiro/Snapshot/Codec.hs, dist/build/Keiro/Snapshot/Codec.o, dist/build/Keiro/Snapshot/Codec.dyn_o )
+[22 of 75] Compiling Keiro.Snapshot.Schema ( src/Keiro/Snapshot/Schema.hs, dist/build/Keiro/Snapshot/Schema.o, dist/build/Keiro/Snapshot/Schema.dyn_o )
+[23 of 75] Compiling Keiro.Snapshot   ( src/Keiro/Snapshot.hs, dist/build/Keiro/Snapshot.o, dist/build/Keiro/Snapshot.dyn_o )
+[24 of 75] Compiling Keiro.Subscription.Shard.Schema ( src/Keiro/Subscription/Shard/Schema.hs, dist/build/Keiro/Subscription/Shard/Schema.o, dist/build/Keiro/Subscription/Shard/Schema.dyn_o )
+[25 of 75] Compiling Keiro.Subscription.Shard ( src/Keiro/Subscription/Shard.hs, dist/build/Keiro/Subscription/Shard.o, dist/build/Keiro/Subscription/Shard.dyn_o )
+[26 of 75] Compiling Keiro.Subscription.Shard.Worker ( src/Keiro/Subscription/Shard/Worker.hs, dist/build/Keiro/Subscription/Shard/Worker.o, dist/build/Keiro/Subscription/Shard/Worker.dyn_o )
+[27 of 75] Compiling Keiro.Timer.Types ( src/Keiro/Timer/Types.hs, dist/build/Keiro/Timer/Types.o, dist/build/Keiro/Timer/Types.dyn_o )
+[28 of 75] Compiling Keiro.Timer.Schema ( src/Keiro/Timer/Schema.hs, dist/build/Keiro/Timer/Schema.o, dist/build/Keiro/Timer/Schema.dyn_o )
+src/Keiro/Timer/Schema.hs:82:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Data.List.NonEmpty’ is redundant
+      except perhaps to import instances from ‘Data.List.NonEmpty’
+    To import instances alone, use: import Data.List.NonEmpty()
+   |
+82 | import Data.List.NonEmpty (NonEmpty (..))
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[29 of 75] Compiling Keiro.Wake       ( src/Keiro/Wake.hs, dist/build/Keiro/Wake.o, dist/build/Keiro/Wake.dyn_o )
+[30 of 75] Compiling Keiro.Workflow.Awakeable.Schema ( src/Keiro/Workflow/Awakeable/Schema.hs, dist/build/Keiro/Workflow/Awakeable/Schema.o, dist/build/Keiro/Workflow/Awakeable/Schema.dyn_o )
+[31 of 75] Compiling Keiro.Workflow.Child.Schema ( src/Keiro/Workflow/Child/Schema.hs, dist/build/Keiro/Workflow/Child/Schema.o, dist/build/Keiro/Workflow/Child/Schema.dyn_o )
+[32 of 75] Compiling Keiro.Workflow.Instance.Schema ( src/Keiro/Workflow/Instance/Schema.hs, dist/build/Keiro/Workflow/Instance/Schema.o, dist/build/Keiro/Workflow/Instance/Schema.dyn_o )
+[33 of 75] Compiling Keiro.Workflow.Inspection.Query ( src/Keiro/Workflow/Inspection/Query.hs, dist/build/Keiro/Workflow/Inspection/Query.o, dist/build/Keiro/Workflow/Inspection/Query.dyn_o )
+[34 of 75] Compiling Keiro.Workflow.Types ( src/Keiro/Workflow/Types.hs, dist/build/Keiro/Workflow/Types.o, dist/build/Keiro/Workflow/Types.dyn_o )
+[35 of 75] Compiling Keiro.Workflow.Snapshot ( src/Keiro/Workflow/Snapshot.hs, dist/build/Keiro/Workflow/Snapshot.o, dist/build/Keiro/Workflow/Snapshot.dyn_o )
+[36 of 75] Compiling Keiro.Workflow.Schema ( src/Keiro/Workflow/Schema.hs, dist/build/Keiro/Workflow/Schema.o, dist/build/Keiro/Workflow/Schema.dyn_o )
+[37 of 75] Compiling Keiro.Workflow.Gc ( src/Keiro/Workflow/Gc.hs, dist/build/Keiro/Workflow/Gc.o, dist/build/Keiro/Workflow/Gc.dyn_o )
+[38 of 75] Compiling Keiro.Workflow.Awakeable.Internal.Identity ( src/Keiro/Workflow/Awakeable/Internal/Identity.hs, dist/build/Keiro/Workflow/Awakeable/Internal/Identity.o, dist/build/Keiro/Workflow/Awakeable/Internal/Identity.dyn_o )
+[39 of 75] Compiling Keiro.Telemetry  ( src/Keiro/Telemetry.hs, dist/build/Keiro/Telemetry.o, dist/build/Keiro/Telemetry.dyn_o )
+[40 of 75] Compiling Keiro.Workflow.Journal ( src/Keiro/Workflow/Journal.hs, dist/build/Keiro/Workflow/Journal.o, dist/build/Keiro/Workflow/Journal.dyn_o )
+[41 of 75] Compiling Keiro.Workflow.Child.Cancel ( src/Keiro/Workflow/Child/Cancel.hs, dist/build/Keiro/Workflow/Child/Cancel.o, dist/build/Keiro/Workflow/Child/Cancel.dyn_o )
+[42 of 75] Compiling Keiro.Workflow.Instance ( src/Keiro/Workflow/Instance.hs, dist/build/Keiro/Workflow/Instance.o, dist/build/Keiro/Workflow/Instance.dyn_o )
+src/Keiro/Workflow/Instance.hs:888:30: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘argument’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Workflow/Instance.hs:69:1-20
+      (and originally defined in ‘Control.Lens.Setter’)
+    |
+888 |     parameter template value argument = (\n -> Text.replace "?" ("$" <> number n) template, 1, const argument >$< E.param (E.nonNullable value))
+    |                              ^^^^^^^^
+
+src/Keiro/Workflow/Instance.hs:915:50: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Workflow/Instance.hs:69:1-20
+      (and originally defined in ‘Control.Lens.Indexed’)
+    |
+915 |     (next, predicates, filterParams) = foldl' (\(index, clauses, encoders) (render, width, encoder) -> (index + width, clauses <> [render index], encoders <> encoder)) (1, [], mempty) filters
+    |                                                  ^^^^^
+
+[43 of 75] Compiling Keiro.Workflow.Inspection ( src/Keiro/Workflow/Inspection.hs, dist/build/Keiro/Workflow/Inspection.o, dist/build/Keiro/Workflow/Inspection.dyn_o )
+src/Keiro/Workflow/Inspection.hs:84:1: warning: [GHC-90177] [-Worphans]
+    Orphan class instance: instance ToJSON WorkflowStatusCounts
+    Suggested fix:
+      Move the instance declaration to the module of the class or of the type, or
+      wrap the type with a newtype and declare the instance on the new type.
+   |
+84 | instance ToJSON WorkflowStatusCounts where
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^...
+
+src/Keiro/Workflow/Inspection.hs:87:1: warning: [GHC-90177] [-Worphans]
+    Orphan class instance: instance ToJSON WorkflowCounts
+    Suggested fix:
+      Move the instance declaration to the module of the class or of the type, or
+      wrap the type with a newtype and declare the instance on the new type.
+   |
+87 | instance ToJSON WorkflowCounts where
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^...
+
+src/Keiro/Workflow/Inspection.hs:126:30: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         listWorkflowInstancesPage :: forall (es :: [Effectful.Internal.Effect.Effect]).
+                                      (IOE :> es, Store :> es) =>
+                                      WorkflowListQuery
+                                      -> Eff es (Either InspectionError WorkflowListPage)
+    |
+126 | listWorkflowInstancesPage :: (IOE :> es, Store :> es) => WorkflowListQuery -> Eff es (Either InspectionError WorkflowListPage)
+    |                              ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Workflow/Inspection.hs:244:28: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         readWorkflowJournalPage :: forall (es :: [Effectful.Internal.Effect.Effect]).
+                                    (IOE :> es, Store :> es) =>
+                                    WorkflowName
+                                    -> WorkflowId
+                                    -> DetailPageQuery
+                                    -> Eff es (Either InspectionError WorkflowJournalPage)
+    |
+244 | readWorkflowJournalPage :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> DetailPageQuery -> Eff es (Either InspectionError WorkflowJournalPage)
+    |                            ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Workflow/Inspection.hs:255:22: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         loadStepIndexPage :: forall (es :: [Effectful.Internal.Effect.Effect]).
+                              (IOE :> es, Store :> es) =>
+                              WorkflowName
+                              -> WorkflowId
+                              -> DetailPageQuery
+                              -> Eff es (Either InspectionError WorkflowStepPage)
+    |
+255 | loadStepIndexPage :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> DetailPageQuery -> Eff es (Either InspectionError WorkflowStepPage)
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Workflow/Inspection.hs:265:29: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         listWorkflowChildrenPage :: forall (es :: [Effectful.Internal.Effect.Effect]).
+                                     (IOE :> es, Store :> es) =>
+                                     WorkflowName
+                                     -> WorkflowId
+                                     -> OwnerPageQuery
+                                     -> Eff es (Either InspectionError WorkflowChildPage)
+    |
+265 | listWorkflowChildrenPage :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> OwnerPageQuery -> Eff es (Either InspectionError WorkflowChildPage)
+    |                             ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Workflow/Inspection.hs:274:31: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         listWorkflowAwakeablesPage :: forall (es :: [Effectful.Internal.Effect.Effect]).
+                                       (IOE :> es, Store :> es) =>
+                                       WorkflowName
+                                       -> WorkflowId
+                                       -> OwnerPageQuery
+                                       -> Eff es (Either InspectionError WorkflowAwakeablePage)
+    |
+274 | listWorkflowAwakeablesPage :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> OwnerPageQuery -> Eff es (Either InspectionError WorkflowAwakeablePage)
+    |                               ^^^^^^^^^^^^^^^^^^^^^^^^
+
+[44 of 75] Compiling Keiro.Workflow   ( src/Keiro/Workflow.hs, dist/build/Keiro/Workflow.o, dist/build/Keiro/Workflow.dyn_o )
+[45 of 75] Compiling Keiro.Workflow.Child ( src/Keiro/Workflow/Child.hs, dist/build/Keiro/Workflow/Child.o, dist/build/Keiro/Workflow/Child.dyn_o )
+[46 of 75] Compiling Keiro.Workflow.Resume ( src/Keiro/Workflow/Resume.hs, dist/build/Keiro/Workflow/Resume.o, dist/build/Keiro/Workflow/Resume.dyn_o )
+[47 of 75] Compiling Keiro.Workflow.Awakeable ( src/Keiro/Workflow/Awakeable.hs, dist/build/Keiro/Workflow/Awakeable.o, dist/build/Keiro/Workflow/Awakeable.dyn_o )
+[48 of 75] Compiling Keiro.Workflow.Awakeable.Compatibility ( src/Keiro/Workflow/Awakeable/Compatibility.hs, dist/build/Keiro/Workflow/Awakeable/Compatibility.o, dist/build/Keiro/Workflow/Awakeable/Compatibility.dyn_o )
+[49 of 75] Compiling Keiro.Timer      ( src/Keiro/Timer.hs, dist/build/Keiro/Timer.o, dist/build/Keiro/Timer.dyn_o )
+[50 of 75] Compiling Keiro.Workflow.Sleep ( src/Keiro/Workflow/Sleep.hs, dist/build/Keiro/Workflow/Sleep.o, dist/build/Keiro/Workflow/Sleep.dyn_o )
+[51 of 75] Compiling Keiro.ReadModel  ( src/Keiro/ReadModel.hs, dist/build/Keiro/ReadModel.o, dist/build/Keiro/ReadModel.dyn_o )
+[52 of 75] Compiling Keiro.Projection.Catalog ( src/Keiro/Projection/Catalog.hs, dist/build/Keiro/Projection/Catalog.o, dist/build/Keiro/Projection/Catalog.dyn_o )
+src/Keiro/Projection/Catalog.hs:534:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘arguments’
+    Record selection and update using this field will be partial.
+    |
+534 |         arguments :: ![SqlFunctionArgument],
+    |         ^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:536:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘privateImplementation’
+    Record selection and update using this field will be partial.
+    |
+536 |         privateImplementation :: !QualifiedFunction,
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:537:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘privateImplementationVersion’
+    Record selection and update using this field will be partial.
+    |
+537 |         privateImplementationVersion :: !Int,
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1100:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilitySubscriptionId’
+    Record selection and update using this field will be partial.
+     |
+1100 |         capabilitySubscriptionId :: !SubscriptionId,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1101:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilitySubscriptionName’
+    Record selection and update using this field will be partial.
+     |
+1101 |         capabilitySubscriptionName :: !Text,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1102:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilitySourceId’
+    Record selection and update using this field will be partial.
+     |
+1102 |         capabilitySourceId :: !SourceId,
+     |         ^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1103:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilityCheckpointOnMissing’
+    Record selection and update using this field will be partial.
+     |
+1103 |         capabilityCheckpointOnMissing :: !MissingCheckpointPolicy,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1104:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilityDedupKeyId’
+    Record selection and update using this field will be partial.
+     |
+1104 |         capabilityDedupKeyId :: !DedupKeyId,
+     |         ^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1105:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilityDedupName’
+    Record selection and update using this field will be partial.
+     |
+1105 |         capabilityDedupName :: !Text
+     |         ^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:3412:29: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘argument’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Projection/Catalog.hs:194:1-20
+      (and originally defined in ‘Control.Lens.Setter’)
+     |
+3412 | sqlFunctionArgumentPreimage argument =
+     |                             ^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:3582:20: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘argument’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Projection/Catalog.hs:194:1-20
+      (and originally defined in ‘Control.Lens.Setter’)
+     |
+3582 |     renderArgument argument = argument ^. #argumentName <> ":" <> renderQualifiedType (argument ^. #argumentType)
+     |                    ^^^^^^^^
+
+[53 of 75] Compiling Keiro.ReadModel.External ( src/Keiro/ReadModel/External.hs, dist/build/Keiro/ReadModel/External.o, dist/build/Keiro/ReadModel/External.dyn_o )
+[54 of 75] Compiling Keiro.ReadModel.Rebuild.Group ( src/Keiro/ReadModel/Rebuild/Group.hs, dist/build/Keiro/ReadModel/Rebuild/Group.o, dist/build/Keiro/ReadModel/Rebuild/Group.dyn_o )
+[55 of 75] Compiling Keiro.ReadModel.Rebuild.Stream ( src/Keiro/ReadModel/Rebuild/Stream.hs, dist/build/Keiro/ReadModel/Rebuild/Stream.o, dist/build/Keiro/ReadModel/Rebuild/Stream.dyn_o )
+[56 of 75] Compiling Keiro.ReadModel.Rebuild.Status ( src/Keiro/ReadModel/Rebuild/Status.hs, dist/build/Keiro/ReadModel/Rebuild/Status.o, dist/build/Keiro/ReadModel/Rebuild/Status.dyn_o )
+[57 of 75] Compiling Keiro.ReadModel.Rebuild.Runner ( src/Keiro/ReadModel/Rebuild/Runner.hs, dist/build/Keiro/ReadModel/Rebuild/Runner.o, dist/build/Keiro/ReadModel/Rebuild/Runner.dyn_o )
+[58 of 75] Compiling Keiro.ReadModel.Rebuild.Versioned ( src/Keiro/ReadModel/Rebuild/Versioned.hs, dist/build/Keiro/ReadModel/Rebuild/Versioned.o, dist/build/Keiro/ReadModel/Rebuild/Versioned.dyn_o )
+[59 of 75] Compiling Keiro.ReadModel.Rebuild ( src/Keiro/ReadModel/Rebuild.hs, dist/build/Keiro/ReadModel/Rebuild.o, dist/build/Keiro/ReadModel/Rebuild.dyn_o )
+[60 of 75] Compiling Keiro.Projection.Catalog.Operations ( src/Keiro/Projection/Catalog/Operations.hs, dist/build/Keiro/Projection/Catalog/Operations.o, dist/build/Keiro/Projection/Catalog/Operations.dyn_o )
+[61 of 75] Compiling Keiro.Outbox     ( src/Keiro/Outbox.hs, dist/build/Keiro/Outbox.o, dist/build/Keiro/Outbox.dyn_o )
+[62 of 75] Compiling Keiro.Inbox      ( src/Keiro/Inbox.hs, dist/build/Keiro/Inbox.o, dist/build/Keiro/Inbox.dyn_o )
+[63 of 75] Compiling Keiro.Command    ( src/Keiro/Command.hs, dist/build/Keiro/Command.o, dist/build/Keiro/Command.dyn_o )
+[64 of 75] Compiling Keiro.ReplayAudit ( src/Keiro/ReplayAudit.hs, dist/build/Keiro/ReplayAudit.o, dist/build/Keiro/ReplayAudit.dyn_o )
+src/Keiro/ReplayAudit.hs:141:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘streamVersion’
+    Record selection and update using this field will be partial.
+    |
+141 |       { streamVersion :: !StreamVersion,
+    |         ^^^^^^^^^^^^^
+
+src/Keiro/ReplayAudit.hs:142:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘digest’
+    Record selection and update using this field will be partial.
+    |
+142 |         digest :: !(Maybe Text)
+    |         ^^^^^^
+
+src/Keiro/ReplayAudit.hs:145:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘commandError’
+    Record selection and update using this field will be partial.
+    |
+145 |       { commandError :: !CommandError
+    |         ^^^^^^^^^^^^
+
+src/Keiro/ReplayAudit.hs:148:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘seedVersion’
+    Record selection and update using this field will be partial.
+    |
+148 |       { seedVersion :: !StreamVersion,
+    |         ^^^^^^^^^^^
+
+src/Keiro/ReplayAudit.hs:149:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘seededDigest’
+    Record selection and update using this field will be partial.
+    |
+149 |         seededDigest :: !Text,
+    |         ^^^^^^^^^^^^
+
+src/Keiro/ReplayAudit.hs:150:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘fullDigest’
+    Record selection and update using this field will be partial.
+    |
+150 |         fullDigest :: !Text
+    |         ^^^^^^^^^^
+
+[65 of 75] Compiling Keiro.Projection ( src/Keiro/Projection.hs, dist/build/Keiro/Projection.o, dist/build/Keiro/Projection.dyn_o )
+[66 of 75] Compiling Keiro.ProcessManager.Provenance ( src/Keiro/ProcessManager/Provenance.hs, dist/build/Keiro/ProcessManager/Provenance.o, dist/build/Keiro/ProcessManager/Provenance.dyn_o )
+src/Keiro/ProcessManager/Provenance.hs:14:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Control.Monad’ is redundant
+      except perhaps to import instances from ‘Control.Monad’
+    To import instances alone, use: import Control.Monad()
+   |
+14 | import Control.Monad (unless)
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/ProcessManager/Provenance.hs:79:67: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager/Provenance.hs:24:1-34
+      (and originally defined in ‘Control.Lens.Indexed’)
+   |
+79 |       "dispatched" .= [object ["i" .= index, "target" .= name] | (index, StreamName name) <- provenance.dispatched],
+   |                                                                   ^^^^^
+
+src/Keiro/ProcessManager/Provenance.hs:111:17: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager/Provenance.hs:24:1-34
+      (and originally defined in ‘Control.Lens.Indexed’)
+    |
+111 |                 index <- entry .: "i"
+    |                 ^^^^^
+
+[67 of 75] Compiling Keiro.ProcessManager ( src/Keiro/ProcessManager.hs, dist/build/Keiro/ProcessManager.o, dist/build/Keiro/ProcessManager.dyn_o )
+src/Keiro/ProcessManager.hs:540:78: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager.hs:168:1-20
+      (and originally defined in ‘Control.Lens.Indexed’)
+    |
+540 |                 dispatched = [(index, resolveTarget (command ^. #target)) | (index, command) <- zip [0 ..] (action ^. #commands)],
+    |                                                                              ^^^^^
+
+[68 of 75] Compiling Keiro.Router.Selection ( src/Keiro/Router/Selection.hs, dist/build/Keiro/Router/Selection.o, dist/build/Keiro/Router/Selection.dyn_o )
+[69 of 75] Compiling Keiro.Router     ( src/Keiro/Router.hs, dist/build/Keiro/Router.o, dist/build/Keiro/Router.dyn_o )
+[70 of 75] Compiling Keiro.ProcessManager.Reaction ( src/Keiro/ProcessManager/Reaction.hs, dist/build/Keiro/ProcessManager/Reaction.o, dist/build/Keiro/ProcessManager/Reaction.dyn_o )
+src/Keiro/ProcessManager/Reaction.hs:128:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘command’
+    Record selection and update using this field will be partial.
+    |
+128 |       { command :: !ci,
+    |         ^^^^^^^
+
+src/Keiro/ProcessManager/Reaction.hs:129:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘followUps’
+    Record selection and update using this field will be partial.
+    |
+129 |         followUps :: ![FollowUp targetCi],
+    |         ^^^^^^^^^
+
+src/Keiro/ProcessManager/Reaction.hs:130:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘onAccepted’
+    Record selection and update using this field will be partial.
+    |
+130 |         onAccepted :: ![FollowUp targetCi]
+    |         ^^^^^^^^^^
+
+src/Keiro/ProcessManager/Reaction.hs:568:3: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         recoverWitness :: forall (es :: [Effectful.Internal.Effect.Effect])
+                                  phi (rs :: [Keiki.Core.Slot]) s ci co.
+                           (IOE :> es, Store :> es) =>
+                           ValidatedEventStream phi rs s ci co
+                           -> StreamName -> EventId -> Eff es (Either ReactionError ())
+    |
+568 |   (IOE :> es, Store :> es) =>
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+[71 of 75] Compiling Keiro.Inspection.Aggregate ( src/Keiro/Inspection/Aggregate.hs, dist/build/Keiro/Inspection/Aggregate.o, dist/build/Keiro/Inspection/Aggregate.dyn_o )
+src/Keiro/Inspection/Aggregate.hs:249:11: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘folded’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Inspection/Aggregate.hs:57:1-34
+      (and originally defined in ‘Control.Lens.Fold’)
+    |
+249 |           folded <- if isJust info.deletedAt then pure (Right Nothing) else fmap (fmap Just) (hydrateWithSource inspectionRunCommandOptions (unvalidated inspector.eventStream) target)
+    |           ^^^^^^
+
+src/Keiro/Inspection/Aggregate.hs:381:19: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘view’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Inspection/Aggregate.hs:57:1-34
+      (and originally defined in ‘Control.Lens.Getter’)
+    |
+381 | aggregateViewJson view =
+    |                   ^^^^
+
+[72 of 75] Compiling Keiro.ProcessManager.Inspect ( src/Keiro/ProcessManager/Inspect.hs, dist/build/Keiro/ProcessManager/Inspect.o, dist/build/Keiro/ProcessManager/Inspect.dyn_o )
+src/Keiro/ProcessManager/Inspect.hs:291:19: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager/Inspect.hs:59:1-34
+      (and originally defined in ‘Control.Lens.Indexed’)
+    |
+291 |     probe record (index, target) = do
+    |                   ^^^^^
+
+src/Keiro/ProcessManager/Inspect.hs:354:24: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘view’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager/Inspect.hs:59:1-34
+      (and originally defined in ‘Control.Lens.Getter’)
+    |
+354 | processManagerViewJson view =
+    |                        ^^^^
+
+[73 of 75] Compiling Keiro.Inbox.Delegated ( src/Keiro/Inbox/Delegated.hs, dist/build/Keiro/Inbox/Delegated.o, dist/build/Keiro/Inbox/Delegated.dyn_o )
+[74 of 75] Compiling Paths_keiro      ( dist/build/autogen/Paths_keiro.hs, dist/build/Paths_keiro.o, dist/build/Paths_keiro.dyn_o )
+[75 of 75] Compiling Keiro            ( src/Keiro.hs, dist/build/Keiro.o, dist/build/Keiro.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/kr-0.25.0.0-3f633033/lib
+Configuring library for kiroku-store-migrations-0.7.3.0...
+Preprocessing library for kiroku-store-migrations-0.7.3.0...
+Building library for kiroku-store-migrations-0.7.3.0...
+[1 of 5] Compiling Kiroku.Store.Migrations.Internal.Definition ( src/Kiroku/Store/Migrations/Internal/Definition.hs, dist/build/Kiroku/Store/Migrations/Internal/Definition.o, dist/build/Kiroku/Store/Migrations/Internal/Definition.dyn_o )
+[2 of 5] Compiling Kiroku.Store.Migrations ( src/Kiroku/Store/Migrations.hs, dist/build/Kiroku/Store/Migrations.o, dist/build/Kiroku/Store/Migrations.dyn_o )
+[3 of 5] Compiling Kiroku.Store.Migrations.Internal.EmbedFile ( src/Kiroku/Store/Migrations/Internal/EmbedFile.hs, dist/build/Kiroku/Store/Migrations/Internal/EmbedFile.o, dist/build/Kiroku/Store/Migrations/Internal/EmbedFile.dyn_o )
+[4 of 5] Compiling Kiroku.Store.Migrations.History.Codd ( src/Kiroku/Store/Migrations/History/Codd.hs, dist/build/Kiroku/Store/Migrations/History/Codd.o, dist/build/Kiroku/Store/Migrations/History/Codd.dyn_o )
+[5 of 5] Compiling Kiroku.Store.Migrations.New ( src/Kiroku/Store/Migrations/New.hs, dist/build/Kiroku/Store/Migrations/New.o, dist/build/Kiroku/Store/Migrations/New.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/krk-str-mgrtns-0.7.3.0-eb1f4ee5/lib
+Configuring library for keiro-migrations-0.25.0.0...
+Preprocessing library for keiro-migrations-0.25.0.0...
+Building library for keiro-migrations-0.25.0.0...
+[1 of 5] Compiling Keiro.Migrations.Internal.Definition ( src/Keiro/Migrations/Internal/Definition.hs, dist/build/Keiro/Migrations/Internal/Definition.o, dist/build/Keiro/Migrations/Internal/Definition.dyn_o )
+[2 of 5] Compiling Keiro.Migrations ( src/Keiro/Migrations.hs, dist/build/Keiro/Migrations.o, dist/build/Keiro/Migrations.dyn_o )
+[3 of 5] Compiling Keiro.Migrations.Internal.EmbedFile ( src/Keiro/Migrations/Internal/EmbedFile.hs, dist/build/Keiro/Migrations/Internal/EmbedFile.o, dist/build/Keiro/Migrations/Internal/EmbedFile.dyn_o )
+[4 of 5] Compiling Keiro.Migrations.History.Codd ( src/Keiro/Migrations/History/Codd.hs, dist/build/Keiro/Migrations/History/Codd.o, dist/build/Keiro/Migrations/History/Codd.dyn_o )
+[5 of 5] Compiling Keiro.Migrations.SchemaCheck ( src/Keiro/Migrations/SchemaCheck.hs, dist/build/Keiro/Migrations/SchemaCheck.o, dist/build/Keiro/Migrations/SchemaCheck.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/kr-mgrtns-0.25.0.0-fc738c1a/lib
+Configuring library for keiro-test-support-0.25.0.0...
+Preprocessing library for keiro-test-support-0.25.0.0...
+Building library for keiro-test-support-0.25.0.0...
+[1 of 2] Compiling Keiro.Test.Postgres ( src/Keiro/Test/Postgres.hs, dist/build/Keiro/Test/Postgres.o, dist/build/Keiro/Test/Postgres.dyn_o )
+[2 of 2] Compiling Keiro.Test.ReplayCompatibility ( src/Keiro/Test/ReplayCompatibility.hs, dist/build/Keiro/Test/ReplayCompatibility.o, dist/build/Keiro/Test/ReplayCompatibility.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/kr-tst-spprt-0.25.0.0-725a5eae/lib
+Configuring library for keiro-ops-0.25.0.0...
+Preprocessing library for keiro-ops-0.25.0.0...
+Building library for keiro-ops-0.25.0.0...
+[ 1 of 19] Compiling Keiro.Ops.Env    ( src/Keiro/Ops/Env.hs, dist/build/Keiro/Ops/Env.o, dist/build/Keiro/Ops/Env.dyn_o )
+[ 2 of 19] Compiling Keiro.Ops.Parse  ( src/Keiro/Ops/Parse.hs, dist/build/Keiro/Ops/Parse.o, dist/build/Keiro/Ops/Parse.dyn_o )
+[ 3 of 19] Compiling Keiro.Ops.Render ( src/Keiro/Ops/Render.hs, dist/build/Keiro/Ops/Render.o, dist/build/Keiro/Ops/Render.dyn_o )
+[ 4 of 19] Compiling Keiro.Ops.Rebuild ( src/Keiro/Ops/Rebuild.hs, dist/build/Keiro/Ops/Rebuild.o, dist/build/Keiro/Ops/Rebuild.dyn_o )
+[ 5 of 19] Compiling Keiro.Ops.Projection ( src/Keiro/Ops/Projection.hs, dist/build/Keiro/Ops/Projection.o, dist/build/Keiro/Ops/Projection.dyn_o )
+src/Keiro/Ops/Projection.hs:137:18: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘head’ shadows the existing binding
+      imported from ‘Prelude’ at src/Keiro/Ops/Projection.hs:56:1-14
+      (and originally defined in ‘ghc-internal-9.1204.0:GHC.Internal.List’)
+    |
+137 |     Right (page, head) ->
+    |                  ^^^^
+
+src/Keiro/Ops/Projection.hs:153:17: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘value’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops/Projection.hs:55:1-42
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+153 |           Right value -> Right . (value,) <$> storeHeadPosition
+    |                 ^^^^^
+
+src/Keiro/Ops/Projection.hs:270:29: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘value’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops/Projection.hs:55:1-42
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+270 | positionInt (GlobalPosition value) = value
+    |                             ^^^^^
+
+src/Keiro/Ops/Projection.hs:300:12: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘value’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops/Projection.hs:55:1-42
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+300 | shellQuote value = "'" <> Text.replace "'" "'\"'\"'" value <> "'"
+    |            ^^^^^
+
+[ 6 of 19] Compiling Keiro.Ops.ProcessManager ( src/Keiro/Ops/ProcessManager.hs, dist/build/Keiro/Ops/ProcessManager.o, dist/build/Keiro/Ops/ProcessManager.dyn_o )
+[ 7 of 19] Compiling Keiro.Ops.Pgmq   ( src/Keiro/Ops/Pgmq.hs, dist/build/Keiro/Ops/Pgmq.o, dist/build/Keiro/Ops/Pgmq.dyn_o )
+[ 8 of 19] Compiling Keiro.Ops.Outbox ( src/Keiro/Ops/Outbox.hs, dist/build/Keiro/Ops/Outbox.o, dist/build/Keiro/Ops/Outbox.dyn_o )
+[ 9 of 19] Compiling Keiro.Ops.Inbox  ( src/Keiro/Ops/Inbox.hs, dist/build/Keiro/Ops/Inbox.o, dist/build/Keiro/Ops/Inbox.dyn_o )
+[10 of 19] Compiling Keiro.Ops.Aggregate ( src/Keiro/Ops/Aggregate.hs, dist/build/Keiro/Ops/Aggregate.o, dist/build/Keiro/Ops/Aggregate.dyn_o )
+[11 of 19] Compiling Keiro.Ops.ReplayAudit ( src/Keiro/Ops/ReplayAudit.hs, dist/build/Keiro/Ops/ReplayAudit.o, dist/build/Keiro/Ops/ReplayAudit.dyn_o )
+[12 of 19] Compiling Keiro.Ops.Shard  ( src/Keiro/Ops/Shard.hs, dist/build/Keiro/Ops/Shard.o, dist/build/Keiro/Ops/Shard.dyn_o )
+src/Keiro/Ops/Shard.hs:21:29: warning: [GHC-38856] [-Wunused-imports]
+    The import of ‘:>’ from module ‘Effectful’ is redundant
+   |
+21 | import Effectful (Eff, IOE, (:>))
+   |                             ^^^^
+
+[13 of 19] Compiling Keiro.Ops.Snapshot ( src/Keiro/Ops/Snapshot.hs, dist/build/Keiro/Ops/Snapshot.o, dist/build/Keiro/Ops/Snapshot.dyn_o )
+[14 of 19] Compiling Keiro.Ops.Stream ( src/Keiro/Ops/Stream.hs, dist/build/Keiro/Ops/Stream.o, dist/build/Keiro/Ops/Stream.dyn_o )
+[15 of 19] Compiling Keiro.Ops.Timer  ( src/Keiro/Ops/Timer.hs, dist/build/Keiro/Ops/Timer.o, dist/build/Keiro/Ops/Timer.dyn_o )
+[16 of 19] Compiling Keiro.Ops.Workflow ( src/Keiro/Ops/Workflow.hs, dist/build/Keiro/Ops/Workflow.o, dist/build/Keiro/Ops/Workflow.dyn_o )
+src/Keiro/Ops/Workflow.hs:354:26: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops/Workflow.hs:58:1-49
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+354 | validateCommand (Inspect command) = either (Left . inspectionError) Right $ case command of
+    |                          ^^^^^^^
+
+[17 of 19] Compiling Keiro.Ops.Embed  ( src/Keiro/Ops/Embed.hs, dist/build/Keiro/Ops/Embed.o, dist/build/Keiro/Ops/Embed.dyn_o )
+[18 of 19] Compiling Keiro.Ops.WorkflowHeaderCache ( src/Keiro/Ops/WorkflowHeaderCache.hs, dist/build/Keiro/Ops/WorkflowHeaderCache.o, dist/build/Keiro/Ops/WorkflowHeaderCache.dyn_o )
+[19 of 19] Compiling Keiro.Ops        ( src/Keiro/Ops.hs, dist/build/Keiro/Ops.o, dist/build/Keiro/Ops.dyn_o )
+src/Keiro/Ops.hs:198:33: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+198 | validateCommand (ProcessManager command) = ProcessManager.validateCommand command
+    |                                 ^^^^^^^
+
+src/Keiro/Ops.hs:199:28: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+199 | validateCommand (Aggregate command) = Aggregate.validateCommand command
+    |                            ^^^^^^^
+
+src/Keiro/Ops.hs:200:27: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+200 | validateCommand (Workflow command) = Workflow.validateCommand command
+    |                           ^^^^^^^
+
+src/Keiro/Ops.hs:201:24: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+201 | validateCommand (Timer command) = Timer.validateCommand command
+    |                        ^^^^^^^
+
+src/Keiro/Ops.hs:202:29: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+202 | validateCommand (Projection command) = Projection.validateCommand command
+    |                             ^^^^^^^
+
+src/Keiro/Ops.hs:208:18: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+208 |   ProcessManager command -> ProcessManager.isMutation command
+    |                  ^^^^^^^
+
+src/Keiro/Ops.hs:209:13: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+209 |   Aggregate command -> Aggregate.isMutation command
+    |             ^^^^^^^
+
+src/Keiro/Ops.hs:227:39: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+227 | runCommandWithHeaderCache _ hooks env command = do
+    |                                       ^^^^^^^
+
+src/Keiro/Ops.hs:236:51: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+236 | runCommandWithReadEncoding encode cache hooks env command = case command of
+    |                                                   ^^^^^^^
+
+src/Keiro/Ops.hs:256:18: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+256 |   ProcessManager command -> maybe (pure (Failed "process-manager inspection hook is not mounted")) (\catalog -> ProcessManager.runCommand catalog env command) hooks.processManagers
+    |                  ^^^^^^^
+
+src/Keiro/Ops.hs:257:13: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘command’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops.hs:49:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+    |
+257 |   Aggregate command -> maybe (pure (Failed "aggregate inspection hook is not mounted")) (\catalog -> Aggregate.runCommand env catalog command) hooks.aggregates
+    |             ^^^^^^^
+
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/kr-ps-0.25.0.0-2d76361c/lib
+Configuring library for keiro-ops-http-0.25.0.0...
+Preprocessing library for keiro-ops-http-0.25.0.0...
+Building library for keiro-ops-http-0.25.0.0...
+[ 1 of 16] Compiling Keiro.Ops.Http.Config ( src/Keiro/Ops/Http/Config.hs, dist/build/Keiro/Ops/Http/Config.o, dist/build/Keiro/Ops/Http/Config.dyn_o )
+[ 2 of 16] Compiling Keiro.Ops.Http.Budget ( src/Keiro/Ops/Http/Budget.hs, dist/build/Keiro/Ops/Http/Budget.o, dist/build/Keiro/Ops/Http/Budget.dyn_o )
+[ 3 of 16] Compiling Keiro.Ops.Http.Cors ( src/Keiro/Ops/Http/Cors.hs, dist/build/Keiro/Ops/Http/Cors.o, dist/build/Keiro/Ops/Http/Cors.dyn_o )
+[ 4 of 16] Compiling Keiro.Ops.Http.Pool ( src/Keiro/Ops/Http/Pool.hs, dist/build/Keiro/Ops/Http/Pool.o, dist/build/Keiro/Ops/Http/Pool.dyn_o )
+[ 5 of 16] Compiling Keiro.Ops.Http.Protocol ( src/Keiro/Ops/Http/Protocol.hs, dist/build/Keiro/Ops/Http/Protocol.o, dist/build/Keiro/Ops/Http/Protocol.dyn_o )
+src/Keiro/Ops/Http/Protocol.hs:84:15: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘feed’
+    Record selection and update using this field will be partial.
+   |
+84 |   = Snapshot {feed :: !FeedName, sequence :: !Word64, trigger :: !Trigger, readAt :: !UTCTime, items :: ![Value], extra :: !(Maybe Value)}
+   |               ^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:84:34: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘sequence’
+    Record selection and update using this field will be partial.
+   |
+84 |   = Snapshot {feed :: !FeedName, sequence :: !Word64, trigger :: !Trigger, readAt :: !UTCTime, items :: ![Value], extra :: !(Maybe Value)}
+   |                                  ^^^^^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:84:55: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘trigger’
+    Record selection and update using this field will be partial.
+   |
+84 |   = Snapshot {feed :: !FeedName, sequence :: !Word64, trigger :: !Trigger, readAt :: !UTCTime, items :: ![Value], extra :: !(Maybe Value)}
+   |                                                       ^^^^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:84:76: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘readAt’
+    Record selection and update using this field will be partial.
+   |
+84 |   = Snapshot {feed :: !FeedName, sequence :: !Word64, trigger :: !Trigger, readAt :: !UTCTime, items :: ![Value], extra :: !(Maybe Value)}
+   |                                                                            ^^^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:84:96: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘items’
+    Record selection and update using this field will be partial.
+   |
+84 |   = Snapshot {feed :: !FeedName, sequence :: !Word64, trigger :: !Trigger, readAt :: !UTCTime, items :: ![Value], extra :: !(Maybe Value)}
+   |                                                                                                ^^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:84:115: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘extra’
+    Record selection and update using this field will be partial.
+   |
+84 |   = Snapshot {feed :: !FeedName, sequence :: !Word64, trigger :: !Trigger, readAt :: !UTCTime, items :: ![Value], extra :: !(Maybe Value)}
+   |                                                                                                                   ^^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:85:94: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘changed’
+    Record selection and update using this field will be partial.
+   |
+85 |   | Update {feed :: !FeedName, sequence :: !Word64, trigger :: !Trigger, readAt :: !UTCTime, changed :: ![Value], removed :: ![Value], extra :: !(Maybe Value)}
+   |                                                                                              ^^^^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:85:115: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘removed’
+    Record selection and update using this field will be partial.
+   |
+85 |   | Update {feed :: !FeedName, sequence :: !Word64, trigger :: !Trigger, readAt :: !UTCTime, changed :: ![Value], removed :: ![Value], extra :: !(Maybe Value)}
+   |                                                                                                                   ^^^^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:88:17: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘code’
+    Record selection and update using this field will be partial.
+   |
+88 |   | ErrorFrame {code :: !SocketErrorCode, message :: !Text, errorFeed :: !(Maybe FeedName)}
+   |                 ^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:88:43: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘message’
+    Record selection and update using this field will be partial.
+   |
+88 |   | ErrorFrame {code :: !SocketErrorCode, message :: !Text, errorFeed :: !(Maybe FeedName)}
+   |                                           ^^^^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:88:61: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘errorFeed’
+    Record selection and update using this field will be partial.
+   |
+88 |   | ErrorFrame {code :: !SocketErrorCode, message :: !Text, errorFeed :: !(Maybe FeedName)}
+   |                                                             ^^^^^^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:94:19: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘sequence’ shadows the existing binding
+      imported from ‘Prelude’ at src/Keiro/Ops/Http/Protocol.hs:3:8-30
+      (and originally defined in ‘ghc-internal-9.1204.0:GHC.Internal.Data.Traversable’)
+   |
+94 |     Snapshot feed sequence trigger stamp items extra ->
+   |                   ^^^^^^^^
+
+src/Keiro/Ops/Http/Protocol.hs:97:17: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘sequence’ shadows the existing binding
+      imported from ‘Prelude’ at src/Keiro/Ops/Http/Protocol.hs:3:8-30
+      (and originally defined in ‘ghc-internal-9.1204.0:GHC.Internal.Data.Traversable’)
+   |
+97 |     Update feed sequence trigger stamp changed removed extra ->
+   |                 ^^^^^^^^
+
+[ 6 of 16] Compiling Keiro.Ops.Http.Feed.Queue ( src/Keiro/Ops/Http/Feed/Queue.hs, dist/build/Keiro/Ops/Http/Feed/Queue.o, dist/build/Keiro/Ops/Http/Feed/Queue.dyn_o )
+[ 7 of 16] Compiling Keiro.Ops.Http.Route ( src/Keiro/Ops/Http/Route.hs, dist/build/Keiro/Ops/Http/Route.o, dist/build/Keiro/Ops/Http/Route.dyn_o )
+[ 8 of 16] Compiling Keiro.Ops.Http.Application ( src/Keiro/Ops/Http/Application.hs, dist/build/Keiro/Ops/Http/Application.o, dist/build/Keiro/Ops/Http/Application.dyn_o )
+[ 9 of 16] Compiling Keiro.Ops.Http.Compose ( src/Keiro/Ops/Http/Compose.hs, dist/build/Keiro/Ops/Http/Compose.o, dist/build/Keiro/Ops/Http/Compose.dyn_o )
+[10 of 16] Compiling Keiro.Ops.Http.Server ( src/Keiro/Ops/Http/Server.hs, dist/build/Keiro/Ops/Http/Server.o, dist/build/Keiro/Ops/Http/Server.dyn_o )
+[11 of 16] Compiling Keiro.Ops.Http.Views ( src/Keiro/Ops/Http/Views.hs, dist/build/Keiro/Ops/Http/Views.o, dist/build/Keiro/Ops/Http/Views.dyn_o )
+[12 of 16] Compiling Keiro.Ops.Http.Feed.Driver ( src/Keiro/Ops/Http/Feed/Driver.hs, dist/build/Keiro/Ops/Http/Feed/Driver.o, dist/build/Keiro/Ops/Http/Feed/Driver.dyn_o )
+src/Keiro/Ops/Http/Feed/Driver.hs:166:11: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘sequence’ shadows the existing binding
+      imported from ‘Prelude’ at src/Keiro/Ops/Http/Feed/Driver.hs:3:8-33
+      (and originally defined in ‘ghc-internal-9.1204.0:GHC.Internal.Data.Traversable’)
+    |
+166 |           sequence = previous.currentSequence + if trigger /= P.Subscribed && different then 1 else 0
+    |           ^^^^^^^^
+
+[13 of 16] Compiling Keiro.Ops.Http.Feed ( src/Keiro/Ops/Http/Feed.hs, dist/build/Keiro/Ops/Http/Feed.o, dist/build/Keiro/Ops/Http/Feed.dyn_o )
+[14 of 16] Compiling Keiro.Ops.Http.WebSocket ( src/Keiro/Ops/Http/WebSocket.hs, dist/build/Keiro/Ops/Http/WebSocket.o, dist/build/Keiro/Ops/Http/WebSocket.dyn_o )
+src/Keiro/Ops/Http/WebSocket.hs:17:1: warning: [GHC-66111] [-Wunused-imports]
+    The qualified import of ‘Data.Text.Encoding’ is redundant
+      except perhaps to import instances from ‘Data.Text.Encoding’
+    To import instances alone, use: import Data.Text.Encoding()
+   |
+17 | import Data.Text.Encoding qualified as Text
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Ops/Http/WebSocket.hs:44:5: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘maximum’ shadows the existing binding
+      imported from ‘Prelude’ at src/Keiro/Ops/Http/WebSocket.hs:3:8-31
+      (and originally defined in ‘ghc-internal-9.1204.0:GHC.Internal.Data.Foldable’)
+   |
+44 |     maximum = fromIntegral config.inspectionLimits.maxRequestBytes
+   |     ^^^^^^^
+
+[15 of 16] Compiling Keiro.Ops.Http.Host ( src/Keiro/Ops/Http/Host.hs, dist/build/Keiro/Ops/Http/Host.o, dist/build/Keiro/Ops/Http/Host.dyn_o )
+src/Keiro/Ops/Http/Host.hs:64:21: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘action’ shadows the existing binding
+      imported from ‘Options.Applicative’ at src/Keiro/Ops/Http/Host.hs:26:1-26
+      (and originally defined in ‘Options.Applicative.Builder’)
+   |
+64 | withHost opts hooks action = do
+   |                     ^^^^^^
+
+[16 of 16] Compiling Keiro.Ops.Http   ( src/Keiro/Ops/Http.hs, dist/build/Keiro/Ops/Http.o, dist/build/Keiro/Ops/Http.dyn_o )
+Installing library in /Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/incoming/new-8361/Users/shinzui/.local/state/cabal/store/ghc-9.12.4-8bff/kr-ps-http-0.25.0.0-24ec83e8/lib
+Configuring executable 'release-consumer' for release-consumer-0.1.0.0...
+Preprocessing executable 'release-consumer' for release-consumer-0.1.0.0...
+Building executable 'release-consumer' for release-consumer-0.1.0.0...
+[1 of 1] Compiling Main             ( Main.hs, dist-newstyle/build/aarch64-osx/ghc-9.12.4/release-consumer-0.1.0.0/x/release-consumer/build/release-consumer/release-consumer-tmp/Main.o )
+[2 of 2] Linking dist-newstyle/build/aarch64-osx/ghc-9.12.4/release-consumer-0.1.0.0/x/release-consumer/build/release-consumer/release-consumer
+started=2026-11-15 13:31:26.36326 UTC
+finished=2026-11-15 13:31:26.439039 UTC
+kiroku/0001-kiroku-bootstrap outcome=applied_now duration_ms=11
+kiroku/0002-add-subscription-dead-letters outcome=applied_now duration_ms=2
+kiroku/0003-notify-trigger-append-guard outcome=applied_now duration_ms=1
+kiroku/0004-dead-letters-event-id-index outcome=applied_now duration_ms=0
+kiroku/0005-index-hygiene-and-streams-fillfactor outcome=applied_now duration_ms=8
+kiroku/0006-stream-name-length-check outcome=applied_now duration_ms=2
+kiroku/0007-stream-truncate-before outcome=applied_now duration_ms=1
+kiroku/0008-schema-management-comment outcome=applied_now duration_ms=0
+kiroku/0009 outcome=applied_now duration_ms=1
+kiroku/0010 outcome=applied_now duration_ms=2
+kiroku/0011 outcome=applied_now duration_ms=0
+kiroku/0012 outcome=applied_now duration_ms=1
+kiroku/0013 outcome=applied_now duration_ms=0
+kiroku/0014 outcome=applied_now duration_ms=0
+kiroku/0015 outcome=applied_now duration_ms=1
+kiroku/0016 outcome=applied_now duration_ms=0
+kiroku/0017 outcome=applied_now duration_ms=2
+keiro/0001-keiro-bootstrap outcome=applied_now duration_ms=2
+keiro/0002-keiro-outbox outcome=applied_now duration_ms=2
+keiro/0003-keiro-inbox outcome=applied_now duration_ms=1
+keiro/0004-keiro-timer-recovery outcome=applied_now duration_ms=1
+keiro/0005-keiro-workflow-steps outcome=applied_now duration_ms=1
+keiro/0006-keiro-awakeables outcome=applied_now duration_ms=1
+keiro/0007-keiro-workflow-children outcome=applied_now duration_ms=1
+keiro/0008-keiro-workflow-generation outcome=applied_now duration_ms=1
+keiro/0009-keiro-subscription-shards outcome=applied_now duration_ms=1
+keiro/0010-keiro-messaging-crash-recovery outcome=applied_now duration_ms=1
+keiro/0011-keiro-workflows-instances outcome=applied_now duration_ms=2
+keiro/0012-keiro-workflow-gc-index outcome=applied_now duration_ms=1
+keiro/0013-keiro-workflows-wake-after outcome=applied_now duration_ms=0
+keiro/0014-keiro-projection-dedup outcome=applied_now duration_ms=1
+keiro/0015-keiro-outbox-claim-order-index outcome=applied_now duration_ms=1
+keiro/0016-keiro-inbox-drop-received-idx outcome=applied_now duration_ms=0
+keiro/0017-schema-management-comment outcome=applied_now duration_ms=0
+keiro/0018 outcome=applied_now duration_ms=2
+keiro/0019-keiro-snapshots-state-shape-hash outcome=applied_now duration_ms=0
+keiro/0020-keiro-workflow-children-failure-reason outcome=applied_now duration_ms=0
+keiro/0021-keiro-workflows-exact-discovery outcome=applied_now duration_ms=1
+keiro/0022 outcome=applied_now duration_ms=2
+keiro/0023 outcome=applied_now duration_ms=4
+keiro/0024 outcome=applied_now duration_ms=0
+keiro/0025 outcome=applied_now duration_ms=6
+keiro/0026 outcome=applied_now duration_ms=3
+keiro/0027 outcome=applied_now duration_ms=3
+keiro/0028 outcome=applied_now duration_ms=0
+keiro/0029 outcome=applied_now duration_ms=2
+keiro/0030 outcome=applied_now duration_ms=1
+keiro/0031 outcome=applied_now duration_ms=1
+keiro/0032 outcome=applied_now duration_ms=1
+keiro/0033 outcome=applied_now duration_ms=0
+
+{"mutations_enabled": false, "schema_drift": [], "status": "ok"}

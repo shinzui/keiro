@@ -1,0 +1,8 @@
+{
+  "mean_ps": {
+    "previous": 23432995.0,
+    "candidate": 23050079.0
+  },
+  "candidate_over_previous": 0.9836591097296782,
+  "limitation": "One adaptive measurement per version, in fixed previous/candidate order; not a release-guard substitute."
+}

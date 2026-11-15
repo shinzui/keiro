@@ -1,0 +1,7 @@
+All
+  command
+    legacy
+      no-op: OK
+        23.4 μs ± 2.0 μs
+
+All 1 tests passed (2.93s)

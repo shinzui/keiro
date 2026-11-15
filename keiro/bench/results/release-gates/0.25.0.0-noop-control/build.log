@@ -1,0 +1,614 @@
+Control checkout: /private/tmp/keiro-025-control-48vb_hgf
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+WARNING: git-hooks.nix: .git not found; skipping installation.
+The files belonging to this database system will be owned by user "shinzui".
+This user must also own the server process.
+
+The database cluster will be initialized with locale "C".
+The default text search configuration will be set to "english".
+
+Data page checksums are enabled.
+
+creating directory /private/tmp/keiro-025-control-48vb_hgf/db/db ... ok
+creating subdirectories ... ok
+selecting dynamic shared memory implementation ... posix
+selecting default "max_connections" ... 100
+selecting default "shared_buffers" ... 128MB
+selecting default time zone ... US/Pacific
+creating configuration files ... ok
+running bootstrap script ... ok
+performing post-bootstrap initialization ... ok
+syncing data to disk ... ok
+
+Success. You can now start the database server using:
+
+    pg_ctl -D /private/tmp/keiro-025-control-48vb_hgf/db/db -l logfile start
+
+Cloning into '/private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/src/codd-a2add0cb9aa6b19935f10abf77974da666f76aff8ee59265d24ea84d1b521ef8'...
+From https://github.com/mzabani/codd
+ * tag                 v0.1.8     -> FETCH_HEAD
+HEAD is now at 29478ff4 Prepare for v0.1.8 release
+Resolving dependencies...
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-core-0.24.0.0 (lib) (first run)
+ - keiro-migrations-0.24.0.0 (lib) (first run)
+ - keiro-0.24.0.0 (lib) (first run)
+ - keiro-test-support-0.24.0.0 (lib) (first run)
+ - keiro-0.24.0.0 (bench:keiro-bench) (first run)
+Configuring library for keiro-core-0.24.0.0...
+Configuring library for keiro-migrations-0.24.0.0...
+Preprocessing library for keiro-migrations-0.24.0.0...
+Building library for keiro-migrations-0.24.0.0...
+Preprocessing library for keiro-core-0.24.0.0...
+Building library for keiro-core-0.24.0.0...
+[ 1 of 16] Compiling Keiro.Codec.Base16Bytes ( src/Keiro/Codec/Base16Bytes.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Codec/Base16Bytes.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Codec/Base16Bytes.dyn_o )
+[ 2 of 16] Compiling Keiro.Codec.CalendarDay ( src/Keiro/Codec/CalendarDay.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Codec/CalendarDay.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Codec/CalendarDay.dyn_o )
+[ 3 of 16] Compiling Keiro.Codec.IdDomain ( src/Keiro/Codec/IdDomain.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Codec/IdDomain.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Codec/IdDomain.dyn_o )
+[1 of 5] Compiling Keiro.Migrations.Internal.Definition ( src/Keiro/Migrations/Internal/Definition.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.24.0.0/build/Keiro/Migrations/Internal/Definition.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.24.0.0/build/Keiro/Migrations/Internal/Definition.dyn_o )
+[ 4 of 16] Compiling Keiro.Codec.Nominal ( src/Keiro/Codec/Nominal.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Codec/Nominal.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Codec/Nominal.dyn_o )
+[ 5 of 16] Compiling Keiro.Codec.Refined ( src/Keiro/Codec/Refined.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Codec/Refined.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Codec/Refined.dyn_o )
+[ 6 of 16] Compiling Keiro.Codec.Structural ( src/Keiro/Codec/Structural.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Codec/Structural.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Codec/Structural.dyn_o )
+[ 7 of 16] Compiling Keiro.Codec.Structural.Generic ( src/Keiro/Codec/Structural/Generic.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Codec/Structural/Generic.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Codec/Structural/Generic.dyn_o )
+[2 of 5] Compiling Keiro.Migrations ( src/Keiro/Migrations.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.24.0.0/build/Keiro/Migrations.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.24.0.0/build/Keiro/Migrations.dyn_o )
+[ 8 of 16] Compiling Keiro.Codec.TextSet ( src/Keiro/Codec/TextSet.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Codec/TextSet.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Codec/TextSet.dyn_o )
+[ 9 of 16] Compiling Keiro.Prelude    ( src/Keiro/Prelude.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Prelude.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Prelude.dyn_o )
+[10 of 16] Compiling Keiro.Integration.Event ( src/Keiro/Integration/Event.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Integration/Event.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Integration/Event.dyn_o )
+[3 of 5] Compiling Keiro.Migrations.Internal.EmbedFile ( src/Keiro/Migrations/Internal/EmbedFile.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.24.0.0/build/Keiro/Migrations/Internal/EmbedFile.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.24.0.0/build/Keiro/Migrations/Internal/EmbedFile.dyn_o )
+[4 of 5] Compiling Keiro.Migrations.History.Codd ( src/Keiro/Migrations/History/Codd.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.24.0.0/build/Keiro/Migrations/History/Codd.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.24.0.0/build/Keiro/Migrations/History/Codd.dyn_o )
+[5 of 5] Compiling Keiro.Migrations.SchemaCheck ( src/Keiro/Migrations/SchemaCheck.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.24.0.0/build/Keiro/Migrations/SchemaCheck.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.24.0.0/build/Keiro/Migrations/SchemaCheck.dyn_o )
+[11 of 16] Compiling Keiro.Codec      ( src/Keiro/Codec.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Codec.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Codec.dyn_o )
+[12 of 16] Compiling Keiro.Schema     ( src/Keiro/Schema.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Schema.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Schema.dyn_o )
+[13 of 16] Compiling Keiro.Stream     ( src/Keiro/Stream.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Stream.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Stream.dyn_o )
+[14 of 16] Compiling Keiro.EventStream ( src/Keiro/EventStream.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/EventStream.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/EventStream.dyn_o )
+[15 of 16] Compiling Keiro.Snapshot.Policy ( src/Keiro/Snapshot/Policy.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Snapshot/Policy.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/Snapshot/Policy.dyn_o )
+[16 of 16] Compiling Keiro.EventStream.Validate ( src/Keiro/EventStream/Validate.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/EventStream/Validate.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-core-0.24.0.0/build/Keiro/EventStream/Validate.dyn_o )
+Configuring library for keiro-test-support-0.24.0.0...
+Configuring library for keiro-0.24.0.0...
+Preprocessing library for keiro-test-support-0.24.0.0...
+Building library for keiro-test-support-0.24.0.0...
+Preprocessing library for keiro-0.24.0.0...
+Building library for keiro-0.24.0.0...
+[1 of 2] Compiling Keiro.Test.Postgres ( src/Keiro/Test/Postgres.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-test-support-0.24.0.0/build/Keiro/Test/Postgres.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-test-support-0.24.0.0/build/Keiro/Test/Postgres.dyn_o )
+[ 1 of 75] Compiling Keiro.Command.Domain ( src/Keiro/Command/Domain.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Command/Domain.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Command/Domain.dyn_o )
+[2 of 2] Compiling Keiro.Test.ReplayCompatibility ( src/Keiro/Test/ReplayCompatibility.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-test-support-0.24.0.0/build/Keiro/Test/ReplayCompatibility.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-test-support-0.24.0.0/build/Keiro/Test/ReplayCompatibility.dyn_o )
+[ 2 of 75] Compiling Keiro.Connection ( src/Keiro/Connection.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Connection.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Connection.dyn_o )
+[ 3 of 75] Compiling Keiro.DeadLetter.Replay ( src/Keiro/DeadLetter/Replay.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/DeadLetter/Replay.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/DeadLetter/Replay.dyn_o )
+[ 4 of 75] Compiling Keiro.DeadLetter.Schema ( src/Keiro/DeadLetter/Schema.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/DeadLetter/Schema.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/DeadLetter/Schema.dyn_o )
+[ 5 of 75] Compiling Keiro.DeadLetter ( src/Keiro/DeadLetter.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/DeadLetter.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/DeadLetter.dyn_o )
+[ 6 of 75] Compiling Keiro.DeterministicId ( src/Keiro/DeterministicId.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/DeterministicId.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/DeterministicId.dyn_o )
+[ 7 of 75] Compiling Keiro.Inbox.Types ( src/Keiro/Inbox/Types.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Inbox/Types.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Inbox/Types.dyn_o )
+[ 8 of 75] Compiling Keiro.Inbox.Schema ( src/Keiro/Inbox/Schema.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Inbox/Schema.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Inbox/Schema.dyn_o )
+[ 9 of 75] Compiling Keiro.Inbox.Kafka ( src/Keiro/Inbox/Kafka.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Inbox/Kafka.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Inbox/Kafka.dyn_o )
+[10 of 75] Compiling Keiro.Inspection.Cursor ( src/Keiro/Inspection/Cursor.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Inspection/Cursor.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Inspection/Cursor.dyn_o )
+[11 of 75] Compiling Keiro.Outbox.Rejection ( src/Keiro/Outbox/Rejection.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Outbox/Rejection.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Outbox/Rejection.dyn_o )
+[12 of 75] Compiling Keiro.Outbox.Types ( src/Keiro/Outbox/Types.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Outbox/Types.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Outbox/Types.dyn_o )
+[13 of 75] Compiling Keiro.Outbox.Kafka ( src/Keiro/Outbox/Kafka.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Outbox/Kafka.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Outbox/Kafka.dyn_o )
+[14 of 75] Compiling Keiro.Projection.Catalog.Preimage ( src/Keiro/Projection/Catalog/Preimage.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Projection/Catalog/Preimage.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Projection/Catalog/Preimage.dyn_o )
+[15 of 75] Compiling Keiro.Inspection.Consumers ( src/Keiro/Inspection/Consumers.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Inspection/Consumers.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Inspection/Consumers.dyn_o )
+src/Keiro/Inspection/Consumers.hs:19:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Data.List’ is redundant
+      except perhaps to import instances from ‘Data.List’
+    To import instances alone, use: import Data.List()
+   |
+19 | import Data.List (foldl')
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[16 of 75] Compiling Keiro.Projection.Types ( src/Keiro/Projection/Types.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Projection/Types.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Projection/Types.dyn_o )
+[17 of 75] Compiling Keiro.ReadModel.Schema ( src/Keiro/ReadModel/Schema.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReadModel/Schema.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReadModel/Schema.dyn_o )
+[18 of 75] Compiling Keiro.ReplayDigest ( src/Keiro/ReplayDigest.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReplayDigest.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReplayDigest.dyn_o )
+[19 of 75] Compiling Keiro.Outbox.Identity ( src/Keiro/Outbox/Identity.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Outbox/Identity.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Outbox/Identity.dyn_o )
+[20 of 75] Compiling Keiro.Outbox.Schema ( src/Keiro/Outbox/Schema.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Outbox/Schema.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Outbox/Schema.dyn_o )
+[21 of 75] Compiling Keiro.Snapshot.Codec ( src/Keiro/Snapshot/Codec.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Snapshot/Codec.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Snapshot/Codec.dyn_o )
+[22 of 75] Compiling Keiro.Snapshot.Schema ( src/Keiro/Snapshot/Schema.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Snapshot/Schema.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Snapshot/Schema.dyn_o )
+[23 of 75] Compiling Keiro.Snapshot   ( src/Keiro/Snapshot.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Snapshot.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Snapshot.dyn_o )
+[24 of 75] Compiling Keiro.Subscription.Shard.Schema ( src/Keiro/Subscription/Shard/Schema.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Subscription/Shard/Schema.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Subscription/Shard/Schema.dyn_o )
+[25 of 75] Compiling Keiro.Subscription.Shard ( src/Keiro/Subscription/Shard.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Subscription/Shard.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Subscription/Shard.dyn_o )
+[26 of 75] Compiling Keiro.Subscription.Shard.Worker ( src/Keiro/Subscription/Shard/Worker.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Subscription/Shard/Worker.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Subscription/Shard/Worker.dyn_o )
+[27 of 75] Compiling Keiro.Timer.Types ( src/Keiro/Timer/Types.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Timer/Types.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Timer/Types.dyn_o )
+[28 of 75] Compiling Keiro.Timer.Schema ( src/Keiro/Timer/Schema.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Timer/Schema.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Timer/Schema.dyn_o )
+src/Keiro/Timer/Schema.hs:82:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Data.List.NonEmpty’ is redundant
+      except perhaps to import instances from ‘Data.List.NonEmpty’
+    To import instances alone, use: import Data.List.NonEmpty()
+   |
+82 | import Data.List.NonEmpty (NonEmpty (..))
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[29 of 75] Compiling Keiro.Wake       ( src/Keiro/Wake.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Wake.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Wake.dyn_o )
+[30 of 75] Compiling Keiro.Workflow.Awakeable.Schema ( src/Keiro/Workflow/Awakeable/Schema.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Awakeable/Schema.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Awakeable/Schema.dyn_o )
+[31 of 75] Compiling Keiro.Workflow.Child.Schema ( src/Keiro/Workflow/Child/Schema.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Child/Schema.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Child/Schema.dyn_o )
+[32 of 75] Compiling Keiro.Workflow.Instance.Schema ( src/Keiro/Workflow/Instance/Schema.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Instance/Schema.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Instance/Schema.dyn_o )
+[33 of 75] Compiling Keiro.Workflow.Inspection.Query ( src/Keiro/Workflow/Inspection/Query.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Inspection/Query.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Inspection/Query.dyn_o )
+[34 of 75] Compiling Keiro.Workflow.Types ( src/Keiro/Workflow/Types.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Types.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Types.dyn_o )
+[35 of 75] Compiling Keiro.Workflow.Snapshot ( src/Keiro/Workflow/Snapshot.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Snapshot.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Snapshot.dyn_o )
+[36 of 75] Compiling Keiro.Workflow.Schema ( src/Keiro/Workflow/Schema.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Schema.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Schema.dyn_o )
+[37 of 75] Compiling Keiro.Workflow.Journal ( src/Keiro/Workflow/Journal.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Journal.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Journal.dyn_o )
+[38 of 75] Compiling Keiro.Workflow.Gc ( src/Keiro/Workflow/Gc.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Gc.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Gc.dyn_o )
+[39 of 75] Compiling Keiro.Workflow.Child.Cancel ( src/Keiro/Workflow/Child/Cancel.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Child/Cancel.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Child/Cancel.dyn_o )
+[40 of 75] Compiling Keiro.Workflow.Instance ( src/Keiro/Workflow/Instance.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Instance.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Instance.dyn_o )
+src/Keiro/Workflow/Instance.hs:868:30: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘argument’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Workflow/Instance.hs:66:1-20
+      (and originally defined in ‘Control.Lens.Setter’)
+    |
+868 |     parameter template value argument = (\n -> Text.replace "?" ("$" <> number n) template, 1, const argument >$< E.param (E.nonNullable value))
+    |                              ^^^^^^^^
+
+src/Keiro/Workflow/Instance.hs:895:50: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Workflow/Instance.hs:66:1-20
+      (and originally defined in ‘Control.Lens.Indexed’)
+    |
+895 |     (next, predicates, filterParams) = foldl' (\(index, clauses, encoders) (render, width, encoder) -> (index + width, clauses <> [render index], encoders <> encoder)) (1, [], mempty) filters
+    |                                                  ^^^^^
+
+[41 of 75] Compiling Keiro.Workflow.Inspection ( src/Keiro/Workflow/Inspection.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Inspection.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Inspection.dyn_o )
+src/Keiro/Workflow/Inspection.hs:84:1: warning: [GHC-90177] [-Worphans]
+    Orphan class instance: instance ToJSON WorkflowStatusCounts
+    Suggested fix:
+      Move the instance declaration to the module of the class or of the type, or
+      wrap the type with a newtype and declare the instance on the new type.
+   |
+84 | instance ToJSON WorkflowStatusCounts where
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^...
+
+src/Keiro/Workflow/Inspection.hs:87:1: warning: [GHC-90177] [-Worphans]
+    Orphan class instance: instance ToJSON WorkflowCounts
+    Suggested fix:
+      Move the instance declaration to the module of the class or of the type, or
+      wrap the type with a newtype and declare the instance on the new type.
+   |
+87 | instance ToJSON WorkflowCounts where
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^...
+
+src/Keiro/Workflow/Inspection.hs:126:30: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         listWorkflowInstancesPage :: forall (es :: [Effectful.Internal.Effect.Effect]).
+                                      (IOE :> es, Store :> es) =>
+                                      WorkflowListQuery
+                                      -> Eff es (Either InspectionError WorkflowListPage)
+    |
+126 | listWorkflowInstancesPage :: (IOE :> es, Store :> es) => WorkflowListQuery -> Eff es (Either InspectionError WorkflowListPage)
+    |                              ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Workflow/Inspection.hs:244:28: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         readWorkflowJournalPage :: forall (es :: [Effectful.Internal.Effect.Effect]).
+                                    (IOE :> es, Store :> es) =>
+                                    WorkflowName
+                                    -> WorkflowId
+                                    -> DetailPageQuery
+                                    -> Eff es (Either InspectionError WorkflowJournalPage)
+    |
+244 | readWorkflowJournalPage :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> DetailPageQuery -> Eff es (Either InspectionError WorkflowJournalPage)
+    |                            ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Workflow/Inspection.hs:255:22: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         loadStepIndexPage :: forall (es :: [Effectful.Internal.Effect.Effect]).
+                              (IOE :> es, Store :> es) =>
+                              WorkflowName
+                              -> WorkflowId
+                              -> DetailPageQuery
+                              -> Eff es (Either InspectionError WorkflowStepPage)
+    |
+255 | loadStepIndexPage :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> DetailPageQuery -> Eff es (Either InspectionError WorkflowStepPage)
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Workflow/Inspection.hs:265:29: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         listWorkflowChildrenPage :: forall (es :: [Effectful.Internal.Effect.Effect]).
+                                     (IOE :> es, Store :> es) =>
+                                     WorkflowName
+                                     -> WorkflowId
+                                     -> OwnerPageQuery
+                                     -> Eff es (Either InspectionError WorkflowChildPage)
+    |
+265 | listWorkflowChildrenPage :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> OwnerPageQuery -> Eff es (Either InspectionError WorkflowChildPage)
+    |                             ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Workflow/Inspection.hs:274:31: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         listWorkflowAwakeablesPage :: forall (es :: [Effectful.Internal.Effect.Effect]).
+                                       (IOE :> es, Store :> es) =>
+                                       WorkflowName
+                                       -> WorkflowId
+                                       -> OwnerPageQuery
+                                       -> Eff es (Either InspectionError WorkflowAwakeablePage)
+    |
+274 | listWorkflowAwakeablesPage :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> OwnerPageQuery -> Eff es (Either InspectionError WorkflowAwakeablePage)
+    |                               ^^^^^^^^^^^^^^^^^^^^^^^^
+
+[42 of 75] Compiling Keiro.Workflow.Awakeable.Internal.Identity ( src/Keiro/Workflow/Awakeable/Internal/Identity.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Awakeable/Internal/Identity.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Awakeable/Internal/Identity.dyn_o )
+[43 of 75] Compiling Keiro.Telemetry  ( src/Keiro/Telemetry.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Telemetry.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Telemetry.dyn_o )
+[44 of 75] Compiling Keiro.Workflow   ( src/Keiro/Workflow.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow.dyn_o )
+[45 of 75] Compiling Keiro.Workflow.Child ( src/Keiro/Workflow/Child.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Child.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Child.dyn_o )
+[46 of 75] Compiling Keiro.Workflow.Resume ( src/Keiro/Workflow/Resume.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Resume.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Resume.dyn_o )
+[47 of 75] Compiling Keiro.Workflow.Awakeable ( src/Keiro/Workflow/Awakeable.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Awakeable.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Awakeable.dyn_o )
+[48 of 75] Compiling Keiro.Workflow.Awakeable.Compatibility ( src/Keiro/Workflow/Awakeable/Compatibility.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Awakeable/Compatibility.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Awakeable/Compatibility.dyn_o )
+[49 of 75] Compiling Keiro.Timer      ( src/Keiro/Timer.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Timer.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Timer.dyn_o )
+[50 of 75] Compiling Keiro.Workflow.Sleep ( src/Keiro/Workflow/Sleep.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Sleep.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Workflow/Sleep.dyn_o )
+[51 of 75] Compiling Keiro.ReadModel  ( src/Keiro/ReadModel.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReadModel.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReadModel.dyn_o )
+[52 of 75] Compiling Keiro.Projection.Catalog ( src/Keiro/Projection/Catalog.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Projection/Catalog.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Projection/Catalog.dyn_o )
+src/Keiro/Projection/Catalog.hs:534:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘arguments’
+    Record selection and update using this field will be partial.
+    |
+534 |         arguments :: ![SqlFunctionArgument],
+    |         ^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:536:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘privateImplementation’
+    Record selection and update using this field will be partial.
+    |
+536 |         privateImplementation :: !QualifiedFunction,
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:537:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘privateImplementationVersion’
+    Record selection and update using this field will be partial.
+    |
+537 |         privateImplementationVersion :: !Int,
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1100:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilitySubscriptionId’
+    Record selection and update using this field will be partial.
+     |
+1100 |         capabilitySubscriptionId :: !SubscriptionId,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1101:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilitySubscriptionName’
+    Record selection and update using this field will be partial.
+     |
+1101 |         capabilitySubscriptionName :: !Text,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1102:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilitySourceId’
+    Record selection and update using this field will be partial.
+     |
+1102 |         capabilitySourceId :: !SourceId,
+     |         ^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1103:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilityCheckpointOnMissing’
+    Record selection and update using this field will be partial.
+     |
+1103 |         capabilityCheckpointOnMissing :: !MissingCheckpointPolicy,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1104:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilityDedupKeyId’
+    Record selection and update using this field will be partial.
+     |
+1104 |         capabilityDedupKeyId :: !DedupKeyId,
+     |         ^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:1105:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘capabilityDedupName’
+    Record selection and update using this field will be partial.
+     |
+1105 |         capabilityDedupName :: !Text
+     |         ^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:3412:29: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘argument’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Projection/Catalog.hs:194:1-20
+      (and originally defined in ‘Control.Lens.Setter’)
+     |
+3412 | sqlFunctionArgumentPreimage argument =
+     |                             ^^^^^^^^
+
+src/Keiro/Projection/Catalog.hs:3582:20: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘argument’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Projection/Catalog.hs:194:1-20
+      (and originally defined in ‘Control.Lens.Setter’)
+     |
+3582 |     renderArgument argument = argument ^. #argumentName <> ":" <> renderQualifiedType (argument ^. #argumentType)
+     |                    ^^^^^^^^
+
+[53 of 75] Compiling Keiro.ReadModel.External ( src/Keiro/ReadModel/External.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReadModel/External.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReadModel/External.dyn_o )
+[54 of 75] Compiling Keiro.ReadModel.Rebuild.Group ( src/Keiro/ReadModel/Rebuild/Group.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReadModel/Rebuild/Group.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReadModel/Rebuild/Group.dyn_o )
+[55 of 75] Compiling Keiro.ReadModel.Rebuild.Stream ( src/Keiro/ReadModel/Rebuild/Stream.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReadModel/Rebuild/Stream.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReadModel/Rebuild/Stream.dyn_o )
+[56 of 75] Compiling Keiro.ReadModel.Rebuild.Status ( src/Keiro/ReadModel/Rebuild/Status.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReadModel/Rebuild/Status.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReadModel/Rebuild/Status.dyn_o )
+[57 of 75] Compiling Keiro.ReadModel.Rebuild.Runner ( src/Keiro/ReadModel/Rebuild/Runner.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReadModel/Rebuild/Runner.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReadModel/Rebuild/Runner.dyn_o )
+[58 of 75] Compiling Keiro.ReadModel.Rebuild.Versioned ( src/Keiro/ReadModel/Rebuild/Versioned.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReadModel/Rebuild/Versioned.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReadModel/Rebuild/Versioned.dyn_o )
+[59 of 75] Compiling Keiro.ReadModel.Rebuild ( src/Keiro/ReadModel/Rebuild.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReadModel/Rebuild.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReadModel/Rebuild.dyn_o )
+[60 of 75] Compiling Keiro.Projection.Catalog.Operations ( src/Keiro/Projection/Catalog/Operations.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Projection/Catalog/Operations.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Projection/Catalog/Operations.dyn_o )
+[61 of 75] Compiling Keiro.Outbox     ( src/Keiro/Outbox.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Outbox.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Outbox.dyn_o )
+[62 of 75] Compiling Keiro.Inbox      ( src/Keiro/Inbox.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Inbox.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Inbox.dyn_o )
+[63 of 75] Compiling Keiro.Command    ( src/Keiro/Command.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Command.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Command.dyn_o )
+[64 of 75] Compiling Keiro.ReplayAudit ( src/Keiro/ReplayAudit.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReplayAudit.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ReplayAudit.dyn_o )
+src/Keiro/ReplayAudit.hs:141:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘streamVersion’
+    Record selection and update using this field will be partial.
+    |
+141 |       { streamVersion :: !StreamVersion,
+    |         ^^^^^^^^^^^^^
+
+src/Keiro/ReplayAudit.hs:142:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘digest’
+    Record selection and update using this field will be partial.
+    |
+142 |         digest :: !(Maybe Text)
+    |         ^^^^^^
+
+src/Keiro/ReplayAudit.hs:145:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘commandError’
+    Record selection and update using this field will be partial.
+    |
+145 |       { commandError :: !CommandError
+    |         ^^^^^^^^^^^^
+
+src/Keiro/ReplayAudit.hs:148:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘seedVersion’
+    Record selection and update using this field will be partial.
+    |
+148 |       { seedVersion :: !StreamVersion,
+    |         ^^^^^^^^^^^
+
+src/Keiro/ReplayAudit.hs:149:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘seededDigest’
+    Record selection and update using this field will be partial.
+    |
+149 |         seededDigest :: !Text,
+    |         ^^^^^^^^^^^^
+
+src/Keiro/ReplayAudit.hs:150:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘fullDigest’
+    Record selection and update using this field will be partial.
+    |
+150 |         fullDigest :: !Text
+    |         ^^^^^^^^^^
+
+[65 of 75] Compiling Keiro.Projection ( src/Keiro/Projection.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Projection.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Projection.dyn_o )
+[66 of 75] Compiling Keiro.ProcessManager.Provenance ( src/Keiro/ProcessManager/Provenance.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ProcessManager/Provenance.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ProcessManager/Provenance.dyn_o )
+src/Keiro/ProcessManager/Provenance.hs:14:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Control.Monad’ is redundant
+      except perhaps to import instances from ‘Control.Monad’
+    To import instances alone, use: import Control.Monad()
+   |
+14 | import Control.Monad (unless)
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/ProcessManager/Provenance.hs:79:67: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager/Provenance.hs:24:1-34
+      (and originally defined in ‘Control.Lens.Indexed’)
+   |
+79 |       "dispatched" .= [object ["i" .= index, "target" .= name] | (index, StreamName name) <- provenance.dispatched],
+   |                                                                   ^^^^^
+
+src/Keiro/ProcessManager/Provenance.hs:111:17: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager/Provenance.hs:24:1-34
+      (and originally defined in ‘Control.Lens.Indexed’)
+    |
+111 |                 index <- entry .: "i"
+    |                 ^^^^^
+
+[67 of 75] Compiling Keiro.ProcessManager ( src/Keiro/ProcessManager.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ProcessManager.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ProcessManager.dyn_o )
+src/Keiro/ProcessManager.hs:540:78: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager.hs:168:1-20
+      (and originally defined in ‘Control.Lens.Indexed’)
+    |
+540 |                 dispatched = [(index, resolveTarget (command ^. #target)) | (index, command) <- zip [0 ..] (action ^. #commands)],
+    |                                                                              ^^^^^
+
+[68 of 75] Compiling Keiro.Router.Selection ( src/Keiro/Router/Selection.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Router/Selection.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Router/Selection.dyn_o )
+[69 of 75] Compiling Keiro.Router     ( src/Keiro/Router.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Router.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Router.dyn_o )
+[70 of 75] Compiling Keiro.ProcessManager.Reaction ( src/Keiro/ProcessManager/Reaction.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ProcessManager/Reaction.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ProcessManager/Reaction.dyn_o )
+src/Keiro/ProcessManager/Reaction.hs:126:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘command’
+    Record selection and update using this field will be partial.
+    |
+126 |       { command :: !ci,
+    |         ^^^^^^^
+
+src/Keiro/ProcessManager/Reaction.hs:127:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘followUps’
+    Record selection and update using this field will be partial.
+    |
+127 |         followUps :: ![FollowUp targetCi],
+    |         ^^^^^^^^^
+
+src/Keiro/ProcessManager/Reaction.hs:128:9: warning: [GHC-82712] [-Wpartial-fields]
+    Definition of partial record field: ‘onAccepted’
+    Record selection and update using this field will be partial.
+    |
+128 |         onAccepted :: ![FollowUp targetCi]
+    |         ^^^^^^^^^^
+
+src/Keiro/ProcessManager/Reaction.hs:489:18: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         runTimerPhase :: forall (es :: [Effectful.Internal.Effect.Effect])
+                                 targetCi.
+                          (IOE :> es, Store :> es) =>
+                          [FollowUp targetCi] -> Eff es ReactionTimerEffects
+    |
+489 | runTimerPhase :: (IOE :> es, Store :> es) => [FollowUp targetCi] -> Eff es ReactionTimerEffects
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Keiro/ProcessManager/Reaction.hs:549:3: warning: [GHC-30606] [-Wredundant-constraints]
+    Redundant constraint: IOE :> es
+    In the type signature for:
+         recoverWitness :: forall (es :: [Effectful.Internal.Effect.Effect])
+                                  phi (rs :: [Keiki.Core.Slot]) s ci co.
+                           (IOE :> es, Store :> es) =>
+                           ValidatedEventStream phi rs s ci co
+                           -> StreamName -> EventId -> Eff es (Either ReactionError ())
+    |
+549 |   (IOE :> es, Store :> es) =>
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+[71 of 75] Compiling Keiro.Inspection.Aggregate ( src/Keiro/Inspection/Aggregate.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Inspection/Aggregate.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Inspection/Aggregate.dyn_o )
+src/Keiro/Inspection/Aggregate.hs:249:11: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘folded’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Inspection/Aggregate.hs:57:1-34
+      (and originally defined in ‘Control.Lens.Fold’)
+    |
+249 |           folded <- if isJust info.deletedAt then pure (Right Nothing) else fmap (fmap Just) (hydrateWithSource inspectionRunCommandOptions (unvalidated inspector.eventStream) target)
+    |           ^^^^^^
+
+src/Keiro/Inspection/Aggregate.hs:381:19: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘view’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/Inspection/Aggregate.hs:57:1-34
+      (and originally defined in ‘Control.Lens.Getter’)
+    |
+381 | aggregateViewJson view =
+    |                   ^^^^
+
+[72 of 75] Compiling Keiro.ProcessManager.Inspect ( src/Keiro/ProcessManager/Inspect.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ProcessManager/Inspect.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/ProcessManager/Inspect.dyn_o )
+src/Keiro/ProcessManager/Inspect.hs:291:19: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager/Inspect.hs:59:1-34
+      (and originally defined in ‘Control.Lens.Indexed’)
+    |
+291 |     probe record (index, target) = do
+    |                   ^^^^^
+
+src/Keiro/ProcessManager/Inspect.hs:354:24: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘view’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at src/Keiro/ProcessManager/Inspect.hs:59:1-34
+      (and originally defined in ‘Control.Lens.Getter’)
+    |
+354 | processManagerViewJson view =
+    |                        ^^^^
+
+[73 of 75] Compiling Keiro.Inbox.Delegated ( src/Keiro/Inbox/Delegated.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Inbox/Delegated.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro/Inbox/Delegated.dyn_o )
+[74 of 75] Compiling Paths_keiro      ( /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/autogen/Paths_keiro.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Paths_keiro.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Paths_keiro.dyn_o )
+[75 of 75] Compiling Keiro            ( src/Keiro.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro.o, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/build/Keiro.dyn_o )
+Configuring benchmark 'keiro-bench' for keiro-0.24.0.0...
+Preprocessing benchmark 'keiro-bench' for keiro-0.24.0.0...
+Building benchmark 'keiro-bench' for keiro-0.24.0.0...
+[ 1 of 10] Compiling BenchSetup       ( bench/BenchSetup.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/BenchSetup.o )
+[ 2 of 10] Compiling CommandProbe     ( bench/CommandProbe.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/CommandProbe.o )
+[ 3 of 10] Compiling GuardedCatalogFixture ( test/GuardedCatalogFixture.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/GuardedCatalogFixture.o )
+test/GuardedCatalogFixture.hs:26:28: warning: [GHC-38856] [-Wunused-imports]
+    The import of ‘EventType’
+    from module ‘Kiroku.Store.Types’ is redundant
+   |
+26 | import Kiroku.Store.Types (EventType (..), RecordedEvent)
+   |                            ^^^^^^^^^^^^^^
+
+test/GuardedCatalogFixture.hs:189:8: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘applyEvent’ shadows the existing binding
+      imported from ‘Keiki.Core’ at test/GuardedCatalogFixture.hs:14:1-17
+    |
+189 | replay applyEvent = Replayable (replayAdapterFromCodec noteCodec applyEvent)
+    |        ^^^^^^^^^^
+
+[ 4 of 10] Compiling GuardedCatalogExample ( test/GuardedCatalogExample.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/GuardedCatalogExample.o )
+[ 5 of 10] Compiling GuardedCatalogWorkload ( bench/GuardedCatalogWorkload.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/GuardedCatalogWorkload.o )
+bench/GuardedCatalogWorkload.hs:155:36: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘head’ shadows the existing binding
+      imported from ‘Prelude’ at bench/GuardedCatalogWorkload.hs:33:1-14
+      (and originally defined in ‘ghc-internal-9.1204.0:GHC.Internal.List’)
+    |
+155 |   (identityRows, events, richRows, head, cursor) <- facts runner
+    |                                    ^^^^
+
+bench/GuardedCatalogWorkload.hs:164:14: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘request’ shadows the existing binding
+      bound at bench/GuardedCatalogWorkload.hs:161:7
+    |
+164 |         Just request -> do
+    |              ^^^^^^^
+
+bench/GuardedCatalogWorkload.hs:197:7: warning: [GHC-81995] [-Wunused-do-bind]
+    A do-notation statement discarded a result of type
+      ‘Store.SubscriptionCheckpointResetReport’
+    Suggested fix:
+      Suppress this warning by saying
+        ‘_ <- checked
+                runner
+                (Store.runTransaction
+                   (Store.resetSubscriptionCheckpointsTx
+                      (Store.SubscriptionName "note-rich-worker" :| []) next))’
+    |
+197 |       checked runner (Store.runTransaction (Store.resetSubscriptionCheckpointsTx (Store.SubscriptionName "note-rich-worker" :| []) next))
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+bench/GuardedCatalogWorkload.hs:208:5: warning: [GHC-81995] [-Wunused-do-bind]
+    A do-notation statement discarded a result of type
+      ‘Store.SubscriptionCheckpointResetReport’
+    Suggested fix:
+      Suppress this warning by saying
+        ‘_ <- checked
+                runner
+                (Store.runTransaction
+                   (Store.resetSubscriptionCheckpointsTx
+                      (Store.SubscriptionName "note-rich-worker" :| []) next))’
+    |
+208 |     checked runner (Store.runTransaction (Store.resetSubscriptionCheckpointsTx (Store.SubscriptionName "note-rich-worker" :| []) next))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+bench/GuardedCatalogWorkload.hs:211:1: warning: [GHC-38417] [-Wmissing-signatures]
+    Top-level binding with no type signature:
+      facts :: StoreRunner -> IO (Int64, Int64, Int64, Int64, Int64)
+    |
+211 | facts runner =
+    | ^^^^^
+
+[ 6 of 10] Compiling GuardedCatalogBench ( bench/GuardedCatalogBench.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/GuardedCatalogBench.o )
+bench/GuardedCatalogBench.hs:104:146: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘chosen’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at bench/GuardedCatalogBench.hs:20:1-20
+      (and originally defined in ‘lens-5.3.6:Control.Lens.Lens’)
+    |
+104 |             sustainedResults <- forM [("control", Ordinary, sustained {duplicatePercent = 0}), ("duplicates", IndexedGuard, sustained)] \(label, chosen, config) -> do
+    |                                                                                                                                                  ^^^^^^
+
+bench/GuardedCatalogBench.hs:220:1: warning: [GHC-38417] [-Wmissing-signatures]
+    Top-level binding with no type signature:
+      originalSample :: (ToJSON a, FromJSON b) =>
+                        FilePath -> FilePath -> FilePath -> a -> IO b
+    |
+220 | originalSample output executable prefix config = do
+    | ^^^^^^^^^^^^^^
+
+bench/GuardedCatalogBench.hs:249:47: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘sample’ shadows the existing binding
+      defined at bench/GuardedCatalogBench.hs:151:1
+    |
+249 |     latencies value = [latencyMicros sample | sample <- samples value, if label == "mixed" || label == "fixed-arrival" then cohort sample == "ordinary" else True]
+    |                                               ^^^^^^
+
+bench/GuardedCatalogBench.hs:256:1: warning: [GHC-38417] [-Wmissing-signatures]
+    Top-level binding with no type signature:
+      sampleWithStorage :: FilePath
+                           -> FilePath -> Workload -> Mode -> IO Measurements
+    |
+256 | sampleWithStorage output name config mode = withMigratedBenchmarkSuite \fixture -> withFreshResourceStore fixture \(_, runner) -> do
+    | ^^^^^^^^^^^^^^^^^
+
+bench/GuardedCatalogBench.hs:260:9: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘snapshot’ shadows the existing binding
+      bound at bench/GuardedCatalogBench.hs:259:7
+    |
+260 |         snapshot <-
+    |         ^^^^^^^^
+
+bench/GuardedCatalogBench.hs:291:68: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘sample’ shadows the existing binding
+      defined at bench/GuardedCatalogBench.hs:151:1
+    |
+291 | minute n result = result {elapsedSeconds = 60, samples = [sample | sample <- samples result, completedSeconds sample >= fromIntegral (n * 60), completedSeconds sample < fromIntegral ((n + 1) * 60)]}
+    |                                                                    ^^^^^^
+
+[ 7 of 10] Compiling InboxDelegatedBench ( bench/InboxDelegatedBench.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/InboxDelegatedBench.o )
+[ 8 of 10] Compiling ProducerIdentityBench ( bench/ProducerIdentityBench.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/ProducerIdentityBench.o )
+[ 9 of 10] Compiling ReadModelBench   ( bench/ReadModelBench.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/ReadModelBench.o )
+[10 of 10] Compiling Main             ( bench/Main.hs, /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/Main.o )
+[11 of 11] Linking /private/tmp/keiro-025-control-48vb_hgf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.24.0.0/b/keiro-bench/build/keiro-bench/keiro-bench
