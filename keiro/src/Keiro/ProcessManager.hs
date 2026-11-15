@@ -169,7 +169,7 @@ import Keiro.Prelude
 import Keiro.ProcessManager.Provenance
 import Keiro.Projection (InlineProjection, runCommandWithProjections, runDomainCommandWithProjections)
 import Keiro.Stream (Stream)
-import Keiro.Telemetry (KeiroMetrics, recordDispatchDeadLettered, recordDispatchDuplicate, recordDispatchFailed, recordDispatchPoison)
+import Keiro.Telemetry (KeiroMetrics, recordDispatchDeadLettered, recordDispatchDuplicate, recordDispatchFailed, recordDispatchPoison, recordSubscriptionOutcome, withSubscriptionProcessSpan)
 import Keiro.Timer (TimerRequest, scheduleTimerTx)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
@@ -901,10 +901,19 @@ runDomainProcessManagerWorkerWith ::
   Adapter es msg ->
   (msg -> Maybe (RecordedEvent, input)) ->
   Eff es ()
-runDomainProcessManagerWorkerWith workerOptions options manager Adapter {source = adapterSource} decodeMessage =
+runDomainProcessManagerWorkerWith workerOptions options manager Adapter {source = adapterSource, telemetry = adapterTelemetry} decodeMessage =
   Streamly.fold Fold.drain
-    $ Streamly.mapM handleIngested adapterSource
+    $ Streamly.mapM handleTraced adapterSource
   where
+    -- Select the original handler without inspecting per-message telemetry.
+    handleTraced = case options ^. #tracer of
+      Nothing -> handleIngested
+      Just _ -> \ingested@Ingested {envelope = traceEnvelope} -> instrument traceEnvelope $ \mSpan -> do
+        decision <- handleIngested ingested
+        recordSubscriptionOutcome mSpan decision
+        pure decision
+    instrument = withSubscriptionProcessSpan (options ^. #tracer) (adapterTelemetry ^. #traceCorrelation) (manager ^. #name)
+
     handleIngested :: Ingested es msg -> Eff es AckDecision
     handleIngested Ingested {envelope = env@Envelope {payload = message}, ack = AckHandle finalizeAck} = do
       decision <- case decodeMessage message of
@@ -1008,10 +1017,19 @@ runProcessManagerWorkerWith ::
   Adapter es msg ->
   (msg -> Maybe (RecordedEvent, input)) ->
   Eff es ()
-runProcessManagerWorkerWith workerOptions options manager Adapter {source = adapterSource} decodeMessage =
+runProcessManagerWorkerWith workerOptions options manager Adapter {source = adapterSource, telemetry = adapterTelemetry} decodeMessage =
   Streamly.fold Fold.drain
-    $ Streamly.mapM handleIngested adapterSource
+    $ Streamly.mapM handleTraced adapterSource
   where
+    -- Select the original handler without inspecting per-message telemetry.
+    handleTraced = case options ^. #tracer of
+      Nothing -> handleIngested
+      Just _ -> \ingested@Ingested {envelope = traceEnvelope} -> instrument traceEnvelope $ \mSpan -> do
+        decision <- handleIngested ingested
+        recordSubscriptionOutcome mSpan decision
+        pure decision
+    instrument = withSubscriptionProcessSpan (options ^. #tracer) (adapterTelemetry ^. #traceCorrelation) (manager ^. #name)
+
     handleIngested :: Ingested es msg -> Eff es AckDecision
     handleIngested Ingested {envelope = env@Envelope {payload = message}, ack = AckHandle finalizeAck} = do
       decision <- case decodeMessage message of

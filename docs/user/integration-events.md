@@ -7,7 +7,7 @@ tags: [keiro, integration-events, messaging]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:05:10Z
-timestamp: 2026-11-14T23:17:22Z
+timestamp: 2026-11-15T00:08:55Z
 ---
 
 # Integration Events
@@ -240,3 +240,8 @@ Derivation is deterministic and independent of the enqueuing worker's tracer.
 The publisher links its root batch span to stored creation contexts and sends those
 same contexts in Kafka headers. Explicit draft context is preserved. Trace headers
 remain part of producer equality, so changing them on replay is a content conflict.
+
+Inbox transaction and delegated handlers run synchronously inside their transport's
+processing span; the inbox adds no independent span. Applications reading Kafka without
+Shibuya can wrap handling in `Keiro.Telemetry.withConsumerSpan`, which parents and links
+to valid W3C creation context. To choose link-only correlation, use a Shibuya adapter.

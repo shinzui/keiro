@@ -254,6 +254,7 @@ test-suite keiro-test
     kiroku-store ^>=0.13.0.1,
     process >=1.6 && <1.7,
     shibuya-core ^>=0.13.0.1,
+    shibuya-kiroku-adapter ^>=0.8.0.0,
     stm >=2.5 && <2.6,
     streamly-core >=0.3 && <0.4,
     text >=2.1 && <2.2,

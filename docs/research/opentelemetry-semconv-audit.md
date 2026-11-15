@@ -2,7 +2,7 @@
 type: Research Document
 title: OpenTelemetry semantic-conventions audit
 description: Audit Keiro instrumentation sites against the OpenTelemetry semantic conventions and record gaps and actions.
-timestamp: 2026-11-14T23:17:22Z
+timestamp: 2026-11-15T00:08:55Z
 researchId: RES-16
 status: active
 scope: Keiro tracing and metrics instrumentation governed by OpenTelemetry semantic conventions.
@@ -108,91 +108,48 @@ application callers; the durable publisher uses the batch-aware helper.
 
 ## Inbox consume
 
-**File:** `src/Keiro/Inbox/Kafka.hs:86` — `integrationEventFromKafka`. The
-decode is pure; the consumer span is opened by the inbox runner around the
-*user handler* that consumes the decoded event, not inside the decoder.
+Kafka decoding in `Keiro.Inbox.Kafka.integrationEventFromKafka` is pure. The inbox
+opens no independent span. Applications consuming records without Shibuya can call
+`Keiro.Telemetry.withConsumerSpan` around decode/handling: it opens a Consumer span
+named `process <topic>`, parented under and linked to the W3C creation context.
+Absent or malformed context inherits the ambient context without links.
 
-**Span name:** `process <destination>`. The `<destination>` matches the
-Kafka topic from the inbound record (`record ^. #topic`), which equals the
-producer-side `destination` after round-tripping through the
-`keiro-destination` header.
-
-**Span kind:** `Consumer`.
-
-**Parenting:** The span is parented under the *upstream* producer span. The
-parent context is extracted from the inbound Kafka headers using the W3C
-TraceContext propagator (the `traceparent` and `tracestate` header names
-defined at `src/Keiro/Integration/Event.hs:227–229`) *before* the consumer
-span opens.
-
-**Required attributes (citation: `-- $attributes_messaging_trace_minimal`,
-line 27014):**
-
-- `messaging.operation.name` — `messaging_operation_name`. Value: `"process"`.
-- `messaging.system` — `messaging_system`. Value: `"kafka"`.
-
-**Conditionally required:**
-
-- `messaging.operation.type` — `messaging_operation_type`. Value: `"process"`.
-- `messaging.destination.name` — `messaging_destination_name`. Value:
-  `record ^. #topic`.
-- `messaging.message.id` — `messaging_message_id`. Value:
-  `event ^. #messageId` (set on the span *after* decode succeeds; missing
-  when the decode fails — in that case set `error.type` instead).
-
-**Recommended (citation: `-- $messaging_attributes`, line 27047 and
-`-- $registry_messaging_kafka`, line 27708):**
-
-- `messaging.destination.partition.id` — `messaging_destination_partition_id`.
-  Value: `Text.pack (show (record ^. #partition))`.
-- `messaging.kafka.offset` — `messaging_kafka_offset`. Value:
-  `record ^. #offset`.
-- `messaging.kafka.message.key` — `messaging_kafka_message_key`. Value:
-  `record ^. #key`, when present.
-- `messaging.consumer.group.name` — `messaging_consumer_group_name`. Value:
-  the consumer group identifier the application supplies. Not currently
-  captured on `KafkaInboundRecord`; the inbox runner can take it from its
-  Shibuya/`shibuya-kafka-adapter` configuration and pass it explicitly to
-  `withConsumerSpan`.
-
-**Decode-failure handling (citation: `-- $registry_error`, line 26956):**
-
-- On `MissingHeader`: set `error.type = "missing_header"` and the header
-  name on the span description.
-- On `InvalidIntHeader` / `InvalidUuidHeader`: set
-  `error.type = "invalid_header"`.
-
-**Gap as of 2026-05-19:** No span emitted. The decode is pure and the
-`traceContext` returned in the decoded `IntegrationEvent` is opaque
-metadata — no downstream consumer uses it to parent a span.
-
-**Action:** Milestone 5 opens a `Consumer`-kind span around the user
-handler in the inbox runner. The runner extracts the upstream context via
-the W3C propagator before opening the span. Decode itself stays pure; if
-decode fails the runner records the error on the consumer span.
-
+Attributes describe Kafka, the process operation, topic, partition, offset, optional
+key/group and decoded message ID. Scalar projections are evaluated before SDK
+ownership. The application owns decode-failure classification and handler outcomes;
+the helper does not claim a decoder or inbox runner emitted spans automatically.
 
 ## Inbox process
 
-**File:** the application-supplied handler that runs after
-`integrationEventFromKafka` succeeds. Covered by the consumer span opened
-in the previous section; the user can open further `Internal` spans as
-they please.
+Both transaction and delegated inbox modes execute the handler synchronously inside
+the caller's transport processing span. Business child spans are application-owned.
+No deferred boundary or independent inbox span is introduced.
 
-**Span name:** Inherited — the consumer span surrounds the handler. The
-user may open child `Internal` spans named after their own business
-operations.
+## Subscription workers
 
-**Span kind:** Child spans are `Internal`.
+All six process-manager, router and reaction worker entry points wrap each delivery
+in one `process <worker name>` Consumer span through Shibuya's shared IO helper.
+They reuse `RunCommandOptions.tracer`. Policy and span name are shared once per
+worker; without a tracer the original handler is selected and envelope telemetry
+is untouched.
 
-**Attributes:** Application-specific. The keiro library makes no claim on
-this surface beyond the parent consumer span.
+A valid envelope creation context contributes one link. The adapter's
+`telemetry.traceCorrelation` chooses `ParentAndLink` or `LinkOnly`; the Kiroku adapter
+defaults to `LinkOnly`. With no usable context the shared helper retains its
+ambient-parent fallback. The span records `messaging.system=keiro`, destination,
+operation name/type `process`, message ID and adapter attributes (including Kiroku's
+subscription/event attributes). Primitive attribute values are evaluated before
+handoff so lazy projections cannot retain envelopes or payloads.
 
-**Gap as of 2026-05-19:** No span emitted. Same root cause as "Inbox
-consume" — no consumer span exists for child spans to attach to.
+Dispatch and acknowledgement finalization stay inside the span. Dispatched commands
+are children and stamp their own appended events. Every settled decision records the
+existing `shibuya.ack.decision` vocabulary. `AckOk` includes duplicates and handled
+skips; retry, dead-letter and halt decisions mark this delivery as an error using
+only the decision classifier. Business reason text is not retained. A thrown exception
+is recorded by the span scope and does not fabricate an acknowledgement.
 
-**Action:** Closed transitively by Milestone 5; once the consumer span is
-open, application-level child spans are the user's responsibility.
+The real Kiroku chain test verifies command creation metadata, a linked processing
+root, its child target command and that command's persisted creation metadata.
 
 
 ## Command run
@@ -395,15 +352,16 @@ boundary is crossed by the runtime itself.
 
 ## Compliance table
 
-This table is the at-a-glance summary the Milestone 9 sweep will reconcile.
+This table summarizes implemented tracing and remaining historical instrumentation gaps.
 
-| Site                | Span name pattern              | Kind     | Anchor                                       | Status as of 2026-05-19 |
+| Site                | Span name pattern              | Kind     | Anchor                                       | Current status |
 | ------------------- | ------------------------------ | -------- | -------------------------------------------- | ----------------------- |
-| Outbox enqueue      | `create <destination>`         | Internal | `$attributes_messaging_trace_minimal` 27014  | Gap (out of scope M4)   |
+| Outbox enqueue      | `create <destination>`         | Internal | `$attributes_messaging_trace_minimal` 27014  | Durable context; no independent span |
 | Outbox publish      | `send <destination>` or `send` | Producer | `$attributes_messaging_trace_minimal` 27014  | Root with bounded creation links |
-| Inbox consume       | `process <destination>`        | Consumer | `$attributes_messaging_trace_minimal` 27014  | Gap → M5                |
-| Inbox process       | (inherits consumer span)       | Internal | n/a                                          | Closed transitively M5  |
-| Command run         | `command <category>`                     | Internal | `$span_db_client` 19833                      | Gap → M6                |
+| Inbox consume       | `process <destination>`        | Consumer | `$attributes_messaging_trace_minimal` 27014  | Exported parent-and-link helper |
+| Inbox process       | (inherits consumer span)       | Internal | n/a                                          | Inherits transport span |
+| Subscription workers | `process <worker>` | Consumer | shared Shibuya process helper | Adapter policy and creation link |
+| Command run         | `command <category>`                     | Internal | `$span_db_client` 19833                      | Category span with creation metadata |
 | Hydration           | `hydrate <stream>`             | Internal | n/a (bespoke)                                | Gap (follow-up)         |
 | Snapshot read/write | `snapshot.{read,write} <s>`    | Internal | n/a (bespoke)                                | Gap (follow-up)         |
 | Read-model rebuild  | `rebuild <read-model>`         | Internal | `$span_db_client` 19833                      | Gap (follow-up)         |

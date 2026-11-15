@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-15
+* **Update**: Extend ADR-60 with shared subscription processing spans, adapter-owned policy, settled outcome classifiers and synchronous inbox transport scope.
+
 ## 2026-11-14
 
 * **Update**: Revise ADR-1: both PGMQ execution paths use the released shared process helper and explicit parent/link policy while preserving settlement differences.

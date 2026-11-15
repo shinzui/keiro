@@ -19,6 +19,12 @@ interface:
 evidence:
   - kind: test
     resource: keiro/test/Main.hs
+    proves: "All six subscription workers correlate processing spans using adapter policy; the actual Kiroku command/event/manager/command/event chain preserves creation context and child parenting."
+  - kind: test
+    resource: keiro/retention/Retention/SpanOwnership.hs
+    proves: "Actual subscription helpers release envelopes and lazy attribute projections while exported spans remain alive under both correlation policies."
+  - kind: test
+    resource: keiro/test/Main.hs
     proves: "Producer cutoff survives restart, rollback and successful-row GC; batch send spans are roots with bounded per-message links and restore ambient context."
   - kind: test
     resource: keiro/test/Main.hs

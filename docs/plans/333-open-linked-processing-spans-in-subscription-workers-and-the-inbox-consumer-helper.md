@@ -23,6 +23,11 @@ provenance:
       at: 2026-11-14T19:06:08Z
       mode: "update"
       note: "Apply review findings, reconcile ownership and acceptance gates, and verify available upstream releases."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-14T23:48:49Z
+      mode: "implement"
+      note: "Wrap subscription handlers with shared policy-aware process spans and verify durable command chain"
 ---
 
 # Open linked processing spans in subscription workers and the inbox consumer helper
@@ -60,18 +65,27 @@ creation context, so applications that call it directly get the same behaviour.
 
 ## Progress
 
-- [ ] M1: EP-5 is Complete; its dependency handoff builds and existing tests pass.
-- [ ] M2: Process managers, routers and reactions open one linked processing span per handled
+- [x] M1 (2026-11-14): EP-5 is Complete; its dependency handoff builds and existing tests pass.
+- [x] M2 (2026-11-14): Process managers, routers and reactions open one linked processing span per handled
   event when given a tracer, and none otherwise; dispatched commands are its children.
-- [ ] M3: The end-to-end chain test passes: command, event, process manager, command, event.
-- [ ] M4: `withConsumerSpan` links to the creation context.
-- [ ] M5: Benchmark and retention gates pass; costs recorded.
-- [ ] M6: Documents and the correlation ADR updated; parent MasterPlan updated.
+- [x] M3 (2026-11-14): The end-to-end chain test passes: command, event, process manager, command, event.
+- [x] M4 (2026-11-14): `withConsumerSpan` links to the creation context.
+- [x] M5 (2026-11-15): Benchmark and retention gates pass; costs recorded.
+- [x] M6 (2026-11-15): Documents and the correlation ADR updated; parent MasterPlan updated.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Nine focused examples pass across all six worker entry points, duplicate/poison/no-context
+  delivery and the actual Kiroku-backed command/event/worker/command/event chain. Kiroku's
+  default produces a linked root; target command parenting and both events' metadata agree.
+- Shibuya Adapter and Ingested do not derive Generic; use their public record patterns
+  rather than Keiro's generic lenses. Envelope and AdapterTelemetry support the needed fields.
+- SDK primitive wrappers are lazy too. Adapter attribute primitives, including array members,
+  are forced before SDK ownership; direct Kafka scalar projections follow the same rule.
+- The shared IO helper requires no HasCallStack constraint, so the new public wrapper uses
+  the more general MonadUnliftIO signature. Existing worker behavior is selected directly
+  when no tracer is configured.
 
 
 ## Decision Log
@@ -107,7 +121,28 @@ creation context, so applications that call it directly get the same behaviour.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete. All six entry points use one shared, policy-aware processing scope while
+retaining their original drain, dispatch and acknowledgement behavior. With no tracer
+workers select the original handler; name/policy/envelope telemetry are not touched.
+The public Kafka helper adds its creation link alongside the existing parent. The
+inbox remains inside its caller's transport span.
+
+The actual Kiroku chain passes with origin metadata naming command A, a linked
+processing root, command B parented to that root and target metadata naming B.
+Nine new integration examples plus 86 affected existing checks pass. Seven ownership
+probes and two affected retention legs pass; the actual subscription helper releases
+envelopes and lazy attribute projections under both policies while spans stay alive.
+The contextual tracer leg ends Bounded at 1,056 B/op and 0.99 MiB growth. Unaffected
+coverage reuses EP-5 evidence and the final full repository gate remains required.
+
+Evidence in `keiro/bench/results/tracing-subscriptions-v1/` retains matched harnesses,
+dependencies and binary hashes. One initial 44% untraced timing outlier passes the
+unchanged-source focused rerun against the original 25% ceiling. Accepted deltas are
+−4.8% to +16.0%; no-tracer allocation estimates differ by −0.03% to +0.15%. Traced
+cost is about 6.8 KB per input without a link and 8.7 KB with one, including startup
+in the accepted one-delivery-worker workload. No event or query count changes.
+ADR-60, capability, audit, operations, integration guide and changelog agree, and
+strict affected documentation/extension/re-export checks pass.
 
 
 ## Context and Orientation
@@ -337,7 +372,7 @@ Added to `Keiro.Telemetry`:
 
 ```haskell
 withSubscriptionProcessSpan ::
-  (MonadUnliftIO m, HasCallStack) =>
+  (MonadUnliftIO m) =>
   Maybe Tracer ->
   TraceCorrelation ->
   -- | worker name (low-cardinality destination)

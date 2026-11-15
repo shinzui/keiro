@@ -20,6 +20,11 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### New Features
 
+- Traced subscription workers open `process <worker name>` spans linked according to
+  adapter policy; dispatched command spans are children. The Kiroku default is a linked root.
+- `withConsumerSpan` adds a creation link alongside its existing W3C parent. Inbox handlers
+  inherit the transport span and add no independent span.
+
 - Producer context can derive deterministically from stored source-event metadata above
   an immutable cutoff. Publisher root spans link up to 128 stored creation contexts,
   report batch size and omitted valid links, and preserve creation context on the wire.

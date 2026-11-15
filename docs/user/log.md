@@ -1,5 +1,8 @@
 # Keiro User Documentation Log
 
+## 2026-11-15
+* **Update**: Explain worker creation links, child commands and the inbox transport-span contract.
+
 ## 2026-11-14
 
 * **Update**: Update PGMQ API reference with telemetry policy exports and released Shibuya dependency bounds.

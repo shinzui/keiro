@@ -1,0 +1,21 @@
+{
+  "baseline": "3dfd6831",
+  "candidate_base": "3dfd6831",
+  "candidate_sources": {
+    "keiro/src/Keiro/Telemetry.hs": "11f3d1027c75a41a4b0a387142a7f7a65f56b2fba18a4e73c0653cdd3a25ec7b",
+    "keiro/src/Keiro/ProcessManager.hs": "f633f28ff8283283731f0b0c2a9f63473252cd7e1fe45d006617c1e37afb865c",
+    "keiro/src/Keiro/Router.hs": "29e448a3c7864ec3bbe3d41dd26eaa3daa0330056170a3484ab74c779cfa4ba2",
+    "keiro/src/Keiro/ProcessManager/Reaction.hs": "7c70e49b9eafd83dd04c421904046008f3a11be8ab45983f2231ae477f08515e",
+    "keiro/bench/Main.hs": "a643c5f1b41b5519c47c6190ea357f2c2f1a8c0259d1649467b75727d1f15991",
+    "keiro/retention/Retention/SpanOwnership.hs": "aadaa4d7573e6913f86313ef30be3954109f8ae0f05fe5255adeaee0d6f8f93b"
+  },
+  "benchmark_harness_identical": true,
+  "binary_sha256": {
+    "control": "565324447c6113d1effd20ac2a3a4c72799593c999f7483fc0bebf36369f67ad",
+    "candidate": "3c80a71aa6972179649a1f80e67dcaaa72c99080e76be0449d2f8cab2f70de3a"
+  },
+  "dependency_changes": {},
+  "toolchain_reference": "../tracing-baseline-v1/environment.json",
+  "rts": "-N2 -T",
+  "timing_ceiling_percent": 25
+}

@@ -11,7 +11,7 @@ import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM (atomically, putTMVar)
 import Control.Exception (evaluate, finally)
 import Control.Monad (forM_, unless, void, when)
-import Data.Aeson (toJSON)
+import Data.Aeson (object, toJSON, (.=))
 import Data.ByteString qualified as BS
 import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Data.Text (Text)
@@ -43,7 +43,7 @@ import Kiroku.Store.Transaction qualified as StoreTx
 import Kiroku.Store.Types (CategoryName (..), EventData (..), EventId (..), EventType (..), ExpectedVersion (..), RecordedEvent, StreamName (..), StreamVersion (..))
 import Numeric (showHex)
 import OpenTelemetry.Trace.Core (Tracer)
-import Retention.Fixture (LedgerCommand (..), TargetCommand (..), TargetEventStream, ackAdapter, appendSignals, decodeSignal, ledgerTarget, retentionLedger, retentionManager, retentionRouter, retentionTargetStream, sampleOnAck, seedLedger, seedLedgerRaw)
+import Retention.Fixture (LedgerCommand (..), TargetCommand (..), TargetEventStream, ackAdapter, appendSignals, appendSignalsWithMetadata, decodeSignal, ledgerTarget, retentionLedger, retentionManager, retentionRouter, retentionTargetStream, sampleOnAck, seedLedger, seedLedgerRaw)
 import Retention.Measure (GateConfig (..), HeapSample (..), Verdict (..), measureLeg, measureLegWithSampler, sampleHeap)
 import Retention.Tracing (withRecordingTracer)
 import Shibuya.Adapter (Adapter (..))
@@ -318,7 +318,10 @@ pmWorker = pmWorkerWithTracer Nothing
 
 pmWorkerWithTracer :: Maybe Tracer -> GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
 pmWorkerWithTracer tracer config (store, runner@(StoreRunner runStore)) = do
-  appendSignals runner (operationCount config)
+  let creationMetadata index = Just (object ["traceparent" .= ("00-0af7651916cd43dd8448eb211c80319c-" <> Text.justifyRight 16 '0' (Text.pack (showHex index "")) <> "-01")])
+  case tracer of
+    Nothing -> appendSignals runner (operationCount config)
+    Just _ -> appendSignalsWithMetadata creationMetadata runner (operationCount config)
   measured <- measureLegWithSampler config (maybe "pm-worker" (const "pm-worker-tracer") tracer) \sample -> do
     outcome <- runStore do
       adapter <- kirokuAdapter store (defaultKirokuAdapterConfig (SubscriptionName "retention-pm") sourceTarget)

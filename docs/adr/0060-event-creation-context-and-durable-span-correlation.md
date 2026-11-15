@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Event creation context and durable span correlation
 description: Commands stamp W3C creation context once per run and durable consumers correlate through evaluated span identities without changing replay.
-timestamp: 2026-11-14T23:17:22Z
+timestamp: 2026-11-15T00:08:55Z
 docId: ADR-60
 status: Accepted
 date: 2026-11-14
@@ -65,6 +65,21 @@ contexts, uses a common destination name only for uniform batches, and keeps per
 span attributes only for singletons. Wire headers carry the stored creation context rather
 than the send identity. Missing tracers bypass decoding. The existing exported single-event
 helper keeps its API; the durable publisher uses the batch-aware helper.
+
+Subscription workers keep their ordered adapter drain and call Shibuya's shared
+processing-span helper themselves. Every traced delivery, including duplicate or poison
+handling, gets one span named `process <worker name>`. The adapter owns correlation policy;
+Kiroku defaults to a linked root. Worker name/policy are shared once per worker, and the
+untraced path selects the original handler without reading envelope telemetry. Command
+options supply the same tracer for the processing span and dispatched child commands.
+Acknowledgement finalization remains inside the span. Settled non-AckOk decisions use
+only existing acknowledgement classifiers as errors; handled skips and duplicates remain
+non-error. Evaluate adapter attribute primitives as well as direct scalar projections
+before SDK ownership. The actual helper's retained-span probe covers both policies.
+
+The inbox adds no span because its handlers execute synchronously in the caller's
+transport scope. The exported Kafka helper is parent-and-link, preserving its parent
+behavior while adding the creation link; source adapters provide configurable policies.
 
 ## Consequences
 

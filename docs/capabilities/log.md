@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-15
+* **Update**: Add all-worker, real Kiroku command-chain and subscription payload-ownership evidence to CAP-15.
+
 ## 2026-11-14
 
 * **Update**: Add both-path PGMQ correlation, delayed/retry and retained-payload evidence to CAP-15.

@@ -1,0 +1,9 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+All
+  tracing
+    process-manager
+      dispatch: OK
+        31.7 ms ± 3.0 ms,  17 MB allocated, 303 KB copied,  27 MB peak memory,       same as baseline
+
+All 1 tests passed (5.45s)

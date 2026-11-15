@@ -16,16 +16,20 @@ import Data.Text qualified as Text
 import Data.Time (UTCTime (..))
 import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Data.UUID qualified as UUID
+import GHC.Exts (fromList)
 import Keiro.Command qualified as Command
 import Keiro.Integration.Event qualified as Integration
 import Keiro.Outbox qualified as Outbox
 import Keiro.Stream qualified as Stream
 import Keiro.Telemetry qualified as Telemetry
 import Keiro.Test.Postgres (Fixture, StoreRunner (..), withFreshResourceStore)
+import OpenTelemetry.Attributes (toAttribute)
 import OpenTelemetry.Context.ThreadLocal qualified as Context
 import OpenTelemetry.Exporter.InMemory.Span (inMemoryListExporter)
 import OpenTelemetry.Trace.Core
 import Retention.Fixture (TargetCommand (..), retentionNoOpTargetStream)
+import Shibuya.Adapter (TraceCorrelation (..))
+import Shibuya.Core.Types qualified as Shibuya
 import System.Mem (performMajorGC)
 import System.Mem.Weak (Weak, deRefWeak, mkWeakPtr)
 import Test.Hspec
@@ -59,6 +63,38 @@ spec fixture = describe "Span payload ownership" do
         awaitCollection weak `shouldReturn` True
         spans <- readIORef exported
         length spans `shouldBe` 1
+
+  forM_ [ParentAndLink, LinkOnly] $ \policy ->
+    it ("collects subscription envelopes and lazy scalar attributes under " <> show policy) $ do
+      (processor, exported) <- inMemoryListExporter
+      bracket
+        (createTracerProvider [processor] emptyTracerProviderOptions)
+        (\provider -> void (shutdownTracerProvider provider Nothing))
+        $ \provider -> do
+          weak <- produceSubscriptionPayloads (makeTracer provider "keiro-retention" tracerOptions) policy
+          awaitCollection weak `shouldReturn` True
+          spans <- readIORef exported
+          length spans `shouldBe` 8
+
+{-# NOINLINE produceSubscriptionPayloads #-}
+produceSubscriptionPayloads :: Tracer -> TraceCorrelation -> IO [Weak Text]
+produceSubscriptionPayloads tracer policy = forM [1 .. 8 :: Int] $ \index -> do
+  payload <- evaluate (Text.replicate (128 * 1024) (Text.pack (show index)))
+  weak <- mkWeakPtr payload Nothing
+  let envelope =
+        Shibuya.Envelope
+          { Shibuya.messageId = Shibuya.MessageId (Text.pack (show index)),
+            Shibuya.cursor = Nothing,
+            Shibuya.partition = Nothing,
+            Shibuya.enqueuedAt = Nothing,
+            Shibuya.traceContext = Just [("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")],
+            Shibuya.headers = Nothing,
+            Shibuya.attempt = Nothing,
+            Shibuya.attributes = fromList [("payload.size", toAttribute (Text.length payload))],
+            Shibuya.payload = payload
+          }
+  Telemetry.withSubscriptionProcessSpan (Just tracer) policy "ownership" envelope (const (pure ()))
+  pure weak
 
 {-# NOINLINE produceBatchPayloads #-}
 produceBatchPayloads :: Tracer -> IO [Weak Text]

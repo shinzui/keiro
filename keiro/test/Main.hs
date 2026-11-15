@@ -441,7 +441,8 @@ import ProjectionReplaySpec qualified
 import ReactionExample qualified
 import ReadModelSpec qualified
 import ReplayCompatibilitySpec qualified
-import Shibuya.Adapter (Adapter (..), defaultAdapterTelemetry)
+import Shibuya.Adapter (Adapter (..), AdapterTelemetry (traceCorrelation), TraceCorrelation (..), defaultAdapterTelemetry)
+import Shibuya.Adapter.Kiroku (defaultKirokuAdapterConfig, kirokuAdapter)
 import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), HaltReason (..), RetryDelay (..), deadLetterCodeText, deadLetterReasonCode, deadLetterReasonDetail, renderDeadLetterReason)
 import Shibuya.Core.AckHandle (AckHandle (..))
 import Shibuya.Core.Ingested (DeliveryStatus (..), Ingested (..))
@@ -5402,6 +5403,84 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 pure (Vector.length events)
           Prelude.sum persistedCounts `shouldBe` fanOut
 
+  describe "subscription processing spans" $ around (withFreshResourceStore fixture) $ do
+    for_ [("pm", "counter-pm"), ("domain-pm", "domain-pm"), ("router", "failing-router"), ("domain-router", "domain-router"), ("declarative", "declarative-test-router"), ("reaction", "counter-reaction"), ("poison", "counter-pm"), ("no-context", "counter-pm")] $ \(scenario, workerName) ->
+      it ("wraps and settles " <> scenario <> " with one processing span per delivery") $ \(_, StoreRunner runner) -> do
+        (processor, exported) <- inMemoryListExporter
+        provider <- createTracerProvider [processor] emptyTracerProviderOptions
+        decisions <- newIORef []
+        contract <- testSelectionContract EmptyAck FailureRetry 2
+        let tracer = makeTracer provider "keiro-test" tracerOptions
+            options = defaultRunCommandOptions & #tracer ?~ tracer
+            recorded = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+            policy = if scenario == "router" then ParentAndLink else LinkOnly
+            context = if scenario == "no-context" then Nothing else sampleIntegrationEnvelope ^. #traceContext
+            adapter :: (IOE :> es) => [message] -> Adapter es message
+            adapter messages = withAdapterCreation policy context (inMemoryAdapter decisions messages)
+            domainInput = DomainDispatchInput "trace" [CoordinatorAccept 1]
+            selection = selectionRouter contract (pure (Right [PMCommand (stream "selection-trace") (Add 1)]))
+            reaction = Reaction.AdvanceReaction (Add 1) [] [Reaction.FollowDispatch (PMCommand (stream "reaction-trace") (Add 1))]
+        Right () <- runner $ case scenario of
+          "pm" -> runProcessManagerWorker options counterProcessManager (adapter [(recorded, CounterAdded 1), (recorded, CounterAdded 1)]) Just
+          "domain-pm" -> runDomainProcessManagerWorkerWith defaultWorkerOptions options domainProcessManager (adapter [(recorded, domainInput)]) Just
+          "router" -> runRouterWorker options failingRouter (adapter [(recorded, RouteGroup "trace")]) Just
+          "domain-router" -> runDomainRouterWorkerWith defaultWorkerOptions options domainRouter (adapter [(recorded, domainInput)]) Just
+          "declarative" -> runDeclarativeRouterWorkerWith defaultWorkerOptions options selection (adapter [(recorded, RouteGroup "trace")]) Just
+          "reaction" -> Reaction.runReactiveProcessManagerWorker options counterReactionManager (adapter [(recorded, ("trace", reaction))]) Just
+          "poison" -> runProcessManagerWorker options counterProcessManager (adapter [recorded]) (const Nothing)
+          _ -> runProcessManagerWorker options counterProcessManager (adapter [(recorded, CounterAdded 1)]) Just
+        _ <- shutdownTracerProvider provider Nothing
+        spans <- traverse captureSpan =<< readIORef exported
+        let processing = filter ((== "process " <> Text.pack workerName) . csName) spans
+        length processing `shouldBe` (if scenario == "pm" then 2 else 1)
+        for_ processing $ \span -> do
+          textAttr (csAttributes span) "messaging.system" `shouldBe` Just "keiro"
+          textAttr (csAttributes span) "messaging.operation.name" `shouldBe` Just "process"
+          textAttr (csAttributes span) "messaging.message.id" `shouldBe` Just "router-test-message"
+          case context >>= Telemetry.creationLinkFromTraceContext of
+            Nothing -> csLinks span `shouldSatisfy` null
+            Just expected -> do
+              map (spanId . frozenLinkContext) (csLinks span) `shouldBe` [spanId (linkContext expected)]
+              case policy of
+                LinkOnly -> do
+                  csParent span `shouldSatisfy` isNothing
+                  traceId (csContext span) `shouldNotBe` traceId (linkContext expected)
+                ParentAndLink -> do
+                  parent <- traverse getSpanContext (csParent span)
+                  fmap spanId parent `shouldBe` Just (spanId (linkContext expected))
+          if scenario `elem` ["router", "poison"]
+            then csStatus span `shouldBe` Error "ack_halt"
+            else textAttr (csAttributes span) "error.type" `shouldBe` Nothing
+        length <$> readIORef decisions `shouldReturn` length processing
+
+    it "chain: command, event, Kiroku processing span, command, event is link-followable" $ \(storeHandle, StoreRunner runner) -> do
+      (processor, exported) <- inMemoryListExporter
+      provider <- createTracerProvider [processor] emptyTracerProviderOptions
+      let tracer = makeTracer provider "keiro-test" tracerOptions
+          options = defaultRunCommandOptions & #tracer ?~ tracer
+          source = stream "traceorigin-1" :: Stream CounterEventStream
+          decode event = case decodeRecorded counterCodec event of
+            Right input -> Just (event, input)
+            Left _ -> Nothing
+      Right (Right _) <- runner (runCommand options counterEventStream source (Add 4))
+      Right () <- runner $ do
+        adapter@Adapter {source = incoming, shutdown = stop} <- kirokuAdapter storeHandle (defaultKirokuAdapterConfig (SubscriptionName "trace-chain") (Category (CategoryName "traceorigin")))
+        runProcessManagerWorker options counterProcessManager (adapter {source = Streamly.take 1 incoming}) decode `EffException.finally` stop
+      Right origin <- runner $ Store.readStreamForward (StreamName "traceorigin-1") (StreamVersion 0) 10
+      Right target <- runner $ Store.readStreamForward (StreamName "counter-target-order-1") (StreamVersion 0) 10
+      _ <- shutdownTracerProvider provider Nothing
+      spans <- traverse captureSpan =<< readIORef exported
+      let [created] = filter ((== Just "traceorigin-1") . (\sp -> textAttr (csAttributes sp) "keiro.stream.name")) spans
+          [processing] = filter ((== "process counter-pm") . csName) spans
+          [dispatched] = filter ((== Just "counter-target-order-1") . (\sp -> textAttr (csAttributes sp) "keiro.stream.name")) spans
+      assertCreationContext (csContext created) (Vector.head origin ^. #metadata)
+      map (spanId . frozenLinkContext) (csLinks processing) `shouldBe` [spanId (csContext created)]
+      csParent processing `shouldSatisfy` isNothing
+      traceId (csContext processing) `shouldNotBe` traceId (csContext created)
+      parent <- traverse getSpanContext (csParent dispatched)
+      fmap spanId parent `shouldBe` Just (spanId (csContext processing))
+      assertCreationContext (csContext dispatched) (Vector.head target ^. #metadata)
+
   describe "Keiro.ProcessManager" $ around (withFreshResourceStore fixture) $ do
     it "discovers sorted lookup names without evaluating instance callbacks" $ \_ -> do
       let unused = error "discovery invoked an instance callback"
@@ -10128,7 +10207,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       InboxKafka.integrationEventFromKafka record
         `shouldBe` Left (InboxKafka.MissingHeader "keiro-message-id")
 
-    it "withConsumerSpan parents the consumer span under an upstream producer span via W3C headers" $ do
+    it "withConsumerSpan parents and links the consumer to the W3C creation context" $ do
       (processor, spansRef) <- inMemoryListExporter
       provider <- createTracerProvider [processor] emptyTracerProviderOptions
       let tracer = makeTracer provider "keiro-test" tracerOptions
@@ -10173,6 +10252,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         Just parent -> do
           parentCtx <- getSpanContext parent
           spanId parentCtx `shouldBe` spanId (csContext producerSp)
+      map (spanId . frozenLinkContext) (csLinks consumerSp) `shouldBe` [spanId (csContext producerSp)]
       -- Consumer span carries the expected attributes.
       show (csKind consumerSp) `shouldBe` "Consumer"
       textAttr (csAttributes consumerSp) "messaging.system" `shouldBe` Just "kafka"
@@ -10454,6 +10534,9 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             spanId (frozenLinkContext link) `shouldBe` spanId (linkContext expected)
         _ <- shutdownTracerProvider provider Nothing
         pure ()
+
+    it "does not inspect subscription name, policy or envelope without a tracer" $ do
+      Telemetry.withSubscriptionProcessSpan Nothing (error "policy inspected") (error "name inspected") (error "envelope inspected") (const (pure (7 :: Int))) `shouldReturn` 7
 
     it "keeps unstamped, non-object and caller-parent metadata unchanged" $ do
       let caller = Just (object ["traceparent" Aeson..= ("caller" :: Text), "audit" Aeson..= True])
@@ -19068,6 +19151,17 @@ inMemoryAdapter decisionsRef messages =
           lease = Nothing,
           deliveryStatus = pure DeliveryCurrent
         }
+
+withAdapterCreation :: TraceCorrelation -> Maybe TraceContext -> Adapter es msg -> Adapter es msg
+withAdapterCreation policy context adapter@Adapter {source = messages} =
+  adapter
+    { telemetry = defaultAdapterTelemetry {traceCorrelation = policy},
+      source = fmap install messages
+    }
+  where
+    install ingested@Ingested {envelope = env} =
+      ingested {envelope = env & #traceContext .~ fmap headers context}
+    headers context = [(TE.encodeUtf8 headerTraceParent, TE.encodeUtf8 (context ^. #traceparent))] <> maybe [] (\state -> [(TE.encodeUtf8 IntegrationEvent.headerTraceState, TE.encodeUtf8 state)]) (context ^. #tracestate)
 
 routerTestEnvelope :: msg -> Envelope msg
 routerTestEnvelope message =

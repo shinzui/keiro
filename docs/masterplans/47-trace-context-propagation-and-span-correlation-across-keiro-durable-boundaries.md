@@ -174,9 +174,9 @@ revises ADR-1.
 | 1 | Establish tracing-enabled performance and retention baselines | docs/plans/330-establish-tracing-enabled-performance-and-retention-baselines.md | None | None | Complete |
 | 2 | Stamp trace context on appended events and name command spans by category | docs/plans/331-stamp-trace-context-on-appended-events-and-name-command-spans-by-category.md | EP-1 | None | Complete |
 | 3 | Derive outbox creation context from source events and link it from the send span | docs/plans/332-derive-outbox-creation-context-from-source-events-and-link-it-from-the-send-span.md | EP-1, EP-2 | None | Complete |
-| 4 | Open linked processing spans in subscription workers and the inbox consumer helper | docs/plans/333-open-linked-processing-spans-in-subscription-workers-and-the-inbox-consumer-helper.md | EP-1, EP-2, EP-5 | None | In Progress |
+| 4 | Open linked processing spans in subscription workers and the inbox consumer helper | docs/plans/333-open-linked-processing-spans-in-subscription-workers-and-the-inbox-consumer-helper.md | EP-1, EP-2, EP-5 | None | Complete |
 | 5 | Align keiro-pgmq job spans with Shibuya 0.13 and expose the correlation policy | docs/plans/334-align-keiro-pgmq-job-spans-with-shibuya-0-13-and-expose-the-correlation-policy.md | EP-1, Shibuya gate, PGMQ adapter gate | None | Complete |
-| 6 | Persist trace context on timers and workflow journals and link it on fire and resume | docs/plans/335-persist-trace-context-on-timers-and-workflow-journals-and-link-it-on-fire-and-resume.md | EP-1, EP-2 | EP-4 | Not Started |
+| 6 | Persist trace context on timers and workflow journals and link it on fire and resume | docs/plans/335-persist-trace-context-on-timers-and-workflow-journals-and-link-it-on-fire-and-resume.md | EP-1, EP-2 | EP-4 | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -316,7 +316,8 @@ registry discovery, terminology and the complete repository verification gate. E
 `keiro/bench/results/tracing-baseline-v1/`. EP-2 is Complete with event-stamping, category span names, strict scalar ownership and
 matched benchmark evidence. EP-3 is Complete with immutable producer adoption, bounded root batch links and
 accepted performance/ownership evidence. EP-5 is Complete with released dependency alignment and both-path job correlation/ownership.
-EP-4 is In Progress; EP-6 follows.
+EP-4 is Complete: all subscription workers correlate, and the real command/event/Kiroku/
+manager/command/event chain passes with metadata, links and child parenting. EP-6 is In Progress.
 The combined command/worker/timer/workflow check and final full gate remain outstanding.
 
 Cross-plan gates not owned by a child plan:

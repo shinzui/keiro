@@ -29,6 +29,8 @@ module Keiro.Telemetry
     withProducerSpan,
     withProducerBatchSpan,
     withConsumerSpan,
+    withSubscriptionProcessSpan,
+    recordSubscriptionOutcome,
     withCommandSpan,
     withWorkflowSpan,
 
@@ -208,10 +210,10 @@ import Keiro.Workflow.Types (StepName (..), WorkflowId (..), WorkflowName (..))
 import Kiroku.Store.Observability (KirokuEvent (..))
 import Kiroku.Store.Types (CategoryName (..), StreamName (..), categoryName)
 import "base" Control.Exception (bracket)
-import "base" GHC.Exts (fromList)
+import "base" GHC.Exts (fromList, toList)
 import "base" GHC.Stack (HasCallStack)
 import "bytestring" Data.ByteString qualified as ByteString
-import "hs-opentelemetry-api" OpenTelemetry.Attributes (addAttributesFromBuilder, defaultAttributeLimits, emptyAttributes, toAttribute, (.@))
+import "hs-opentelemetry-api" OpenTelemetry.Attributes (Attribute (..), PrimitiveAttribute (..), addAttributesFromBuilder, defaultAttributeLimits, emptyAttributes, toAttribute, (.@))
 import "hs-opentelemetry-api" OpenTelemetry.Attributes.Key (AttributeKey (..))
 import "hs-opentelemetry-api" OpenTelemetry.Context (insertSpan, lookupSpan)
 import "hs-opentelemetry-api" OpenTelemetry.Context qualified as Context
@@ -239,10 +241,12 @@ import "hs-opentelemetry-api" OpenTelemetry.Trace.Core
     Span,
     SpanArguments (..),
     SpanKind (..),
+    SpanStatus (..),
     Tracer,
     addAttribute,
     defaultSpanArguments,
     inSpan',
+    setStatus,
     wrapSpanContext,
   )
 import "hs-opentelemetry-propagator-w3c" OpenTelemetry.Propagator.W3CTraceContext
@@ -265,6 +269,11 @@ import "hs-opentelemetry-semantic-conventions" OpenTelemetry.SemanticConventions
     messaging_operation_type,
     messaging_system,
   )
+import "shibuya-core" Shibuya.Adapter (TraceCorrelation)
+import "shibuya-core" Shibuya.Core.Ack (AckDecision (..))
+import "shibuya-core" Shibuya.Core.Types qualified as Shibuya
+import "shibuya-core" Shibuya.Telemetry.Process (withProcessSpanIO)
+import "shibuya-core" Shibuya.Telemetry.Semantic (processSpanName)
 import "text" Data.Text qualified as Text
 import "text" Data.Text.Encoding qualified as TE
 import "unliftio-core" Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
@@ -402,7 +411,65 @@ withProducerBatchSpan (Just tracer) rows body = do
           !link = NewLink context fields
        in link : acc
 
--- | Run @body@ inside a @Consumer@-kind span named @"process " <> topic@.
+-- | One subscription delivery, using its source adapter's correlation policy.
+-- Partial application shares the full name/policy once per worker. Without a
+-- tracer neither the name, policy nor envelope is inspected.
+withSubscriptionProcessSpan ::
+  (MonadUnliftIO m) =>
+  Maybe Tracer -> TraceCorrelation -> Text -> Shibuya.Envelope msg -> (Maybe Span -> m a) -> m a
+withSubscriptionProcessSpan Nothing _ _ = \_ body -> body Nothing
+withSubscriptionProcessSpan (Just tracer) policy destination =
+  let !name = processSpanName destination
+      !correlation = policy
+   in \envelope body -> withRunInIO $ \runInIO ->
+        withProcessSpanIO tracer correlation name (envelope ^. #traceContext) $ \sp -> runInIO $ do
+          let !messageId = case envelope ^. #messageId of Shibuya.MessageId value -> value
+          for_ (toList (envelope ^. #attributes)) $ \(!key, value) -> do
+            let !scalar = forceSpanAttribute value
+            addAttribute sp key scalar
+          addAttribute sp (unkey messaging_system) ("keiro" :: Text)
+          addAttribute sp (unkey messaging_destination_name) destination
+          addAttribute sp (unkey messaging_operation_name) ("process" :: Text)
+          addAttribute sp (unkey messaging_operation_type) ("process" :: Text)
+          addAttribute sp (unkey messaging_message_id) messageId
+          body (Just sp)
+
+-- Attribute wrappers are lazy, including values projected from adapter records.
+-- Evaluate their primitive values before handing ownership to the SDK.
+forceSpanAttribute :: Attribute -> Attribute
+forceSpanAttribute (AttributeValue value) = let !scalar = forcePrimitive value in AttributeValue scalar
+forceSpanAttribute (AttributeArray values) =
+  let !scalars = reverse (List.foldl' (\acc value -> let !scalar = forcePrimitive value in scalar : acc) [] values)
+   in AttributeArray scalars
+
+forcePrimitive :: PrimitiveAttribute -> PrimitiveAttribute
+forcePrimitive value = case value of
+  TextAttribute !text -> TextAttribute text
+  BoolAttribute !boolean -> BoolAttribute boolean
+  IntAttribute !integer -> IntAttribute integer
+  DoubleAttribute !number -> DoubleAttribute number
+
+-- | Observe the worker's existing settled acknowledgement, after finalization.
+-- A retry/dead-letter/halt means this delivery did not complete successfully;
+-- retain only the existing decision vocabulary, never its business reason.
+recordSubscriptionOutcome :: (MonadIO m) => Maybe Span -> AckDecision -> m ()
+recordSubscriptionOutcome Nothing _ = pure ()
+recordSubscriptionOutcome (Just sp) decision = do
+  let !classification = case decision of
+        AckOk -> "ack_ok" :: Text
+        AckRetry _ -> "ack_retry"
+        AckDeadLetter _ -> "ack_dead_letter"
+        AckHalt _ -> "ack_halt"
+  addAttribute sp "shibuya.ack.decision" classification
+  case decision of
+    AckOk -> pure ()
+    _ -> do
+      addAttribute sp "error.type" classification
+      setStatus sp (Error classification)
+
+-- | Run @body@ inside a @Consumer@-kind span named @"process " <> topic@,
+-- child of and linked to the W3C creation context. Inbox handlers execute inside
+-- this transport span; the inbox opens no independent span.
 --
 -- Like 'withProducerSpan', the helper is a pass-through under a 'Nothing'
 -- tracer. The 'KafkaInboundRecord' is required so the helper can populate
@@ -432,7 +499,7 @@ withConsumerSpan (Just tracer) consumerGroup record mEvent body =
       body (Just sp)
   where
     name = "process " <> (record ^. #topic)
-    args = defaultSpanArguments {kind = Consumer}
+    args = defaultSpanArguments {kind = Consumer, links = maybe [] pure (traceContextFromHeaders (record ^. #headers) >>= creationLinkFromTraceContext)}
 
 -- | Run @body@ with the OpenTelemetry context temporarily augmented by a
 -- parent span extracted from the supplied header list via the W3C
@@ -628,7 +695,7 @@ setProducerAttributes sp event _record = do
   addAttribute sp (unkey messaging_message_id) messageId
   case event ^. #key of
     Nothing -> pure ()
-    Just k -> addAttribute sp (unkey messaging_kafka_message_key) k
+    Just !k -> addAttribute sp (unkey messaging_kafka_message_key) k
 
 setConsumerAttributes ::
   (MonadIO m) =>
@@ -641,18 +708,21 @@ setConsumerAttributes sp consumerGroup record mEvent = do
   addAttribute sp (unkey messaging_system) ("kafka" :: Text)
   addAttribute sp (unkey messaging_operation_type) ("process" :: Text)
   addAttribute sp (unkey messaging_operation_name) ("process" :: Text)
-  addAttribute sp (unkey messaging_destination_name) (record ^. #topic)
-  addAttribute sp (unkey messaging_destination_partition_id) (showText (record ^. #partition))
-  addAttribute sp (unkey messaging_kafka_offset) (record ^. #offset)
+  let !topic = record ^. #topic
+      !partition = showText (record ^. #partition)
+      !offset = record ^. #offset
+  addAttribute sp (unkey messaging_destination_name) topic
+  addAttribute sp (unkey messaging_destination_partition_id) partition
+  addAttribute sp (unkey messaging_kafka_offset) offset
   case record ^. #key of
     Nothing -> pure ()
-    Just k -> addAttribute sp (unkey messaging_kafka_message_key) k
+    Just !k -> addAttribute sp (unkey messaging_kafka_message_key) k
   case consumerGroup of
     Nothing -> pure ()
-    Just g -> addAttribute sp (unkey messaging_consumer_group_name) g
+    Just !g -> addAttribute sp (unkey messaging_consumer_group_name) g
   case mEvent of
     Nothing -> pure ()
-    Just event -> addAttribute sp (unkey messaging_message_id) (event ^. #messageId)
+    Just event -> let !messageId = event ^. #messageId in addAttribute sp (unkey messaging_message_id) messageId
 
 showText :: (Show a) => a -> Text
 showText = Text.pack . show

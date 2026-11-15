@@ -24,6 +24,7 @@ module Retention.Fixture
     retentionTarget,
     signalStreamName,
     appendSignals,
+    appendSignalsWithMetadata,
     decodeSignal,
     ackAdapter,
     sampleOnAck,
@@ -379,7 +380,10 @@ signalStreamName :: Int -> StreamName
 signalStreamName index = StreamName ("retentionsource-" <> Text.pack (show index))
 
 appendSignals :: StoreRunner -> Int -> IO ()
-appendSignals (StoreRunner runStore) count =
+appendSignals = appendSignalsWithMetadata (const Nothing)
+
+appendSignalsWithMetadata :: (Int -> Maybe Value) -> StoreRunner -> Int -> IO ()
+appendSignalsWithMetadata metadataFor (StoreRunner runStore) count =
   forM_ [1 .. count] \index -> do
     let signal = Signal (Text.pack (show index)) (index `mod` 16)
         event =
@@ -387,7 +391,7 @@ appendSignals (StoreRunner runStore) count =
             { eventId = Nothing,
               eventType = EventType "RetentionSignal",
               payload = toJSON signal,
-              metadata = Nothing,
+              metadata = metadataFor index,
               causationId = Nothing,
               correlationId = Nothing
             }

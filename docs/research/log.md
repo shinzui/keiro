@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-15
+* **Update**: Replace unwired inbox audit designs with implemented transport helpers and subscription worker spans.
+
 ## 2026-11-14
 
 * **Update**: Reconcile outbox enqueue and publish audit with immutable derivation and root batch spans.

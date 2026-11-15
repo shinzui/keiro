@@ -90,7 +90,7 @@ import Keiro.ProcessManager
 import Keiro.Projection (InlineProjection, runCommandWithProjections, runDomainCommandWithProjections)
 import Keiro.Router.Selection
 import Keiro.Stream (Stream)
-import Keiro.Telemetry (recordDispatchDuplicate, recordDispatchFailed, recordDispatchPoison)
+import Keiro.Telemetry (recordDispatchDuplicate, recordDispatchFailed, recordDispatchPoison, recordSubscriptionOutcome, withSubscriptionProcessSpan)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError (..))
@@ -551,10 +551,19 @@ runDomainRouterWorkerWith ::
   Adapter es msg ->
   (msg -> Maybe (RecordedEvent, input)) ->
   Eff es ()
-runDomainRouterWorkerWith workerOptions options router Adapter {source = adapterSource} decodeMessage =
+runDomainRouterWorkerWith workerOptions options router Adapter {source = adapterSource, telemetry = adapterTelemetry} decodeMessage =
   Streamly.fold Fold.drain
-    $ Streamly.mapM handleIngested adapterSource
+    $ Streamly.mapM handleTraced adapterSource
   where
+    -- Select the original handler without inspecting per-message telemetry.
+    handleTraced = case options ^. #tracer of
+      Nothing -> handleIngested
+      Just _ -> \ingested@Ingested {envelope = traceEnvelope} -> instrument traceEnvelope $ \mSpan -> do
+        decision <- handleIngested ingested
+        recordSubscriptionOutcome mSpan decision
+        pure decision
+    instrument = withSubscriptionProcessSpan (options ^. #tracer) (adapterTelemetry ^. #traceCorrelation) (router ^. #name)
+
     handleIngested :: Ingested es msg -> Eff es AckDecision
     handleIngested Ingested {envelope = env@Envelope {payload = message}, ack = AckHandle finalizeAck} = do
       decision <- case decodeMessage message of
@@ -670,10 +679,19 @@ runRouterWorkerWith ::
   Adapter es msg ->
   (msg -> Maybe (RecordedEvent, input)) ->
   Eff es ()
-runRouterWorkerWith workerOptions options router Adapter {source = adapterSource} decodeMessage =
+runRouterWorkerWith workerOptions options router Adapter {source = adapterSource, telemetry = adapterTelemetry} decodeMessage =
   Streamly.fold Fold.drain
-    $ Streamly.mapM handleIngested adapterSource
+    $ Streamly.mapM handleTraced adapterSource
   where
+    -- Select the original handler without inspecting per-message telemetry.
+    handleTraced = case options ^. #tracer of
+      Nothing -> handleIngested
+      Just _ -> \ingested@Ingested {envelope = traceEnvelope} -> instrument traceEnvelope $ \mSpan -> do
+        decision <- handleIngested ingested
+        recordSubscriptionOutcome mSpan decision
+        pure decision
+    instrument = withSubscriptionProcessSpan (options ^. #tracer) (adapterTelemetry ^. #traceCorrelation) (router ^. #name)
+
     handleIngested :: Ingested es msg -> Eff es AckDecision
     handleIngested Ingested {envelope = env@Envelope {payload = message}, ack = AckHandle finalizeAck} = do
       decision <- case decodeMessage message of
@@ -779,11 +797,20 @@ runDeclarativeRouterWorkerWith ::
   Adapter es msg ->
   (msg -> Maybe (RecordedEvent, input)) ->
   Eff es ()
-runDeclarativeRouterWorkerWith workerOptions options router Adapter {source = adapterSource} decodeMessage =
+runDeclarativeRouterWorkerWith workerOptions options router Adapter {source = adapterSource, telemetry = adapterTelemetry} decodeMessage =
   Streamly.fold Fold.drain
-    $ Streamly.mapM handleIngested adapterSource
+    $ Streamly.mapM handleTraced adapterSource
   where
     contract = router ^. #selectionContract
+
+    -- Select the original handler without inspecting per-message telemetry.
+    handleTraced = case options ^. #tracer of
+      Nothing -> handleIngested
+      Just _ -> \ingested@Ingested {envelope = traceEnvelope} -> instrument traceEnvelope $ \mSpan -> do
+        decision <- handleIngested ingested
+        recordSubscriptionOutcome mSpan decision
+        pure decision
+    instrument = withSubscriptionProcessSpan (options ^. #tracer) (adapterTelemetry ^. #traceCorrelation) (router ^. #name)
 
     handleIngested :: Ingested es msg -> Eff es AckDecision
     handleIngested Ingested {envelope = env@Envelope {payload = message}, ack = AckHandle finalizeAck} = do

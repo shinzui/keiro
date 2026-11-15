@@ -108,7 +108,7 @@ import ReadModelBench
     runReadModelLatencyEvidenceIfRequested,
     setupReadModelBench,
   )
-import Shibuya.Adapter (Adapter (..), defaultAdapterTelemetry)
+import Shibuya.Adapter (Adapter (..), AdapterTelemetry (traceCorrelation), TraceCorrelation (LinkOnly), defaultAdapterTelemetry)
 import Shibuya.Core.AckHandle (AckHandle (..))
 import Shibuya.Core.Ingested (DeliveryStatus (..), Ingested (..))
 import Shibuya.Core.Types (Envelope (..))
@@ -1264,7 +1264,7 @@ tracingBenchmarks store dispatchStore runner outboxStore tracer =
   [ bgroup "tracing" $
       [selected (prepareCommandStore store) $ \_ -> bgroup "command" ([commandCell distinct traced | distinct <- [True, False], traced <- [False, True]] <> [batchCommandCell traced | traced <- [False, True]])]
         <> [publishCell withContext traced | withContext <- [False, True], traced <- [False, True]]
-        <> [selected (prepareCommandStore dispatchStore) $ \_ -> bgroup "process-manager" [dispatchCell traced | traced <- [False, True]]]
+        <> [selected (prepareCommandStore dispatchStore) $ \_ -> bgroup "process-manager" [dispatchCell withContext traced | withContext <- [False, True], traced <- [False, True]]]
   ]
   where
     options traced = defaultRunCommandOptions & #tracer .~ (if traced then Just tracer else Nothing)
@@ -1306,13 +1306,20 @@ tracingBenchmarks store dispatchStore runner outboxStore tracer =
                       drain
               drain
        in selected (warmAction outboxStore "tracing" label action) $ \_ -> bench label (nfIO action)
-    dispatchCell traced =
-      let label = "dispatch" <> suffix traced
+    dispatchCell withContext traced =
+      let label = (if withContext then "dispatch-contexts" else "dispatch") <> suffix traced
           action counter = do
             iteration <- nextIteration label 100 counter
             runResourceStoreChecked runner $
               for_ [1 .. 100 :: Int] $ \index -> do
                 let n = iteration * 100 + index
                     input = FanoutInput (Text.pack label <> "-" <> Text.pack (show n)) 1
-                runDomainProcessManagerWorker (options traced) fanoutDomainProcessManager (fanoutAdapter input) (\message -> Just (iterationSourceEvent n, message))
+                let plain = fanoutAdapter input
+                    contextual = case plain of
+                      Adapter {source = incoming} ->
+                        plain
+                          { telemetry = defaultAdapterTelemetry {traceCorrelation = LinkOnly},
+                            source = fmap (\ingested@Ingested {envelope = envelope} -> ingested {envelope = envelope & #traceContext ?~ [("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")]}) incoming
+                          }
+                runDomainProcessManagerWorker (options traced) fanoutDomainProcessManager (if withContext then contextual else plain) (\message -> Just (iterationSourceEvent n, message))
        in selectedCounterWithCleanup label 100 (prepareCommand dispatchStore label 100 1000 action) (\n -> workCountProbe dispatchStore (Text.pack label) ("bench-command-domain-process-manager:" <> Text.pack label <> "-") (n * 100) (n * 100)) $ \counter -> bench label (nfIO (action counter))

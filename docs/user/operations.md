@@ -2,7 +2,7 @@
 type: Runbook
 title: Operations
 description: Deploy and operate Keiro applications, workers, rebuilds, retries, and production checks.
-timestamp: 2026-11-14T22:01:22Z
+timestamp: 2026-11-15T00:08:55Z
 docId: DOC-15
 tags: [keiro, operations, deployment, runbook]
 generated:
@@ -506,7 +506,17 @@ At minimum, track:
 
 Keiro emits OpenTelemetry **spans** through `Keiro.Telemetry`: an `Internal` span around
 `runCommand` (opt-in via `RunCommandOptions.tracer`), a `Producer` span around outbox
-publishing, and `Consumer` spans parented via W3C trace headers.
+publishing, and `Consumer` spans correlated via W3C creation contexts.
+
+Process managers, routers and reactions reuse `RunCommandOptions.tracer` to open
+`process <worker name>` spans around dispatch and acknowledgement. Their adapter chooses
+parent-and-link or link-only correlation; Kiroku subscriptions default to linked roots.
+Dispatched command spans are children of the processing span. Missing or malformed context
+omits the link and retains the ambient-parent fallback. Settled retry/dead-letter/halt
+outcomes record low-cardinality error classifiers; duplicate and handled-skip acknowledgements
+remain non-error. The inbox executes inside the transport's span and opens none itself.
+Applications consuming Kafka without Shibuya can use `withConsumerSpan` for fixed
+parent-and-link behavior.
 
 Command spans use `command <category>` names, such as `command order`; the complete stream
 name remains in `keiro.stream.name`. With `RunCommandOptions.tracer` configured, events carry
