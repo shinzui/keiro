@@ -298,7 +298,9 @@ def reusable(receipt, expected, root, now=None):
         log = root / receipt["log"]
         return (receipt["schema"] == SCHEMA and receipt["identity"] == expected
                 and receipt["status"] == 0 and 0 <= now - receipt["finished"] <= MAX_AGE
-                and file_digest(log) == receipt["log_sha256"])
+                and file_digest(log) == receipt["log_sha256"]
+                and all(file_digest(root / name) == checksum
+                        for name, checksum in receipt.get("artifacts", {}).items()))
     except (KeyError, OSError, TypeError):
         return False
 
@@ -340,7 +342,11 @@ class Gate:
         with log.open("w") as stream:
             stream.write(json.dumps({"identity": expected, "command": command}) + "\n")
             stream.flush()
+            artifacts = path.with_suffix("")
+            environment = dict(os.environ, KEIRO_BENCH_OUTPUT_DIRECTORY=str(artifacts), KEIRO_BENCH_LOCKED="1",
+                               KEIRO_BENCH_FRESH_REFERENCE="1" if self.fresh else "0") if name in GUARDS else None
             process = subprocess.Popen(command, cwd=self.root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                       env=environment,
                                        text=True, start_new_session=True)
             try:
                 for line in process.stdout:
@@ -362,6 +368,9 @@ class Gate:
                 status = 1
             stream.write(f"STAGE_EXIT={status}\n")
         receipt.update(status=status, finished=time.time(), log_sha256=file_digest(log))
+        if artifacts.is_dir():
+            receipt["artifacts"] = {str(p.relative_to(self.root)): file_digest(p)
+                                    for p in sorted(artifacts.rglob("*")) if p.is_file()}
         atomic_json(path, receipt)
         self.record(name, path, receipt, reused=False)
         return status

@@ -329,7 +329,9 @@ passes read-model, leaving seven failed cases across inbox, command and projecti
 All sixteen archives and an isolated staged-consumer build, migration and HTTP health check
 pass. A focused released-0.24/candidate no-op comparison measures 23.433/23.050 us;
 this limited observation shows that case also exceeds baseline in the released version.
-Publication remains blocked pending the maintainer decision on a benchmark exception. See the
+The user requested a permanent benchmark fix: selection-scoped tracing resources and
+automatic comparisons against the immutable original source on the current machine.
+No benchmark waiver is being used; release requires the corrected gate to pass. See the
 [release status](../../keiro/bench/results/release-gates/0.25.0.0-release-status.md).
 
 Cross-plan gates not owned by a child plan:
@@ -437,5 +439,6 @@ The user approved the 0.25.0.0 release on 2026-11-14. The prepared candidate pas
 full correctness and native Nix checks. Sixteen source/docs archives and the isolated
 staged-consumer build, migration and HTTP health proof pass. Three historical guards retain
 seven red cases after the bounded rerun; all original and resumed evidence plus the focused
-released-version comparison are retained. Publication awaits an explicit maintainer decision
-on the requested benchmark exception. Thresholds and baselines are unchanged.
+released-version comparison are retained. The user requested investigation and a permanent benchmark correction. No exception
+is being used. Release remains pending the corrected source-pinned gate and refreshed
+archive/consumer evidence. Thresholds and baselines are unchanged.

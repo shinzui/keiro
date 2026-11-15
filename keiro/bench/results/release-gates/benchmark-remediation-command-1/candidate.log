@@ -1,0 +1,58 @@
+All
+  tracing
+    command
+      append-distinct-streams:        OK
+        17.4 ms ± 783 μs
+      append-distinct-streams/tracer: OK
+        16.8 ms ± 1.2 ms
+      append-one-stream:              OK
+        66.7 ms ± 1.8 ms
+      append-one-stream/tracer:       OK
+        68.3 ms ± 3.4 ms
+      append-batch:                   OK
+        1.84 ms ± 134 μs
+      append-batch/tracer:            OK
+        1.90 ms ± 176 μs
+  command
+    legacy
+      accepted-1:                     OK
+        179  μs ±  11 μs, 19% more than baseline
+    control
+      accepted-1:                     OK
+        178  μs ±  20 μs, 19% more than baseline
+    domain-warmup
+      accepted-1:                     OK
+        182  μs ± 9.3 μs, 16% more than baseline
+    domain
+      accepted-1:                     OK
+        180  μs ±  14 μs, 1.01x, 19% more than baseline
+    legacy
+      accepted-large:                 OK
+        1.88 ms ± 117 μs, 24% more than baseline
+    domain
+      accepted-large:                 OK
+        1.82 ms ± 182 μs, 0.97x, 21% more than baseline
+    legacy
+      no-op:                          OK
+        21.4 μs ± 1.6 μs, 31% more than baseline
+    domain
+      rejected:                       OK
+        21.7 μs ± 1.6 μs, 1.01x, 32% more than baseline
+      no-op:                          OK
+        21.8 μs ± 1.7 μs, 1.02x, 33% more than baseline
+      router-fanout
+        10:                           OK
+          2.72 ms ± 252 μs, 26% more than baseline
+        100:                          OK
+          27.6 ms ± 675 μs, 26% more than baseline
+        1000:                         OK
+          261  ms ± 7.0 ms, 21% more than baseline
+      process-manager-fanout
+        10:                           OK
+          2.59 ms ± 244 μs, 23% more than baseline
+        100:                          OK
+          25.1 ms ± 653 μs, 22% more than baseline
+        1000:                         OK
+          304  ms ± 148 ms,       same as baseline
+
+All 21 tests passed (83.94s)

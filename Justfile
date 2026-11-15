@@ -25,6 +25,7 @@ _verify: mapped-structural-enum-equality-proof consumer-enum-literal-proof mappe
 release-static: terminology-validate record-migration-policy adr-validate research-validate capabilities-validate reviews-validate bug-reports-validate user-documentation-validate extension-policy dsl-api-boundaries keiro-reexports
     scripts/check-generated-name-policy.sh --paths-only
     python3 -m unittest discover -s scripts/tests -p 'test_release*.py'
+    python3 -m unittest discover -s scripts/tests -p test_bench_guard.py
 
 [group('meta')]
 release-prepare:

@@ -2,6 +2,9 @@
 
 ## 2026-11-15
 
+* **Update**: Keep benchmark limits fixed while comparing immutable recording source on the current machine; scope tracing resources to selected tests and checksum supplementary release evidence.
+
+
 * **Update**: ADR-60: distill traced entry transaction sharing and the direct untraced timer path after initiative review.
 
 

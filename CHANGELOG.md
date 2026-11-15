@@ -25,6 +25,12 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 - **keiro**: Release typed command outcome payloads before retained-span attribute inspection.
 
+### Other Changes
+
+- Acquire tracing benchmark fixtures only when selected. Compare fixed performance
+  workloads with their immutable recording source on the current machine, retaining
+  historical diagnostics, unchanged limits and checksum-bound measurement evidence.
+
 ## 0.24.0.0 — 2026-11-05
 
 ### Breaking Changes

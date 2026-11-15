@@ -1,0 +1,25 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+All
+  tracing
+    command
+      append-one-stream/tracer: BENCH_SETUP group=tracing-fixture scenario=tracing acquired
+BENCH_SETUP group=command scenario=shared schema seed_streams=5000 seed_events=5000 analyze=once-before-warm-up
+BENCH_SETUP group=command scenario=append-one-stream/tracer counter budget_iterations=1000 events_per_iteration=100
+BENCH_SETUP group=command scenario=append-one-stream/tracer checkpoint=before-warm-up
+BENCH_SETUP group=command scenario=append-one-stream/tracer warm-up invocations=3
+BENCH_SETUP group=counts scenario=append-one-stream/tracer iterations=18 units=1800
+BENCH_SETUP group=tracing-fixture scenario=tracing closing
+BENCH_SETUP group=command scenario=shared schemaOK
+         68.9 ms ±  12 ms
+s  command
+    legacy
+e      no-op:                    ed_streams=5000 seed_events=5000 analyze=once-before-warm-up
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/legacy/no-op counter budget_iterations=1000000 events_per_iteration=0
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/legacy/no-op checkpoint=before-warm-up
+BENCH_SETUP group=command scenario=StreamName "bench-command-legacy-no-op"/legacy/no-op warm-up invocations=3
+BENCH_SETUP group=counts scenario=StreamName "bench-command-legacy-no-op"/legacy/no-op iterations=65538 units=0
+OK
+        21.1 μs ± 3.9 μs
+
+All 2 tests passed (5.90s)

@@ -1,0 +1,10 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+.PERFORMANCE(inbox)=BENCHMARK-ERROR: fixture assertion failed
+........PERFORMANCE(inbox)=PASSED cases=1 evidence=/tmp/nix-shell.dY5ynk/tmpnpzlvtb1/evidence
+.PERFORMANCE(inbox)=REGRESSION cases=1 evidence=/tmp/nix-shell.dY5ynk/tmprgogd4az/evidence
+.
+----------------------------------------------------------------------
+Ran 11 tests in 0.013s
+
+OK

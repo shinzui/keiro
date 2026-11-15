@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
-# Run every benchmark regression guard and report each one, instead of stopping
-# at the first failure. Each guard is one `cabal bench keiro-bench` invocation
-# against a committed baseline (or, for producer-identity, a same-process
-# ratio ceiling). The exit status is non-zero when any guard failed, and the
-# per-guard summary is printed last so a log reader can find it without
-# scrolling through tasty-bench output.
+# Run all fixed-workload guards, retaining failures for every family. CSV families
+# compare with immutable recording source measured on this machine; producer
+# identity retains its same-process paired ceiling. See keiro/bench/REGRESSION.md.
 #
 # Usage: scripts/bench-regression.sh [guard...]
 # With no arguments every guard runs. Guard names: producer-identity, outbox,
@@ -13,6 +10,10 @@ set -uo pipefail
 
 cd "$(dirname "$0")/.."
 
+if [ "${KEIRO_BENCH_LOCKED:-}" != 1 ]; then
+  exec python3 scripts/release_workflow.py locked -- env KEIRO_BENCH_LOCKED=1 scripts/bench-regression.sh "$@"
+fi
+
 run_guard() {
   local name="$1"
   shift
@@ -20,13 +21,16 @@ run_guard() {
   "$@"
   local status=$?
   results+=("${name}=${status}")
-  if [ "$status" -ne 0 ]; then
+  if [ "$status" -eq 2 ]; then
+    inconclusive=1
+  elif [ "$status" -ne 0 ]; then
     failed=1
   fi
 }
 
 declare -a results=()
 failed=0
+inconclusive=0
 
 wanted=("$@")
 if [ "${#wanted[@]}" -eq 0 ]; then
@@ -38,20 +42,12 @@ for guard in "${wanted[@]}"; do
     producer-identity)
       run_guard producer-identity cabal bench keiro-bench --benchmark-options="-p producer-identity -j1 --time-mode wall --hide-progress --stdev 1 --timeout 120s +RTS -N2 -RTS"
       ;;
-    outbox)
-      run_guard outbox cabal bench keiro-bench --benchmark-options="-p outbox -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --baseline bench/baseline-outbox.csv --fail-if-slower 25 +RTS -N2 -RTS"
-      ;;
-    inbox)
-      run_guard inbox cabal bench keiro-bench --benchmark-options="-p inbox -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --baseline bench/baseline-inbox.csv --fail-if-slower 25 +RTS -N2 -RTS"
-      ;;
-    command)
-      run_guard command cabal bench keiro-bench --benchmark-options="-p command -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --baseline bench/baseline-command.csv --fail-if-slower 25 +RTS -N2 -RTS"
-      ;;
-    projection)
-      KEIRO_READ_MODEL_P95=1 run_guard projection cabal bench keiro-bench --benchmark-options="-p projection -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --baseline bench/baseline-projection.csv --fail-if-slower 25 +RTS -N2 -RTS"
-      ;;
-    read-model)
-      run_guard read-model cabal bench keiro-bench --benchmark-options="-p read-model -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --baseline bench/baseline-read-model.csv --fail-if-slower 25 +RTS -N2 -RTS"
+    outbox|inbox|command|projection|read-model)
+      if [ "$guard" = projection ]; then
+        KEIRO_READ_MODEL_P95=1 run_guard "$guard" python3 scripts/bench_guard.py "$guard"
+      else
+        run_guard "$guard" python3 scripts/bench_guard.py "$guard"
+      fi
       ;;
     *)
       echo "unknown guard: $guard" >&2
@@ -67,5 +63,9 @@ done
 if [ "$failed" -ne 0 ]; then
   echo "BENCH_REGRESSION=FAILED"
   exit 1
+fi
+if [ "$inconclusive" -ne 0 ]; then
+  echo "BENCH_REGRESSION=INCONCLUSIVE"
+  exit 2
 fi
 echo "BENCH_REGRESSION=PASSED"

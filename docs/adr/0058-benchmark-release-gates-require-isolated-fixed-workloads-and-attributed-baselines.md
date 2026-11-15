@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Benchmark release gates require isolated fixed workloads and attributed baselines
 description: Release benchmark evidence uses isolated fixtures, fixed measured work, explicit growth bounds and reproducible baselines whose changes have attributed causes.
-timestamp: 2026-10-27T19:00:00Z
+timestamp: 2026-11-15T15:10:41Z
 docId: ADR-58
 status: Accepted
 date: 2026-10-21
@@ -23,8 +23,8 @@ interference cannot distinguish a runtime regression from a different workload.
 ## Decision
 
 Release candidates run the correctness gate followed by all six benchmark guards through
-`just release-gate`: five historical CSV comparisons and the producer same-process ratio
-guard. Retain the manifest, individual stage receipts and original checksum-verified logs,
+`just release-gate`: five fixed workload families compared with the immutable baseline
+source measured in the current environment, and the producer same-process ratio guard. Retain the manifest, individual stage receipts and original checksum-verified logs,
 tested source revision/tree and environment. Release preparation and verification share
 a workspace lock; failed preflight or correctness never starts benchmark work.
 A failed or inconclusive comparison is not acceptance. Implementation changes after a passing
@@ -43,6 +43,46 @@ conservatively invalidates reuse. A newer red or interrupted attempt supersedes 
 Missing or altered logs and receipts refuse acceptance; the manifest links the original
 records rather than representing several attempts as one uninterrupted measurement.
 `--fresh` forces all stages. No numerical guard or baseline rule changes.
+
+### Machine-matched regression comparisons
+
+The absolute CSVs recorded on Darwin 27.0 are retained as diagnostics and workload
+inventories. They cannot distinguish environment drift from code cost after an OS
+or machine change. Exact released 0.24 and candidate 0.25 no-op controls both exceed
+that historical threshold on Darwin 27.2 while the candidate/reference ratio is
+0.984. This observation concerns that case, not every workload.
+
+For the five CSV families, `scripts/bench_guard.py` builds original recording source
+`b8695a0d050c5b0db2f251887d43182da2b47eed` with the current Nix compiler and measures
+its unchanged workloads on this machine. Candidate means are compared with those
+reference means at the existing 1.25 ceiling. Historical rows, measured quantities,
+RTS settings and in-run ratio assertions remain unchanged. Every required historical
+row must exist in both results. New tracing-only cells retain their existing bounded
+work/count assertions rather than acquiring an invented historical budget.
+
+A verified reference executable is cached by source and build environment. Reference
+measurements are reusable for at most 24 hours and only for the identical candidate
+executable and environment; checksums bind their CSV and original log. Thus a new
+candidate binary never inherits reference timings measured for another binary.
+Over-limit results receive two fixed adjacent confirmations in opposite orders,
+with at most 120 additional seconds per family. Both must pass the original mean
+ratio ceiling to accept. Both must exceed it beyond the reported uncertainty to
+classify a regression; disagreement, insufficient precision or an unfinished pair
+is inconclusive and blocks acceptance. No favorable observation erases another. `release-gate --fresh` also bypasses
+reference-timing reuse. Standalone guards share the release workspace lock.
+Benchmark assertion/execution failures are never reclassified as environment drift.
+
+Retain all original measurements, confirmation commands/results, source and binary
+identities and dependency plans. Release receipts checksum these supplementary
+artifacts as well as their stage log; altered measurements refuse reuse/readiness.
+The producer's existing 15-pair estimator and 1.10 ceiling are unchanged. This is
+source-pinned, same-environment measurement, not a waiver or a baseline re-recording.
+
+Tracing fixture acquisition also follows selection. Bracket-only tracer/store
+resources are held by a linked worker through the Tasty environment lifecycle,
+with cleanup joining that worker. Acquisition stays outside both timed actions and
+the per-test timeout, and the benchmark name tree remains static. Historical-only
+filters do not start tracing providers, pools or notifier workers.
 
 Build all source/documentation archives before publication. An isolated consumer with an
 explicit secure HTTPS configuration and its own package cache tests those exact source

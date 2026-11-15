@@ -6,7 +6,7 @@ module Main
   )
 where
 
-import BenchSetup (memoSetup, nextBoundedIteration, nextIteration, selected, selectedCounterWithCleanup, selectedWithCleanup, setupTrace, withRecordingTracer)
+import BenchSetup (memoSetup, nextBoundedIteration, nextIteration, selected, selectedBracket, selectedCounterWithCleanup, selectedWithCleanup, setupTrace, withRecordingTracer)
 import CommandProbe (commandPlanProbe, maintenanceProbe, rebuildCountProbe, tableResetProbe, workCountProbe)
 import Control.Concurrent (threadDelay)
 import Control.Monad (replicateM_)
@@ -81,7 +81,7 @@ import Keiro.ReadModel.Rebuild
     startCatalogRebuild,
   )
 import Keiro.Telemetry qualified as Telemetry
-import Keiro.Test.Postgres (StoreRunner (..), checkpointBenchmarkStore, withFreshResourceStore, withMigratedBenchmarkSuite)
+import Keiro.Test.Postgres (Fixture, StoreRunner (..), checkpointBenchmarkStore, withFreshResourceStore, withMigratedBenchmarkSuite)
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
@@ -161,48 +161,72 @@ main = do
   unless evidence ordinaryMain
 
 ordinaryMain :: IO ()
-ordinaryMain = withRecordingTracer $ \tracer ->
+ordinaryMain =
   withMigratedBenchmarkSuite \fixture ->
-    withFreshResourceStore fixture \(tracingCommandStore, _) ->
-      withFreshResourceStore fixture \(tracingDispatchStore, tracingRunner) ->
-        withFreshResourceStore fixture \(tracingOutboxStore, _) ->
-          withFreshResourceStore fixture \(store, runner) ->
-            withFreshResourceStore fixture \(outboxStore, _) ->
-              withFreshResourceStore fixture \(inboxStore, _) ->
-                withFreshResourceStore fixture \(delegatedStore, _) ->
-                  withFreshResourceStore fixture \(producerStore, _) ->
-                    withFreshResourceStore fixture \(rebuildStore, _) ->
-                      withFreshResourceStore fixture \(readModelStore, readModelRunner) -> do
-                        (provider, _env) <- createMeterProvider emptyMaterializedResources defaultSdkMeterProviderOptions
-                        meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
-                        metrics <- Telemetry.newKeiroMetrics meter
-                        producerCounter <- newIORef 0
-                        readModelSetup <- memoSetup do
-                          setupTrace "read-model" "shared" "schema history=25000"
-                          model <- setupReadModelBench readModelStore readModelRunner
-                          runReadModelExplainEvidenceIfRequested model
-                          runReadModelLatencyEvidenceIfRequested model
-                          pure model
-                        runInboxDelegatedExplainIfRequested delegatedStore
-                        producerProbe <- lookupEnv "KEIRO_BENCH_PRODUCER_PROBE"
-                        resetProbe <- lookupEnv "KEIRO_BENCH_RESET_PROBE"
-                        probe <- lookupEnv "KEIRO_BENCH_COMMAND_PROBE"
-                        if producerProbe == Just "1"
-                          then runProducerIdentityProbe producerStore
-                          else
-                            if probe == Just "1"
-                              then runCommandGrowthProbe store
-                              else
-                                if resetProbe == Just "1"
-                                  then runResetProbes outboxStore inboxStore producerStore
-                                  else
-                                    defaultMain
-                                      ( durableTraceBenchmarks tracingOutboxStore tracer
-                                          <> tracingBenchmarks tracingCommandStore tracingDispatchStore tracingRunner tracingOutboxStore tracer
-                                          <> benchmarks store runner outboxStore inboxStore rebuildStore metrics (inboxDelegatedBenchmarks delegatedStore metrics)
-                                          <> [selectedWithCleanup readModelSetup probeReadModelCounts (\model -> readModelBenchmarks model !! groupIndex) | groupIndex <- [0 .. 2]]
-                                          <> producerIdentityBenchmarks producerStore producerCounter
-                                      )
+    withFreshResourceStore fixture \(store, runner) ->
+      withFreshResourceStore fixture \(outboxStore, _) ->
+        withFreshResourceStore fixture \(inboxStore, _) ->
+          withFreshResourceStore fixture \(delegatedStore, _) ->
+            withFreshResourceStore fixture \(producerStore, _) ->
+              withFreshResourceStore fixture \(rebuildStore, _) ->
+                withFreshResourceStore fixture \(readModelStore, readModelRunner) -> do
+                  (provider, _env) <- createMeterProvider emptyMaterializedResources defaultSdkMeterProviderOptions
+                  meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+                  metrics <- Telemetry.newKeiroMetrics meter
+                  producerCounter <- newIORef 0
+                  readModelSetup <- memoSetup do
+                    setupTrace "read-model" "shared" "schema history=25000"
+                    model <- setupReadModelBench readModelStore readModelRunner
+                    runReadModelExplainEvidenceIfRequested model
+                    runReadModelLatencyEvidenceIfRequested model
+                    pure model
+                  runInboxDelegatedExplainIfRequested delegatedStore
+                  producerProbe <- lookupEnv "KEIRO_BENCH_PRODUCER_PROBE"
+                  resetProbe <- lookupEnv "KEIRO_BENCH_RESET_PROBE"
+                  probe <- lookupEnv "KEIRO_BENCH_COMMAND_PROBE"
+                  if producerProbe == Just "1"
+                    then runProducerIdentityProbe producerStore
+                    else
+                      if probe == Just "1"
+                        then runCommandGrowthProbe store
+                        else
+                          if resetProbe == Just "1"
+                            then runResetProbes outboxStore inboxStore producerStore
+                            else
+                              defaultMain
+                                ( selectedDurableBenchmarks fixture
+                                    <> selectedTracingBenchmarks fixture
+                                    <> benchmarks store runner outboxStore inboxStore rebuildStore metrics (inboxDelegatedBenchmarks delegatedStore metrics)
+                                    <> [selectedWithCleanup readModelSetup probeReadModelCounts (\model -> readModelBenchmarks model !! groupIndex) | groupIndex <- [0 .. 2]]
+                                    <> producerIdentityBenchmarks producerStore producerCounter
+                                )
+
+-- These groups remain visible while listing/filtering, without acquiring their
+-- tracer, pools, notifier threads or cloned databases until a case is selected.
+selectedTracingBenchmarks :: Fixture -> [Benchmark]
+selectedTracingBenchmarks fixture =
+  [ selectedBracket acquire $ \ ~(store, dispatch, runner, outbox, tracer) ->
+      head (tracingBenchmarks store dispatch runner outbox tracer)
+  ]
+  where
+    acquire use = withRecordingTracer $ \tracer ->
+      withFreshResourceStore fixture $ \(store, _) ->
+        withFreshResourceStore fixture $ \(dispatch, runner) ->
+          withFreshResourceStore fixture $ \(outbox, _) -> do
+            setupTrace "tracing-fixture" "tracing" "acquired"
+            use (store, dispatch, runner, outbox, tracer)
+            setupTrace "tracing-fixture" "tracing" "closing"
+
+selectedDurableBenchmarks :: Fixture -> [Benchmark]
+selectedDurableBenchmarks fixture =
+  [ selectedBracket acquire $ \ ~(store, tracer) -> head (durableTraceBenchmarks store tracer)
+  ]
+  where
+    acquire use = withRecordingTracer $ \tracer ->
+      withFreshResourceStore fixture $ \(store, _) -> do
+        setupTrace "tracing-fixture" "durable-tracing" "acquired"
+        use (store, tracer)
+        setupTrace "tracing-fixture" "durable-tracing" "closing"
 
 benchmarks :: Store.KirokuStore -> StoreRunner -> Store.KirokuStore -> Store.KirokuStore -> Store.KirokuStore -> Telemetry.KeiroMetrics -> [Benchmark] -> [Benchmark]
 benchmarks store runner outboxStore inboxStore rebuildStore metrics delegatedInboxBenchmarks =

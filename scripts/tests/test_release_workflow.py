@@ -19,6 +19,19 @@ import release_workflow as release
 
 
 class GateControls(unittest.TestCase):
+    def test_tampered_measurement_artifacts_refuse_stage_reuse(self):
+        command = ["sh", "-c", 'mkdir -p "$KEIRO_BENCH_OUTPUT_DIRECTORY"; echo proof > "$KEIRO_BENCH_OUTPUT_DIRECTORY/values.csv"; echo measured >> calls']
+        first = self.gate()
+        self.assertEqual(first.stage("outbox", command), 0)
+        reference = first.manifest["stages"]["outbox"]
+        receipt = json.loads((self.root / reference["receipt"]).read_text())
+        artifact = next(iter(receipt["artifacts"]))
+        (self.root / artifact).write_text("tampered")
+        second = self.gate()
+        self.assertEqual(second.stage("outbox", command), 0)
+        self.assertFalse(second.manifest["stages"]["outbox"]["reused"])
+        self.assertEqual(self.calls(), ["measured", "measured"])
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="keiro-release-control-")
         self.addCleanup(self.temporary.cleanup)

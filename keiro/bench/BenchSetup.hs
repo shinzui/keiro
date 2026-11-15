@@ -1,9 +1,10 @@
 -- | Selection-aware fixture diagnostics shared by the benchmark groups.
-module BenchSetup (withRecordingTracer, selected, selectedWithCleanup, memoSetup, setupTrace, freshCounter, nextIteration, nextBoundedIteration, selectedCounter, selectedCounterWithCleanup) where
+module BenchSetup (selectedBracket, withRecordingTracer, selected, selectedWithCleanup, memoSetup, setupTrace, freshCounter, nextIteration, nextBoundedIteration, selectedCounter, selectedCounterWithCleanup) where
 
-import Control.Concurrent.MVar (modifyMVar, newMVar)
+import Control.Concurrent.Async (async, cancel, link, wait)
+import Control.Concurrent.MVar (modifyMVar, newEmptyMVar, newMVar, putMVar, takeMVar)
 import Control.DeepSeq (NFData (..))
-import Control.Exception (bracket)
+import Control.Exception (bracket, mask, onException)
 import Control.Monad (unless)
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import OpenTelemetry.Exporter.InMemory.Span (inMemoryListExporter)
@@ -27,6 +28,19 @@ selectedWithCleanup :: IO a -> (a -> IO ()) -> (a -> Benchmark) -> Benchmark
 selectedWithCleanup acquire cleanup build =
   envWithCleanup (Handle <$> acquire) (\(Handle value) -> cleanup value) $ \handle ->
     build (case handle of Handle value -> value)
+
+-- Adapt bracket-only resources to Tasty's selected environment lifecycle. The
+-- worker holds the bracket open; cleanup joins it after every resource closes.
+selectedBracket :: ((a -> IO ()) -> IO ()) -> (a -> Benchmark) -> Benchmark
+selectedBracket scope build = selectedWithCleanup acquire cleanup $ \ ~(value, _, _) -> build value
+  where
+    acquire = mask $ \restore -> do
+      ready <- newEmptyMVar
+      release <- newEmptyMVar
+      worker <- async $ restore $ scope $ \value -> putMVar ready value >> takeMVar release
+      value <- (link worker >> restore (takeMVar ready)) `onException` cancel worker
+      pure (value, release, worker)
+    cleanup (_, release, worker) = putMVar release () >> wait worker
 
 memoSetup :: IO a -> IO (IO a)
 memoSetup acquire = do

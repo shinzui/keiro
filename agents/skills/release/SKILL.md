@@ -383,12 +383,17 @@ work is cancelled after a terminal failure.
 Correctness then runs the full existing `verify` suite. A failed preflight or
 correctness stage stops immediately, before benchmarks. Once correctness passes,
 all six guards run, including after one guard fails, so diagnostics remain
-complete. Workloads, committed baselines and numerical ceilings are unchanged.
+complete. Five workload families use `scripts/bench_guard.py` to compare against
+the immutable recording source on the current machine, with checksum-verified
+reference caching and bounded opposite-order confirmation of over-limit results.
+Historical CSVs remain diagnostics; workload inventories and numerical ceilings
+are unchanged. Regression, benchmark-error and inconclusive outcomes all block
+acceptance. The producer estimator remains unchanged. See ADR-58.
 A failed guard blocks acceptance; never re-record a baseline merely to pass.
 
 The driver retains separate command logs, JSON stage receipts and a manifest in
 `keiro/bench/results/release-gates/`. A receipt records its command, exact input
-identity, status, time and log checksum. Re-running `just release-gate` reuses
+identity, status, time, log checksum and supplementary measurement checksums. Re-running `just release-gate` reuses
 only matching, checksum-verified successful stages less than 24 hours old. Source,
 versions, scripts/recipes, baseline, dependency plan, compiler, relevant environment,
 local Cabal configuration or PostgreSQL server identity changes invalidate reuse.
