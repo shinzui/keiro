@@ -40,6 +40,7 @@ import Data.UUID.V5 qualified as UUID.V5
 import Data.Vector qualified as Vector
 import Data.Version (showVersion)
 import Data.Word (Word64)
+import DurableTracingSpec qualified
 import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (Error, throwError)
 import Effectful.Exception qualified as EffException
@@ -460,6 +461,7 @@ import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 main :: IO ()
 main = withMigratedSuite $ \fixture -> hspec $ do
+  DurableTracingSpec.spec fixture
   WorkflowInspectionSpec.spec fixture
   ConsumerInspectionSpec.spec
   CatalogSpec.spec
@@ -7454,6 +7456,37 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         Store.runStoreIO storeHandle $
           Store.readStreamForward (StreamName "timer-target") (StreamVersion 0) 10
       fmap (^. #eventId) (Vector.toList targetEvents) `shouldBe` [firedEventId]
+
+    it "links a timer scheduled inside a command and parents the fired command" $ \storeHandle -> do
+      (processor, exported) <- inMemoryListExporter
+      provider <- createTracerProvider [processor] emptyTracerProviderOptions
+      let tracer = makeTracer provider "timer-chain" tracerOptions
+          options = defaultRunCommandOptions & #tracer ?~ tracer
+          schedule = do
+            request <- captureTimerTraceContext (Just tracer) counterTimerRequest
+            Store.runStoreIO storeHandle (Store.runTransaction (scheduleTimerTx request)) `shouldReturn` Right ()
+      Right (Right _) <-
+        Store.runStoreIO storeHandle $
+          runCommand (options & #beforeAppend .~ schedule) counterEventStream (stream "schedule-source") (Add 1)
+      Right (Just _) <- Store.runStoreIO storeHandle $
+        runTimerWorkerWith Nothing (defaultTimerWorkerOptions & #tracer ?~ tracer) dueTimerTime $ \_ -> do
+          result <- runCommand (options & #eventIds .~ [EventId sampleUuid2]) counterEventStream (stream "timer-child") (Add 2)
+          liftIO (shouldBeRight_ result)
+          pure (Just (EventId sampleUuid2))
+      spans <- traverse captureSpan =<< readIORef exported
+      let [source] = filter ((== "command schedule") . csName) spans
+          [fire] = filter ((== "timer fire counter-pm") . csName) spans
+          [child] = filter ((== "command timer") . csName) spans
+      fmap (spanId . frozenLinkContext) (csLinks fire) `shouldBe` [spanId (csContext source)]
+      case csParent fire of
+        Nothing -> pure ()
+        _ -> expectationFailure "timer fire must be a root"
+      case csParent child of
+        Just parent -> (spanId <$> getSpanContext parent) `shouldReturn` spanId (csContext fire)
+        _ -> expectationFailure "fired command must be a child of the fire span"
+      Right events <- Store.runStoreIO storeHandle $ Store.readStreamForward (StreamName "timer-child") (StreamVersion 0) 10
+      forM_ events (assertCreationContext (csContext child) . (^. #metadata))
+      void (shutdownTracerProvider provider Nothing)
 
     it "records timer backlog, fire lag, attempts, and stuck count" $ \storeHandle -> do
       (exporter, metricsRef) <- inMemoryMetricExporter
@@ -15077,7 +15110,8 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             void $
               scheduleTimerOnceTx
                 TimerRequest
-                  { timerId,
+                  { traceContext = Nothing,
+                    timerId,
                     processManagerName = "gc-terminal-fire",
                     correlationId = "gtf-1",
                     fireAt = now,
@@ -18035,7 +18069,8 @@ assertWorkflowProcessManagerAppended = \case
 counterTimerRequest :: TimerRequest
 counterTimerRequest =
   TimerRequest
-    { timerId = TimerId sampleUuid,
+    { traceContext = Nothing,
+      timerId = TimerId sampleUuid,
       processManagerName = "counter-pm",
       correlationId = "order-1",
       fireAt = dueTimerTime,
@@ -18067,7 +18102,8 @@ reactionTimerFailureTriggerSql =
 plainTimerRequest :: Int -> TimerRequest
 plainTimerRequest i =
   TimerRequest
-    { timerId = TimerId (fromWords64 0xd7a10 (fromIntegral i)),
+    { traceContext = Nothing,
+      timerId = TimerId (fromWords64 0xd7a10 (fromIntegral i)),
       processManagerName = "drain-pm",
       correlationId = "drain-" <> Text.pack (show i),
       fireAt = dueTimerTime,

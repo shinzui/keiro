@@ -2,7 +2,7 @@
 type: Research Document
 title: OpenTelemetry semantic-conventions audit
 description: Audit Keiro instrumentation sites against the OpenTelemetry semantic conventions and record gaps and actions.
-timestamp: 2026-11-15T00:08:55Z
+timestamp: 2026-11-15T01:15:00Z
 researchId: RES-16
 status: active
 scope: Keiro tracing and metrics instrumentation governed by OpenTelemetry semantic conventions.
@@ -312,21 +312,20 @@ the read-model's metadata identity.
 
 ## Timer fire
 
-**File:** `src/Keiro/Timer.hs:1` — the module-level timer dispatch.
+**File:** `keiro/src/Keiro/Timer.hs` — `claimAndFireOne`.
 
-**Span name:** `timer.fire <timer-id>`.
+**Span name:** `timer fire <processManagerName>`; **kind:** `Internal`.
 
-**Span kind:** `Internal`.
+With `TimerWorkerOptions.tracer`, each firing opens a root span with the stored
+creation context as a link. It covers the fire action and mark-fired write. Commands
+called by the fire action are children and stamp their own event contexts. Attributes:
+`keiro.timer.id`, `keiro.timer.process_manager`, and `keiro.timer.fire_lag` (milliseconds).
+Exceptions use the SDK's error status; retry and dead-letter behavior stays unchanged.
 
-**Attributes:**
-
-- `keiro.timer.id` — bespoke key.
-- `keiro.timer.scheduled_for` — RFC3339 timestamp of the original
-  scheduling.
-
-**Gap as of 2026-05-19:** No span emitted.
-
-**Action:** Out of scope for M4–M7; tracked under [[milestone-9-followups]].
+`TimerRequest.traceContext` is stored in nullable `traceparent`/`tracestate` columns.
+Capture occurs before SQL, only with explicit tracing enablement, and preserves a supplied
+request context. Legacy/null or malformed context yields an unlinked root. No configured
+worker tracer bypasses span creation and context decoding.
 
 
 ## Workflow run
@@ -346,8 +345,18 @@ boundary is crossed by the runtime itself.
 - `keiro.workflow.step` — bespoke key; value: the `StepName`, set only when the
   span wraps a single step or a resume (omitted on the whole-run span).
 
-**Gap as of 2026-06-03:** opened by EP-44 via
-`Keiro.Telemetry.withWorkflowSpan`, threaded through `WorkflowRunOptions.tracer`.
+**Implemented:** `WorkflowRunOptions.tracer` opens a root span per invocation and
+stamps journal metadata before transaction preparation. Sleep, signal and child wake
+paths use explicitly traced APIs; legacy wrappers remain untraced.
+
+At entry, one generation-qualified hint query selects an indexed first-event reference;
+two normal event reads recover journal origin and exact awaited wake contexts independently
+of snapshots. Link attributes use `keiro.workflow.link = origin | wake`; equal identities
+prefer `wake`. The lateral reference lookup limits before joining event payloads, avoiding
+a full-journal sort in the generic forward-read query. Read hooks remain active. Invalid,
+missing, foreign-stream or mismatched-step evidence omits the unavailable link. Links are
+added after opening the span, so head samplers cannot consider them. Ambient context is
+restored on success, failure and cancellation. No per-step spans are added by this work.
 
 
 ## Compliance table
@@ -366,8 +375,8 @@ This table summarizes implemented tracing and remaining historical instrumentati
 | Snapshot read/write | `snapshot.{read,write} <s>`    | Internal | n/a (bespoke)                                | Gap (follow-up)         |
 | Read-model rebuild  | `rebuild <read-model>`         | Internal | `$span_db_client` 19833                      | Gap (follow-up)         |
 | Projection apply    | `apply <projection>`           | Internal | n/a (bespoke)                                | Gap (follow-up)         |
-| Timer fire          | `timer.fire <timer-id>`        | Internal | n/a (bespoke)                                | Gap (follow-up)         |
-| Workflow run        | `workflow <name>`              | Internal | n/a (bespoke)                                | Gap → EP-44             |
+| Timer fire          | `timer fire <manager>`        | Internal | root with stored creation link              | Implemented            |
+| Workflow run        | `workflow <name>`              | Internal | root with bounded origin/exact-wake links    | Implemented            |
 
 
 ## Metrics

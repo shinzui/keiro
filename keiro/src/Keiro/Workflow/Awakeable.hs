@@ -61,7 +61,9 @@ module Keiro.Workflow.Awakeable
 
     -- * External completion (outside a workflow)
     signalAwakeable,
+    signalAwakeableTraced,
     signalAwakeableFrom,
+    signalAwakeableFromTraced,
     cancelAwakeable,
 
     -- * Errors
@@ -78,6 +80,7 @@ import Data.UUID.V4 qualified as UUID.V4
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (throwIO)
 import Keiro.Prelude
+import Keiro.Telemetry (Tracer)
 import Keiro.Workflow
   ( JournalAppendOutcome (..),
     StepName (..),
@@ -86,15 +89,15 @@ import Keiro.Workflow
     WorkflowId (..),
     WorkflowJournalEvent (..),
     WorkflowName (..),
-    appendJournalEntry,
+    appendJournalEntryTraced,
     awaitStep,
     awakeableAllocStepPrefix,
     awakeableStepPrefix,
     currentGeneration,
     currentRunGeneration,
     currentWorkflow,
+    currentWorkflowTracer,
     freshOrdinal,
-    prepareJournalAppend,
     step,
   )
 import Keiro.Workflow.Awakeable.Internal.Identity (generation0AwakeableUuidProbes)
@@ -108,6 +111,7 @@ import Keiro.Workflow.Awakeable.Schema
     registerAwakeableTx,
   )
 import Keiro.Workflow.Instance (WorkflowStatus (..), upsertInstanceTx)
+import Keiro.Workflow.Journal (journalTraceMetadata, prepareJournalAppendWithMetadata)
 import Keiro.Workflow.Schema (lockWorkflowStepTx, workflowStepLockKey)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
@@ -249,7 +253,9 @@ awaitCancellable name wid aid stepNm =
         | row ^. #status == Completed,
           Just payload <- row ^. #payload -> do
             now <- liftIO getCurrentTime
-            appendJournalEntry
+            tracer <- currentWorkflowTracer
+            appendJournalEntryTraced
+              tracer
               name
               wid
               StepRecorded
@@ -287,10 +293,14 @@ awaitCancellable name wid aid stepNm =
 -- A 'False' return therefore does not mean "nothing happened": the journal may
 -- still have been repaired. Returns 'False' for an unknown id.
 signalAwakeable :: (IOE :> es, Store :> es, ToJSON r) => AwakeableId -> r -> Eff es Bool
-signalAwakeable aid result =
+signalAwakeable = signalAwakeableTraced Nothing
+
+-- | Stamp the wake journal only when explicitly enabled.
+signalAwakeableTraced :: (IOE :> es, Store :> es, ToJSON r) => Maybe Tracer -> AwakeableId -> r -> Eff es Bool
+signalAwakeableTraced tracer aid result =
   lookupAwakeable (awakeableIdToUuid aid) >>= \case
     Nothing -> pure False
-    Just row -> signalAwakeableFrom row result
+    Just row -> signalAwakeableFromTraced tracer row result
 
 -- | The transaction-decision core of 'signalAwakeable', exposed so race
 -- contracts can deterministically interpose between the initial row read and the
@@ -305,7 +315,10 @@ signalAwakeableFrom ::
   AwakeableRow ->
   r ->
   Eff es Bool
-signalAwakeableFrom row result
+signalAwakeableFrom = signalAwakeableFromTraced Nothing
+
+signalAwakeableFromTraced :: (IOE :> es, Store :> es, ToJSON r) => Maybe Tracer -> AwakeableRow -> r -> Eff es Bool
+signalAwakeableFromTraced tracer row result
   | row ^. #status == Cancelled = pure False
   | otherwise = do
       now <- liftIO getCurrentTime
@@ -320,8 +333,10 @@ signalAwakeableFrom row result
           let ownerName = WorkflowName (row ^. #ownerWorkflowName)
               ownerId = WorkflowId (row ^. #ownerWorkflowId)
           gen <- currentGeneration ownerName ownerId
+          metadata <- journalTraceMetadata tracer
           appendTx <-
-            prepareJournalAppend
+            prepareJournalAppendWithMetadata
+              metadata
               ownerName
               ownerId
               gen

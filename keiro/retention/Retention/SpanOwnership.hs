@@ -1,4 +1,5 @@
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 -- | Finite ownership probe, separate from the steady-state heap slope gate.
@@ -16,6 +17,7 @@ import Data.Text qualified as Text
 import Data.Time (UTCTime (..))
 import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Data.UUID qualified as UUID
+import Data.Vector qualified as Vector
 import GHC.Exts (fromList)
 import Keiro.Command qualified as Command
 import Keiro.Integration.Event qualified as Integration
@@ -23,6 +25,9 @@ import Keiro.Outbox qualified as Outbox
 import Keiro.Stream qualified as Stream
 import Keiro.Telemetry qualified as Telemetry
 import Keiro.Test.Postgres (Fixture, StoreRunner (..), withFreshResourceStore)
+import Keiro.Timer qualified as Timer
+import Keiro.Workflow qualified as Workflow
+import Kiroku.Store qualified as Store
 import OpenTelemetry.Attributes (toAttribute)
 import OpenTelemetry.Context.ThreadLocal qualified as Context
 import OpenTelemetry.Exporter.InMemory.Span (inMemoryListExporter)
@@ -64,6 +69,18 @@ spec fixture = describe "Span payload ownership" do
         spans <- readIORef exported
         length spans `shouldBe` 1
 
+  it "collects fetched timer and journal payloads while durable spans remain retained" $
+    withFreshResourceStore fixture $ \(_, runner) -> do
+      (processor, exported) <- inMemoryListExporter
+      bracket
+        (createTracerProvider [processor] emptyTracerProviderOptions)
+        (\provider -> void (shutdownTracerProvider provider Nothing))
+        $ \provider -> do
+          weak <- produceDurablePayloads runner (makeTracer provider "durable-ownership" tracerOptions)
+          awaitCollection weak `shouldReturn` True
+          spans <- readIORef exported
+          length spans `shouldBe` 24
+
   forM_ [ParentAndLink, LinkOnly] $ \policy ->
     it ("collects subscription envelopes and lazy scalar attributes under " <> show policy) $ do
       (processor, exported) <- inMemoryListExporter
@@ -75,6 +92,30 @@ spec fixture = describe "Span payload ownership" do
           awaitCollection weak `shouldReturn` True
           spans <- readIORef exported
           length spans `shouldBe` 8
+
+-- Both probes use rows decoded from PostgreSQL, rather than synthetic contexts.
+{-# NOINLINE produceDurablePayloads #-}
+produceDurablePayloads :: StoreRunner -> Tracer -> IO [Weak Aeson.Value]
+produceDurablePayloads (StoreRunner runStore) tracer = fmap concat $ forM [1 .. 8 :: Int] $ \index -> do
+  let name = Workflow.WorkflowName "ownership"
+      wid = Workflow.WorkflowId (Text.pack (show index))
+      now = UTCTime (ModifiedJulianDay 60000) 0
+      payload = Aeson.String (Text.replicate (128 * 1024) (Text.pack (show index)))
+      request = Timer.TimerRequest (Timer.TimerId (UUID.fromWords 0 0 0 (fromIntegral index))) "ownership" "one" now payload Nothing
+  Telemetry.withWorkflowSpan (Just tracer) name wid Nothing $ \_ -> do
+    Right () <- runStore (Workflow.appendJournalEntryTraced (Just tracer) name wid (Workflow.StepRecorded "origin" payload now))
+    captured <- Timer.captureTimerTraceContext (Just tracer) request
+    Right () <- runStore (Store.runTransaction (Timer.scheduleTimerTx captured))
+    pure ()
+  Right events <- runStore (Store.readStreamForward (Workflow.workflowGenerationStreamName name wid 0) (Store.StreamVersion 0) 1)
+  Right (Just timer) <- runStore (Timer.lookupTimer (Timer.TimerId (UUID.fromWords 0 0 0 (fromIntegral index))))
+  let event = Vector.head events
+  eventWeak <- mkWeakPtr (event.payload) Nothing
+  timerWeak <- mkWeakPtr (timer.payload) Nothing
+  Telemetry.withWorkflowSpan (Just tracer) name wid Nothing $ \sp ->
+    Telemetry.recordWorkflowResumeLinks sp (Telemetry.traceContextFromMetadata event.metadata) (Telemetry.traceContextFromMetadata event.metadata)
+  Telemetry.withTimerFireSpan (Just tracer) timer.processManagerName (case timer.timerId of Timer.TimerId uuid -> UUID.toText uuid) timer.traceContext (const (pure ()))
+  pure [eventWeak, timerWeak]
 
 {-# NOINLINE produceSubscriptionPayloads #-}
 produceSubscriptionPayloads :: Tracer -> TraceCorrelation -> IO [Weak Text]
@@ -173,7 +214,7 @@ produce tracer finished retainPayload = do
     pure (span, weak)
   pure (if finished then [] else map fst results, map snd results)
 
-awaitCollection :: [Weak Text] -> IO Bool
+awaitCollection :: [Weak a] -> IO Bool
 awaitCollection weak = loop (20 :: Int)
   where
     loop remaining = do

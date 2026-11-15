@@ -84,7 +84,7 @@ spec fixture = describe "reaction process-manager commands" $
     it "mounts a handwritten reaction inspector through pm show and pm list" $ \(store, StoreRunner run) -> do
       clock <- getCurrentTime
       let source = RecordedEvent (EventId UUID.nil) (EventType "Input") (StreamVersion 1) (GlobalPosition 1) (StreamId 1) (StreamVersion 1) Null Nothing Nothing Nothing clock
-          timer = Timer.TimerRequest (Timer.TimerId UUID.nil) "modern" "one" clock (object [])
+          timer = Timer.TimerRequest (Timer.TimerId UUID.nil) "modern" "one" clock (object []) Nothing
           manager =
             Reaction.ReactiveProcessManager
               "modern"

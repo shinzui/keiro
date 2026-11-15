@@ -76,7 +76,7 @@ module Keiro.Timer.Schema
   )
 where
 
-import Contravariant.Extras (contrazip2, contrazip5, contrazip6)
+import Contravariant.Extras (contrazip2, contrazip5, contrazip6, contrazip8)
 import Data.Aeson (object, (.=))
 import Data.Int (Int32)
 import Data.List.NonEmpty (NonEmpty (..))
@@ -89,6 +89,7 @@ import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Keiro.Inspection.Cursor
+import Keiro.Integration.Event (TraceContext (..))
 import Keiro.Prelude hiding ((.=))
 import Keiro.Timer.Types (TimerId (..), TimerRequest (..))
 import Kiroku.Store.Effect (Store)
@@ -126,7 +127,8 @@ data TimerRow = TimerRow
     payload :: !Value,
     status :: !TimerStatus,
     attempts :: !Int,
-    firedEventId :: !(Maybe EventId)
+    firedEventId :: !(Maybe EventId),
+    traceContext :: !(Maybe TraceContext)
   }
   deriving stock (Generic, Eq, Show)
 
@@ -333,7 +335,7 @@ pendingTimerPageJson page =
 findPendingTimersStmt :: Bool -> Bool -> Bool -> Statement (Maybe Text, Maybe Text, Maybe UTCTime, Maybe UUID, Int64) [TimerInspection]
 findPendingTimersStmt manager correlation cursor =
   preparable
-    ( "SELECT timer_id,process_manager_name,correlation_id,fire_at,payload,status,attempts,fired_event_id,last_error FROM keiro.keiro_timers WHERE status IN ('scheduled','firing')"
+    ( "SELECT timer_id,process_manager_name,correlation_id,fire_at,payload,status,attempts,fired_event_id,traceparent,tracestate,last_error FROM keiro.keiro_timers WHERE status IN ('scheduled','firing')"
         <> (if manager then " AND process_manager_name=$1" else " AND $1::text IS NULL")
         <> (if correlation then " AND correlation_id=$2" else " AND $2::text IS NULL")
         <> (if cursor then " AND (fire_at,timer_id)>($3,$4)" else " AND $3::timestamptz IS NULL AND $4::uuid IS NULL")
@@ -433,7 +435,7 @@ claimDeadTimerStmt =
       AND process_manager_name COLLATE "C" = $2
       AND last_error COLLATE "C" = $3 AND attempts < $4
     RETURNING kt.timer_id, kt.process_manager_name, kt.correlation_id, kt.fire_at,
-      kt.payload, kt.status, kt.attempts, kt.fired_event_id, kt.resume_claim_token, kt.resume_lease_until
+      kt.payload, kt.status, kt.attempts, kt.fired_event_id, kt.traceparent, kt.tracestate, kt.resume_claim_token, kt.resume_lease_until
     """
     ( contrazip6
         (E.param (E.nonNullable E.uuid))
@@ -558,7 +560,9 @@ scheduleTimerTx request =
       request ^. #correlationId,
       request ^. #fireAt,
       request ^. #payload,
-      statusToText Scheduled
+      statusToText Scheduled,
+      fmap (^. #traceparent) (request ^. #traceContext),
+      (request ^. #traceContext) >>= (^. #tracestate)
     )
     scheduleTimerStmt
 
@@ -578,7 +582,9 @@ scheduleTimerOnceTx request =
       request ^. #correlationId,
       request ^. #fireAt,
       request ^. #payload,
-      statusToText Scheduled
+      statusToText Scheduled,
+      fmap (^. #traceparent) (request ^. #traceContext),
+      (request ^. #traceContext) >>= (^. #tracestate)
     )
     scheduleTimerOnceStmt
 
@@ -680,50 +686,56 @@ deadLetterTimer timerId reason =
   runTransaction $
     Tx.statement (timerIdToUuid timerId, reason) deadLetterTimerStmt
 
-scheduleTimerStmt :: Statement (UUID, Text, Text, UTCTime, Value, Text) ()
+scheduleTimerStmt :: Statement (UUID, Text, Text, UTCTime, Value, Text, Maybe Text, Maybe Text) ()
 scheduleTimerStmt =
   preparable
     """
     INSERT INTO keiro.keiro_timers
-      (timer_id, process_manager_name, correlation_id, fire_at, payload, status)
+      (timer_id, process_manager_name, correlation_id, fire_at, payload, status, traceparent, tracestate)
     VALUES
-      ($1, $2, $3, $4, $5, $6)
+      ($1, $2, $3, $4, $5, $6, $7, $8)
     ON CONFLICT (timer_id) DO UPDATE
       SET process_manager_name = EXCLUDED.process_manager_name,
           correlation_id = EXCLUDED.correlation_id,
           fire_at = EXCLUDED.fire_at,
           payload = EXCLUDED.payload,
+          traceparent = EXCLUDED.traceparent,
+          tracestate = EXCLUDED.tracestate,
           status = EXCLUDED.status,
           updated_at = now()
       WHERE keiro_timers.status = 'scheduled'
     """
-    ( contrazip6
+    ( contrazip8
         (E.param (E.nonNullable E.uuid))
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.timestamptz))
         (E.param (E.nonNullable E.jsonb))
         (E.param (E.nonNullable E.text))
+        (E.param (E.nullable E.text))
+        (E.param (E.nullable E.text))
     )
     D.noResult
 
-scheduleTimerOnceStmt :: Statement (UUID, Text, Text, UTCTime, Value, Text) Bool
+scheduleTimerOnceStmt :: Statement (UUID, Text, Text, UTCTime, Value, Text, Maybe Text, Maybe Text) Bool
 scheduleTimerOnceStmt =
   preparable
     """
     INSERT INTO keiro.keiro_timers
-      (timer_id, process_manager_name, correlation_id, fire_at, payload, status)
+      (timer_id, process_manager_name, correlation_id, fire_at, payload, status, traceparent, tracestate)
     VALUES
-      ($1, $2, $3, $4, $5, $6)
+      ($1, $2, $3, $4, $5, $6, $7, $8)
     ON CONFLICT (timer_id) DO NOTHING
     """
-    ( contrazip6
+    ( contrazip8
         (E.param (E.nonNullable E.uuid))
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.timestamptz))
         (E.param (E.nonNullable E.jsonb))
         (E.param (E.nonNullable E.text))
+        (E.param (E.nullable E.text))
+        (E.param (E.nullable E.text))
     )
     ((> 0) <$> D.rowsAffected)
 
@@ -747,7 +759,7 @@ claimDueTimerStmt =
     FROM due
     WHERE kt.timer_id = due.timer_id
     RETURNING kt.timer_id, kt.process_manager_name, kt.correlation_id, kt.fire_at,
-      kt.payload, kt.status, kt.attempts, kt.fired_event_id
+      kt.payload, kt.status, kt.attempts, kt.fired_event_id, kt.traceparent, kt.tracestate
     """
     (E.param (E.nonNullable E.timestamptz))
     (D.rowMaybe timerRowDecoder)
@@ -757,7 +769,7 @@ lookupTimerStmt =
   preparable
     """
     SELECT timer_id, process_manager_name, correlation_id, fire_at,
-      payload, status, attempts, fired_event_id
+      payload, status, attempts, fired_event_id, traceparent, tracestate
     FROM keiro.keiro_timers
     WHERE timer_id = $1
     """
@@ -769,7 +781,7 @@ lookupTimerInspectionStmt =
   preparable
     """
     SELECT timer_id, process_manager_name, correlation_id, fire_at,
-      payload, status, attempts, fired_event_id, last_error
+      payload, status, attempts, fired_event_id, traceparent, tracestate, last_error
     FROM keiro.keiro_timers
     WHERE timer_id = $1
     """
@@ -781,7 +793,7 @@ findDeadTimersStmt =
   preparable
     """
     SELECT timer_id, process_manager_name, correlation_id, fire_at,
-      payload, status, attempts, fired_event_id, last_error
+      payload, status, attempts, fired_event_id, traceparent, tracestate, last_error
     FROM keiro.keiro_timers
     WHERE status = 'dead'
       AND ($1::text IS NULL OR process_manager_name COLLATE "C" = $1)
@@ -859,7 +871,7 @@ findStuckTimersStmt =
   preparable
     """
     SELECT timer_id, process_manager_name, correlation_id, fire_at,
-      payload, status, attempts, fired_event_id
+      payload, status, attempts, fired_event_id, traceparent, tracestate
     FROM keiro.keiro_timers
     WHERE status = 'firing'
       AND ($1::timestamptz IS NULL OR updated_at <= $1)
@@ -943,6 +955,7 @@ timerRowDecoder =
     <*> D.column (D.nonNullable (D.refine statusFromText D.text))
     <*> (fromIntegral <$> D.column (D.nonNullable D.int8))
     <*> (fmap EventId <$> D.column (D.nullable D.uuid))
+    <*> ((\parent state -> fmap (\value -> TraceContext value state) parent) <$> D.column (D.nullable D.text) <*> D.column (D.nullable D.text))
 
 statusToText :: TimerStatus -> Text
 statusToText = \case

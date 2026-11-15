@@ -1,6 +1,12 @@
 # Bundle Update Log
 
 ## 2026-11-15
+
+* **Update**: Require indexed origin-reference discovery before payload joins; preserve read hooks and bounded resume work.
+
+
+* **Update**: Persist timer and workflow creation contexts with bounded, decoded exact-wake and origin links.
+
 * **Update**: Extend ADR-60 with shared subscription processing spans, adapter-owned policy, settled outcome classifiers and synchronous inbox transport scope.
 
 ## 2026-11-14

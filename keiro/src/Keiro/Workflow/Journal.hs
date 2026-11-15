@@ -3,6 +3,13 @@
 module Keiro.Workflow.Journal
   ( JournalAppendOutcome (..),
     prepareJournalAppend,
+    prepareJournalAppendWithMetadata,
+    appendJournalWithMetadata,
+    appendJournalTraced,
+    appendJournalEntryTraced,
+    appendJournalEntryReturningIdTraced,
+    journalTraceMetadata,
+    readWorkflowTraceResume,
     appendJournal,
     appendJournalEntry,
     appendJournalEntryReturningId,
@@ -10,19 +17,26 @@ module Keiro.Workflow.Journal
   )
 where
 
+import Contravariant.Extras (contrazip4)
 import Data.Aeson qualified as Aeson
+import Data.Int (Int32)
 import Data.Maybe (listToMaybe)
 import Data.Text qualified as Text
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (throwIO)
+import Hasql.Decoders qualified as D
+import Hasql.Encoders qualified as E
+import Hasql.Statement (preparable)
 import Keiro.Codec (encodeForAppendWithMetadata)
 import Keiro.DeterministicId (identitySeedBytes)
 import Keiro.Prelude
+import Keiro.Telemetry (Tracer, stampTraceContext)
 import Keiro.Workflow.Instance.Schema (WorkflowStatus (..), upsertInstanceTx)
 import Keiro.Workflow.Schema
   ( WorkflowStepRow (..),
     currentGeneration,
+    currentGenerationTx,
     lockWorkflowStepTx,
     lookupStepResultTx,
     recordStepTx,
@@ -33,7 +47,7 @@ import Keiro.Workflow.Schema
 import Keiro.Workflow.Types
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (AppendConflict, appendToStreamTx, prepareEventsIO, runTransaction)
-import Kiroku.Store.Types (AppendResult, EventData, EventId (..), ExpectedVersion (..))
+import Kiroku.Store.Types (AppendResult, EventData, EventId (..), ExpectedVersion (..), StreamId (..), StreamName (..), StreamVersion (..))
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 -- | What a journal append did.
@@ -65,7 +79,11 @@ prepareJournalAppend ::
   Int ->
   WorkflowJournalEvent ->
   Eff es (Tx.Transaction JournalAppendOutcome)
-prepareJournalAppend name wid gen event = do
+prepareJournalAppend = prepareJournalAppendWithMetadata Nothing
+
+-- | Metadata is captured in the effect layer, before constructing SQL.
+prepareJournalAppendWithMetadata :: (IOE :> es) => Maybe Aeson.Value -> WorkflowName -> WorkflowId -> Int -> WorkflowJournalEvent -> Eff es (Tx.Transaction JournalAppendOutcome)
+prepareJournalAppendWithMetadata metadata name wid gen event = do
   let key = journalKey event
       entryId = deterministicJournalId name wid gen key
       requestedEntryId = case event of
@@ -88,7 +106,7 @@ prepareJournalAppend name wid gen event = do
         _ ->
           listToMaybe
             <$> workflowLifecycleMarkersTx (unWorkflowId wid) (unWorkflowName name) gen
-  base <- case encodeForAppendWithMetadata workflowJournalCodec Nothing event of
+  base <- case encodeForAppendWithMetadata workflowJournalCodec metadata event of
     Right encoded -> pure encoded
     Left err -> throwIO (WorkflowJournalEncodeError (Text.pack (show err)))
   let entry = base & #eventId .~ requestedEntryId :: EventData
@@ -127,8 +145,25 @@ appendJournal ::
   Int ->
   WorkflowJournalEvent ->
   Eff es JournalAppendOutcome
-appendJournal name wid gen event =
-  prepareJournalAppend name wid gen event >>= runTransaction
+appendJournal = appendJournalWithMetadata Nothing
+
+appendJournalWithMetadata :: (IOE :> es, Store :> es) => Maybe Aeson.Value -> WorkflowName -> WorkflowId -> Int -> WorkflowJournalEvent -> Eff es JournalAppendOutcome
+appendJournalWithMetadata metadata name wid gen event =
+  prepareJournalAppendWithMetadata metadata name wid gen event >>= runTransaction
+
+-- | Explicit enablement; ambient context alone never enables journal tracing.
+journalTraceMetadata :: (MonadIO m) => Maybe Tracer -> m (Maybe Aeson.Value)
+journalTraceMetadata Nothing = pure Nothing
+journalTraceMetadata (Just _) = stampTraceContext Nothing
+
+appendJournalTraced :: (IOE :> es, Store :> es) => Maybe Tracer -> WorkflowName -> WorkflowId -> Int -> WorkflowJournalEvent -> Eff es JournalAppendOutcome
+appendJournalTraced tracer name wid gen event = do
+  metadata <- journalTraceMetadata tracer
+  appendJournalWithMetadata metadata name wid gen event
+
+appendJournalEntryTraced :: (IOE :> es, Store :> es) => Maybe Tracer -> WorkflowName -> WorkflowId -> WorkflowJournalEvent -> Eff es ()
+appendJournalEntryTraced tracer name wid event =
+  void (appendJournalEntryReturningIdTraced tracer name wid event)
 
 -- | Append one event on the current generation, idempotently.
 --
@@ -151,11 +186,14 @@ appendJournalEntryReturningId ::
   WorkflowId ->
   WorkflowJournalEvent ->
   Eff es EventId
-appendJournalEntryReturningId name wid event = do
+appendJournalEntryReturningId = appendJournalEntryReturningIdTraced Nothing
+
+appendJournalEntryReturningIdTraced :: (IOE :> es, Store :> es) => Maybe Tracer -> WorkflowName -> WorkflowId -> WorkflowJournalEvent -> Eff es EventId
+appendJournalEntryReturningIdTraced tracer name wid event = do
   gen <- currentGeneration name wid
   let key = journalKey event
       entryId = deterministicJournalId name wid gen key
-  appendJournal name wid gen event >>= \case
+  appendJournalTraced tracer name wid gen event >>= \case
     JournalAppended {} -> pure entryId
     JournalAlreadyPresent {} -> pure entryId
     JournalRefusedTerminal {} -> pure entryId
@@ -205,3 +243,38 @@ deterministicJournalId (WorkflowName name) (WorkflowId wid) gen key =
     UUID.V5.generateNamed UUID.V5.namespaceURL $
       identitySeedBytes $
         Text.intercalate ":" ["keiro", "workflow", name, wid, Text.pack (show gen), key]
+
+-- | The attribution hint and an indexed first-event reference. Select the
+-- reference before joining payloads: the generic forward read can otherwise
+-- sort an entire journal before applying LIMIT. Payloads still go through
+-- Store.getEvent so configured read decoders remain authoritative.
+readWorkflowTraceResume :: (Store :> es) => WorkflowName -> WorkflowId -> Eff es (Int, Maybe (Text, Maybe (EventId, StreamId, StreamVersion)))
+readWorkflowTraceResume name wid =
+  runTransaction $ do
+    gen <- currentGenerationTx name wid
+    let StreamName journalName = workflowGenerationStreamName name wid gen
+    hint <- Tx.statement (unWorkflowId wid, unWorkflowName name, fromIntegral gen :: Int32, journalName) statement
+    pure (gen, hint)
+  where
+    statement =
+      preparable
+        """
+        SELECT w.trace_awaited_step, first.event_id, s.stream_id, first.stream_version
+        FROM keiro.keiro_workflows w
+        LEFT JOIN streams s ON s.stream_name = $4 AND s.deleted_at IS NULL
+        LEFT JOIN LATERAL (
+          SELECT se.event_id, se.stream_version FROM stream_events se
+          WHERE se.stream_id = s.stream_id AND se.stream_version > 0
+            AND se.stream_version >= s.truncate_before
+          ORDER BY se.stream_version ASC LIMIT 1
+        ) first ON true
+        WHERE w.workflow_id = $1 AND w.workflow_name = $2 AND w.generation = $3
+          AND w.trace_awaited_step IS NOT NULL
+        """
+        (contrazip4 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.int4)) (E.param (E.nonNullable E.text)))
+        (D.rowMaybe ((,) <$> D.column (D.nonNullable D.text) <*> origin))
+    origin =
+      (\eid sid version -> (,,) <$> (EventId <$> eid) <*> (StreamId <$> sid) <*> (StreamVersion <$> version))
+        <$> D.column (D.nullable D.uuid)
+        <*> D.column (D.nullable D.int8)
+        <*> D.column (D.nullable D.int8)

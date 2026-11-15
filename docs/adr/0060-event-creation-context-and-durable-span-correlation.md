@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Event creation context and durable span correlation
 description: Commands stamp W3C creation context once per run and durable consumers correlate through evaluated span identities without changing replay.
-timestamp: 2026-11-15T00:08:55Z
+timestamp: 2026-11-15T01:15:00Z
 docId: ADR-60
 status: Accepted
 date: 2026-11-14
@@ -80,6 +80,24 @@ before SDK ownership. The actual helper's retained-span probe covers both polici
 The inbox adds no span because its handlers execute synchronously in the caller's
 transport scope. The exported Kafka helper is parent-and-link, preserving its parent
 behavior while adding the creation link; source adapters provide configurable policies.
+
+Timers persist request context in dedicated nullable columns, preserving explicit context.
+Effectful schedulers capture before SQL only under configured tracing. Firing opens a linked
+root that covers the action and mark-fired; dispatched commands inherit this live scope.
+
+Workflow journal metadata uses the same stamping helpers. Existing append/signal/child/timer
+APIs stay untraced wrappers; traced variants require explicit enablement. Child completion
+captures metadata before leaving the child's live run span, then propagates after completion.
+Suspension writes the exact attribution hint under the existing step lock; it is independent
+of readiness and replay. ADR-59 defines lifecycle and rollback rules.
+
+A traced run reads the hint together with an indexed first-event reference, then fetches at
+most two events through normal Kiroku reads. Limit reference discovery before payload joins:
+the generic one-event forward query was observed sorting a whole journal before LIMIT. The
+bounded reference query preserves read hooks by loading payloads with `getEvent`. Validate
+both source stream and awaited step, omit unverifiable context, and deduplicate by span identity
+with wake precedence. Links are added inside a root span after lookup; head samplers cannot
+see them. Snapshots and deterministic journal identities contain no tracing state.
 
 ## Consequences
 

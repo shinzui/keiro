@@ -48,6 +48,7 @@ surgeFlowTimerRequest :: Text -> UTCTime -> TimerRequest
 surgeFlowTimerRequest correlationId fireAtTime =
   TimerRequest
     { timerId = TimerId (namedUuid ("surge-timer:" <> correlationId))
+    , traceContext = Nothing
     , processManagerName = surgeFlowProcessName
     , correlationId = correlationId
     , fireAt = fireAtTime

@@ -33,6 +33,8 @@ module Keiro.Telemetry
     recordSubscriptionOutcome,
     withCommandSpan,
     withWorkflowSpan,
+    withTimerFireSpan,
+    recordWorkflowResumeLinks,
 
     -- * W3C TraceContext bridge
     traceContextFromCurrentSpan,
@@ -244,9 +246,12 @@ import "hs-opentelemetry-api" OpenTelemetry.Trace.Core
     SpanStatus (..),
     Tracer,
     addAttribute,
+    addLink,
     defaultSpanArguments,
     inSpan',
     setStatus,
+    spanId,
+    traceId,
     wrapSpanContext,
   )
 import "hs-opentelemetry-propagator-w3c" OpenTelemetry.Propagator.W3CTraceContext
@@ -570,16 +575,53 @@ withWorkflowSpan ::
   m a
 withWorkflowSpan Nothing _ _ _ body = body Nothing
 withWorkflowSpan (Just tracer) name wid mStep body =
-  inSpan' tracer spanName args $ \sp -> do
-    addAttribute sp (unkey keiro_workflow_name) (unWorkflowName name)
-    addAttribute sp (unkey keiro_workflow_id) (unWorkflowId wid)
+  withEmptyContext $ inSpan' tracer spanName args $ \sp -> do
+    let !workflowName = unWorkflowName name
+        !workflowId = unWorkflowId wid
+    addAttribute sp (unkey keiro_workflow_name) workflowName
+    addAttribute sp (unkey keiro_workflow_id) workflowId
     case mStep of
       Nothing -> pure ()
-      Just s -> addAttribute sp (unkey keiro_workflow_step) (unStepName s)
+      Just (StepName !step) -> addAttribute sp (unkey keiro_workflow_step) step
     body (Just sp)
   where
     spanName = "workflow " <> unWorkflowName name
     args = defaultSpanArguments {kind = Internal}
+
+-- | Fire delayed work as a root, linked to the stored scheduling context.
+withTimerFireSpan ::
+  (MonadUnliftIO m, HasCallStack) =>
+  Maybe Tracer -> Text -> Text -> Maybe TraceContext -> (Maybe Span -> m a) -> m a
+withTimerFireSpan Nothing _ _ _ body = body Nothing
+withTimerFireSpan (Just tracer) manager timerId context body =
+  let !managerName = manager
+      !identifier = timerId
+      !creationLinks = maybe [] pure (context >>= creationLinkFromTraceContext)
+      !args = defaultSpanArguments {kind = Internal, links = creationLinks}
+   in withEmptyContext $ inSpan' tracer ("timer fire " <> managerName) args $ \sp -> do
+        addAttribute sp "keiro.timer.id" identifier
+        addAttribute sp "keiro.timer.process_manager" managerName
+        body (Just sp)
+
+-- | Add bounded, evaluated journal evidence after lookup. Samplers cannot see
+-- these late links. Equal span identities prefer the exact wake label.
+recordWorkflowResumeLinks :: (MonadIO m) => Maybe Span -> Maybe TraceContext -> Maybe TraceContext -> m ()
+recordWorkflowResumeLinks Nothing _ _ = pure ()
+recordWorkflowResumeLinks (Just sp) origin wake = do
+  let originLink = origin >>= creationLinkFromTraceContext
+      wakeLink = wake >>= creationLinkFromTraceContext
+      same a b = traceId (linkContext a) == traceId (linkContext b) && spanId (linkContext a) == spanId (linkContext b)
+      add role link =
+        let !fields = fromList [("keiro.workflow.link", toAttribute (role :: Text))]
+            !labelled = link {linkAttributes = fields}
+         in addLink sp labelled
+  case (originLink, wakeLink) of
+    (Just a, Just b) | same a b -> add "wake" b
+    _ -> for_ originLink (add "origin") >> for_ wakeLink (add "wake")
+
+withEmptyContext :: (MonadUnliftIO m) => m a -> m a
+withEmptyContext body = withRunInIO $ \runInIO ->
+  bracket (attachContext Context.empty) detachContext (const (runInIO body))
 
 -- ---------------------------------------------------------------------------
 -- W3C TraceContext bridge

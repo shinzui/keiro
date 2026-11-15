@@ -60,6 +60,7 @@ incidentTimersEscalationTimerRequest :: Text -> UTCTime -> N.IncidentId -> Text 
 incidentTimersEscalationTimerRequest correlationId fireAtTime payloadIncidentId payloadDetail =
   TimerRequest
     { timerId = TimerId (reactionIdentity "incident-escalation-timer:" correlationId)
+    , traceContext = Nothing
     , processManagerName = incidentTimersProcessName
     , correlationId = correlationId
     , fireAt = fireAtTime
@@ -77,6 +78,7 @@ incidentTimersReminderTimerRequest :: Text -> UTCTime -> N.IncidentId -> TimerRe
 incidentTimersReminderTimerRequest correlationId fireAtTime payloadIncidentId =
   TimerRequest
     { timerId = TimerId (reactionIdentity "incident-reminder-timer:" correlationId)
+    , traceContext = Nothing
     , processManagerName = incidentTimersProcessName
     , correlationId = correlationId
     , fireAt = fireAtTime
@@ -103,6 +105,7 @@ incidentTimersTimerWorkerOptions =
   TimerWorkerOptions
     { maxAttempts = Just 5
     , requeueStuckAfter = Just 300
+    , tracer = Nothing
     }
 -- Operator dead-letter guidance: "incident timer exceeded ceiling"
 

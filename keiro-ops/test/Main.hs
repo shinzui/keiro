@@ -1894,7 +1894,8 @@ timerStatus store timerId = do
 timerRequest :: String -> UTCTime -> Timer.TimerRequest
 timerRequest rawId fireAt =
   Timer.TimerRequest
-    { timerId = Timer.TimerId (maybe (error "test timer UUID") Function.id (UUID.fromString rawId)),
+    { traceContext = Nothing,
+      timerId = Timer.TimerId (maybe (error "test timer UUID") Function.id (UUID.fromString rawId)),
       processManagerName = "billing",
       correlationId = "invoice-1",
       fireAt,

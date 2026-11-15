@@ -80,8 +80,11 @@ module Keiro.Workflow.Sleep
 
     -- * Firing and worker wiring
     workflowSleepFireAction,
+    workflowSleepFireActionTraced,
     runWorkflowTimerWorker,
+    runWorkflowTimerWorkerWith,
     drainWorkflowSleepTimers,
+    drainWorkflowSleepTimersWith,
 
     -- * Timer id, payload, and step-name helpers
     sleepTimerId,
@@ -104,14 +107,17 @@ import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (throwIO)
 import Keiro.DeterministicId (identitySeedBytes)
 import Keiro.Prelude
-import Keiro.Telemetry (KeiroMetrics)
+import Keiro.Telemetry (KeiroMetrics, Tracer)
 import Keiro.Timer
   ( TimerId (..),
     TimerRequest (..),
     TimerRow,
+    TimerWorkerOptions (..),
     cancelTimer,
-    drainDueTimers,
-    runTimerWorker,
+    captureTimerTraceContext,
+    defaultTimerWorkerOptions,
+    drainDueTimersWith,
+    runTimerWorkerWith,
     scheduleTimerOnceTx,
   )
 import Keiro.Workflow
@@ -127,13 +133,14 @@ import Keiro.Workflow
     currentGeneration,
     currentRunGeneration,
     currentWorkflow,
+    currentWorkflowTracer,
     deterministicJournalId,
     freshOrdinal,
-    prepareJournalAppend,
     setWorkflowWakeAfterTx,
     sleepStepPrefix,
   )
 import Keiro.Workflow.Instance qualified as Instance
+import Keiro.Workflow.Journal (journalTraceMetadata, prepareJournalAppendWithMetadata)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId)
@@ -276,7 +283,8 @@ sleepNamed userStep delta = do
     now <- liftIO getCurrentTime
     let request =
           TimerRequest
-            { timerId = sleepTimerId name wid gen full,
+            { traceContext = Nothing,
+              timerId = sleepTimerId name wid gen full,
               processManagerName = unWorkflowName name,
               correlationId = unWorkflowId wid,
               fireAt = addUTCTime delta now,
@@ -286,8 +294,10 @@ sleepNamed userStep delta = do
     -- leave both fire_at and wake_after untouched, so re-entering a due or
     -- already-fired sleep cannot postpone discovery. Firing clears the
     -- hint in the same transaction as its journal append.
+    tracer <- currentWorkflowTracer
+    tracedRequest <- captureTimerTraceContext tracer request
     runTransaction $ do
-      inserted <- scheduleTimerOnceTx request
+      inserted <- scheduleTimerOnceTx tracedRequest
       when inserted (setWorkflowWakeAfterTx name wid (request ^. #fireAt))
 
 -- | Durably pause the workflow for @delta@ under an ordinal name (the @N@th
@@ -318,7 +328,11 @@ sleep delta = do
 -- exactly-once journaling even after the workflow has rotated.
 workflowSleepFireAction ::
   (Store :> es, IOE :> es) => TimerRow -> Eff es (Maybe EventId)
-workflowSleepFireAction row =
+workflowSleepFireAction = workflowSleepFireActionTraced Nothing
+
+-- | Explicitly trace the wake append using the timer fire span.
+workflowSleepFireActionTraced :: (Store :> es, IOE :> es) => Maybe Tracer -> TimerRow -> Eff es (Maybe EventId)
+workflowSleepFireActionTraced tracer row =
   case parseSleepPayload (row ^. #payload) of
     Nothing -> pure Nothing
     Just (full, payloadGen) -> do
@@ -341,8 +355,10 @@ workflowSleepFireAction row =
                     currentGen
                     (matchSleepTimerGeneration name wid currentGen full (row ^. #timerId))
           now <- liftIO getCurrentTime
+          metadata <- journalTraceMetadata tracer
           appendTx <-
-            prepareJournalAppend
+            prepareJournalAppendWithMetadata
+              metadata
               name
               wid
               targetGen
@@ -394,8 +410,11 @@ runWorkflowTimerWorker ::
   -- | Fallback fire action for non-sleep (process-manager) timers.
   (TimerRow -> Eff es (Maybe EventId)) ->
   Eff es (Maybe TimerRow)
-runWorkflowTimerWorker metrics now pmFire =
-  runTimerWorker metrics now (workflowSleepOrPmFire pmFire)
+runWorkflowTimerWorker = runWorkflowTimerWorkerWith defaultTimerWorkerOptions
+
+runWorkflowTimerWorkerWith :: (IOE :> es, Store :> es) => TimerWorkerOptions -> Maybe KeiroMetrics -> UTCTime -> (TimerRow -> Eff es (Maybe EventId)) -> Eff es (Maybe TimerRow)
+runWorkflowTimerWorkerWith options metrics now pmFire =
+  runTimerWorkerWith metrics options now (workflowSleepOrPmFire (options ^. #tracer) pmFire)
 
 -- | 'runWorkflowTimerWorker' over a whole batch: drain up to @limit@ due timers
 -- in one pass, routing each to the workflow-sleep fire action or the supplied
@@ -416,18 +435,22 @@ drainWorkflowSleepTimers ::
   -- | Fallback fire action for non-sleep (process-manager) timers.
   (TimerRow -> Eff es (Maybe EventId)) ->
   Eff es Int
-drainWorkflowSleepTimers metrics now limit pmFire =
-  drainDueTimers metrics now limit (workflowSleepOrPmFire pmFire)
+drainWorkflowSleepTimers = drainWorkflowSleepTimersWith defaultTimerWorkerOptions
+
+drainWorkflowSleepTimersWith :: (IOE :> es, Store :> es) => TimerWorkerOptions -> Maybe KeiroMetrics -> UTCTime -> Int -> (TimerRow -> Eff es (Maybe EventId)) -> Eff es Int
+drainWorkflowSleepTimersWith options metrics now limit pmFire =
+  drainDueTimersWith metrics options now limit (workflowSleepOrPmFire (options ^. #tracer) pmFire)
 
 -- | Route one claimed timer: a workflow sleep wakes its workflow, anything else
 -- falls through to the caller's process-manager action.
 workflowSleepOrPmFire ::
   (IOE :> es, Store :> es) =>
+  Maybe Tracer ->
   (TimerRow -> Eff es (Maybe EventId)) ->
   TimerRow ->
   Eff es (Maybe EventId)
-workflowSleepOrPmFire pmFire row = do
-  handled <- workflowSleepFireAction row
+workflowSleepOrPmFire tracer pmFire row = do
+  handled <- workflowSleepFireActionTraced tracer row
   case handled of
     Just eid -> pure (Just eid)
     Nothing -> pmFire row

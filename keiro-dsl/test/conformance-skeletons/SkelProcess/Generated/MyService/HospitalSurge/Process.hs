@@ -48,6 +48,7 @@ hospitalSurgeTimerRequest :: Text -> UTCTime -> TimerRequest
 hospitalSurgeTimerRequest correlationId fireAtTime =
   TimerRequest
     { timerId = TimerId (namedUuid ("hospital-surge-timer:" <> correlationId))
+    , traceContext = Nothing
     , processManagerName = hospitalSurgeProcessName
     , correlationId = correlationId
     , fireAt = fireAtTime

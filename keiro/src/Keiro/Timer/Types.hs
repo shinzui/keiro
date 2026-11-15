@@ -4,10 +4,12 @@
 module Keiro.Timer.Types
   ( TimerId (..),
     TimerRequest (..),
+    withTimerTraceContext,
   )
 where
 
 import Data.UUID (UUID)
+import Keiro.Integration.Event (TraceContext)
 import Keiro.Prelude
 
 -- | A timer's stable identifier. A caller-chosen id makes scheduling
@@ -27,6 +29,15 @@ data TimerRequest = TimerRequest
     processManagerName :: !Text,
     correlationId :: !Text,
     fireAt :: !UTCTime,
-    payload :: !Value
+    payload :: !Value,
+    traceContext :: !(Maybe TraceContext)
   }
   deriving stock (Generic, Eq, Show)
+
+-- | Fill missing context from a value captured before the transaction. Explicit
+-- caller context wins; absence preserves the original request without inspection.
+withTimerTraceContext :: Maybe TraceContext -> TimerRequest -> TimerRequest
+withTimerTraceContext Nothing request = request
+withTimerTraceContext context request = case request ^. #traceContext of
+  Just _ -> request
+  Nothing -> request & #traceContext .~ context

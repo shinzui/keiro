@@ -4,7 +4,7 @@ type: Capability
 description: "Emit bounded OpenTelemetry spans and metrics across commands, projections/rebuilds, dispatch, messaging, timers, workflows, and PGMQ jobs, with W3C propagation across durable boundaries."
 generated:
   by: openai/codex
-  at: "2026-11-14T23:33:52Z"
+  at: "2026-11-15T01:15:00Z"
 capabilityId: CAP-15
 provider: mori://shinzui/keiro
 status: shipped
@@ -17,6 +17,9 @@ interface:
   - Keiro.Telemetry
   - Keiro.PGMQ.Metrics
 evidence:
+  - kind: test
+    resource: keiro/test/DurableTracingSpec.hs
+    proves: "A real command/subscription reaction/timer/workflow chain links exact wake and origin beyond snapshots; traced signals and child completions preserve replay and idempotent metadata."
   - kind: test
     resource: keiro/test/Main.hs
     proves: "All six subscription workers correlate processing spans using adapter policy; the actual Kiroku command/event/manager/command/event chain preserves creation context and child parenting."
@@ -76,6 +79,12 @@ import Keiro.Telemetry
 -- keiro's runners open the spans and record the metrics.
 ```
 
+Timers store creation context in nullable columns; firing opens a root with a creation link.
+Workflow resumes use an advisory suspension hint and bounded event reads to recover exact
+wake and journal-origin links independently of snapshot hydration. Existing untraced APIs
+remain available; enable wake-source tracing explicitly. Retained-span probes exercise
+actual fetched timer/journal rows, and separate timer/workflow legs enforce bounded live heap.
+
 ## Limits
 
 - keiro produces telemetry but does not ship an exporter or a collector; the
@@ -84,3 +93,5 @@ import Keiro.Telemetry
 - Coverage is the delivery and handler paths the runtime controls. Work a
   consumer does inside a filled handler is only traced if the consumer opens its
   own child spans.
+
+Workflow origin/wake links are added after span creation; head samplers cannot inspect them.

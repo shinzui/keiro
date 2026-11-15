@@ -2,7 +2,7 @@
 type: Runbook
 title: Operations
 description: Deploy and operate Keiro applications, workers, rebuilds, retries, and production checks.
-timestamp: 2026-11-15T00:08:55Z
+timestamp: 2026-11-15T01:15:00Z
 docId: DOC-15
 tags: [keiro, operations, deployment, runbook]
 generated:
@@ -523,6 +523,53 @@ name remains in `keiro.stream.name`. With `RunCommandOptions.tracer` configured,
 that command span's `traceparent` and optional `tracestate` in their metadata. Capture happens
 once before retries, and an explicit caller `traceparent` wins. With no configured tracer,
 metadata stays unchanged even when an application span is active.
+
+Timers persist creation context outside their opaque payload. Set
+`TimerWorkerOptions.tracer` to open linked root spans named `timer fire <manager>`;
+`fire` and mark-fired execute inside them. Process-manager and reaction schedulers capture
+only when their command tracer is configured; supplied `TimerRequest.traceContext` wins.
+Application scheduling can use `captureTimerTraceContext` before building its transaction.
+Null legacy rows fire normally, with an unlinked span when tracing is enabled.
+
+`WorkflowRunOptions.tracer` stamps journal appends and opens root workflow spans.
+For wake sources, use `signalAwakeableTraced`, `childCompletionHookTraced`, or the
+`runWorkflowTimerWorkerWith` / `drainWorkflowSleepTimersWith` variants carrying a timer
+tracer. Existing entry points remain untraced. A resume links to the generation's first
+persisted event (`origin`) and the exact awaited step (`wake`), even before a snapshot.
+Equal contexts produce one `wake` link. Missing or invalid evidence omits a link. These
+links arrive after span creation and cannot influence head sampling.
+
+Apply migration `0033` before deploying timer/workflow tracing. Its columns are nullable;
+old named-column inserts continue to work. The `trace_awaited_step` hint is attribution only,
+written under the existing step lock even when a wake won the race. Same-generation wakes
+preserve it; untraced suspension, rotation and terminal transitions clear it. After an old-code
+rollback, stop workflow workers and clear hints before re-enabling traced resumes:
+
+```sql
+UPDATE keiro.keiro_workflows SET trace_awaited_step = NULL;
+```
+
+This does not change readiness or journal replay. See [ADR-59](../adr/0059-durable-trace-correlation-preserves-replay-and-exact-wake-identity.md).
+
+The worked example can export a complete delayed chain to your OTLP backend from a
+migrated disposable database:
+
+```bash
+OTEL_SERVICE_NAME=jitsurei-tracing \
+OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf \
+OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:10428/insert/opentelemetry \
+PG_CONNECTION_STRING='host=/path/to/postgresql/socket dbname=trace_demo' \
+nix develop -c env -u OTEL_EXPORTER_OTLP_HEADERS -u OTEL_EXPORTER_OTLP_TRACES_HEADERS \
+  cabal run jitsurei-demo -- tracing
+```
+
+The command clears inherited exporter headers for the local backend; supply your backend's headers when it requires authentication or tenancy. The endpoint shown is [VictoriaTraces' OTLP/HTTP endpoint](https://docs.victoriametrics.com/victoriatraces/data-ingestion/opentelemetry/);
+the current Haskell SDK appends `/v1/traces` to the configured prefix.
+Use your collector's prefix for other backends. Find `jitsurei request`, then follow
+creation links through fulfillment processing, its dispatched packing command, `send
+jitsurei.traces`, timer firing and workflow resume. The example's outbox transport is a
+local success stub; spans are exported by the real SDK. Its producer name/cutoff is
+for this new demonstration producer, not an adoption recipe for an existing deployment.
 
 Keiro also emits OpenTelemetry **metrics** through `Keiro.Telemetry`. Metrics are opt-in
 and no-op by default: build the instrument set once from an SDK `Meter`

@@ -1,6 +1,12 @@
 # Keiro User Documentation Log
 
 ## 2026-11-15
+
+* **Update**: DOC-14: document additive tracing migration 0033 and old-code rollback hint clearing.
+
+
+* **Update**: Document timer/workflow tracing enablement, hint lifecycle, sampler limits and rollback clearing.
+
 * **Update**: Explain worker creation links, child commands and the inbox transport-span contract.
 
 ## 2026-11-14

@@ -170,7 +170,7 @@ import Keiro.ProcessManager.Provenance
 import Keiro.Projection (InlineProjection, runCommandWithProjections, runDomainCommandWithProjections)
 import Keiro.Stream (Stream)
 import Keiro.Telemetry (KeiroMetrics, recordDispatchDeadLettered, recordDispatchDuplicate, recordDispatchFailed, recordDispatchPoison, recordSubscriptionOutcome, withSubscriptionProcessSpan)
-import Keiro.Timer (TimerRequest, scheduleTimerTx)
+import Keiro.Timer (TimerRequest, captureTimerTraceContext, scheduleTimerTx)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError (..))
@@ -587,13 +587,16 @@ runProcessManagerOnce options manager sourceEvent input = do
   case existingManagerId of
     Just matchedId -> finish correlationId (PMStateDuplicate matchedId) action
     Nothing -> do
+      timerRequests <- case options ^. #tracer of
+        Nothing -> pure (action ^. #timers)
+        configured -> traverse (captureTimerTraceContext configured) (action ^. #timers)
       managerOutcome <-
         runCommandWithSql
           managerOptions
           (manager ^. #eventStream)
           managerStream
           (action ^. #command)
-          (\_ -> traverse_ scheduleTimerTx (action ^. #timers))
+          (\_ -> traverse_ scheduleTimerTx timerRequests)
       case managerOutcome of
         Left err -> do
           benign <- confirmBenignDuplicate managerStreamName managerEventId err
@@ -604,7 +607,7 @@ runProcessManagerOnce options manager sourceEvent input = do
           -- No-op manager commands do not execute runCommandWithSql's callback,
           -- so schedule timer-only reactions explicitly.
           case scheduledInAppend of
-            Nothing -> runTransaction (traverse_ scheduleTimerTx (action ^. #timers))
+            Nothing -> runTransaction (traverse_ scheduleTimerTx timerRequests)
             Just () -> pure ()
           finish correlationId (PMStateAppended managerResult) action
   where
@@ -728,13 +731,16 @@ advanceDomainProcessManager options manager sourceEvent input = do
   case existingManagerId of
     Just matchedId -> finish (PMStateDuplicate matchedId)
     Nothing -> do
+      timerRequests <- case options ^. #tracer of
+        Nothing -> pure (action ^. #timers)
+        configured -> traverse (captureTimerTraceContext configured) (action ^. #timers)
       managerOutcome <-
         runCommandWithSql
           managerOptions
           (manager ^. #eventStream)
           managerStream
           (action ^. #command)
-          (\_ -> traverse_ scheduleTimerTx (action ^. #timers))
+          (\_ -> traverse_ scheduleTimerTx timerRequests)
       case managerOutcome of
         Left err -> do
           benign <- confirmBenignDuplicate managerStreamName managerEventId err
@@ -743,7 +749,7 @@ advanceDomainProcessManager options manager sourceEvent input = do
             else pure (Left err)
         Right (managerResult, scheduledInAppend) -> do
           case scheduledInAppend of
-            Nothing -> runTransaction (traverse_ scheduleTimerTx (action ^. #timers))
+            Nothing -> runTransaction (traverse_ scheduleTimerTx timerRequests)
             Just () -> pure ()
           finish (PMStateAppended managerResult)
 

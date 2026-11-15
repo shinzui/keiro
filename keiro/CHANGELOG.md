@@ -8,6 +8,10 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Breaking Changes
 
+- `TimerRequest` and `TimerRow` add strict `traceContext`; use `Nothing` for legacy behavior.
+- `TimerWorkerOptions` adds `tracer` (default `Nothing`) and retains `Show` but no longer has `Eq`.
+
+
 - `IntegrationProducer` requires `tracePolicy`; use `PreserveDraftTrace` until explicit
   adoption of an immutable `DeriveTraceAfter` cutoff. Strict trace-content equality stays intact.
 - Mixed publisher batches use the span name `send`; only singleton batch spans carry
@@ -19,6 +23,12 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   replacing the full stream name (`counter-42`). The full name remains in `keiro.stream.name`.
 
 ### New Features
+
+- Linked root timer-fire spans and workflow origin/exact-wake links across snapshots.
+  Traced journal/wake APIs are explicit; legacy APIs remain untraced wrappers.
+  Tracing preserves replay identity and event metadata on idempotent retries.
+
+
 
 - Traced subscription workers open `process <worker name>` spans linked according to
   adapter policy; dispatched command spans are children. The Kiroku default is a linked root.

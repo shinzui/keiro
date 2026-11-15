@@ -11,7 +11,7 @@ import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM (atomically, putTMVar)
 import Control.Exception (evaluate, finally)
 import Control.Monad (forM_, unless, void, when)
-import Data.Aeson (object, toJSON, (.=))
+import Data.Aeson (Value, object, toJSON, (.=))
 import Data.ByteString qualified as BS
 import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Data.Text (Text)
@@ -25,6 +25,7 @@ import Effectful (Eff, IOE, liftIO, (:>))
 import Effectful.Exception qualified as Effectful
 import Keiro.Command (defaultRunCommandOptions)
 import Keiro.Command qualified as Command
+import Keiro.EventStream (SnapshotPolicy (Every))
 import Keiro.EventStream.Validate (unvalidated)
 import Keiro.Integration.Event (IntegrationContentType (..), IntegrationEvent (..), TraceContext (..))
 import Keiro.Outbox qualified as Outbox
@@ -34,7 +35,10 @@ import Keiro.ReadModel.Schema (registerReadModel)
 import Keiro.Router (runRouterWorkerWith)
 import Keiro.Snapshot.Schema (SnapshotRow (..), lookupSnapshotRow)
 import Keiro.Stream qualified as KeiroStream
+import Keiro.Telemetry qualified as Telemetry
 import Keiro.Test.Postgres (StoreRunner (..))
+import Keiro.Timer qualified as Timer
+import Keiro.Workflow qualified as Workflow
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Subscription qualified as Subscription
 import Kiroku.Store.Subscription.Stream (AckItem (..), defaultStreamBufferSize, subscriptionAckStream)
@@ -84,6 +88,8 @@ allLegs =
     Leg "outbox-publisher-tracer" (\config handle -> withRecordingTracer (\tracer -> outboxPublisher (Just tracer) False config handle)),
     Leg "outbox-publisher-contexts-tracer" (\config handle -> withRecordingTracer (\tracer -> outboxPublisher (Just tracer) True config handle)),
     Leg "pm-worker-tracer" (\config handle -> withRecordingTracer (\tracer -> pmWorkerWithTracer (Just tracer) config handle)),
+    Leg "timer-fire-tracer" (\config handle -> withRecordingTracer (\tracer -> timerFireTracer tracer config handle)),
+    Leg "workflow-snapshot-resume-tracer" (\config handle -> withRecordingTracer (\tracer -> workflowSnapshotResumeTracer tracer config handle)),
     Leg "command-long-history-verify-every" commandLongHistoryVerifyEvery
   ]
 
@@ -439,3 +445,42 @@ outboxPublisher tracer withContext config (_, StoreRunner runStore) = do
   unless (backlog == 0) (fail "outbox retention did not drain backlog")
   postReturn name (operationCount config)
   pure measured
+
+-- A fixed backlog, claimed one row per operation. The SDK records and discards
+-- completed spans, as in the publisher and worker legs.
+timerFireTracer :: Tracer -> GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
+timerFireTracer tracer config (_, StoreRunner runStore) = do
+  let now = UTCTime (ModifiedJulianDay 61000) 0
+      options = Timer.defaultTimerWorkerOptions {Timer.tracer = Just tracer, Timer.requeueStuckAfter = Nothing}
+      request index = Timer.TimerRequest (Timer.TimerId (UUID.fromWords64 0 (fromIntegral index))) "retention" "one" now (object ["body" .= Text.replicate 1024 "x"]) Nothing
+  Telemetry.withWorkflowSpan (Just tracer) (Workflow.WorkflowName "timerRetention") (Workflow.WorkflowId "one") Nothing $ \_ -> do
+    requests <- traverse (Timer.captureTimerTraceContext (Just tracer) . request) [1 .. operationCount config]
+    expectRight =<< runStore (StoreTx.runTransaction (mapM_ Timer.scheduleTimerTx requests))
+  measured <- measureLeg config "timer-fire-tracer" $ \_ -> do
+    row <- expectRight =<< runStore (Timer.runTimerWorkerWith Nothing options now (const (pure (Just (EventId UUID.nil)))))
+    unless (maybe False (const True) row) (fail "timer retention exhausted its backlog")
+  backlog <- expectRight =<< runStore (Timer.countDueTimers now)
+  unless (backlog == 0) (fail "timer retention left due rows")
+  postReturn "timer-fire-tracer" (operationCount config)
+  pure measured
+
+workflowSnapshotResumeTracer :: Tracer -> GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
+workflowSnapshotResumeTracer tracer config (_, StoreRunner runStore) = do
+  let name = Workflow.WorkflowName "retention"
+      wid = Workflow.WorkflowId "one"
+      options = Workflow.defaultWorkflowRunOptions {Workflow.tracer = Just tracer, Workflow.snapshotPolicy = Every 1000}
+  seeded <- expectRight =<< runStore (Workflow.runWorkflowWith options name wid seedWorkflow)
+  unless (seeded == Workflow.Suspended) (fail "workflow retention did not seed")
+  measured <- measureLeg config "workflow-snapshot-resume-tracer" $ \_ -> do
+    result <- expectRight =<< runStore (Workflow.runWorkflowWith options name wid holdWorkflow)
+    unless (result == Workflow.Suspended) (fail "workflow retention did not resume")
+  postReturn "workflow-snapshot-resume-tracer" (operationCount config)
+  pure measured
+
+seedWorkflow :: (Workflow.Workflow :> es) => Eff es Value
+seedWorkflow = do
+  forM_ [1 .. 1000 :: Int] $ \index -> void (Workflow.step (Workflow.StepName ("prefix-" <> Text.pack (show index))) (pure index))
+  holdWorkflow
+
+holdWorkflow :: (Workflow.Workflow :> es) => Eff es Value
+holdWorkflow = Workflow.awaitStep (Workflow.StepName "hold") (pure ())

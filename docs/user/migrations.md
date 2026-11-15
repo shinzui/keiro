@@ -2,7 +2,7 @@
 type: Runbook
 title: Database Migrations
 description: Install, upgrade, and verify Keiro framework database migrations.
-timestamp: 2026-10-27T21:15:00Z
+timestamp: 2026-11-15T01:15:00Z
 docId: DOC-14
 tags: [keiro, migrations, database, operations]
 generated:
@@ -42,6 +42,18 @@ files. Runtime code contains no second copy of the framework DDL.
 The old timestamped Codd files, expected-schema snapshot, and lock manifest are
 retained only as cutover evidence and opt-in legacy verification. They are not
 the normal migration runner.
+
+## Durable tracing migration
+
+Migration `0033` adds nullable timer `traceparent` and `tracestate` columns and a nullable
+workflow `trace_awaited_step` attribution hint. It does not rewrite timer payloads, change
+workflow readiness, or alter journal replay. Apply it before enabling the new timer/workflow
+tracing APIs. Old inserts and reads name their columns and remain compatible; existing rows
+start with null trace fields. The current composed plan has 50 migrations (17 Kiroku, 33 Keiro).
+
+Before resuming tracing after an old-code rollback, stop workflow workers and clear trace hints
+as described in [Operations](operations.md). The hint is advisory and older binaries cannot
+maintain its lifecycle. Never edit an already-applied migration.
 
 ## Upgrading to 0.22.0.0
 

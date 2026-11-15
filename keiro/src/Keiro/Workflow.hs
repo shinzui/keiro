@@ -120,6 +120,7 @@ module Keiro.Workflow
     step,
     awaitStep,
     currentWorkflow,
+    currentWorkflowTracer,
     currentRunGeneration,
     freshOrdinal,
     continueAsNew,
@@ -136,6 +137,9 @@ module Keiro.Workflow
     -- * Journal append helpers (used by wake-source plans)
     JournalAppendOutcome (..),
     prepareJournalAppend,
+    prepareJournalAppendWithMetadata,
+    appendJournalEntryTraced,
+    appendJournalEntryReturningIdTraced,
     appendJournalEntry,
     appendJournalEntryReturningId,
     deterministicJournalId,
@@ -198,8 +202,10 @@ import Keiro.Telemetry
     recordSnapshotWriteFailures,
     recordWorkflowActive,
     recordWorkflowJournalLength,
+    recordWorkflowResumeLinks,
     recordWorkflowStepExecuted,
     recordWorkflowStepReplayed,
+    traceContextFromMetadata,
     withWorkflowSpan,
   )
 import Keiro.Workflow.Instance
@@ -211,23 +217,28 @@ import Keiro.Workflow.Instance
     defaultWorkflowInstanceFilter,
     forceReleaseInstanceLease,
     listWorkflowInstances,
-    markInstanceSuspendedAwaiting,
+    markInstanceSuspendedAwaitingTraced,
     renewInstanceLease,
   )
 import Keiro.Workflow.Journal
   ( JournalAppendOutcome (..),
-    appendJournal,
     appendJournalEntry,
     appendJournalEntryReturningId,
+    appendJournalEntryReturningIdTraced,
+    appendJournalEntryTraced,
+    appendJournalTraced,
     deterministicJournalId,
+    journalTraceMetadata,
     prepareJournalAppend,
+    prepareJournalAppendWithMetadata,
+    readWorkflowTraceResume,
   )
 import Keiro.Workflow.Schema (WorkflowStepRow (..), clearWorkflowWakeAfterTx, currentGeneration, findUnfinishedWorkflowIds, loadStepIndex, lookupStepResult, recordStepTx, setWorkflowWakeAfterTx, stepExists, terminalMarkers)
 import Keiro.Workflow.Snapshot (lookupWorkflowSnapshot, writeWorkflowSnapshot)
 import Keiro.Workflow.Types
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
-import Kiroku.Store.Read (readStreamForwardStream)
+import Kiroku.Store.Read (getEvent, readStreamForwardStream)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (StreamId, StreamVersion (..))
 import Streamly.Data.Fold qualified as Fold
@@ -252,6 +263,8 @@ data Workflow :: Effect where
   CurrentWorkflow :: Workflow m (WorkflowName, WorkflowId)
   -- | The journal generation this run is operating on.
   CurrentRunGeneration :: Workflow m Int
+  -- | Explicit tracing policy of the current run, for durable wake sources.
+  CurrentWorkflowTracer :: Workflow m (Maybe Tracer)
   -- | A per-run, per-namespace counter for deterministic ordinal step names.
   FreshOrdinal :: Text -> Workflow m Int
   -- | EP-48: snapshot the carried seed, rotate onto a fresh journal generation,
@@ -296,6 +309,10 @@ awaitStep name arm = send (Await name arm)
 -- | The identity of the workflow currently running.
 currentWorkflow :: (Workflow :> es) => Eff es (WorkflowName, WorkflowId)
 currentWorkflow = send CurrentWorkflow
+
+-- | Tracing policy used by this invocation; ambient context does not enable it.
+currentWorkflowTracer :: (Workflow :> es) => Eff es (Maybe Tracer)
+currentWorkflowTracer = send CurrentWorkflowTracer
 
 -- | The journal generation this run is operating on. Wake sources include it
 -- in their durable identities so a generation opened by 'continueAsNew' never
@@ -544,12 +561,14 @@ runWorkflowWith ::
   WorkflowId ->
   Eff (Workflow : es) a ->
   Eff es (WorkflowOutcome a)
-runWorkflowWith options name wid action = do
+runWorkflowWith options name wid action = withWorkflowSpan (options ^. #tracer) name wid Nothing $ \sp -> do
   -- EP-48: resolve the CURRENT (highest) generation once per run and operate
   -- only on it. A never-rotating workflow stays at generation 0, so naming,
   -- load, and append are byte-for-byte as before. A rotated workflow resolves
   -- to its newest generation, so discovery/resume transparently continue there.
-  gen <- currentGeneration name wid
+  (gen, traceHint) <- case sp of
+    Nothing -> (,Nothing) <$> currentGeneration name wid
+    Just _ -> readWorkflowTraceResume name wid
   -- Terminal short-circuit (EP-43): a workflow whose journal carries a
   -- WorkflowCancelled or WorkflowFailed marker makes no further progress. Both
   -- markers are index rows on the current generation, so one query answers for
@@ -559,7 +578,7 @@ runWorkflowWith options name wid action = do
   case (cancelledStepName `elem` markers, failedStepName `elem` markers) of
     (True, _) -> pure Cancelled
     (_, True) -> pure Failed
-    _ -> runActive gen
+    _ -> runActive gen sp traceHint
   where
     -- EP-44 telemetry handles, pulled from the run options once. Both default
     -- to 'Nothing' (see 'defaultWorkflowRunOptions'), so a default-options run
@@ -567,8 +586,28 @@ runWorkflowWith options name wid action = do
     mMetrics = options ^. #metrics
     mTracer = options ^. #tracer
     fireAppendWitness = for_ (options ^. #onJournalAppend) liftIO
-    runActive :: Int -> Eff es (WorkflowOutcome a)
-    runActive gen =
+    -- Bounded reference discovery plus two normal event reads. The hint is
+    -- captured before interpretation; snapshots never participate in attribution.
+    recoverResumeLinks Nothing _ _ = pure ()
+    recoverResumeLinks sp gen hint = do
+      for_ hint $ \(awaited, originReference) -> do
+        origin <- traverse (\(eid, _, _) -> getEvent eid) originReference
+        wake <- getEvent (deterministicJournalId name wid gen awaited)
+        let originContext = do
+              (_, expectedStream, version) <- originReference
+              guard (version == StreamVersion 1)
+              row <- fromMaybe Nothing origin
+              guard (row ^. #originalStreamId == expectedStream && row ^. #originalVersion == version)
+              traceContextFromMetadata (row ^. #metadata)
+            wakeContext = do
+              (_, expectedStream, _) <- originReference
+              row <- wake
+              guard (row ^. #originalStreamId == expectedStream)
+              case decodeRecorded workflowJournalCodec row of
+                Right (StepRecorded key _ _) | key == awaited -> traceContextFromMetadata (row ^. #metadata)
+                _ -> Nothing
+        recordWorkflowResumeLinks sp originContext wakeContext
+    runActive gen sp traceHint =
       -- EP-44: maintain the process-wide live-run count and sample the
       -- @keiro.workflow.active@ gauge on both entry and exit, and open the
       -- whole-run @workflow \<name\>@ span (step 'Nothing'). The body is
@@ -576,7 +615,7 @@ runWorkflowWith options name wid action = do
       bracket_
         (liftIO (atomicModifyIORef' activeCountRef (\n -> (n + 1, ()))) >> sampleActive)
         (liftIO (atomicModifyIORef' activeCountRef (\n -> (n - 1, ()))) >> sampleActive)
-        (withWorkflowSpan mTracer name wid Nothing (\_sp -> interpreted))
+        (recoverResumeLinks sp gen traceHint >> interpreted)
       where
         sampleActive = liftIO (readIORef activeCountRef) >>= recordWorkflowActive mMetrics
         interpreted = do
@@ -605,7 +644,7 @@ runWorkflowWith options name wid action = do
             -- advisory lock, so a wake landing in this gap cannot be masked by a
             -- 'suspended' status that exact discovery would never return.
             RunSuspendedOn awaitedStep -> do
-              markInstanceSuspendedAwaiting name wid gen awaitedStep
+              markInstanceSuspendedAwaitingTraced (isJust mTracer) name wid gen awaitedStep
               pure Suspended
             RunOutcome outcome -> case outcome of
               Completed result -> do
@@ -616,7 +655,7 @@ runWorkflowWith options name wid action = do
                 -- workflow this is 'JournalAlreadyPresent' and no terminal snapshot is
                 -- taken (one was already taken on the original completing run, if the
                 -- policy fired).
-                appendCompletion name wid gen now >>= \case
+                appendJournalTraced mTracer name wid gen (WorkflowCompleted now) >>= \case
                   JournalAppended appendResult -> do
                     fireAppendWitness
                     when
@@ -661,7 +700,7 @@ runWorkflowWith options name wid action = do
             then do
               let encoded = Aeson.toJSON (map unPatchId (Set.toList patches))
               now <- liftIO getCurrentTime
-              appendJournal name wid runGen (StepRecorded patchSetStepName encoded now) >>= \case
+              appendJournalTraced mTracer name wid runGen (StepRecorded patchSetStepName encoded now) >>= \case
                 JournalAppended {} -> do
                   fireAppendWitness
                   pure (Map.insert patchSetStepName encoded initial)
@@ -702,7 +741,7 @@ runWorkflowWith options name wid action = do
             a <- localSeqUnlift env (\unlift -> unlift act)
             let encoded = Aeson.toJSON a
             now <- liftIO getCurrentTime
-            appendOutcome <- appendJournal name wid gen (StepRecorded key encoded now)
+            appendOutcome <- appendJournalTraced mTracer name wid gen (StepRecorded key encoded now)
             case appendOutcome of
               JournalAppended appendResult -> do
                 -- Miss: @act@ ran and was journaled — a fresh execution.
@@ -767,6 +806,7 @@ runWorkflowWith options name wid action = do
                 throwIO (WorkflowSuspend key)
       CurrentWorkflow -> pure (name, wid)
       CurrentRunGeneration -> pure gen
+      CurrentWorkflowTracer -> pure mTracer
       FreshOrdinal namespace ->
         liftIO . atomicModifyIORef' ordinalRef $ \counters ->
           let n = Map.findWithDefault 0 namespace counters
@@ -793,7 +833,7 @@ runWorkflowWith options name wid action = do
             let decision = unPatchId pid `elem` (recordedSet :: [Text])
                 encoded = Aeson.toJSON decision
             now <- liftIO getCurrentTime
-            appendOutcome <- appendJournal name wid gen (StepRecorded key encoded now)
+            appendOutcome <- appendJournalTraced mTracer name wid gen (StepRecorded key encoded now)
             case appendOutcome of
               JournalAppended {} -> do
                 fireAppendWitness
@@ -897,12 +937,6 @@ loadJournal options name wid gen = do
 -- Journal append helpers
 -- ---------------------------------------------------------------------------
 
--- | Attempt the completion marker append. The caller maps a lifecycle refusal
--- to the winning workflow outcome instead of reporting a spurious append error.
-appendCompletion :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> Int -> UTCTime -> Eff es JournalAppendOutcome
-appendCompletion name wid gen now =
-  appendJournal name wid gen (WorkflowCompleted now)
-
 -- | Perform a continue-as-new rotation (EP-48): close generation @gen@ and open
 -- generation @gen + 1@, seeded with @seedJson@ and the deployed patch set. Returns
 -- 'ContinuedAsNew'.
@@ -937,8 +971,10 @@ rotateGeneration options name wid gen seedJson = do
       patchEvent =
         StepRecorded patchSetStepName encodedPatches
   now <- liftIO getCurrentTime
+  metadata <- journalTraceMetadata (options ^. #tracer)
   seedTx <-
-    prepareJournalAppend
+    prepareJournalAppendWithMetadata
+      metadata
       name
       wid
       nextGen
@@ -948,13 +984,15 @@ rotateGeneration options name wid gen seedJson = do
       then pure Nothing
       else
         Just
-          <$> prepareJournalAppend
+          <$> prepareJournalAppendWithMetadata
+            metadata
             name
             wid
             nextGen
             (patchEvent now)
   rotationTx <-
-    prepareJournalAppend
+    prepareJournalAppendWithMetadata
+      metadata
       name
       wid
       gen

@@ -258,7 +258,7 @@ operation countsWorkload store wid = do
   d <- getMonotonicTimeNSec
   now <- getCurrentTime
   let timerId = Timer.TimerId (UUIDv5.generateNamed UUIDv5.namespaceURL (Bytes.unpack (Text.encodeUtf8 wid)))
-  checked (runTransaction (Timer.scheduleTimerTx (Timer.TimerRequest timerId "index-evidence" wid now Aeson.Null)))
+  checked (runTransaction (Timer.scheduleTimerTx (Timer.TimerRequest timerId "index-evidence" wid now Aeson.Null Nothing)))
   claimed <- checked (Timer.claimDueTimer now)
   unless (maybe False (\row -> row.timerId == timerId) claimed) (fail "timer was not claimed")
   fired <- checked (Timer.markTimerFired timerId (EventId UUID.nil))

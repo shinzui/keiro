@@ -17,7 +17,10 @@ module Keiro.Workflow.Instance
     statusToText,
     statusFromText,
     upsertInstanceTx,
+    upsertSuspendedInstanceTx,
     markInstanceSuspendedAwaiting,
+    markInstanceSuspendedAwaitingTraced,
+    lookupTraceAwaitedStep,
     lookupInstance,
     lookupInstanceSession,
     WorkflowHeaderKey,
@@ -80,6 +83,7 @@ import Keiro.Workflow.Instance.Schema
     statusFromText,
     statusToText,
     upsertInstanceTx,
+    upsertSuspendedInstanceTx,
   )
 import Keiro.Workflow.Journal
   ( JournalAppendOutcome (..),
@@ -213,7 +217,11 @@ markInstanceSuspendedAwaiting ::
   -- | The step name the run parked on.
   Text ->
   Eff es ()
-markInstanceSuspendedAwaiting (WorkflowName nameText) (WorkflowId widText) gen awaitedStep =
+markInstanceSuspendedAwaiting = markInstanceSuspendedAwaitingTraced False
+
+-- | The hint is attribution only, including when a wake won the step lock.
+markInstanceSuspendedAwaitingTraced :: (Store :> es) => Bool -> WorkflowName -> WorkflowId -> Int -> Text -> Eff es ()
+markInstanceSuspendedAwaitingTraced traced (WorkflowName nameText) (WorkflowId widText) gen awaitedStep =
   runTransaction $ do
     lockWorkflowStepTx (workflowStepLockKey widText nameText gen awaitedStep)
     resolved <- lookupStepResultTx widText nameText gen awaitedStep
@@ -223,7 +231,18 @@ markInstanceSuspendedAwaiting (WorkflowName nameText) (WorkflowId widText) gen a
         Nothing -> pure False
         Just aid -> maybe False (/= Pending) <$> lookupAwakeableStatusTx aid
     let status = if isJust resolved || abandoned then WfRunning else WfSuspended
-    upsertInstanceTx widText nameText (fromIntegral gen) status Nothing
+    upsertSuspendedInstanceTx widText nameText (fromIntegral gen) status (if traced then Just awaitedStep else Nothing)
+
+-- | Read a generation-qualified attribution hint without loading the instance.
+lookupTraceAwaitedStep :: (Store :> es) => WorkflowName -> WorkflowId -> Int -> Eff es (Maybe Text)
+lookupTraceAwaitedStep (WorkflowName name) (WorkflowId wid) gen =
+  fromMaybe Nothing <$> runTransaction (Tx.statement (wid, name, fromIntegral gen) statement)
+  where
+    statement =
+      preparable
+        "SELECT trace_awaited_step FROM keiro.keiro_workflows WHERE workflow_id = $1 AND workflow_name = $2 AND generation = $3"
+        (contrazip3 (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.int4)))
+        (D.rowMaybe (D.column (D.nullable D.text)))
 
 awakeableUuidFromStep :: Text -> Maybe UUID
 awakeableUuidFromStep stepName =
@@ -816,6 +835,7 @@ reviveFailedInstanceStmt =
         leased_by = NULL,
         lease_expires_at = NULL,
         completed_at = NULL,
+        trace_awaited_step = NULL,
         updated_at = now()
     WHERE workflow_id = $1
       AND workflow_name = $2

@@ -265,6 +265,8 @@ column	keiro_timers.resume_claim_token	uuid
 column	keiro_timers.resume_lease_until	timestamp with time zone
 column	keiro_timers.status	text not null default 'scheduled'::text
 column	keiro_timers.timer_id	uuid not null
+column	keiro_timers.traceparent	text
+column	keiro_timers.tracestate	text
 column	keiro_timers.updated_at	timestamp with time zone not null default now()
 column	keiro_workflow_children.await_step	text not null
 column	keiro_workflow_children.child_id	text not null
@@ -292,6 +294,7 @@ column	keiro_workflows.lease_expires_at	timestamp with time zone
 column	keiro_workflows.leased_by	text
 column	keiro_workflows.next_attempt_at	timestamp with time zone
 column	keiro_workflows.status	text not null default 'running'::text
+column	keiro_workflows.trace_awaited_step	text
 column	keiro_workflows.updated_at	timestamp with time zone not null default now()
 column	keiro_workflows.wake_after	timestamp with time zone
 column	keiro_workflows.workflow_id	text not null

@@ -33,6 +33,7 @@ module Keiro.Workflow.Schema
     stepExists,
     terminalMarkers,
     currentGeneration,
+    currentGenerationTx,
     findUnfinishedWorkflowIds,
   )
 where
@@ -218,8 +219,12 @@ workflowLifecycleMarkersTx wid name gen =
 -- the same logical-id key space, so @MAX(generation)@ is unambiguously the
 -- current generation.
 currentGeneration :: (Store :> es) => WorkflowName -> WorkflowId -> Eff es Int
-currentGeneration (WorkflowName name) (WorkflowId wid) =
-  fromIntegral <$> runTransaction (Tx.statement (wid, name) currentGenerationStmt)
+currentGeneration name wid = runTransaction (currentGenerationTx name wid)
+
+-- | The same generation lookup, composable with advisory entry reads.
+currentGenerationTx :: WorkflowName -> WorkflowId -> Tx.Transaction Int
+currentGenerationTx (WorkflowName name) (WorkflowId wid) =
+  fromIntegral <$> Tx.statement (wid, name) currentGenerationStmt
 
 -- | Return the @(workflow_id, workflow_name)@ of every workflow instance that
 -- has progress to make right now. Discovery is /exact/: an instance is returned

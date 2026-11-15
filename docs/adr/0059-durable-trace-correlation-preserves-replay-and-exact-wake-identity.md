@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Durable trace correlation preserves replay and exact wake identity
 description: Trace adoption uses immutable producer cutovers, exact snapshot-independent wake attribution, and explicit span ownership evidence.
-timestamp: 2026-11-14T19:05:00Z
+timestamp: 2026-11-15T01:15:00Z
 docId: ADR-59
 status: Accepted
 date: 2026-11-14
@@ -14,7 +14,7 @@ originatingPlan: docs/masterplans/47-trace-context-propagation-and-span-correlat
 ## Context
 
 [MasterPlan 47](../masterplans/47-trace-context-propagation-and-span-correlation-across-keiro-durable-boundaries.md)
-adds correlation across durable boundaries. Implementation has not started. Its review found
+adds correlation across durable boundaries. Its review found
 that a deployment-wide switch cannot preserve historical producer content, that workflow
 snapshot hydration cannot recover trace metadata, and that bounded live heap does not prove
 that retained spans release payloads.
@@ -49,7 +49,7 @@ event by ID. Missing hints or events omit the wake link; the latest journal even
 Old binaries cannot maintain hints, so clear them with workers stopped before re-enabling traced
 resumes after an old-code rollback.
 
-Fetch the generation's first persisted event separately with a one-event read from version zero.
+Fetch the generation's first persisted event independently of replay. Discover its reference with an indexed, limited lateral read alongside the hint, then load the payload through the normal event read API. A generic forward read with LIMIT was measured sorting the whole journal, so bounding returned rows alone is insufficient.
 Call this link `origin`: it is a journal origin, not a claim about the first invocation. A workflow
 that suspends before journaling may have its wake as its first event. Both lookups are independent
 of snapshot hydration, bounded in result count, and performed only with a tracer. No full-history
@@ -73,4 +73,4 @@ no-tracer span helpers remain pass-throughs.
 
 EP-1 owns reusable ownership evidence. EP-4 and EP-6 each have independent acceptance; their
 combined command/worker/timer/workflow demonstration is an initiative release gate. These
-constraints are accepted architecture for pending work, not a claim that tracing is implemented.
+constraints govern the implementation and its release evidence.

@@ -72,6 +72,7 @@ module Keiro.Workflow.Child
     -- * Driving a child to completion (used by the resume worker)
     runChildWorkflow,
     childCompletionHook,
+    childCompletionHookTraced,
 
     -- * Errors
     WorkflowChildCancelled (..),
@@ -82,11 +83,13 @@ where
 import Control.Exception (Exception)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.IORef (newIORef, readIORef, writeIORef)
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
 import Effectful.Exception (throwIO)
 import Keiro.Prelude
+import Keiro.Telemetry (Tracer)
 import Keiro.Workflow
   ( JournalAppendOutcome (..),
     StepName (..),
@@ -97,12 +100,12 @@ import Keiro.Workflow
     WorkflowName (..),
     WorkflowOutcome (..),
     WorkflowRunOptions,
-    appendJournalEntry,
+    appendJournalEntryTraced,
     awaitStep,
     childStepPrefix,
     currentGeneration,
     currentWorkflow,
-    prepareJournalAppend,
+    currentWorkflowTracer,
     runWorkflowWith,
     step,
   )
@@ -114,6 +117,7 @@ import Keiro.Workflow.Child.Schema
     registerChildTx,
   )
 import Keiro.Workflow.Instance (WorkflowStatus (..), lookupInstance, upsertInstanceTx)
+import Keiro.Workflow.Journal (appendJournalWithMetadata, journalTraceMetadata, prepareJournalAppendWithMetadata)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
@@ -246,8 +250,10 @@ awaitChild (ChildHandle childNm childWid) = do
                             (mInstance >>= (^. #lastError))
                 throwIO (WorkflowChildFailed childNm childWid reason)
             | (row ^. #status) == ChildCompleted,
-              Just resultValue <- row ^. #result ->
-                appendJournalEntry
+              Just resultValue <- row ^. #result -> do
+                tracer <- currentWorkflowTracer
+                appendJournalEntryTraced
+                  tracer
                   (WorkflowName (row ^. #parentName))
                   (WorkflowId (row ^. #parentId))
                   StepRecorded
@@ -315,10 +321,21 @@ runChildWorkflow opts childNm childWid action = do
       pure Cancelled
     Just ChildFailed -> pure Failed
     _ -> do
-      outcome <- runWorkflowWith opts childNm childWid action
+      -- Capture inside the child's run: its span has ended when propagation
+      -- executes. The untraced path allocates no metadata cell.
+      (outcome, metadata) <- case opts ^. #tracer of
+        Nothing -> (,Nothing) <$> runWorkflowWith opts childNm childWid action
+        tracer -> do
+          captured <- liftIO (newIORef Nothing)
+          result <- runWorkflowWith opts childNm childWid $ do
+            value <- action
+            md <- journalTraceMetadata tracer
+            liftIO (writeIORef captured md)
+            pure value
+          (result,) <$> liftIO (readIORef captured)
       case outcome of
         Completed result -> do
-          childCompletionHook childNm childWid (toJSON result)
+          childCompletionHookWithMetadata metadata childNm childWid (toJSON result)
           pure (Completed result)
         other -> pure other
 
@@ -336,7 +353,15 @@ childCompletionHook ::
   WorkflowId ->
   Aeson.Value ->
   Eff es ()
-childCompletionHook childNm childWid resultValue = do
+childCompletionHook = childCompletionHookWithMetadata Nothing
+
+childCompletionHookTraced :: (IOE :> es, Store :> es) => Maybe Tracer -> WorkflowName -> WorkflowId -> Aeson.Value -> Eff es ()
+childCompletionHookTraced tracer name wid value = do
+  metadata <- journalTraceMetadata tracer
+  childCompletionHookWithMetadata metadata name wid value
+
+childCompletionHookWithMetadata :: (IOE :> es, Store :> es) => Maybe Aeson.Value -> WorkflowName -> WorkflowId -> Aeson.Value -> Eff es ()
+childCompletionHookWithMetadata metadata childNm childWid resultValue = do
   mrow <- lookupChild (unWorkflowId childWid) (unWorkflowName childNm)
   for_ mrow $ \row -> case row ^. #status of
     Running -> do
@@ -345,7 +370,8 @@ childCompletionHook childNm childWid resultValue = do
           parentId = WorkflowId (row ^. #parentId)
       gen <- currentGeneration parentName parentId
       appendTx <-
-        prepareJournalAppend
+        prepareJournalAppendWithMetadata
+          metadata
           parentName
           parentId
           gen
@@ -366,7 +392,7 @@ childCompletionHook childNm childWid resultValue = do
       throwOnAppendConflict appendOutcome
     ChildCompleted ->
       for_ (row ^. #result) $ \stored ->
-        appendJournalEntry
+        appendJournalEntryWithMetadata
           (WorkflowName (row ^. #parentName))
           (WorkflowId (row ^. #parentId))
           StepRecorded
@@ -376,6 +402,10 @@ childCompletionHook childNm childWid resultValue = do
             }
     ChildCancelled -> pure ()
     ChildFailed -> pure ()
+  where
+    appendJournalEntryWithMetadata name wid event = do
+      gen <- currentGeneration name wid
+      appendJournalWithMetadata metadata name wid gen event >>= throwOnAppendConflict
 
 -- A refusal is deliberately not condemned: the parent is terminal, so its
 -- await-step sentinel must not land, but the child row transition (completed or

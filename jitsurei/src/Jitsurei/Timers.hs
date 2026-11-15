@@ -30,7 +30,8 @@ import Kiroku.Store.Types (EventId (..))
 paymentTimeoutRequest :: OrderId -> UTCTime -> TimerRequest
 paymentTimeoutRequest orderId fireAt =
   TimerRequest
-    { timerId = TimerId paymentTimeoutTimerId,
+    { traceContext = Nothing,
+      timerId = TimerId paymentTimeoutTimerId,
       processManagerName = "jitsurei-fulfillment",
       correlationId = orderIdText orderId,
       fireAt = fireAt,
@@ -58,7 +59,8 @@ jitsureiTimerWorkerOptions :: TimerWorkerOptions
 jitsureiTimerWorkerOptions =
   case mkTimerWorkerOptions
     TimerWorkerOptions
-      { maxAttempts = Just 5,
+      { tracer = Nothing,
+        maxAttempts = Just 5,
         requeueStuckAfter = Just 300
       } of
     Right options -> options

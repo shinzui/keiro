@@ -71,6 +71,7 @@ import Keiro.Command
 import Keiro.DeadLetter (DispatcherKind (..))
 import Keiro.EventStream (EventStream)
 import Keiro.EventStream.Validate (ValidatedEventStream, unvalidated)
+import Keiro.Integration.Event (TraceContext)
 import Keiro.Prelude
 import Keiro.ProcessManager
   ( DispatchFailure (..),
@@ -87,13 +88,14 @@ import Keiro.ProcessManager
   )
 import Keiro.Projection (InlineProjection, runCommandWithProjections)
 import Keiro.Stream (Stream)
-import Keiro.Telemetry (recordDispatchDuplicate, recordDispatchFailed, recordDispatchPoison, recordSubscriptionOutcome, withSubscriptionProcessSpan)
+import Keiro.Telemetry (Tracer, recordDispatchDuplicate, recordDispatchFailed, recordDispatchPoison, recordSubscriptionOutcome, traceContextFromCurrentSpan, withSubscriptionProcessSpan)
 import Keiro.Timer
   ( TimerId,
     TimerRequest,
     cancelTimerTx,
     scheduleTimerOnceTx,
     scheduleTimerTx,
+    withTimerTraceContext,
   )
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
@@ -281,20 +283,21 @@ runReactiveProcessManagerEngine ::
 runReactiveProcessManagerEngine reducer options manager sourceEvent input =
   case (manager ^. #react) input of
     NoAdvance unconditional -> do
-      timers <- runTimerPhase unconditional
+      timers <- runTimerPhase (options ^. #tracer) unconditional
       finish ReactionNotAdvanced timers unconditional
     AdvanceReaction sagaCommand unconditional acceptedOnly -> do
       existing <- firstExistingEventId options sagaStreamName managerProbes
       case existing of
         Just matchedId -> recoverAndFinish matchedId (unconditional <> acceptedOnly)
         Nothing -> do
+          creation <- timerPhaseContext (options ^. #tracer) (unconditional <> acceptedOnly)
           outcome <-
             runDomainCommandWithSqlEvents
               managerOptions
               (manager ^. #sagaHandler)
               sagaStream
               sagaCommand
-              (\_ _ -> runTimerPhaseTx (unconditional <> acceptedOnly))
+              (\_ _ -> runTimerPhaseTx creation (unconditional <> acceptedOnly))
           case outcome of
             Left commandError -> do
               raced <- firstExistingEventId options sagaStreamName managerProbes
@@ -310,7 +313,7 @@ runReactiveProcessManagerEngine reducer options manager sourceEvent input =
               case raced of
                 Just matchedId -> recoverAndFinish matchedId (unconditional <> acceptedOnly)
                 Nothing -> do
-                  timers <- runTimerPhase unconditional
+                  timers <- runTimerPhase (options ^. #tracer) unconditional
                   finish (ReactionEvaluated domainOutcome) timers unconditional
             Right (_, Just _) ->
               Prelude.error "runReactiveProcessManagerOnce: silent decision returned a timer callback result"
@@ -495,12 +498,19 @@ runReactiveProcessManagerWorker =
   runReactiveProcessManagerWorkerWith defaultWorkerOptions
 
 -- | Execute just the timer subsequence in one transaction.
-runTimerPhase :: (IOE :> es, Store :> es) => [FollowUp targetCi] -> Eff es ReactionTimerEffects
-runTimerPhase followUps
+timerPhaseContext :: (MonadIO m) => Maybe Tracer -> [FollowUp targetCi] -> m (Maybe TraceContext)
+timerPhaseContext Nothing _ = pure Nothing
+timerPhaseContext (Just _) followUps
+  | Prelude.any (\case FollowSchedule {} -> True; _ -> False) followUps = traceContextFromCurrentSpan
+  | otherwise = pure Nothing
+
+runTimerPhase :: (IOE :> es, Store :> es) => Maybe Tracer -> [FollowUp targetCi] -> Eff es ReactionTimerEffects
+runTimerPhase tracer followUps
   | List.null timerFollowUps = pure zeroTimerEffects
   | otherwise = do
       emitTimerPhaseProbe (List.length timerFollowUps)
-      runTransaction (runTimerPhaseTx followUps)
+      creation <- timerPhaseContext tracer followUps
+      runTransaction (runTimerPhaseTx creation followUps)
   where
     timerFollowUps = List.filter isTimerFollowUp followUps
     isTimerFollowUp FollowSchedule {} = True
@@ -528,16 +538,16 @@ emitTimerPhaseProbe :: Int -> Eff es ()
 emitTimerPhaseProbe _ = pure ()
 #endif
 
-runTimerPhaseTx :: [FollowUp targetCi] -> Tx.Transaction ReactionTimerEffects
-runTimerPhaseTx = foldM step zeroTimerEffects
+runTimerPhaseTx :: Maybe TraceContext -> [FollowUp targetCi] -> Tx.Transaction ReactionTimerEffects
+runTimerPhaseTx creation = foldM step zeroTimerEffects
   where
     step summary = \case
       FollowDispatch {} -> pure summary
       FollowSchedule Rearm request -> do
-        scheduleTimerTx request
+        scheduleTimerTx (withTimerTraceContext creation request)
         pure summary {statementsCommitted = summary ^. #statementsCommitted Prelude.+ 1}
       FollowSchedule Once request -> do
-        inserted <- scheduleTimerOnceTx request
+        inserted <- scheduleTimerOnceTx (withTimerTraceContext creation request)
         pure
           summary
             { statementsCommitted = summary ^. #statementsCommitted Prelude.+ 1,

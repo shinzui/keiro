@@ -80,7 +80,7 @@ spec fixture = describe "inspection sockets" $ around (withFreshStore fixture) $
       WS.runClient "127.0.0.1" port "/ws" $ \connection -> do
         forM_ ["timers", "projection_groups"] $ \feed -> send connection (subscribe feed) >> receive connection >>= assertType "snapshot"
         now <- getCurrentTime
-        let timer = Timer.TimerRequest (Timer.TimerId UUID.nil) "manager" "one" (addUTCTime (-60) now) Null
+        let timer = Timer.TimerRequest (Timer.TimerId UUID.nil) "manager" "one" (addUTCTime (-60) now) Null Nothing
         stored store (runTransaction (Timer.scheduleTimerTx timer))
         added <- receive connection
         field "feed" added `shouldBe` Just (String "timers")

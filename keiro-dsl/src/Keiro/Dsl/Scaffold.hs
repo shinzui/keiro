@@ -6696,6 +6696,7 @@ emitReactionProcessGen ctx genPrefix holePrefix process reaction =
         timerRequestBuilder timer <> " correlationId fireAtTime " <> T.unwords (map payloadArgument dynamicFields) <> " =",
         "  TimerRequest",
         "    { timerId = " <> timerIdExpression timer "correlationId",
+        "    , traceContext = Nothing",
         "    , processManagerName = " <> lo <> "ProcessName",
         "    , correlationId = correlationId",
         "    , fireAt = fireAtTime",
@@ -6717,6 +6718,7 @@ emitReactionProcessGen ctx genPrefix holePrefix process reaction =
           "  TimerWorkerOptions",
           "    { maxAttempts = Just " <> T.pack (show ((.maxAttempts) policy)),
           "    , requeueStuckAfter = Just 300",
+          "    , tracer = Nothing",
           "    }",
           "-- Operator dead-letter guidance: " <> tshow ((.deadLetter) policy)
         ]
@@ -7027,6 +7029,7 @@ emitProcessGen sagaGenPrefix genPrefix _holePrefix p =
            lo <> "TimerRequest correlationId fireAtTime =",
            "  TimerRequest",
            "    { timerId = TimerId (namedUuid (" <> tshow ((.prefix) ((.id) timer)) <> " <> correlationId))",
+           "    , traceContext = Nothing",
            "    , processManagerName = " <> lo <> "ProcessName",
            "    , correlationId = correlationId",
            "    , fireAt = fireAtTime",

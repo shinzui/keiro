@@ -58,6 +58,7 @@ incidentEscalationEscalationTimerRequest :: Text -> UTCTime -> N.IncidentId -> N
 incidentEscalationEscalationTimerRequest correlationId fireAtTime payloadIncidentId payloadSeverity =
   TimerRequest
     { timerId = TimerId (reactionIdentity "incident-escalation-timer:" correlationId)
+    , traceContext = Nothing
     , processManagerName = incidentEscalationProcessName
     , correlationId = correlationId
     , fireAt = fireAtTime
@@ -84,6 +85,7 @@ incidentEscalationTimerWorkerOptions =
   TimerWorkerOptions
     { maxAttempts = Just 5
     , requeueStuckAfter = Just 300
+    , tracer = Nothing
     }
 -- Operator dead-letter guidance: "escalation timer exceeded ceiling"
 

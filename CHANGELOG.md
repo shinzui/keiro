@@ -6,6 +6,20 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Durable tracing: category-based command span names, explicit producer trace policy,
+  batch send attribution, Shibuya 0.13.0.1 adapter telemetry, timer trace fields and
+  `TimerWorkerOptions.tracer` (the options record no longer derives `Eq`).
+
+### New Features
+
+- Creation context in command events, linked subscription processing and outbox sends,
+  configurable PGMQ parent/link policy, linked root timer fires, and exact workflow
+  wake/origin links across snapshots. Migration `0033` stores timer context and workflow
+  attribution hints. Untraced paths remain opt-in-free; replay identities stay unchanged.
+
+
 ## 0.24.0.0 — 2026-11-05
 
 ### Breaking Changes

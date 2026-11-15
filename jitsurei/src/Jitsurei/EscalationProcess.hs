@@ -330,7 +330,8 @@ escalationWindow = \case
 escalationTimerRequest :: IncidentId -> UTCTime -> TimerRequest
 escalationTimerRequest incidentId fireAt =
   TimerRequest
-    { timerId = TimerId (namedUuid ("jitsurei-escalation-timer:" <> incidentIdText incidentId)),
+    { traceContext = Nothing,
+      timerId = TimerId (namedUuid ("jitsurei-escalation-timer:" <> incidentIdText incidentId)),
       processManagerName = "jitsurei-escalation",
       correlationId = incidentIdText incidentId,
       fireAt = fireAt,

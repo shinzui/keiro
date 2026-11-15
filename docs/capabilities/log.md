@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-11-15
+
+* **Update**: Add durable timer/workflow correlation and snapshot-independent combined-chain evidence.
+
 * **Update**: Add all-worker, real Kiroku command-chain and subscription payload-ownership evidence to CAP-15.
 
 ## 2026-11-14

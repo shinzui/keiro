@@ -12,6 +12,7 @@ import Data.Generics.Labels ()
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as TE
 import Data.Time (UTCTime, addUTCTime)
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
@@ -26,11 +27,15 @@ import Hasql.Statement (Statement, preparable)
 import Jitsurei
 import Keiro
 import Keiro.Connection (keiroConnectionSettings)
+import Keiro.Integration.Event (IntegrationContentType (ApplicationJson), TraceContext (..))
 import Keiro.Ops qualified as Ops
+import Keiro.Outbox qualified as Outbox
 import Keiro.ProcessManager (defaultWorkerOptions, runProcessManagerWorkerWith)
+import Keiro.ProcessManager qualified as PM
 import Keiro.Projection (ProjectionCommandOutcome (..), runCommandWithCatalogProjections)
 import Keiro.ReadModel (runQuery)
 import Keiro.Telemetry qualified as Telemetry
+import Keiro.Timer qualified as Timer
 import Keiro.Workflow
   ( WorkflowId (..),
     WorkflowJournalEvent (StepRecorded, WorkflowCompleted),
@@ -41,9 +46,11 @@ import Keiro.Workflow
     workflowJournalCodec,
     workflowStreamName,
   )
+import Keiro.Workflow qualified as Workflow
 import Keiro.Workflow.Awakeable (AwakeableId, awakeableIdText, signalAwakeable)
 import Keiro.Workflow.Resume (WorkflowRegistry, WorkflowResumeOptions, resumeWorkflowsOnce)
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
+import Keiro.Workflow.Sleep qualified as Sleep
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect qualified as StoreEffect
 import Kiroku.Store.Effect.Resource qualified as StoreResource
@@ -64,7 +71,8 @@ import OpenTelemetry.MeterProvider
   )
 import OpenTelemetry.Metric.Core (getMeter, shutdownMeterProvider)
 import OpenTelemetry.Resource (emptyMaterializedResources)
-import Shibuya.Adapter (Adapter (..), defaultAdapterTelemetry)
+import OpenTelemetry.Trace qualified as Trace
+import Shibuya.Adapter (Adapter (..), AdapterTelemetry (traceCorrelation), TraceCorrelation (LinkOnly), defaultAdapterTelemetry)
 import Shibuya.Core.AckHandle (AckHandle (..))
 import Shibuya.Core.Ingested (DeliveryStatus (..), Ingested (..))
 import Shibuya.Core.Types (Envelope (..), MessageId (..))
@@ -91,6 +99,7 @@ runDemo metrics args =
     ["paging"] -> runPagingDemo metrics
     ["agent-qual"] -> runAgentQualDemo metrics
     ["workflow"] -> runDurableWorkflowDemo metrics
+    ["tracing"] -> runTraceCorrelationDemo
     ["all"] -> do
       runFulfillmentDemo metrics
       runSnapshotsDemo metrics
@@ -139,6 +148,63 @@ withJitsureiMetrics action =
 commandOptions :: Maybe Telemetry.KeiroMetrics -> RunCommandOptions
 commandOptions metrics =
   defaultRunCommandOptions & #metrics .~ metrics
+
+-- | One request across delayed boundaries. The outbox publisher uses a local
+-- transport stub; the SDK exports the real framework spans to the configured
+-- OTLP backend. Use a migrated disposable database for this demonstration.
+runTraceCorrelationDemo :: IO ()
+runTraceCorrelationDemo = Trace.withTracerProvider $ \provider -> do
+  let tracer = Trace.makeTracer provider "jitsurei-durable-tracing" Trace.tracerOptions
+  withJitsureiStore $ \store -> Trace.inSpan' tracer "jitsurei request" Trace.defaultSpanArguments $ \_ -> do
+    orderId <- freshOrderId "trace"
+    let options = defaultRunCommandOptions & #tracer .~ Just tracer
+        name = Workflow.WorkflowName "jitsurei-trace"
+        wid = workflowIdFor orderId
+        workflowOptions = Workflow.defaultWorkflowRunOptions & #tracer .~ Just tracer
+        flow = do
+          _ <- Workflow.step (Workflow.StepName "origin") (pure (7 :: Int))
+          _ <- Workflow.awaitStep (Workflow.StepName "sleep:ready") (pure ()) :: Eff (Workflow.Workflow : JitsureiEffects) Aeson.Value
+          pure ()
+    putStrLn ("[jitsurei:tracing] request " <> Text.unpack (orderIdText orderId))
+    print =<< Telemetry.traceContextFromCurrentSpan
+    requireEither =<< runJitsureiStore store initializeJitsureiTables
+    first <- requireEither =<< runJitsureiStore store (runWorkflowWith workflowOptions name wid flow)
+    when (first /= Suspended) (fail "trace workflow did not suspend")
+    _ <- requireEither =<< requireEither =<< runJitsureiStore store (runCommand options orderEventStream (orderStream orderId) (PlaceOrder (PlaceOrderData orderId (Sku "TRACE-SKU") (Quantity 1))))
+    _ <- requireEither =<< requireEither =<< runJitsureiStore store (runCommand options orderEventStream (orderStream orderId) (ApprovePayment (ApprovePaymentData orderId (PaymentRef "trace-payment"))))
+    payment <- requirePaymentEvent =<< readEvents store ("order-" <> orderIdText orderId)
+    now <- getCurrentTime
+    let request = Timer.TimerRequest (Sleep.sleepTimerId name wid 0 "sleep:ready") "jitsurei-trace" (Workflow.unWorkflowId wid) now (Sleep.sleepTimerPayload 0 "sleep:ready") Nothing
+        manager :: FulfillmentProcessManager
+        manager =
+          fulfillmentProcessManager
+            & #handle
+              .~ ( \event -> case fulfillmentProcessManager.handle event of
+                     PM.ProcessManagerAction command commands _ -> PM.ProcessManagerAction command commands [request]
+                 )
+        base@Adapter {source = incoming} = processManagerAdapter payment (PaymentApproved (PaymentApprovedData orderId (PaymentRef "trace-payment")))
+        creationHeaders = fmap (\ctx -> [("traceparent", TE.encodeUtf8 ctx.traceparent)] <> maybe [] (\state -> [("tracestate", TE.encodeUtf8 state)]) ctx.tracestate) (Telemetry.traceContextFromMetadata payment.metadata)
+        adapter =
+          base
+            { telemetry = defaultAdapterTelemetry {traceCorrelation = LinkOnly},
+              source = fmap (\ingested@Ingested {envelope = envelope} -> ingested {envelope = envelope {traceContext = creationHeaders}}) incoming
+            }
+    requireEither =<< runJitsureiStore store (runProcessManagerWorkerWith defaultWorkerOptions options manager adapter Just)
+    packed <- requireLast "OrderPacked" =<< readEvents store ("order-" <> orderIdText orderId)
+    -- Source-stream reads intentionally report global position zero. Producer
+    -- cutover eligibility needs the event's durable $all coordinate.
+    packedAtGlobalPosition <- requireEither =<< runJitsureiStore store (Store.getEvent packed.eventId)
+    producerSource <- maybe (fail "packed event missing from global log") pure packedAtGlobalPosition
+    let draft = Outbox.IntegrationEventDraft "jitsurei.traces" (Just (orderIdText orderId)) "OrderPacked" 1 ApplicationJson Nothing Nothing Nothing "{}" now Nothing Nothing Nothing Nothing
+        -- A new producer in this fresh demo store; the immutable adoption point
+        -- is before every source event. Never copy this cutoff onto an old producer.
+        producer = Outbox.IntegrationProducer "jitsurei-trace-demo" "jitsurei" "trace" (Outbox.DeriveTraceAfter (GlobalPosition 0)) (\_ (_ :: ()) -> Nothing)
+    print =<< requireEither =<< runJitsureiStore store (Store.runTransaction (Outbox.enqueueProducerEventTx producer producerSource 0 draft))
+    print =<< requireEither =<< runJitsureiStore store (Outbox.publishClaimedOutbox (\rows -> pure [(row.outboxId, Outbox.PublishSucceeded) | row <- rows]) (Outbox.defaultPublishOptions & #tracer .~ Just tracer) Nothing)
+    _ <- requireEither =<< runJitsureiStore store (Sleep.runWorkflowTimerWorkerWith (Timer.defaultTimerWorkerOptions & #tracer .~ Just tracer) Nothing now (const (pure Nothing)))
+    resumed <- requireEither =<< runJitsureiStore store (runWorkflowWith workflowOptions name wid flow)
+    when (resumed /= Completed ()) (fail "trace workflow did not complete")
+    putStrLn "[jitsurei:tracing] command, process, dispatched command, send, timer and workflow spans exported"
 
 runFulfillmentDemo :: Maybe Telemetry.KeiroMetrics -> IO ()
 runFulfillmentDemo metrics = withJitsureiStore $ \store -> do

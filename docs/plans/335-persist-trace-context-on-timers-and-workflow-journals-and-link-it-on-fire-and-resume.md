@@ -23,6 +23,11 @@ provenance:
       at: 2026-11-14T19:06:08Z
       mode: "update"
       note: "Apply review findings, reconcile ownership and acceptance gates, and verify available upstream releases."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-15T00:25:40Z
+      mode: "implement"
+      note: "Persist timer and workflow creation contexts with exact generation-scoped resume attribution"
 ---
 
 # Persist trace context on timers and workflow journals and link it on fire and resume
@@ -56,9 +61,9 @@ fire span linked to the command.
 
 ## Progress
 
-- [ ] M1: A forward migration adds nullable trace columns to the timers table; the expected
+- [x] M1: A forward migration adds nullable trace columns to the timers table; the expected
   schema snapshot is regenerated; a nullable workflow trace-await hint is added; migration tests pass.
-- [ ] M2: Timers store a supplied trace context, Keiro's own scheduling call sites supply it
+- [x] M2: Timers store a supplied trace context, Keiro's own scheduling call sites supply it
   when a tracer is configured, and the timer worker opens a linked span per fired timer.
 - [ ] M3: Workflow journal appends are stamped with the current context, and a resumed run's
   span links to the exact awaited step and the journal origin, including with snapshots.
@@ -68,10 +73,21 @@ fire span linked to the command.
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Native migration inventory tests encode both the local and composed counts; adding 0033 required updating those expectations and the checksum lock, not changing any historical SQL.
+- The actual migration CLI checks a positional manifest argument. The README command was used instead of the illustrative `--manifest` spelling below.
+- `TimerWorkerOptions` cannot honestly retain its derived `Eq` instance after adding an SDK `Tracer`. It retains `Show`; no artificial tracer equality was introduced.
+- M1 accepted: migration check, regenerated native snapshot, and all 42 migration cases pass (`/tmp/keiro-ep6-migrations-accepted.log`, 28.55s). The old timer implementation also passed all 27 timer cases against the additive schema before runtime edits (`/tmp/keiro-ep6-legacy-timer.log`).
 
 
 ## Decision Log
+
+- Decision (2026-11-15 UTC): Keep the new timer/workflow timing comparison diagnostic and accept only explained additive tracing costs; do not install a new percentage release guard.
+  Rationale: The parent and EP-1 require unchanged existing ceilings and attribution of new tracing work, not a universal 25% ceiling on workloads that did not previously exist. An exploratory `--fail-if-slower 25` comparison refuses the short traced-resume cell at about 27%, while the long snapshot cell is about 18%. The added cost is approximately 0.12–0.16 ms per resume and two event reads plus the hint SELECT. Keep those refusing receipts; do not re-record a faster baseline, loosen existing guards, or claim that exploratory command passed. The actual full release gates remain required. Traced generation/hint reads share the existing generation transaction, eliminating a redundant BEGIN/COMMIT pair.
+
+- Decision (2026-11-15 UTC): Discover an indexed origin reference in the hint query, then use at most two normal `getEvent` reads.
+  Rationale: EXPLAIN showed the generic one-event forward read sorting/joining all 1,001 journal events before LIMIT. The first benchmark exceeded the unchanged 25% comparison ceiling, especially with a long snapshot. A lateral reference query limits before payload joins and retains Kiroku's configured read decoders for both actual event reads. This refines the illustrative forward-read procedure, not the bounded lookup, replay or snapshot contract.
+- Decision (2026-11-15 UTC): Analyze seeded benchmark relations before warmup on both binaries and retain the superseded receipts.
+  Rationale: New fixed workloads initially lacked the representative statistics used by the existing benchmark harness. The diagnostic showed that ANALYZE alone still left the full-journal sort; it is not accepted as a runtime fix. Matched analyzed measurements must satisfy this plan's bounded-work reading rule; the existing ADR-58 release guard ceilings remain unchanged.
 
 - Decision (2026-11-14): Use exact trace-await hints and bounded event lookups independent of snapshots; label journal origin honestly.
   Rationale: Resolve the recorded review findings before implementation; accepted durable constraints
@@ -107,7 +123,12 @@ fire span linked to the command.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+M1 and M2 are accepted. Timer verification passes 28 cases, including actual command scheduling, stored creation context, root fire links, dispatched child command parenting and event stamping. The migration suite passes all 42 cases; existing timer/workflow rows upgrade with null tracing fields.
+
+Before the indexed-origin refinement, six focused integration scenarios and all 159 existing workflow cases passed. The combined scenario now uses a real command and Kiroku subscription reaction to schedule the workflow's timer and dispatch a second command, then resumes beyond a snapshot and an unrelated event. A failed resume restores ambient context and preserves exact attribution for retry. Signal metadata remains idempotent, child completion carries the ended child span's captured context, and invalid/foreign/mismatched evidence is omitted.
+
+All eight finite ownership probes and both new retention legs pass (10 cases). Actual PostgreSQL-decoded timer/journal payloads collect while exported spans remain reachable. Both 1,500-operation legs end Bounded. Final integrated verification and post-refinement measurements remain outstanding.
+
 
 
 ## Context and Orientation

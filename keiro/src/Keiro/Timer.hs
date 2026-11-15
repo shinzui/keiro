@@ -24,6 +24,8 @@ module Keiro.Timer
   ( -- * Timer types
     TimerId (..),
     TimerRequest (..),
+    withTimerTraceContext,
+    captureTimerTraceContext,
     TimerRow (..),
     TimerStatus (..),
 
@@ -95,20 +97,25 @@ where
 
 import Data.Text qualified as Text
 import Data.Time.Clock (NominalDiffTime, diffUTCTime)
+import Data.UUID qualified as UUID
 import Effectful (Eff, IOE, (:>))
 import Keiro.Prelude
 import Keiro.Telemetry
   ( KeiroMetrics,
+    Tracer,
     recordTimerAttempts,
     recordTimerBacklog,
     recordTimerFireLag,
     recordTimerRequeued,
     recordTimerStuck,
+    traceContextFromCurrentSpan,
+    withTimerFireSpan,
   )
 import Keiro.Timer.Schema
 import Keiro.Timer.Types
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Types (EventId)
+import OpenTelemetry.Trace.Core (addAttribute)
 
 -- | Options controlling 'runTimerWorkerWith'.
 data TimerWorkerOptions = TimerWorkerOptions
@@ -121,9 +128,10 @@ data TimerWorkerOptions = TimerWorkerOptions
     --     runs longer than this timeout may be fired again; timer handlers must be
     --     idempotent under keiro's at-least-once timer contract. @Nothing@ disables
     --     automatic ordinary requeue. Expired foreground recovery always runs.
-    requeueStuckAfter :: !(Maybe NominalDiffTime)
+    requeueStuckAfter :: !(Maybe NominalDiffTime),
+    tracer :: !(Maybe Tracer)
   }
-  deriving stock (Generic, Eq, Show)
+  deriving stock (Generic, Show)
 
 data TimerWorkerConfigError
   = InvalidTimerMaxAttempts !Int
@@ -132,7 +140,15 @@ data TimerWorkerConfigError
 
 -- | The default worker policy: never auto-dead-letter; requeue stale firings after five minutes.
 defaultTimerWorkerOptions :: TimerWorkerOptions
-defaultTimerWorkerOptions = TimerWorkerOptions {maxAttempts = Nothing, requeueStuckAfter = Just 300}
+defaultTimerWorkerOptions = TimerWorkerOptions {tracer = Nothing, maxAttempts = Nothing, requeueStuckAfter = Just 300}
+
+-- | Capture creation context in the effect layer, before constructing SQL work.
+-- Neither a missing tracer nor an explicit request context reads ambient context.
+captureTimerTraceContext :: (MonadIO m) => Maybe Tracer -> TimerRequest -> m TimerRequest
+captureTimerTraceContext Nothing request = pure request
+captureTimerTraceContext (Just _) request = case request ^. #traceContext of
+  Just _ -> pure request
+  Nothing -> flip withTimerTraceContext request <$> traceContextFromCurrentSpan
 
 -- | Validate timer worker options before starting a worker loop.
 mkTimerWorkerOptions :: TimerWorkerOptions -> Either TimerWorkerConfigError TimerWorkerOptions
@@ -227,10 +243,14 @@ claimAndFireOne metrics options now fire = do
                   (timer ^. #timerId)
                   ("timer exceeded attempt ceiling of " <> Text.pack (show attemptCeiling))
               pure (Just timer)
-        _ -> do
-          fired <- fire timer
-          for_ fired (\eventId -> void (markTimerFired (timer ^. #timerId) eventId))
-          pure (Just timer)
+        _ ->
+          withTimerFireSpan (options ^. #tracer) (timer ^. #processManagerName) (case timer ^. #timerId of TimerId uuid -> UUID.toText uuid) (timer ^. #traceContext) $ \mSpan -> do
+            for_ mSpan $ \sp -> do
+              let !lag = realToFrac (now `diffUTCTime` (timer ^. #fireAt)) * 1000 :: Double
+              addAttribute sp "keiro.timer.fire_lag" lag
+            fired <- fire timer
+            for_ fired (\eventId -> void (markTimerFired (timer ^. #timerId) eventId))
+            pure (Just timer)
 
 -- | Claim and fire up to @limit@ timers due at @now@ in one pass, returning how
 -- many were processed.

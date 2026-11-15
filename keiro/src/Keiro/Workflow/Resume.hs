@@ -128,11 +128,9 @@ import Keiro.Workflow
     WorkflowName (..),
     WorkflowOutcome (..),
     WorkflowRunOptions,
-    appendJournalEntry,
     currentGeneration,
     defaultWorkflowRunOptions,
     findUnfinishedWorkflowIds,
-    prepareJournalAppend,
     runWorkflowWith,
   )
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
@@ -146,6 +144,7 @@ import Keiro.Workflow.Instance
     recordCrashTx,
     releaseInstance,
   )
+import Keiro.Workflow.Journal (appendJournalEntryTraced, journalTraceMetadata, prepareJournalAppendWithMetadata)
 import Kiroku.Store.Connection (KirokuStore)
 import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
@@ -553,9 +552,10 @@ resumeWorkflowsOnceUpTo limit opts registry = do
                 mChild <- lookupChild widText wnameText
                 case mChild of
                   Nothing ->
-                    appendJournalEntry name wid (WorkflowFailed rendered now)
-                  Just childRow ->
-                    appendFailedChildAndWakeParent name wid rendered now childRow
+                    appendJournalEntryTraced (runOptions opts ^. #tracer) name wid (WorkflowFailed rendered now)
+                  Just childRow -> do
+                    metadata <- journalTraceMetadata (runOptions opts ^. #tracer)
+                    appendFailedChildAndWakeParent metadata name wid rendered now childRow
                 liftIO $ logEvent opts (ResumeWorkflowMarkedFailed wnameText widText rendered)
                 recordWorkflowFailed mMetrics 1
                 pure
@@ -576,20 +576,22 @@ data AdvanceResult a
 
 appendFailedChildAndWakeParent ::
   (IOE :> es, Store :> es) =>
+  Maybe Aeson.Value ->
   WorkflowName ->
   WorkflowId ->
   Text ->
   UTCTime ->
   ChildRow ->
   Eff es ()
-appendFailedChildAndWakeParent childNm childWid reason now childRow = do
+appendFailedChildAndWakeParent metadata childNm childWid reason now childRow = do
   childGen <- currentGeneration childNm childWid
   let parentNm = WorkflowName (childRow ^. #parentName)
       parentWid = WorkflowId (childRow ^. #parentId)
   parentGen <- currentGeneration parentNm parentWid
-  childFailTx <- prepareJournalAppend childNm childWid childGen (WorkflowFailed reason now)
+  childFailTx <- prepareJournalAppendWithMetadata metadata childNm childWid childGen (WorkflowFailed reason now)
   parentWakeTx <-
-    prepareJournalAppend
+    prepareJournalAppendWithMetadata
+      metadata
       parentNm
       parentWid
       parentGen

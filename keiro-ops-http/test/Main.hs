@@ -1010,7 +1010,7 @@ seedInspection store = do
       )
       >>= either (fail . show) pure
   runStoreIO store (appendJournalEntry (WorkflowName "approval") (WorkflowId "wf-1") (StepRecorded "received" Null now)) >>= either (fail . show) pure
-  let timer = Timer.TimerRequest (Timer.TimerId UUID.nil) "billing" "invoice-1" (addUTCTime (-60) now) Null
+  let timer = Timer.TimerRequest (Timer.TimerId UUID.nil) "billing" "invoice-1" (addUTCTime (-60) now) Null Nothing
   runStoreIO store (runTransaction (Timer.scheduleTimerTx timer)) >>= either (fail . show) pure
   let job = Job {jobName = "http_test", jobQueue = queueRef "http_test", jobCodec = aesonJobCodec, jobOrdering = Unordered, jobPolicy = defaultRetryPolicy} :: Job Value
   result <- runJobEff (JobRuntime store.pool Nothing) $ do

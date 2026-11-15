@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-11-15
+
+* **Update**: Reconcile implemented timer-fire and workflow resume spans, attributes and bounded correlation.
+
 * **Update**: Replace unwired inbox audit designs with implemented transport helpers and subscription worker spans.
 
 ## 2026-11-14

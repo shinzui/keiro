@@ -152,7 +152,8 @@ exampleReactionManager injectedNow =
   where
     reminderTimer correlationId =
       TimerRequest
-        { timerId = exampleReminderTimerId,
+        { traceContext = Nothing,
+          timerId = exampleReminderTimerId,
           processManagerName = "incident-reaction-example-reminder",
           correlationId,
           fireAt = addUTCTime 300 injectedNow,
@@ -160,7 +161,8 @@ exampleReactionManager injectedNow =
         }
     escalationTimer correlationId =
       TimerRequest
-        { timerId = exampleEscalationTimerId,
+        { traceContext = Nothing,
+          timerId = exampleEscalationTimerId,
           processManagerName = "incident-reaction-example-escalation",
           correlationId,
           fireAt = addUTCTime 900 injectedNow,

@@ -19,6 +19,7 @@ import Data.Time (UTCTime (..), secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Data.UUID qualified as UUID
 import Data.Vector qualified as Vector
+import DurableTraceBench (durableTraceBenchmarks)
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
 import GHC.Clock (getMonotonicTimeNSec)
@@ -196,7 +197,8 @@ ordinaryMain = withRecordingTracer $ \tracer ->
                                   then runResetProbes outboxStore inboxStore producerStore
                                   else
                                     defaultMain
-                                      ( tracingBenchmarks tracingCommandStore tracingDispatchStore tracingRunner tracingOutboxStore tracer
+                                      ( durableTraceBenchmarks tracingOutboxStore tracer
+                                          <> tracingBenchmarks tracingCommandStore tracingDispatchStore tracingRunner tracingOutboxStore tracer
                                           <> benchmarks store runner outboxStore inboxStore rebuildStore metrics (inboxDelegatedBenchmarks delegatedStore metrics)
                                           <> [selectedWithCleanup readModelSetup probeReadModelCounts (\model -> readModelBenchmarks model !! groupIndex) | groupIndex <- [0 .. 2]]
                                           <> producerIdentityBenchmarks producerStore producerCounter
