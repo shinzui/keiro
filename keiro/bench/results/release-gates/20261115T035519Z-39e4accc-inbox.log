@@ -1,0 +1,168 @@
+{"identity": "8b4297b30e80251f540dd5148c445462b2a44a4eea8b91e888e25e81b1449d53", "command": ["scripts/bench-regression.sh", "inbox"]}
+##### guard inbox 2026-11-15T04:30:53Z
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.25.0.0 (bench:keiro-bench) (first run)
+Preprocessing benchmark 'keiro-bench' for keiro-0.25.0.0...
+Building benchmark 'keiro-bench' for keiro-0.25.0.0...
+Running 1 benchmarks...
+Benchmark keiro-bench: RUNNING...
+All
+  inbox
+    single-full:       FAIL
+      161  ms ±  15 ms, 29% more than baseline
+      Use -p '/inbox/&&/single-full/' to rerun this test only.
+    single-nometrics:  FAIL
+      156  ms ±  14 ms, 27% more than baseline
+      Use -p '/inbox/&&/single-nometrics/' to rerun this test only.
+    batch-100:         FAIL
+      74.3 ms ± 7.4 ms, 36% more than baseline
+      Use -p '/inbox/&&/inbox.batch-100/' to rerun this test only.
+    single-slim:       FAIL
+      156  ms ±  27 ms, 29% more than baseline
+      Use -p '/inbox/&&/single-slim/' to rerun this test only.
+    downstream
+      table-downstream-single
+        fresh
+          metrics-off: OK
+            532  ms ±  30 ms, 22% more than baseline
+          metrics-on:  OK
+            540  ms ±  21 ms, 24% more than baseline
+        repeated-key
+          metrics-off: OK
+            198  ms ±  16 ms, 21% more than baseline
+          metrics-on:  OK
+            197  ms ±  15 ms, 19% more than baseline
+        all-duplicate
+          metrics-off: OK
+            194  ms ±  16 ms, 17% more than baseline
+          metrics-on:  OK
+            198  ms ±  19 ms
+      delegated-single
+        fresh
+          metrics-off: FAIL
+            472  ms ±  28 ms, 26% more than baseline
+            Use -p '/inbox/&&/delegated-single.fresh.metrics-off/' to rerun this test only.
+          metrics-on:  OK
+            453  ms ±  34 ms, 14% more than baseline
+        repeated-key
+          metrics-off: FAIL
+            33.1 ms ± 3.1 ms, 35% more than baseline
+            Use -p '/inbox/&&/delegated-single.repeated-key.metrics-off/' to rerun this test only.
+          metrics-on:  FAIL
+            34.3 ms ± 2.5 ms, 33% more than baseline
+            Use -p '/inbox/&&/delegated-single.repeated-key.metrics-on/' to rerun this test only.
+        all-duplicate
+          metrics-off: FAIL
+            33.5 ms ± 2.5 ms, 41% more than baseline
+            Use -p '/inbox/&&/delegated-single.all-duplicate.metrics-off/' to rerun this test only.
+          metrics-on:  OK
+            32.9 ms ± 2.5 ms
+      delegated-direct-single
+        fresh
+          metrics-off: OK
+            466  ms ±  39 ms, 23% more than baseline
+          metrics-on:  OK
+            469  ms ±  31 ms
+        repeated-key
+          metrics-off: OK
+            32.7 ms ± 2.7 ms
+          metrics-on:  OK
+            32.6 ms ± 1.1 ms
+        all-duplicate
+          metrics-off: OK
+            31.6 ms ± 2.7 ms
+          metrics-on:  OK
+            31.6 ms ± 1.1 ms
+      table-downstream-batch-100
+        fresh
+          metrics-off: FAIL
+            374  ms ±  11 ms, 32% more than baseline
+            Use -p '/inbox/&&/table-downstream-batch-100.fresh.metrics-off/' to rerun this test only.
+          metrics-on:  OK
+            366  ms ±  26 ms
+        repeated-key
+          metrics-off: FAIL
+            2.63 ms ± 297 μs, 35% more than baseline
+            Use -p '/inbox/&&/table-downstream-batch-100.repeated-key.metrics-off/' to rerun this test only.
+          metrics-on:  OK
+            3.66 ms ± 225 μs, 22% more than baseline
+        all-duplicate
+          metrics-off: OK
+            2.17 ms ± 118 μs, 21% more than baseline
+          metrics-on:  OK
+            3.39 ms ± 185 μs, 20% more than baseline
+      delegated-batch-100
+        fresh
+          metrics-off: OK
+            487  ms ±  17 ms, 24% more than baseline
+          metrics-on:  OK
+            474  ms ±  22 ms
+        repeated-key
+          metrics-off: FAIL
+            708  μs ±  98 μs, 36% more than baseline
+            Use -p '/inbox/&&/delegated-batch-100.repeated-key.metrics-off/' to rerun this test only.
+          metrics-on:  OK
+            1.83 ms ± 121 μs, 20% more than baseline
+        all-duplicate
+          metrics-off: FAIL
+            422  μs ±  39 μs, 44% more than baseline
+            Use -p '/inbox/&&/delegated-batch-100.all-duplicate.metrics-off/' to rerun this test only.
+          metrics-on:  OK
+            1.59 ms ±  68 μs, 19% more than baseline
+      table-downstream-batch-1000
+        fresh
+          metrics-off: FAIL
+            519  ms ±  35 ms, 28% more than baseline
+            Use -p '/inbox/&&/table-downstream-batch-1000.fresh.metrics-off/' to rerun this test only.
+          metrics-on:  OK
+            520  ms ±  30 ms
+        repeated-key
+          metrics-off: FAIL
+            772  μs ± 101 μs, 33% more than baseline
+            Use -p '/inbox/&&/table-downstream-batch-1000.repeated-key.metrics-off/' to rerun this test only.
+          metrics-on:  OK
+            1.92 ms ±  56 μs, 23% more than baseline
+        all-duplicate
+          metrics-off: OK
+            382  μs ±  35 μs, 20% more than baseline
+          metrics-on:  OK
+            1.50 ms ± 139 μs, 17% more than baseline
+      delegated-batch-1000
+        fresh
+          metrics-off: FAIL
+            500  ms ±  46 ms, 27% more than baseline
+            Use -p '/inbox/&&/delegated-batch-1000.fresh.metrics-off/' to rerun this test only.
+          metrics-on:  OK
+            557  ms ± 108 ms
+        repeated-key
+          metrics-off: FAIL
+            386  μs ±  36 μs, 41% more than baseline
+            Use -p '/inbox/&&/delegated-batch-1000.repeated-key.metrics-off/' to rerun this test only.
+          metrics-on:  OK
+            1.59 ms ±  63 μs, 23% more than baseline
+        all-duplicate
+          metrics-off: OK
+            105  μs ±  10 μs, 21% more than baseline
+          metrics-on:  OK
+            1.20 ms ± 103 μs, 12% more than baseline
+      delegated-history-duplicate
+        events-10:     FAIL
+          35.0 ms ± 6.9 ms, 47% more than baseline
+          Use -p '/inbox/&&$0=="All.inbox.downstream.delegated-history-duplicate.events-10"' to rerun this test only.
+        events-1000:   FAIL
+          32.5 ms ± 2.1 ms, 37% more than baseline
+          Use -p '/inbox/&&$0=="All.inbox.downstream.delegated-history-duplicate.events-1000"' to rerun this test only.
+        events-100000: FAIL
+          32.6 ms ± 1.3 ms, 38% more than baseline
+          Use -p '/inbox/&&/events-100000/' to rerun this test only.
+
+19 out of 49 tests failed (252.66s)
+Benchmark keiro-bench: ERROR
+Error: [Cabal-7125]
+Benchmarks failed for bench:keiro-bench from keiro-0.25.0.0.
+
+##### guard summary 2026-11-15T04:35:11Z
+GUARD(inbox)=1
+BENCH_REGRESSION=FAILED
+STAGE_EXIT=1

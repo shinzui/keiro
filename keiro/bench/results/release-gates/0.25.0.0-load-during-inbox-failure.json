@@ -1,0 +1,64 @@
+{
+  "checked_at": "2026-11-15T04:35:17.645648+00:00",
+  "scope": "Processes reporting at least 15 percent CPU; arguments omitted",
+  "processes": [
+    {
+      "pid": 633,
+      "ppid": 1,
+      "elapsed": "11-00:11:09",
+      "cpu_percent": 103.2,
+      "executable": "fseventsd"
+    },
+    {
+      "pid": 701,
+      "ppid": 1,
+      "elapsed": "11-00:11:09",
+      "cpu_percent": 17.2,
+      "executable": "WindowServer"
+    },
+    {
+      "pid": 24302,
+      "ppid": 24300,
+      "elapsed": "00:04",
+      "cpu_percent": 38.5,
+      "executable": "keiro-bench"
+    },
+    {
+      "pid": 24426,
+      "ppid": 24408,
+      "elapsed": "00:03",
+      "cpu_percent": 24.5,
+      "executable": "postgres:"
+    },
+    {
+      "pid": 24471,
+      "ppid": 24408,
+      "elapsed": "00:02",
+      "cpu_percent": 23.8,
+      "executable": "postgres:"
+    },
+    {
+      "pid": 34157,
+      "ppid": 1,
+      "elapsed": "03-06:05:14",
+      "cpu_percent": 98.9,
+      "executable": "node"
+    },
+    {
+      "pid": 62215,
+      "ppid": 1,
+      "elapsed": "07-02:59:17",
+      "cpu_percent": 19.3,
+      "executable": "com.apple.Virtualization.VirtualMachine"
+    },
+    {
+      "pid": 66599,
+      "ppid": 1,
+      "elapsed": "03-10:04:58",
+      "cpu_percent": 41.2,
+      "executable": "com.apple.Virtualization.VirtualMachine"
+    }
+  ],
+  "inbox_source_unchanged_since": "keiro-0.24.0.0",
+  "thermal_check": "pmset reports no recorded thermal or performance warning"
+}

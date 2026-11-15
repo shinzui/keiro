@@ -1,0 +1,38 @@
+{
+  "checked_at": "2026-11-15T04:24:12.040881+00:00",
+  "processes": [
+    {
+      "pid": 5031,
+      "ppid": 5028,
+      "elapsed": "00:31",
+      "cpu_percent": 0.0,
+      "kind": "build",
+      "keiro_workspace": false
+    },
+    {
+      "pid": 5231,
+      "ppid": 5031,
+      "elapsed": "00:14",
+      "cpu_percent": 0.0,
+      "kind": "benchmark",
+      "keiro_workspace": true
+    },
+    {
+      "pid": 5232,
+      "ppid": 5231,
+      "elapsed": "00:14",
+      "cpu_percent": 100.5,
+      "kind": "benchmark",
+      "keiro_workspace": true
+    },
+    {
+      "pid": 5599,
+      "ppid": 47245,
+      "elapsed": "00:01",
+      "cpu_percent": 3.9,
+      "kind": "benchmark",
+      "keiro_workspace": false
+    }
+  ],
+  "scope_note": "Build/benchmark command substring capture only; includes the capturing shell (PID 5599). This is not evidence of a quiet machine."
+}

@@ -322,9 +322,11 @@ timer and workflow creation contexts persist, exact wake/origin correlation surv
 and retained-span ownership and five matched measurement pairs satisfy the bounded-work reading rule.
 
 All six implementation plans are Complete. Full `just verify` passes at `3bc78fab`, followed
-by focused review checks at `412721f4` and a stronger distinct-row ownership probe. Current-version
-release preflight passes. The versioned release gate, readiness/artifact/consumer checks and
-publication remain outstanding; the user approved shared major release `0.25.0.0` from `0.24.0.0` on 2026-11-14.
+by focused review checks at `412721f4` and a stronger distinct-row ownership probe. The approved `0.25.0.0` candidate at `0d0f87cb` passes release preflight, the full
+correctness stage and native `nix flake check`. Producer identity and outbox guards pass;
+inbox, command, projection and read-model historical guards fail under recorded competing
+load. Attribution remains unresolved and publication is blocked. See the
+[release status](../../keiro/bench/results/release-gates/0.25.0.0-release-status.md).
 
 Cross-plan gates not owned by a child plan:
 
@@ -427,5 +429,7 @@ Implementation is complete across all six children, with correlated events, subs
 processing, outbox sends, timer fires and workflow resumes. Existing replay identities, producer
 digests and snapshot formats are preserved. The full verification, targeted review checks,
 recording allocation/timing measurements, retained-span probes and real backend graph are retained.
-The user approved the 0.25.0.0 release on 2026-11-14. Release preparation and the
-required gates are in progress; publication remains conditional on their success.
+The user approved the 0.25.0.0 release on 2026-11-14. The prepared candidate passes
+full correctness and native Nix checks, but four historical benchmark guards are red.
+Their original evidence and competing-load observations are retained. Publication remains
+blocked pending passing guards; thresholds and baselines are unchanged.

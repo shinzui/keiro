@@ -1,0 +1,78 @@
+{
+  "checked_at": "2026-11-15T04:04:34.423071+00:00",
+  "candidate": "0d0f87cb",
+  "packages": {
+    "kiroku-store": {
+      "resolved": "0.13.0.2",
+      "latest_normal": "0.13.0.2",
+      "registry": "https://hackage.haskell.org/package/kiroku-store.json",
+      "matches_latest": true
+    },
+    "kiroku-store-migrations": {
+      "resolved": "0.7.3.0",
+      "latest_normal": "0.7.3.0",
+      "registry": "https://hackage.haskell.org/package/kiroku-store-migrations.json",
+      "matches_latest": true
+    },
+    "kiroku-metrics": {
+      "resolved": "0.4.0.1",
+      "latest_normal": "0.4.0.1",
+      "registry": "https://hackage.haskell.org/package/kiroku-metrics.json",
+      "matches_latest": true
+    },
+    "kiroku-cli": {
+      "resolved": "0.3.0.1",
+      "latest_normal": "0.3.0.1",
+      "registry": "https://hackage.haskell.org/package/kiroku-cli.json",
+      "matches_latest": true
+    },
+    "shibuya-core": {
+      "resolved": "0.13.0.1",
+      "latest_normal": "0.13.0.1",
+      "registry": "https://hackage.haskell.org/package/shibuya-core.json",
+      "matches_latest": true
+    },
+    "shibuya-kiroku-adapter": {
+      "resolved": "0.8.0.0",
+      "latest_normal": "0.8.0.0",
+      "registry": "https://hackage.haskell.org/package/shibuya-kiroku-adapter.json",
+      "matches_latest": true
+    },
+    "shibuya-pgmq-adapter": {
+      "resolved": "0.19.0.0",
+      "latest_normal": "0.19.0.0",
+      "registry": "https://hackage.haskell.org/package/shibuya-pgmq-adapter.json",
+      "matches_latest": true
+    },
+    "pgmq-config": {
+      "resolved": "0.7.0.0",
+      "latest_normal": "0.7.0.0",
+      "registry": "https://hackage.haskell.org/package/pgmq-config.json",
+      "matches_latest": true
+    },
+    "pgmq-core": {
+      "resolved": "0.7.0.0",
+      "latest_normal": "0.7.0.0",
+      "registry": "https://hackage.haskell.org/package/pgmq-core.json",
+      "matches_latest": true
+    },
+    "pgmq-effectful": {
+      "resolved": "0.7.0.0",
+      "latest_normal": "0.7.0.0",
+      "registry": "https://hackage.haskell.org/package/pgmq-effectful.json",
+      "matches_latest": true
+    },
+    "pgmq-hasql": {
+      "resolved": "0.7.0.0",
+      "latest_normal": "0.7.0.0",
+      "registry": "https://hackage.haskell.org/package/pgmq-hasql.json",
+      "matches_latest": true
+    },
+    "pgmq-migration": {
+      "resolved": "0.7.0.0",
+      "latest_normal": "0.7.0.0",
+      "registry": "https://hackage.haskell.org/package/pgmq-migration.json",
+      "matches_latest": true
+    }
+  }
+}
