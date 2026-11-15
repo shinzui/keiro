@@ -17,11 +17,15 @@ Its executable and dependency plan are checksum-verified. Timings expire after
 share the release workspace lock. A candidate change requires fresh reference timings. All required names must
 exist; malformed/incomplete data cannot pass.
 
-An over-budget result gets exactly two adjacent confirmations, in reverse orders,
-within a 120-second family budget. Both mean ratios must pass to accept. Clear
+Over-budget, noisy or initially timed-out cases share exactly two adjacent
+confirmations, in reverse orders: four processes per family, within a 240-second
+budget including fixture setup. Both mean ratios must pass to accept. Clear
 excess cost in both is a regression; noisy, conflicting or unfinished comparisons
 are inconclusive. Both block release, as do benchmark assertions and execution
-errors. There is no retry-until-green loop.
+errors. Only a run whose failures are all explicitly reported timeouts may supply
+partial measurements; every missing case must complete both confirmations.
+Assertion failures and confirmation timeouts block immediately. Incomplete
+reference measurements never enter the timing cache. There is no retry-until-green loop.
 
 Raw CSVs, logs, immutable reference identity, executable hashes, dependency plan
 and per-case decisions are retained under `keiro/bench/results/release-gates`.

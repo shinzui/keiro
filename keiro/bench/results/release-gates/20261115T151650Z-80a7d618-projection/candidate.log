@@ -1,0 +1,48 @@
+All
+  projection
+    inline
+      legacy
+        one-target:     read-model-latency-run=1 samples=500 legacy_p95_ns=676000 versioned_p95_ns=679000 p95_ratio=1.0044378698224852 throughput_ratio=0.9798249315363169
+read-model-latency-run=2 samples=500 legacy_p95_ns=668000 versioned_p95_ns=691000 p95_ratio=1.034431137724551 throughput_ratio=0.974857473353714
+read-model-latency-run=3 samples=500 legacy_p95_ns=684000 versioned_p95_ns=691000 p95_ratio=1.010233918128655 throughput_ratio=0.9790503797043817
+read-model-latency-run=4 samples=500 legacy_p95_ns=694000 versioned_p95_ns=675000 p95_ratio=0.9726224783861671 throughput_ratio=1.209408043865118
+read-model-latency-run=5 samples=500 legacy_p95_ns=646000 versioned_p95_ns=674000 p95_ratio=1.043343653250774 throughput_ratio=0.9827471245207534
+read-model-latency-median runs=5 samples_per_run=500 p95_ratio=1.010233918128655 p95_budget=1.25 throughput_ratio=0.9798249315363169 throughput_budget=0.90
+OK
+          376  μs ±  63 μs, 62% more than baseline
+      versioned
+        one-target:     OK
+          364  μs ±  16 μs, 0.97x, 54% more than baseline
+      legacy
+        three-target:   OK
+          344  μs ±  46 μs, 33% more than baseline
+      versioned
+        three-target:   OK
+          407  μs ±  34 μs, 1.18x, 52% more than baseline
+      legacy
+        three-groups:   OK
+          535  μs ± 196 μs, 71% more than baseline
+      versioned
+        three-groups:   OK
+          687  μs ±  46 μs, 1.28x, 116% more than baseline
+      legacy
+        many-revisions: OK
+          491  μs ±  35 μs, 112% more than baseline
+      versioned
+        many-revisions: OK
+          479  μs ±  98 μs, 0.97x, 102% more than baseline
+      legacy
+        mixed-delivery: OK
+          440  μs ±  64 μs, 77% more than baseline
+      versioned
+        mixed-delivery: OK
+          386  μs ±  30 μs, 0.88x, 52% more than baseline
+    async
+      legacy
+        mixed-delivery: OK
+          162  μs ±  28 μs, 77% more than baseline
+      versioned
+        mixed-delivery: OK
+          161  μs ±  35 μs, 1.00x, 66% more than baseline
+
+All 12 tests passed (64.46s)

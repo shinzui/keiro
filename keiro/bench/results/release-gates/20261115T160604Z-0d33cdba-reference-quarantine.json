@@ -1,0 +1,7 @@
+{
+  "group": "inbox",
+  "reason": "One case has disagreeing 0.992/1.898 confirmations; retain all observations and force fresh reference on next stage attempt.",
+  "original": "dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/samples-7c3e28a106a2ca21a16d8dd3eb4fb820ed3d6821308616dad6b977c0d68ec6a0",
+  "quarantined": "dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/quarantined-7c3e28a106a2ca21a16d8dd3eb4fb820ed3d6821308616dad6b977c0d68ec6a0-1794759551",
+  "time": 1794759551.718932
+}

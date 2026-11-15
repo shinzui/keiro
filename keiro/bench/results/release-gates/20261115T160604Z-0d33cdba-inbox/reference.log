@@ -1,0 +1,132 @@
+All
+  inbox
+    single-full:       OK
+      179  ms ±  35 ms
+    single-nometrics:  OK
+      189  ms ±  12 ms
+    batch-100:         OK
+      83.8 ms ± 5.2 ms
+    single-slim:       OK
+      167  ms ±  17 ms
+    downstream
+      table-downstream-single
+        fresh
+          metrics-off: OK
+            622  ms ±  37 ms
+          metrics-on:  OK
+            614  ms ±  61 ms
+        repeated-key
+          metrics-off: OK
+            220  ms ±  16 ms
+          metrics-on:  OK
+            217  ms ±  22 ms
+        all-duplicate
+          metrics-off: OK
+            213  ms ±  17 ms
+          metrics-on:  OK
+            200  ms ± 7.2 ms
+      delegated-single
+        fresh
+          metrics-off: OK
+            489  ms ±  31 ms
+          metrics-on:  OK
+            476  ms ±  16 ms
+        repeated-key
+          metrics-off: OK
+            31.1 ms ± 2.7 ms
+          metrics-on:  OK
+            32.0 ms ± 1.9 ms
+        all-duplicate
+          metrics-off: OK
+            29.5 ms ± 2.5 ms
+          metrics-on:  OK
+            31.4 ms ± 1.8 ms
+      delegated-direct-single
+        fresh
+          metrics-off: OK
+            463  ms ±  33 ms
+          metrics-on:  OK
+            519  ms ± 127 ms
+        repeated-key
+          metrics-off: OK
+            36.1 ms ± 3.4 ms
+          metrics-on:  OK
+            38.5 ms ± 3.6 ms
+        all-duplicate
+          metrics-off: OK
+            34.9 ms ± 2.9 ms
+          metrics-on:  OK
+            48.0 ms ±  15 ms
+      table-downstream-batch-100
+        fresh
+          metrics-off: OK
+            660  ms ± 180 ms
+          metrics-on:  OK
+            401  ms ± 174 ms
+        repeated-key
+          metrics-off: OK
+            2.95 ms ±  95 μs
+          metrics-on:  OK
+            3.77 ms ± 532 μs
+        all-duplicate
+          metrics-off: OK
+            2.13 ms ± 186 μs
+          metrics-on:  OK
+            3.29 ms ± 254 μs
+      delegated-batch-100
+        fresh
+          metrics-off: OK
+            470  ms ±  27 ms
+          metrics-on:  OK
+            489  ms ±  70 ms
+        repeated-key
+          metrics-off: OK
+            1.49 ms ± 1.8 ms
+          metrics-on:  OK
+            1.81 ms ±  74 μs
+        all-duplicate
+          metrics-off: OK
+            404  μs ±  40 μs
+          metrics-on:  OK
+            1.53 ms ± 113 μs
+      table-downstream-batch-1000
+        fresh
+          metrics-off: OK
+            498  ms ±  37 ms
+          metrics-on:  OK
+            507  ms ±  42 ms
+        repeated-key
+          metrics-off: OK
+            742  μs ±  64 μs
+          metrics-on:  OK
+            2.11 ms ± 193 μs
+        all-duplicate
+          metrics-off: OK
+            419  μs ±  24 μs
+          metrics-on:  OK
+            1.65 ms ±  74 μs
+      delegated-batch-1000
+        fresh
+          metrics-off: OK
+            517  ms ±  38 ms
+          metrics-on:  OK
+            1.429 s ± 105 ms
+        repeated-key
+          metrics-off: OK
+            853  μs ±  64 μs
+          metrics-on:  OK
+            2.57 ms ± 424 μs
+        all-duplicate
+          metrics-off: OK
+            145  μs ±  17 μs
+          metrics-on:  OK
+            1.73 ms ±  72 μs
+      delegated-history-duplicate
+        events-10:     OK
+          43.2 ms ±  21 ms
+        events-1000:   OK
+          37.3 ms ± 2.0 ms
+        events-100000: OK
+          34.9 ms ± 2.7 ms
+
+All 49 tests passed (255.69s)

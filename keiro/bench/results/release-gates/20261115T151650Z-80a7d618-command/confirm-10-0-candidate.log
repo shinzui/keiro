@@ -1,0 +1,8 @@
+All
+  command
+    domain
+      router-fanout
+        100: OK
+          34.1 ms ± 1.7 ms
+
+All 1 tests passed (6.08s)

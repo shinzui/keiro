@@ -1,0 +1,31 @@
+{
+  "command": [
+    "/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.25.0.0/b/keiro-bench/build/keiro-bench/keiro-bench",
+    "-p",
+    "projection",
+    "-j1",
+    "--time-mode",
+    "wall",
+    "--hide-progress",
+    "--stdev",
+    "5",
+    "--timeout",
+    "10s",
+    "--csv",
+    "/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261115T160604Z-0d33cdba-projection/candidate.csv",
+    "--baseline",
+    "/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/baseline-projection.csv",
+    "+RTS",
+    "-N2",
+    "-RTS"
+  ],
+  "cwd": "/Users/shinzui/Keikaku/bokuno/keiro/keiro",
+  "finished": 1794759470.331845,
+  "load_average": [
+    6.12060546875,
+    7.0673828125,
+    8.49365234375
+  ],
+  "started": 1794759424.816949,
+  "status": 0
+}

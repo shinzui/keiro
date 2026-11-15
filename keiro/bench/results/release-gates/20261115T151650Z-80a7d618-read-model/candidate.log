@@ -1,0 +1,30 @@
+All
+  read-model-lifecycle
+    serving-binding
+      legacy-three:                       OK
+        108  μs ± 9.9 μs, 74% more than baseline
+      versioned-three:                    OK
+        105  μs ± 4.9 μs, 60% more than baseline
+    promotion
+      three-target-end-to-end:            OK
+        14.3 ms ± 1.0 ms,       same as baseline
+    repair
+      10:                                 OK
+        640  μs ± 178 μs, 65% more than baseline
+      100:                                OK
+        3.27 ms ± 298 μs, 49% more than baseline
+      1000:                               OK
+        35.5 ms ± 3.7 ms, 30% more than baseline
+  read-model-reads
+    status
+      list-1000-synthetic-groups:         OK
+        9.16 ms ± 646 μs, 21% more than baseline
+      lookup-among-1000-synthetic-groups: OK
+        78.3 μs ± 3.5 μs, 29% more than baseline
+    guarded
+      all-rows-100:                       OK
+        201  μs ±  18 μs, 19% more than baseline
+      keyed-10000:                        OK
+        84.7 μs ± 7.3 μs, 36% more than baseline
+
+All 10 tests passed (40.46s)

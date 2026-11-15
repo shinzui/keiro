@@ -12,13 +12,14 @@ import bench_guard as guard
 
 
 class AcceptanceControls(unittest.TestCase):
-    def exercise_guard(self, candidate_mean, reference_mean):
+    def exercise_guard(self, candidate_mean, reference_mean, case_count=1, initial_timeout=False):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
         baseline = root / "keiro/bench/baseline-inbox.csv"
         baseline.parent.mkdir(parents=True)
-        baseline.write_text("Name,Mean (ps),2*Stdev (ps)\nAll.inbox.case,60,1\n")
+        names = ["All.inbox.case" + (str(i) if i else "") for i in range(case_count)]
+        baseline.write_text("Name,Mean (ps),2*Stdev (ps)\n" + "".join(f"{name},60,1\n" for name in names))
         original = baseline.read_bytes()
         candidate = root / "candidate"
         candidate.write_text("candidate executable")
@@ -33,11 +34,13 @@ class AcceptanceControls(unittest.TestCase):
 
         def measure(binary, cwd, pattern, target, stem, **kwargs):
             mean = candidate_mean if binary == candidate else reference_mean
+            values = {} if initial_timeout and stem == "candidate" else {
+                name: guard.Estimate(mean, 1) for name in names}
             (target / (stem + ".csv")).write_text(
-                f"Name,Mean (ps),2*Stdev (ps)\nAll.inbox.case,{mean},1\n")
+                "Name,Mean (ps),2*Stdev (ps)\n" + "".join(f"{name},{mean},1\n" for name in values))
             (target / (stem + ".log")).write_text("complete benchmark")
-            (target / (stem + "-command.json")).write_text("{}")
-            return {"All.inbox.case": guard.Estimate(mean, 1)}
+            (target / (stem + "-command.json")).write_text(json.dumps({"status": 0 if values else 1}))
+            return values
 
         target = root / "evidence"
         metadata = {"binary_sha256": guard.sha(reference)}
@@ -63,6 +66,39 @@ class AcceptanceControls(unittest.TestCase):
         self.assertEqual(case["status"], "regression")
         self.assertEqual(len(case["confirmation"]), 2)
         self.assertEqual(len(list(target.glob("confirm-*.csv"))), 4)
+
+    def test_multiple_flagged_cases_share_four_confirmation_processes(self):
+        status, result, target = self.exercise_guard(160, 100, case_count=3)
+        self.assertEqual(status, 1)
+        self.assertEqual(len(list(target.glob("confirm-*.csv"))), 4)
+        self.assertTrue(all(case["status"] == "regression" for case in result["cases"].values()))
+
+    def test_initial_timeout_requires_two_complete_passing_confirmations(self):
+        status, result, _ = self.exercise_guard(100, 100, initial_timeout=True)
+        self.assertEqual(status, 0)
+        case = result["cases"]["All.inbox.case"]
+        self.assertIn("timed out", case["reason"])
+        self.assertEqual([p["status"] for p in case["confirmation"]], ["passed", "passed"])
+
+    def test_only_explicit_timeout_failures_can_supply_partial_measurements(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            def timeout_run(*args, **kwargs):
+                (target / "partial.csv").write_text("Name,Mean (ps),2*Stdev (ps)\n")
+                return 1
+            for transcript, permitted in (("TIMEOUT\nTimed out after 10s\n1 out of 1 tests failed", True),
+                                          ("FAIL\nfixture assertion failed\n1 out of 1 tests failed", False),
+                                          ("TIMEOUT\nTimed out after 10s\nFAIL\n2 out of 2 tests failed", False)):
+                (target / "partial.log").write_text(transcript)
+                with patch.object(guard, "run", side_effect=timeout_run):
+                    if permitted:
+                        self.assertEqual(guard.measure("binary", target, "inbox", target, "partial", allow_timeouts=True, timeout_inventory={"case"}), {})
+                    else:
+                        with self.assertRaises(RuntimeError):
+                            guard.measure("binary", target, "inbox", target, "partial", allow_timeouts=True, timeout_inventory={"case"})
+            (target / "partial.log").write_text("TIMEOUT\nTimed out after 10s\n1 out of 2 tests failed")
+            with patch.object(guard, "run", side_effect=timeout_run), self.assertRaises(RuntimeError):
+                guard.measure("binary", target, "inbox", target, "partial", allow_timeouts=True, timeout_inventory={"case"})
 
     def test_same_environment_comparison_accepts_common_historical_drift(self):
         # Both are far above the old 16us CSV, but the candidate adds no cost.

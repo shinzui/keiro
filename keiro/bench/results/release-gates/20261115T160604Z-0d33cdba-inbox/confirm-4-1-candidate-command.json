@@ -1,0 +1,29 @@
+{
+  "command": [
+    "/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.25.0.0/b/keiro-bench/build/keiro-bench/keiro-bench",
+    "-p",
+    "$0 == \"All.inbox.downstream.delegated-batch-100.repeated-key.metrics-off\"",
+    "-j1",
+    "--time-mode",
+    "wall",
+    "--hide-progress",
+    "--stdev",
+    "5",
+    "--timeout",
+    "10s",
+    "--csv",
+    "/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261115T160604Z-0d33cdba-inbox/confirm-4-1-candidate.csv",
+    "+RTS",
+    "-N2",
+    "-RTS"
+  ],
+  "cwd": "/Users/shinzui/Keikaku/bokuno/keiro/keiro",
+  "finished": 1794759330.689646,
+  "load_average": [
+    7.3740234375,
+    7.37109375,
+    8.7705078125
+  ],
+  "started": 1794759322.067605,
+  "status": 0
+}

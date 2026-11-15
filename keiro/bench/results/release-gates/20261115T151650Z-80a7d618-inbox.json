@@ -1,0 +1,25 @@
+{
+  "artifacts": {
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-inbox/build.log": "215517150aee2d4e7c37e9a89aed453be29626db56807e943248b5085841cc31",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-inbox/reference-build.log": "84616d6710007edef008c24a5b84690849302eec2bc1e0eb31b9b10dfa60df93",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-inbox/reference-plan.json": "67441c31996430b592ba3db7849370f2b570b0757ef3d595c9c4ca046b4bf53b",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-inbox/reference.json": "8a45808f256d11906016858693be2993715babc36cd25a974bf97c9498a87da0",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-inbox/result.json": "9f5e26a03a686780f2dc29df2f967d87b4a121e9f80227c49b9c99bfe3e00bdb"
+  },
+  "command": [
+    "scripts/bench-regression.sh",
+    "inbox"
+  ],
+  "finished": 1794758039.035041,
+  "identity": "0fbdf39e59224de2e9bc391be8016e1ea1fa41e0203e37124839e9c149f610fc",
+  "load_average": [
+    5.62158203125,
+    6.60986328125,
+    7.49169921875
+  ],
+  "log": "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-inbox.log",
+  "log_sha256": "76f947fe095e6b505c1bcdd753aa3818f8f41491ee13a8d6c4f1542a8697096d",
+  "schema": 1,
+  "started": 1794757648.561822,
+  "status": 1
+}

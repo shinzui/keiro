@@ -1,0 +1,10 @@
+{"identity": "0fbdf39e59224de2e9bc391be8016e1ea1fa41e0203e37124839e9c149f610fc", "command": ["scripts/bench-regression.sh", "inbox"]}
+##### guard inbox 2026-11-15T16:20:11Z
++ cabal build keiro:bench:keiro-bench
++ /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench -p inbox -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --csv /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/samples-7c3e28a106a2ca21a16d8dd3eb4fb820ed3d6821308616dad6b977c0d68ec6a0/reference.csv +RTS -N2 -RTS
++ /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.25.0.0/b/keiro-bench/build/keiro-bench/keiro-bench -p inbox -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --csv /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261115T162011Z-dd97fe0d-inbox/candidate.csv --baseline /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/baseline-inbox.csv +RTS -N2 -RTS
+PERFORMANCE(inbox)=BENCHMARK-ERROR: Benchmark assertion/execution failed: candidate
+##### guard summary 2026-11-15T16:28:10Z
+GUARD(inbox)=1
+BENCH_REGRESSION=FAILED
+STAGE_EXIT=1

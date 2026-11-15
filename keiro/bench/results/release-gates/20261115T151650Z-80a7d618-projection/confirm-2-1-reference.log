@@ -1,0 +1,14 @@
+All
+  projection
+    inline
+      legacy
+        many-revisions: read-model-latency-run=1 samples=500 legacy_p95_ns=565000 versioned_p95_ns=588000 p95_ratio=1.0407079646017698 throughput_ratio=0.9659536422574537
+read-model-latency-run=2 samples=500 legacy_p95_ns=591000 versioned_p95_ns=587000 p95_ratio=0.9932318104906938 throughput_ratio=0.9799656609775436
+read-model-latency-run=3 samples=500 legacy_p95_ns=582000 versioned_p95_ns=596000 p95_ratio=1.0240549828178693 throughput_ratio=0.9722594439080143
+read-model-latency-run=4 samples=500 legacy_p95_ns=603000 versioned_p95_ns=618000 p95_ratio=1.0248756218905473 throughput_ratio=0.9782419453812892
+read-model-latency-run=5 samples=500 legacy_p95_ns=708000 versioned_p95_ns=720000 p95_ratio=1.0169491525423728 throughput_ratio=0.977001085820819
+read-model-latency-median runs=5 samples_per_run=500 p95_ratio=1.0240549828178693 p95_budget=1.25 throughput_ratio=0.977001085820819 throughput_budget=0.90
+OK
+          312  μs ±  37 μs
+
+All 1 tests passed (10.87s)

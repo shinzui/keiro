@@ -1,0 +1,47 @@
+1794757928.784694
+  PID  PPID     ELAPSED  %CPU COMM
+  633     1 11-11:28:00 108.1 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/FSEvents.framework/Versions/A/Support/fseventsd
+31635 31620       04:38  65.5 /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench
+34157     1 03-17:22:05  87.7 node
+47508 47506       02:29  67.3 /Users/shinzui/Keikaku/bokuno/shikigami/dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/t/shikigami-core-postgres-test/build/shikigami-core-postgres-test/shikigami-core-postgres-test
+47646 47508       02:29  17.5 /nix/store/zndqgdxn4p28iyax8raza3pfn7lkjw64-postgresql-18.6/bin/postgres
+62215     1 07-14:16:08  43.5 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+66599     1 03-21:21:49 139.8 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+84176 84064       00:10  31.2 /nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/bin/./ghc-9.12.4
+84959 47646       00:07  18.3 postgres: shinzui postgres [local] CREATE DATABASE
+84960 47646       00:07  18.9 postgres: shinzui postgres [local] CREATE DATABASE
+84964 47646       00:07  17.7 postgres: shinzui postgres [local] CREATE DATABASE
+84972 47646       00:07  18.7 postgres: shinzui postgres [local] CREATE DATABASE
+85176 47646       00:05  17.8 postgres: shinzui postgres [local] CREATE DATABASE
+85177 47646       00:05  17.6 postgres: shinzui postgres [local] CREATE DATABASE
+85178 47646       00:05  17.5 postgres: shinzui postgres [local] CREATE DATABASE
+85190 47646       00:05  17.1 postgres: shinzui postgres [local] CREATE DATABASE
+85197 47646       00:05  17.4 postgres: shinzui postgres [local] CREATE DATABASE
+85198 47646       00:05  20.4 postgres: shinzui postgres [local] CREATE DATABASE
+85201 47646       00:05  17.6 postgres: shinzui postgres [local] CREATE DATABASE
+85202 47646       00:05  17.8 postgres: shinzui postgres [local] CREATE DATABASE
+85225 47646       00:05  18.1 postgres: shinzui postgres [local] CREATE DATABASE
+85238 47646       00:05  16.2 postgres: shinzui postgres [local] CREATE DATABASE
+85242 47646       00:05  16.6 postgres: shinzui postgres [local] CREATE DATABASE
+87010 86736       00:02  88.4 /nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/bin/./ghc-pkg-9.12.4
+87013 86734       00:02  88.1 /nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/bin/./ghc-pkg-9.12.4
+87019 86738       00:02  88.4 /nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/bin/./ghc-pkg-9.12.4
+87185 47646       00:01  26.2 postgres: shinzui postgres [local] DROP DATABASE
+87186 47646       00:01  19.2 postgres: shinzui postgres [local] CREATE DATABASE
+87201 47646       00:01  25.2 postgres: shinzui postgres [local] DROP DATABASE
+87210 47646       00:01  24.7 postgres: shinzui postgres [local] DROP DATABASE
+87275 47646       00:01  25.7 postgres: shinzui postgres [local] DROP DATABASE
+87312 47646       00:01  26.2 postgres: shinzui postgres [local] DROP DATABASE
+87314 47646       00:01  25.6 postgres: shinzui postgres [local] DROP DATABASE
+87406 87402       00:00  44.9 (clang-21)
+67720 67714       00:51  74.6 nix
+1794758416.318357
+  PID  PPID     ELAPSED  %CPU COMM
+  633     1 11-11:36:08 105.4 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/FSEvents.framework/Versions/A/Support/fseventsd
+34157     1 03-17:30:13 100.1 node
+62215     1 07-14:24:16 226.5 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+63908 63907       02:29  43.7 /Users/shinzui/Keikaku/bokuno/shikigami/dist-newstyle/build/aarch64-osx/ghc-9.12.4/shikigami-core-0.1.0.0/t/shikigami-core-postgres-test/build/shikigami-core-postgres-test/shikigami-core-postgres-test
+66599     1 03-21:29:57 344.6 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine
+91148 71679       00:47  59.5 /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.25.0.0/b/keiro-bench/build/keiro-bench/keiro-bench
+91785 91299       00:44  30.4 postgres: shinzui keiro_template_7 [local] idle
+91802 91299       00:44  32.5 postgres: shinzui keiro_template_7 [local] idle in transaction

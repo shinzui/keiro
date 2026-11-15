@@ -1,0 +1,7 @@
+{
+  "group": "projection",
+  "reason": "Inconclusive stage after noisy reference and bounded confirmation timeout; preserve data and require fresh reference, without source or budget changes.",
+  "original": "dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/samples-fa8fe0a8d786ebd17a729a3a6265a40ff07314bf245a6c7fcb79d5cfcc9c44e1",
+  "quarantined": "dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/quarantined-fa8fe0a8d786ebd17a729a3a6265a40ff07314bf245a6c7fcb79d5cfcc9c44e1-1794758703",
+  "time": 1794758703.533694
+}

@@ -2,6 +2,9 @@
 
 ## 2026-11-15
 
+* **Update**: Batch flagged benchmark confirmations into four bounded fixture lifecycles; recover only explicit known-inventory timeouts with two complete passing confirmations.
+
+
 * **Update**: Keep benchmark limits fixed while comparing immutable recording source on the current machine; scope tracing resources to selected tests and checksum supplementary release evidence.
 
 

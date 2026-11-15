@@ -1,0 +1,107 @@
+{"identity": "4003b03da0576c9cc2bdb3907af057b043166f067402f229bb7cefe0c0552984", "command": ["scripts/bench-regression.sh", "producer-identity"]}
+##### guard producer-identity 2026-11-15T15:38:34Z
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.25.0.0 (bench:keiro-bench) (file bench/Main.hs changed)
+Preprocessing benchmark 'keiro-bench' for keiro-0.25.0.0...
+Building benchmark 'keiro-bench' for keiro-0.25.0.0...
+[ 1 of 11] Compiling BenchSetup       ( bench/BenchSetup.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.25.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/BenchSetup.o ) [Source file changed]
+bench/BenchSetup.hs:104:64: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘span’ shadows the existing binding
+      imported from ‘Prelude’ at bench/BenchSetup.hs:16:1-14
+      (and originally defined in ‘ghc-internal-9.1204.0:GHC.Internal.List’)
+    |
+104 |       inSpan' tracer "recording-check" defaultSpanArguments $ \span -> do
+    |                                                                ^^^^
+
+[11 of 11] Compiling Main             ( bench/Main.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.25.0.0/b/keiro-bench/build/keiro-bench/keiro-bench-tmp/Main.o ) [Source file changed]
+bench/Main.hs:209:7: warning: [GHC-63394] [-Wx-partial]
+    In the use of ‘head’
+    (imported from Prelude, but defined in GHC.Internal.List):
+    "This is a partial function, it throws an error on empty lists. Use pattern matching, 'Data.List.uncons' or 'Data.Maybe.listToMaybe' instead. Consider refactoring to use "Data.List.NonEmpty"."
+    |
+209 |       head (tracingBenchmarks store dispatch runner outbox tracer)
+    |       ^^^^
+
+bench/Main.hs:212:13: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘use’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at bench/Main.hs:65:1-20
+      (and originally defined in ‘lens-5.3.6:Control.Lens.Getter’)
+    |
+212 |     acquire use = withRecordingTracer $ \tracer ->
+    |             ^^^
+
+bench/Main.hs:222:53: warning: [GHC-63394] [-Wx-partial]
+    In the use of ‘head’
+    (imported from Prelude, but defined in GHC.Internal.List):
+    "This is a partial function, it throws an error on empty lists. Use pattern matching, 'Data.List.uncons' or 'Data.Maybe.listToMaybe' instead. Consider refactoring to use "Data.List.NonEmpty"."
+    |
+222 |   [ selectedBracket acquire $ \ ~(store, tracer) -> head (durableTraceBenchmarks store tracer)
+    |                                                     ^^^^
+
+bench/Main.hs:225:13: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘use’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at bench/Main.hs:65:1-20
+      (and originally defined in ‘lens-5.3.6:Control.Lens.Getter’)
+    |
+225 |     acquire use = withRecordingTracer $ \tracer ->
+    |             ^^^
+
+bench/Main.hs:1302:39: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at bench/Main.hs:65:1-20
+      (and originally defined in ‘lens-5.3.6:Control.Lens.Indexed’)
+     |
+1302 |             for_ [1 .. 100 :: Int] $ \index -> runStoreChecked store do
+     |                                       ^^^^^
+
+bench/Main.hs:1325:40: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at bench/Main.hs:65:1-20
+      (and originally defined in ‘lens-5.3.6:Control.Lens.Indexed’)
+     |
+1325 |                 contextual = zipWith (\index (oid, event) -> (oid, event & #traceContext ?~ TraceContext ("00-0af7651916cd43dd8448eb211c80319c-" <> Text.justifyRight 16 '0' (Text.pack (showHex index "")) <> "-01") Nothing)) [1 :: Int ..] messages
+     |                                        ^^^^^
+
+bench/Main.hs:1340:41: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at bench/Main.hs:65:1-20
+      (and originally defined in ‘lens-5.3.6:Control.Lens.Indexed’)
+     |
+1340 |               for_ [1 .. 100 :: Int] $ \index -> do
+     |                                         ^^^^^
+
+[12 of 12] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.25.0.0/b/keiro-bench/build/keiro-bench/keiro-bench [Objects changed]
+Running 1 benchmarks...
+Benchmark keiro-bench: RUNNING...
+All
+  producer-identity
+    derive-v1:                              OK
+      748  ns ±  10 ns
+    legacy-fresh-1000:                      OK
+      54.0 ms ± 3.0 ms
+    deterministic-fresh-1000:               {"batch":true,"ceiling":1.1,"median_ratio":1.0615035429583703,"pairs_ns_legacy_deterministic":[[52305000,52542000],[50070000,53204000],[51527000,55997000],[48645000,56741000],[54387000,52458000],[50628000,59195000],[52371000,58002000],[54192000,57525000],[51134000,53388000],[56295000,53137000],[49458000,52339000],[51487000,55139000],[53321000,52676000],[50343000,55632000],[54301000,51674000]],"phase":"producer-fresh-ratio"}
+OK
+      66.6 ms ± 2.6 ms
+    deterministic-fresh-and-replay-1000:    OK
+      310  ms ±  15 ms
+    trace-policy-legacy-1000:               OK
+      58.9 ms ± 2.8 ms
+    trace-policy-derived-1000:              OK
+      59.9 ms ± 1.1 ms
+    trace-policy-pre-cutover-1000:          OK
+      60.2 ms ± 8.4 ms
+    trace-policy-explicit-1000:             OK
+      66.3 ms ±  10 ms
+    legacy-single-tx-per-event-1000:        OK
+      107  ms ± 1.3 ms
+    deterministic-single-tx-per-event-1000: {"batch":false,"ceiling":1.1,"median_ratio":0.929776810016331,"pairs_ns_legacy_deterministic":[[110175000,104104000],[107293000,97868000],[132460000,104285000],[101324000,95237000],[178607000,101619000],[99051000,91716000],[101035000,93940000],[97996000,102161000],[106150000,111366000],[108718000,99221000],[100268000,104671000],[105933000,102518000],[114812000,149801000],[118457000,96181000],[116480000,102625000]],"phase":"producer-fresh-ratio"}
+OK
+      103  ms ± 4.2 ms
+
+All 10 tests passed (495.57s)
+Benchmark keiro-bench: FINISH
+##### guard summary 2026-11-15T15:46:58Z
+GUARD(producer-identity)=0
+BENCH_REGRESSION=PASSED
+STAGE_EXIT=0

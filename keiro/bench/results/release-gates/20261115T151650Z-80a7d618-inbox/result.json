@@ -1,0 +1,8 @@
+{
+  "error": "Benchmark assertion/execution failed: reference",
+  "finished": 1794758038.048285,
+  "group": "inbox",
+  "schema": 1,
+  "started": 1794757648.620061,
+  "status": "benchmark-error"
+}

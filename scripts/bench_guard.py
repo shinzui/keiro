@@ -13,6 +13,7 @@ import math
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import signal
 import subprocess
@@ -23,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REFERENCE = "b8695a0d050c5b0db2f251887d43182da2b47eed"
 CEILING = 1.25
 MAX_AGE = 86400
-CONFIRM_SECONDS = 120
+CONFIRM_SECONDS = 240
 GROUPS = ("outbox", "inbox", "command", "projection", "read-model")
 
 
@@ -68,7 +69,7 @@ class Estimate:
     spread: float
 
 
-def estimates(path):
+def estimates(path, allow_empty=False):
     result = {}
     with Path(path).open() as stream:
         for row in csv.DictReader(stream):
@@ -78,7 +79,7 @@ def estimates(path):
                                       and math.isfinite(value.spread) and value.spread >= 0):
                 raise ValueError("Invalid or duplicate measurement: " + name)
             result[name] = value
-    if not result:
+    if not result and not allow_empty:
         raise ValueError("No measurements in " + str(path))
     return result
 
@@ -174,7 +175,8 @@ def reference_binary(context):
         return cache, binary, metadata
 
 
-def measure(binary, cwd, pattern, target, stem, timeout=600, historical=None):
+def measure(binary, cwd, pattern, target, stem, timeout=600, historical=None, allow_timeouts=False,
+            timeout_inventory=None):
     csv_path = target / (stem + ".csv")
     command = [str(binary), "-p", pattern, "-j1", "--time-mode", "wall", "--hide-progress",
                "--stdev", "5", "--timeout", "10s", "--csv", str(csv_path)]
@@ -185,11 +187,25 @@ def measure(binary, cwd, pattern, target, stem, timeout=600, historical=None):
     command_path = target / (stem + "-command.json")
     save(command_path, record)
     status = run(command, cwd, target / (stem + ".log"), timeout)
-    record.update(status=status, finished=time.time())
+    transcript = (target / (stem + ".log")).read_text()
+    failures = re.search(r"(\d+) out of (\d+) tests failed", transcript)
+    timeout_only = (status == 1 and failures is not None
+                    and int(failures[1]) == transcript.count("Timed out after ")
+                    and not re.search(r"\bFAIL\b|Exception", transcript))
+    values = estimates(csv_path, allow_empty=True) if csv_path.exists() else {}
+    recoverable = (allow_timeouts and timeout_only and timeout_inventory is not None
+                   and int(failures[2]) == len(timeout_inventory)
+                   and len(values) + int(failures[1]) == len(timeout_inventory)
+                   and values.keys() <= timeout_inventory)
+    record.update(status=status, timeout_only=timeout_only, recoverable=recoverable, finished=time.time())
     save(command_path, record)
-    if status:
+    if status and not recoverable:
         raise RuntimeError("Benchmark assertion/execution failed: " + stem)
-    return estimates(csv_path)
+    # A timeout is an incomplete observation, never a pass. Every missing case
+    # must complete both targeted confirmations before the family can pass.
+    if not values and not recoverable:
+        raise ValueError("No measurements in " + str(csv_path))
+    return values
 
 
 def confirmation_pattern(name, names):
@@ -231,45 +247,63 @@ def guard(group, target):
     previous = json.loads(state.read_text()) if state.exists() else {}
     reused = os.environ.get("KEIRO_BENCH_FRESH_REFERENCE") != "1" and valid_cache(previous, key, paths)
     if not reused:
-        measure(reference, cache / "keiro", group, samples, "reference")
-        previous = {"key": key, "finished": time.time(), "load_average": os.getloadavg(),
-                    "sha256": {p.name: sha(p) for p in paths}}
-        save(state, previous)
-    for path in paths + [state]:
-        shutil.copyfile(path, target / path.name)
-    ref = estimates(target / "reference.csv")
-    values = measure(candidate, ROOT / "keiro", group, target, "candidate", historical=baseline)
-    missing = historical.keys() - (ref.keys() & values.keys())
-    if missing:
-        raise ValueError("Missing required workloads: " + ", ".join(sorted(missing)))
+        try:
+            measure(reference, cache / "keiro", group, samples, "reference", allow_timeouts=True,
+                    timeout_inventory=set(historical))
+            command = json.loads((samples / "reference-command.json").read_text())
+            previous = {"key": key, "finished": time.time(), "load_average": os.getloadavg(),
+                        "complete": command["status"] == 0,
+                        "sha256": {p.name: sha(p) for p in paths}}
+            # Incomplete references are retained but cannot enter the timing cache.
+            if previous["complete"]:
+                save(state, previous)
+        finally:
+            for path in paths:
+                if path.exists():
+                    shutil.copyfile(path, target / path.name)
+    else:
+        for path in paths:
+            shutil.copyfile(path, target / path.name)
+    save(target / "sample.json", previous)
+    ref = estimates(target / "reference.csv", allow_empty=True)
+    values = measure(candidate, ROOT / "keiro", group, target, "candidate", historical=baseline,
+                     allow_timeouts=True, timeout_inventory=set(historical))
     cases = {}
+    for name in sorted(historical):
+        case = (compare(values[name], ref[name]) if name in values and name in ref
+                else {"status": "inconclusive", "reason": "Initial measurement timed out"})
+        if name in values:
+            case["historical_ratio"] = values[name].mean / historical[name].mean
+        cases[name] = case
     result = {"schema": 1, "group": group, "status": "running", "ceiling": CEILING,
               "reference_source": REFERENCE, "reference_reused": reused, "cases": cases,
               "candidate_sha256": candidate_sha256,
               "measurement_environment": context}
     save(target / "result.json", result)
-    deadline = time.monotonic() + CONFIRM_SECONDS
-    for index, name in enumerate(sorted(historical)):
-        case = compare(values[name], ref[name])
-        case["historical_ratio"] = values[name].mean / historical[name].mean
-        if case["status"] != "passed":
-            pairs = []
-            pattern = confirmation_pattern(name, set(historical))
-            for pair, order in enumerate((("candidate", "reference"), ("reference", "candidate"))):
-                observations = {}
-                for role in order:
-                    remaining = deadline - time.monotonic()
-                    if remaining <= 0:
-                        break
-                    binary, cwd = (candidate, ROOT / "keiro") if role == "candidate" else (reference, cache / "keiro")
-                    observations[role] = measure(binary, cwd, pattern, target,
-                                                 f"confirm-{index}-{pair}-{role}", timeout=remaining)[name]
-                if len(observations) != 2:
+    flagged = [name for name, case in cases.items() if case["status"] != "passed"]
+    if flagged:
+        # Four fixture lifecycles per family, regardless of the number of noisy
+        # cases. Preserve every within-run comparison dependency in the filter.
+        pattern = " || ".join(sorted({confirmation_pattern(name, set(historical)) for name in flagged}))
+        deadline = time.monotonic() + CONFIRM_SECONDS
+        pairs = []
+        for pair, order in enumerate((("candidate", "reference"), ("reference", "candidate"))):
+            observations = {}
+            for role in order:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
                     break
-                pairs.append(compare(observations["candidate"], observations["reference"]))
-            case["confirmation"] = pairs
-            case["status"] = confirmation_status(pairs)
-        cases[name] = case
+                binary, cwd = (candidate, ROOT / "keiro") if role == "candidate" else (reference, cache / "keiro")
+                observations[role] = measure(binary, cwd, pattern, target,
+                                             f"confirm-{pair}-{role}", timeout=remaining)
+            if len(observations) != 2:
+                break
+            pairs.append({name: compare(observations["candidate"][name], observations["reference"][name])
+                          for name in flagged})
+        for name in flagged:
+            confirmations = [pair[name] for pair in pairs]
+            cases[name]["confirmation"] = confirmations
+            cases[name]["status"] = confirmation_status(confirmations)
         save(target / "result.json", result)
     states = {case["status"] for case in cases.values()}
     if sha(candidate) != candidate_sha256 or sha(reference) != metadata["binary_sha256"]:

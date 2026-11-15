@@ -386,6 +386,8 @@ all six guards run, including after one guard fails, so diagnostics remain
 complete. Five workload families use `scripts/bench_guard.py` to compare against
 the immutable recording source on the current machine, with checksum-verified
 reference caching and bounded opposite-order confirmation of over-limit results.
+Flagged cases share four confirmation processes; initial timeout-only runs require
+complete passing confirmations, while assertions and confirmation timeouts still block.
 Historical CSVs remain diagnostics; workload inventories and numerical ceilings
 are unchanged. Regression, benchmark-error and inconclusive outcomes all block
 acceptance. The producer estimator remains unchanged. See ADR-58.

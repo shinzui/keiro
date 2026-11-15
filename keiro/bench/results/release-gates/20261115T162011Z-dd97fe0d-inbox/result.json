@@ -1,0 +1,8 @@
+{
+  "error": "Benchmark assertion/execution failed: candidate",
+  "finished": 1794760090.033938,
+  "group": "inbox",
+  "schema": 1,
+  "started": 1794759611.734146,
+  "status": "benchmark-error"
+}

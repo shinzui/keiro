@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Benchmark release gates require isolated fixed workloads and attributed baselines
 description: Release benchmark evidence uses isolated fixtures, fixed measured work, explicit growth bounds and reproducible baselines whose changes have attributed causes.
-timestamp: 2026-11-15T15:10:41Z
+timestamp: 2026-11-15T16:34:00Z
 docId: ADR-58
 status: Accepted
 date: 2026-10-21
@@ -57,20 +57,27 @@ For the five CSV families, `scripts/bench_guard.py` builds original recording so
 its unchanged workloads on this machine. Candidate means are compared with those
 reference means at the existing 1.25 ceiling. Historical rows, measured quantities,
 RTS settings and in-run ratio assertions remain unchanged. Every required historical
-row must exist in both results. New tracing-only cells retain their existing bounded
+row needs complete candidate and reference estimates in the initial comparison or
+both confirmations. New tracing-only cells retain their existing bounded
 work/count assertions rather than acquiring an invented historical budget.
 
 A verified reference executable is cached by source and build environment. Reference
 measurements are reusable for at most 24 hours and only for the identical candidate
 executable and environment; checksums bind their CSV and original log. Thus a new
 candidate binary never inherits reference timings measured for another binary.
-Over-limit results receive two fixed adjacent confirmations in opposite orders,
-with at most 120 additional seconds per family. Both must pass the original mean
+Over-limit, noisy and initially timed-out cases share two fixed adjacent
+confirmations in opposite orders: four processes per family, with at most 240
+additional seconds including fixture setup. Batching avoids repeatedly paying
+database preparation costs for each flagged case. Both must pass the original mean
 ratio ceiling to accept. Both must exceed it beyond the reported uncertainty to
 classify a regression; disagreement, insufficient precision or an unfinished pair
 is inconclusive and blocks acceptance. No favorable observation erases another. `release-gate --fresh` also bypasses
 reference-timing reuse. Standalone guards share the release workspace lock.
-Benchmark assertion/execution failures are never reclassified as environment drift.
+Only runs whose failures are all explicitly reported timeouts can supply partial
+measurements. Each missing required case must complete both confirmations; a
+timeout never supplies a passing observation. Incomplete reference measurements
+cannot enter the timing cache. Assertion failures, other execution failures and
+timeouts during confirmation block acceptance immediately.
 
 Retain all original measurements, confirmation commands/results, source and binary
 identities and dependency plans. Release receipts checksum these supplementary

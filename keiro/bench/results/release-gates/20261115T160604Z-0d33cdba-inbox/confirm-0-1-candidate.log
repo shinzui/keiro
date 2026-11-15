@@ -1,0 +1,6 @@
+All
+  inbox
+    batch-100: OK
+      79.5 ms ± 7.5 ms
+
+All 1 tests passed (1.56s)

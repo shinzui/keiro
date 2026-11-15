@@ -1,0 +1,53 @@
+{
+  "artifacts": {
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/build.log": "215517150aee2d4e7c37e9a89aed453be29626db56807e943248b5085841cc31",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/candidate-command.json": "525eaba6e090041e25c6aaee2fee1986487f68811206cbdc3fd37a9caa917dac",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/candidate.csv": "10734bbf9bdab0bb73dacce607e8b148386750784903a9076539da61be18c669",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/candidate.log": "53ec950b3ae9761a2d77f8a542192df8d2ac47fdc19cb163e6b14d5a94b964f0",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/confirm-10-0-candidate-command.json": "24b1df69ad9037aa0374f23e2807bb3d8a1eae4777190404c20d81d16ceff620",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/confirm-10-0-candidate.csv": "36f7330731a51140bb116aca4b6c545d4aa87204b258a9b1f5aec5d4a8df9d70",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/confirm-10-0-candidate.log": "413365438bb2ede7753f5b2f6a17947437627abe0b8fdbcfb6cea4b9747d333b",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/confirm-10-0-reference-command.json": "13af99a6221b0e0ced14b1d6c283fe0baaa6c6267cc8fc604bef48a2e19ec6d6",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/confirm-10-0-reference.csv": "b90fa19434f7f11c05e451e8a00b6268561b6366b85454ed185e9ee3fc595756",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/confirm-10-0-reference.log": "a7b3eca0ae79cb8714d8524b29189316e0d24ed33d131cff33deccfa3b45ed19",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/confirm-10-1-reference-command.json": "84f58b37f9879522fd2e5030c60319ac37b2b5b5b3c1918be2e4080bece85071",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/confirm-10-1-reference.csv": "b48b3d5c637e3b7897f0a4775d4d0df9ce0181dd9b628603b78a1231c04a4e23",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/confirm-10-1-reference.log": "62e39a61e61ddeca2c937a038d9e72360019b21b5a8bc79f7a5042db9127d48a",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/confirm-2-0-candidate-command.json": "ba2f11946f2f14315fe2cc8f41131aed64134f6c1ecd47acfc3964a2634cd4e8",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/confirm-2-0-candidate.csv": "9083080667351944e9eabdfdf5c6377d789895555df2464c3bc75d69c72ef0a2",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/confirm-2-0-candidate.log": "537d6081f3a2ddb9159ae46082b9dca3f9423080110e61db5592f4f745ef47c7",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/confirm-2-0-reference-command.json": "8dda3317dda7b12d8eadc2efc068a9fe0233f50e9e65a23f06d9bb6b51e293b6",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/confirm-2-0-reference.csv": "ade8db18a729aec5bfa9dbb50ca88828929535d65a89d78b7bf3a8508971766b",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/confirm-2-0-reference.log": "cfd8ac56918f1773c9aa63f7ad7c474ca66d60efd3247247502b14e180c16f3a",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/confirm-2-1-candidate-command.json": "af1d9259bfcb090a7c9822c5d4cdff0fa089fab16738b9afbf76701a6b65cfc3",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/confirm-2-1-candidate.csv": "454ec54167bae9ca83d32b0eda02e9f44619ea8ee612c02fdbdc45bd9ca2fe65",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/confirm-2-1-candidate.log": "7e64e2decc2d61a509bbf004ec15c2afbc35311e64cb138d218612112a4d5a99",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/confirm-2-1-reference-command.json": "8cce32403d2dbcc033699bd9a9b18ca22f9deb9ae677452b56c5af45d8bb8e56",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/confirm-2-1-reference.csv": "a050c124a6fd4feb59d9819c1af3cb5aed24e5a40652bb17ec6b1e2d7aa30b37",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/confirm-2-1-reference.log": "545e63bf342676595c6644127ff2166153f0d57d31cb32d0311ed83e24b0ec54",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/reference-build.log": "84616d6710007edef008c24a5b84690849302eec2bc1e0eb31b9b10dfa60df93",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/reference-command.json": "28e90bdad18c6eb01a3acd7bd208cc8aa12df3fbcd60a8914c59f90c0cc917b9",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/reference-plan.json": "67441c31996430b592ba3db7849370f2b570b0757ef3d595c9c4ca046b4bf53b",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/reference.csv": "71c9c6130f3a6984d8ef2df82522ba4fcffddb970ba2160e0b4aaefff7ae07e7",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/reference.json": "8a45808f256d11906016858693be2993715babc36cd25a974bf97c9498a87da0",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/reference.log": "44bc8b1569c759206daf33877a42bc84ea49250dc25e3384375f2fc18a7e9646",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/result.json": "a4ceadd9d4b33e94fa0e8d95c566bd10ab2467c9ef8b4574973f760e06e3d7f8",
+    "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection/sample.json": "079afa0360831dff4492ac7cf9ecfe9a3cd7603b888e06077b6873b670b531fc"
+  },
+  "command": [
+    "scripts/bench-regression.sh",
+    "projection"
+  ],
+  "finished": 1794758559.382808,
+  "identity": "6f9386b7fcb34371d1b535ba777f380530868114ef48df8a7c897b54f536c83d",
+  "load_average": [
+    8.51806640625,
+    13.05029296875,
+    11.36328125
+  ],
+  "log": "keiro/bench/results/release-gates/20261115T151650Z-80a7d618-projection.log",
+  "log_sha256": "b3edf357af6bcf12a36b579312f23d733912a032937bfb1b6f533f4974cdf329",
+  "schema": 1,
+  "started": 1794758306.872731,
+  "status": 2
+}

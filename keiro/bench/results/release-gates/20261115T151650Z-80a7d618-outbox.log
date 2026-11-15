@@ -1,0 +1,10 @@
+{"identity": "9428e17adb727c0f7793e19ba75faa393b5c790bc14789fb8baa767ba95e95ef", "command": ["scripts/bench-regression.sh", "outbox"]}
+##### guard outbox 2026-11-15T15:46:58Z
++ cabal build keiro:bench:keiro-bench
++ /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench -p outbox -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --csv /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/9ba8563197df7384b830e2a3ac2db22952b6277cbf428ef9ae39c1052aed253d/samples-ab5cd8670109c1b9bb313c2dbeec0a086cb4f35110332374c3ad6b4a4548c6e8/reference.csv +RTS -N2 -RTS
++ /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.25.0.0/b/keiro-bench/build/keiro-bench/keiro-bench -p outbox -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --csv /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261115T151650Z-80a7d618-outbox/candidate.csv --baseline /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/baseline-outbox.csv +RTS -N2 -RTS
+PERFORMANCE(outbox)=PASSED cases=3 evidence=/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261115T151650Z-80a7d618-outbox
+##### guard summary 2026-11-15T15:47:28Z
+GUARD(outbox)=0
+BENCH_REGRESSION=PASSED
+STAGE_EXIT=0

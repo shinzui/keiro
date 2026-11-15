@@ -1,0 +1,9 @@
+All
+  inbox
+    downstream
+      delegated-batch-100
+        repeated-key
+          metrics-off: OK
+            3.43 ms ± 2.7 ms
+
+All 1 tests passed (5.82s)

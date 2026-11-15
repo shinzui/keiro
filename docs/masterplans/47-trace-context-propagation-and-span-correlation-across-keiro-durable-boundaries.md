@@ -321,17 +321,18 @@ manager/command/event chain passes with metadata, links and child parenting. EP-
 timer and workflow creation contexts persist, exact wake/origin correlation survives snapshots,
 and retained-span ownership and five matched measurement pairs satisfy the bounded-work reading rule.
 
-All six implementation plans are Complete. Full `just verify` passes at `3bc78fab`, followed
-by focused review checks at `412721f4` and a stronger distinct-row ownership probe. The approved `0.25.0.0` candidate at `0d0f87cb` passes release preflight, the full
-correctness stage and native `nix flake check`. Producer identity and outbox guards pass;
-the first historical guard run failed under recorded competing load. A bounded rerun
-passes read-model, leaving seven failed cases across inbox, command and projection.
-All sixteen archives and an isolated staged-consumer build, migration and HTTP health check
-pass. A focused released-0.24/candidate no-op comparison measures 23.433/23.050 us;
-this limited observation shows that case also exceeds baseline in the released version.
-The user requested a permanent benchmark fix: selection-scoped tracing resources and
-automatic comparisons against the immutable original source on the current machine.
-No benchmark waiver is being used; release requires the corrected gate to pass. See the
+All six implementation plans are Complete. The approved `0.25.0.0` candidate now includes
+the permanent benchmark correction at `1184f1ba`: selection-scoped tracing fixtures and
+automatic comparisons against the immutable original recording source on this machine.
+Historical CSVs and numerical ceilings remain unchanged. Full correctness, native
+`nix flake check`, producer identity, outbox, command, projection and read-model pass.
+Inbox remains inconclusive after disagreeing confirmations and an isolated timeout;
+all attempts are retained. The follow-up runner batches flagged cases into four
+bounded confirmation processes and requires two complete passing confirmations
+for any known-inventory initial timeout. Its 87 script controls pass; final release
+verification follows the frozen runner revision. Earlier archives and the successful staged-consumer proof are retained
+as historical evidence and require refresh for the corrected candidate.
+No benchmark waiver is being used; publication requires every corrected guard to pass. See the
 [release status](../../keiro/bench/results/release-gates/0.25.0.0-release-status.md).
 
 Cross-plan gates not owned by a child plan:

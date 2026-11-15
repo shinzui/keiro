@@ -1,0 +1,58 @@
+All
+  tracing
+    command
+      append-distinct-streams:        OK
+        34.2 ms ± 2.6 ms
+      append-distinct-streams/tracer: OK
+        22.1 ms ± 3.0 ms
+      append-one-stream:              OK
+        76.8 ms ± 7.0 ms
+      append-one-stream/tracer:       OK
+        98.7 ms ± 9.1 ms
+      append-batch:                   OK
+        2.24 ms ± 860 μs
+      append-batch/tracer:            OK
+        2.15 ms ± 163 μs
+  command
+    legacy
+      accepted-1:                     OK
+        195  μs ±  12 μs, 29% more than baseline
+    control
+      accepted-1:                     OK
+        186  μs ±  12 μs, 24% more than baseline
+    domain-warmup
+      accepted-1:                     OK
+        199  μs ±  10 μs, 27% more than baseline
+    domain
+      accepted-1:                     OK
+        205  μs ± 7.1 μs, 1.10x, 36% more than baseline
+    legacy
+      accepted-large:                 OK
+        1.92 ms ± 106 μs, 27% more than baseline
+    domain
+      accepted-large:                 OK
+        2.12 ms ± 182 μs, 1.11x, 41% more than baseline
+    legacy
+      no-op:                          OK
+        22.0 μs ± 4.9 μs, 34% more than baseline
+    domain
+      rejected:                       OK
+        22.1 μs ± 491 ns, 1.01x, 35% more than baseline
+      no-op:                          OK
+        21.3 μs ± 1.6 μs, 0.97x, 29% more than baseline
+      router-fanout
+        10:                           OK
+          2.76 ms ± 223 μs, 28% more than baseline
+        100:                          OK
+          30.2 ms ± 2.2 ms, 38% more than baseline
+        1000:                         OK
+          275  ms ±  50 ms, 28% more than baseline
+      process-manager-fanout
+        10:                           OK
+          2.91 ms ± 361 μs, 38% more than baseline
+        100:                          OK
+          31.2 ms ± 9.0 ms, 51% more than baseline
+        1000:                         OK
+          332  ms ±  39 ms, 62% more than baseline
+
+All 21 tests passed (102.18s)
