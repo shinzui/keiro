@@ -19,7 +19,7 @@
        }
 , blueprints =
   [ { name = "keiro-upgrade"
-    , version = Some "0.14.0"
+    , version = Some "0.14.1"
     , path = "blueprints/keiro-upgrade"
     , description = Some
         "Upgrade guidance for Keiro consumers: one agent-guided edge per released version window, with upstream cohort edges entailed"

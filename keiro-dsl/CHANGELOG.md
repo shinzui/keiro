@@ -6,6 +6,8 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.25.1.0 — 2026-11-16
+
 ### New Features
 
 - Scaffolding emits `<generated prefix>.Inspection` for every service context with at
@@ -20,6 +22,10 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   `Keiro.Dsl.Scaffold.scaffoldInspection`. Regenerating adds one context module, which
   the consuming Cabal stanza must list (the emitted Cabal fragment includes it). DSL
   source, checking, language versions, and existing generated modules are unchanged.
+
+### Other Changes
+
+- Version and internal dependency bounds align with the shared release.
 
 ## 0.25.0.0 — 2026-11-14
 

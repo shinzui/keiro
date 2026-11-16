@@ -6,11 +6,18 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+## 0.25.1.0 — 2026-11-16
+
 ### New Features
 
 - **keiro-dsl**: Scaffolding emits a `<generated prefix>.Inspection` module per service
   context with one validated aggregate inspector per declared aggregate, the replay-audit
   targets, and the projection catalog, ready to mount through `Keiro.Ops.AppHooks`.
+
+### Other Changes
+
+- The other seven packages carry no source changes; their versions and internal
+  dependency bounds align with the shared release.
 
 ## 0.25.0.0 — 2026-11-14
 

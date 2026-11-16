@@ -9,6 +9,7 @@ edit. What to edit is in the edge prompt.
 
 | Keiro | `kiroku-store` | `kiroku-store-migrations` | `keiki` | `shibuya-core` |
 |---|---|---|---|---|
+| 0.25.1.0 | `^>=0.13.0.1` | `^>=0.7.3.0` | `>=0.9 && <0.10` | `^>=0.13.0.1` |
 | 0.25.0.0 | `^>=0.13.0.1` | `^>=0.7.3.0` | `>=0.9 && <0.10` | `^>=0.13.0.1` |
 | 0.24.0.0 | `^>=0.13.0.1` | `^>=0.7.3.0` | `>=0.9 && <0.10` | `^>=0.12.0.0` |
 | 0.23.0.0 | `^>=0.13.0.1` | `^>=0.7.3.0` | `>=0.9 && <0.10` | `^>=0.12.0.0` |
@@ -108,3 +109,8 @@ mori://shinzui/shibuya-pgmq-adapter/packages/shibuya-pgmq-adapter and adapter
 The framework plan contains 50 migrations (17 Store plus 33 Keiro); apply new
 Keiro migration `0033` before starting upgraded timer or workflow workers.
 The two adapter upgrade edges cover Shibuya 0.13 configuration and trace shape.
+
+Keiro 0.25.1.0 retains the 0.25.0.0 upstream cohort, adapter requirements, and
+migration plan. It adds a generated `Inspection` module to `keiro-dsl` scaffolding
+and needs no edge: regenerating is optional and existing generated modules are
+unchanged.
