@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-16
+* **Request**: IR-61 proposed from `mori://shinzui/shikigami`: declare workflow fragments from separate packages, so the labels a separately built package journals inside a host workflow are visible to check, diff and replay-impact, with a store-free recording interpreter for label inventories.
+
 ## 2026-11-05
 * **Update**: IR-59 completed: Jitsurei category lookup, explicit durable-input metadata and bounded CLI/HTTP pass 956 examples; focused allocation evidence retained (plan 324).
 * **Update**: IR-59 accepted: implementing category-consumer lookup under plan 324 with user-scoped verification.
