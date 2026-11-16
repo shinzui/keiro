@@ -41,6 +41,7 @@ module Keiro.Dsl.Scaffold
     generatedNominalTypeImportsForService,
     generatedIdSampleHaskell,
     scaffoldReplayAudit,
+    scaffoldInspection,
     scaffoldStructural,
     scaffoldStructuralForService,
     scaffoldStructuralOwners,
@@ -3875,6 +3876,148 @@ scaffoldReplayAudit ctx spec
             ]
           ++ ["  ]"]
 
+-- | Emit the context-wide read-only inspection catalog: one aggregate
+-- inspector per aggregate declaration (the same single source of truth as
+-- 'scaffoldReplayAudit', so process saga aggregates are included), the
+-- replay-audit targets, and the validated projection catalog.
+--
+-- The module exists whenever the context emits a ReplayAudit or a
+-- ProjectionCatalog module. An absent section is an empty value rather than
+-- 'Maybe', so every host mounts the surface with identical code. The state
+-- display is read back from each definition's own @stateCodec@ field, which
+-- the aggregate's snapshot clause decides, so it cannot drift from the codec
+-- the event stream actually uses.
+--
+-- Library names are imported unqualified with explicit lists (aggregate
+-- EventStream modules use single-segment aliases that could otherwise collide),
+-- and the library 'aggregateInspectors' is reached through its full module
+-- name because the export shares its name.
+scaffoldInspection :: Context -> CheckedService -> [ScaffoldModule]
+scaffoldInspection ctx service
+  | null aggregates && not hasCatalog = []
+  | otherwise =
+      [ ScaffoldModule
+          { path = T.unpack (T.replace "." "/" moduleName <> ".hs"),
+            text = emitInspection,
+            kind = Generated,
+            origin = "context " <> (.context) spec <> " inspection catalog"
+          }
+      ]
+  where
+    spec = checkedSpec service
+    aggregates = [aggregate | NAggregate aggregate <- (.nodes) spec]
+    hasAggregates = not (null aggregates)
+    hasCatalog = hasProjectionCatalog spec
+    prefix = contextGeneratedPrefix ctx
+    moduleName = prefix <> ".Inspection"
+    inspectionImports =
+      sort $
+        [ "import Keiro.Inspection.Aggregate (AggregateInspectors, SomeAggregateInspector (..)"
+            <> (if hasAggregates then ", aggregateInspector, displayViaStateCodec" else "")
+            <> ")",
+          "import Keiro.Inspection.Aggregate qualified",
+          "import Keiro.ReplayAudit (SomeAuditTarget)"
+        ]
+          <> ( if hasCatalog
+                 then
+                   [ "import " <> prefix <> ".ProjectionCatalog (validatedProjectionCatalog)",
+                     "import Keiro.Projection.Catalog (ValidatedProjectionCatalog)"
+                   ]
+                 else ["import Keiro.Projection.Catalog (ValidatedProjectionCatalog, Validation (..), emptyProjectionCatalog, validateProjectionCatalog)"]
+             )
+          <> ( if hasAggregates
+                 then
+                   [ "import Data.Aeson (Value, object, (.=))",
+                     "import Data.Text (pack)",
+                     "import " <> prefix <> ".ReplayAudit (auditTargets)",
+                     "import Keiki.Core (RegFile)",
+                     "import Keiro.EventStream (EventStream (..))",
+                     "import Keiro.Stream (categoryText)"
+                   ]
+                     <> [ "import " <> genPrefixFor ctx ((.name) aggregate) <> ".EventStream qualified as " <> (.name) aggregate
+                        | aggregate <- aggregates
+                        ]
+                 else []
+             )
+    inspectorLine index aggregate =
+      let aggregateName = (.name) aggregate
+          qualifiedBinding suffix = aggregateName <> "." <> lowerFirst aggregateName <> suffix
+          category = qualifiedBinding "Category"
+       in (if index == (0 :: Int) then "  [ " else "  , ")
+            <> "SomeAggregateInspector (aggregateInspector (categoryText "
+            <> category
+            <> ") "
+            <> qualifiedBinding "EventStream"
+            <> " "
+            <> category
+            <> " (displayFoldedState "
+            <> qualifiedBinding "EventStreamDef"
+            <> "))"
+    catalogLines
+      | hasAggregates = "aggregateInspectorCatalog =" : zipWith inspectorLine [0 ..] aggregates <> ["  ]"]
+      | otherwise = ["aggregateInspectorCatalog = []"]
+    projectionCatalogLines
+      | hasCatalog = ["inspectionProjectionCatalog = validatedProjectionCatalog"]
+      | otherwise =
+          [ "inspectionProjectionCatalog = case validateProjectionCatalog emptyProjectionCatalog of",
+            "  Success catalog -> catalog",
+            "  Failure diagnostics -> error (\"keiro-dsl generated an invalid empty projection catalog: \" <> show diagnostics)"
+          ]
+    displayLines
+      | hasAggregates =
+          [ "",
+            "-- The aggregate's own state codec when its definition declares one (snapshot",
+            "-- aggregates), otherwise the vertex label.",
+            "displayFoldedState :: (Show s) => EventStream phi rs s ci co -> s -> RegFile rs -> Value",
+            "displayFoldedState EventStream {stateCodec = Just codec} = displayViaStateCodec codec",
+            "displayFoldedState EventStream {stateCodec = Nothing} = \\state _ -> object [\"state\" .= pack (show state)]"
+          ]
+      | otherwise = []
+    emitInspection =
+      nl $
+        renderGeneratedLanguagePragmas []
+          <> [ generatedBanner,
+               "--",
+               "-- The complete read-only inspection catalog for this service: one aggregate",
+               "-- inspector per declared aggregate, the replay-audit targets and the projection",
+               "-- catalog. Mount them through Keiro.Ops.AppHooks; see docs/user/operations.md.",
+               "module " <> moduleName,
+               "  ( aggregateInspectorCatalog",
+               "  , aggregateInspectors",
+               "  , inspectionAuditTargets",
+               "  , inspectionProjectionCatalog",
+               "  ) where",
+               ""
+             ]
+          <> inspectionImports
+          <> ["", "aggregateInspectorCatalog :: [SomeAggregateInspector]"]
+          <> catalogLines
+          <> [ "",
+               "aggregateInspectors :: AggregateInspectors",
+               "aggregateInspectors = case Keiro.Inspection.Aggregate.aggregateInspectors aggregateInspectorCatalog of",
+               "  Right inspectors -> inspectors",
+               "  Left message -> error (\"keiro-dsl generated an invalid aggregate inspector catalog: \" <> show message)",
+               "",
+               "inspectionAuditTargets :: [SomeAuditTarget]",
+               "inspectionAuditTargets = " <> (if hasAggregates then "auditTargets" else "[]"),
+               "",
+               "inspectionProjectionCatalog :: ValidatedProjectionCatalog"
+             ]
+          <> projectionCatalogLines
+          <> displayLines
+
+-- | Whether the context emits a ProjectionCatalog module. Shared by the
+-- catalog and inspection emitters so the two cannot disagree.
+hasProjectionCatalog :: Spec -> Bool
+hasProjectionCatalog spec = any isCatalogNode ((.nodes) spec)
+  where
+    isCatalogNode NProjectionTarget {} = True
+    isCatalogNode NRebuildGroup {} = True
+    isCatalogNode NProjectionRevision {} = True
+    isCatalogNode NExternalRead {} = True
+    isCatalogNode NProjectionOwner {} = True
+    isCatalogNode _ = False
+
 genModule :: Agg -> Text -> Text -> ScaffoldModule
 genModule a name body =
   ScaffoldModule
@@ -5078,7 +5221,7 @@ scaffoldProjectionCatalogForService ctx service =
 
 scaffoldProjectionCatalogWith :: (Name -> Text) -> Context -> Spec -> ProjectionSupplyAnalysis -> [ScaffoldModule]
 scaffoldProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis
-  | null catalogNodes = []
+  | not (hasProjectionCatalog spec) = []
   | otherwise =
       [ ScaffoldModule
           { path = modulePathFor (contextGeneratedPrefix ctx) "ProjectionCatalog",
@@ -5094,16 +5237,9 @@ scaffoldProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis
           }
       ]
   where
-    catalogNodes = [() | node <- (.nodes) spec, isCatalogNode node]
     owners = sortOn (.order) [owner | NProjectionOwner owner <- (.nodes) spec]
     revisions = sortOn (.name) [revision | NProjectionRevision revision <- (.nodes) spec]
     externalReads = sortOn (\externalRead -> ((.name) externalRead, (.version) externalRead)) [externalRead | NExternalRead externalRead <- (.nodes) spec]
-    isCatalogNode NProjectionTarget {} = True
-    isCatalogNode NRebuildGroup {} = True
-    isCatalogNode NProjectionRevision {} = True
-    isCatalogNode NExternalRead {} = True
-    isCatalogNode NProjectionOwner {} = True
-    isCatalogNode _ = False
 
 emitProjectionCatalogWith :: (Name -> Text) -> Context -> Spec -> ProjectionSupplyAnalysis -> Text
 emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =

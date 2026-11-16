@@ -13,6 +13,7 @@ module-role {"family":"MappedBindings","kind":"hole","ownerKind":"consumer","own
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context catalog-demo replay-audit assembly","path":"Generated/CatalogDemo/ReplayAudit.hs"}
 module-role {"family":"ProjectionCatalog","kind":"generated","ownerKind":"projection-catalog","ownerName":"projection-catalog catalog-demo","path":"Generated/CatalogDemo/ProjectionCatalog.hs"}
 module-role {"family":"ProjectionCatalogHoles","kind":"hole","ownerKind":"projection-catalog","ownerName":"projection-catalog catalog-demo","path":"CatalogDemo/ProjectionCatalog/ProjectionCatalogHoles.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context catalog-demo inspection catalog","path":"Generated/CatalogDemo/Inspection.hs"}
 module-role {"family":"ReadModelTable","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel order_inline (line 181)","path":"Generated/CatalogDemo/OrderInline/ReadModelTable.hs"}
 module-role {"family":"QueryContract","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel order_inline (line 181)","path":"Generated/CatalogDemo/OrderInline/QueryContract.hs"}
 module-role {"family":"ReadModel","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel order_inline (line 181)","path":"Generated/CatalogDemo/OrderInline/ReadModel.hs"}
@@ -57,6 +58,7 @@ hole CatalogDemo/MappedBindings.hs
 generated Generated/CatalogDemo/ReplayAudit.hs
 generated Generated/CatalogDemo/ProjectionCatalog.hs
 hole CatalogDemo/ProjectionCatalog/ProjectionCatalogHoles.hs
+generated Generated/CatalogDemo/Inspection.hs
 generated Generated/CatalogDemo/OrderInline/ReadModelTable.hs
 generated Generated/CatalogDemo/OrderInline/QueryContract.hs
 generated Generated/CatalogDemo/OrderInline/ReadModel.hs

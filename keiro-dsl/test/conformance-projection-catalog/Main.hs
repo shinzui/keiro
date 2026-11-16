@@ -4,8 +4,14 @@ import CatalogDemo.MappedDomain (QualificationPayload (..), QualificationResult 
 import Control.Monad (forM_, unless)
 import Data.Aeson (Value (..), object, (.=))
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.Aeson.Text (encodeToLazyText)
+import Data.List (sort)
+import Data.Map.Strict qualified as Map
 import Data.Text (Text)
+import Data.Text qualified as Text
+import Data.Text.Lazy qualified as LazyText
 import Generated.CatalogDemo.CatalogAudit.ReadModelHarness qualified as CatalogAudit
+import Generated.CatalogDemo.Inspection (aggregateInspectors, inspectionAuditTargets, inspectionProjectionCatalog)
 import Generated.CatalogDemo.OrderInline.QueryContract (OrderInlineQueryInput, OrderInlineQueryResult)
 import Generated.CatalogDemo.OrderInline.ReadModelHarness qualified as OrderInline
 import Generated.CatalogDemo.OrderTotalsLookup.ReadModelHarness qualified as OrderTotalsLookup
@@ -21,15 +27,22 @@ import Generated.CatalogDemo.ProjectionCatalog
   , shipmentWriterInlineProjections
   , shipmentsInlineProjections
   , shippingRebuildGroupId
+  , validatedProjectionCatalog
   )
 import Generated.CatalogDemo.ShipmentLookup.ReadModelHarness qualified as ShipmentLookup
 import Generated.CatalogDemo.Shipments.Harness qualified as Shipments
 import Generated.CatalogDemo.QualificationJobs.Queue
 import Generated.CatalogDemo.QualificationJobs.QueueCodec (qualificationJobsJobCodec)
 import Generated.CatalogDemo.StructuralConformance (structuralConformanceAssertions)
+import Keiro.EventStream (EventStream (..))
+import Keiro.EventStream.Validate (unvalidated)
+import Keiro.Inspection.Aggregate (AggregateInspector (..), AggregateTypeSummary (..), SomeAggregateInspector (..), aggregateStream, listAggregateTypes)
 import Keiro.PGMQ.Codec (JobCodec (..))
 import Keiro.Projection.Catalog qualified as Catalog
+import Keiro.ReplayAudit (AuditTarget (..), SomeAuditTarget (..))
+import Keiro.Stream (streamName)
 import Kiroku.Store.Subscription.Types (MissingCheckpointPolicy (FromCurrentHead))
+import Kiroku.Store.Types (StreamName (..))
 
 main :: IO ()
 main = do
@@ -95,7 +108,41 @@ main = do
   assert "generated missing-checkpoint policy" (map inventoryCheckpointPolicy (Catalog.inventorySubscriptions projectionCatalogInventory) == [FromCurrentHead])
   assert "catalog-scoped rebuild group" (Catalog.rebuildGroupIdText reportingRebuildGroupId == "reporting")
   assert "disjoint catalog rebuild group" (Catalog.rebuildGroupIdText shippingRebuildGroupId == "shipping")
+  exerciseInspectionCatalog
   putStrLn "projection catalog conformance: PASS"
+
+-- The generated Inspection module: one inspector per aggregate, named by the
+-- same category text replay audit uses, rendering vertex-only state for an
+-- aggregate without a snapshot clause, and reusing the generated catalog.
+exerciseInspectionCatalog :: IO ()
+exerciseInspectionCatalog = do
+  let names = Map.keys aggregateInspectors
+      auditCategories = sort [target.category | SomeAuditTarget target <- inspectionAuditTargets]
+      aggregateTypes = [(summary.name, summary.snapshotsConfigured) | summary <- listAggregateTypes aggregateInspectors]
+      sameCatalog = Catalog.catalogFingerprintText (Catalog.catalogFingerprint inspectionProjectionCatalog) == Catalog.catalogFingerprintText (Catalog.catalogFingerprint validatedProjectionCatalog)
+  putStrLn ("inspection aggregate names: " <> show names)
+  putStrLn ("inspection names equal replay-audit categories: " <> show (names == auditCategories))
+  putStrLn ("inspection aggregate types: " <> show aggregateTypes)
+  assert "inspection aggregate names" (names == ["orders", "shipments"])
+  assert "inspection names equal replay-audit categories" (names == auditCategories)
+  assert "inspection aggregate types" (aggregateTypes == [("orders", False), ("shipments", False)])
+  case Map.lookup "orders" aggregateInspectors of
+    Nothing -> assert "orders inspector present" False
+    Just (SomeAggregateInspector inspector) -> do
+      let definition = unvalidated inspector.eventStream
+          display = LazyText.unpack (encodeToLazyText (inspector.displayState definition.initialState definition.initialRegisters))
+          label = inspector.stateLabel definition.initialState
+          resolved = case aggregateStream inspector "order-1" of
+            Right resolvedStream -> case streamName resolvedStream of StreamName nameText -> Just nameText
+            Left _ -> Nothing
+      putStrLn ("orders initial display: " <> display)
+      putStrLn ("orders initial label: " <> Text.unpack label)
+      putStrLn ("orders stream for order-1: " <> maybe "<unresolved>" Text.unpack resolved)
+      assert "orders initial display" (display == "{\"state\":\"OrdersEmpty\"}")
+      assert "orders initial label" (label == "OrdersEmpty")
+      assert "orders stream for order-1" (resolved == Just "orders-order-1")
+  putStrLn ("inspection projection catalog is the generated catalog: " <> show sameCatalog)
+  assert "inspection projection catalog is the generated catalog" sameCatalog
 
 perturbSubscriptionName :: Catalog.AsyncProjectionRegistration -> Catalog.AsyncProjectionRegistration
 perturbSubscriptionName (Catalog.AsyncProjectionRegistration projectionId projectionName subscriptionId _ checkpointOnMissing dedupKeyId dedupName) =

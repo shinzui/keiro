@@ -101,7 +101,7 @@ import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFo
 import Keiro.Dsl.ReplayImpact (AggregateImpact (..), CatalogReplayImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
 import Keiro.Dsl.RouterSelection qualified as RouterSelection
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ModuleRole (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, pascal, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldAggregateForService, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldProjectionCatalog, scaffoldPublisher, scaffoldReadModel, scaffoldReadModelForService, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, scaffoldWorkqueueForService, windowSeconds)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ModuleRole (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, pascal, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldAggregateForService, scaffoldContract, scaffoldContractForService, scaffoldInspection, scaffoldIntake, scaffoldProcess, scaffoldProjectionCatalog, scaffoldPublisher, scaffoldReadModel, scaffoldReadModelForService, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, scaffoldWorkqueueForService, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (..), ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, projectionCatalogFactsForService, recordFileName, renderRecord)
 import Keiro.Dsl.ScaffoldRun (GeneratedArtifactCategory (..), GeneratedArtifactImpact (..), GeneratedHaskellEditionImpact (..), GeneratedHaskellEditionUse (..), HoleUseForm (..), MappingDrift (..), QueryContractMigration (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkIndexedServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndMigrations, executeServiceScaffoldWithRuntimePackageAndNameMigrations, generatedImportResolutionViolations, planIndexedServiceScaffold, planIndexedServiceScaffoldWithRuntimePackage, planningRefusalDiagnostics, pureRefusalsForService, renderRefusals, renderScaffoldReport, renderSemanticImpactReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
@@ -9768,6 +9768,49 @@ main = hspec $ do
           T.count "      AuditTarget" ((.text) assembly) `shouldBe` 2
         assemblies -> expectationFailure ("expected one replay-audit assembly, got " <> show (length assemblies))
 
+    describe "Inspection catalog" $ do
+      let inspectionOf fixture = do
+            service <- checkedServiceOf fixture
+            pure (scaffoldInspection (defaultContext ((checkedSpec service).context)) service)
+          singleInspection fixture = do
+            modules <- inspectionOf fixture
+            case modules of
+              [inspection] -> pure inspection
+              _ -> do
+                expectationFailure ("expected one inspection module for " <> fixture <> ", got " <> show (length modules))
+                error "unreachable"
+      it "generates one inspector for every aggregate, including the process saga" $ do
+        inspection <- singleInspection "test/fixtures/surge-service.keiro"
+        (.path) inspection `shouldBe` "Generated/SurgeDemo/Inspection.hs"
+        (.kind) inspection `shouldBe` Generated
+        T.count "SomeAggregateInspector (aggregateInspector" ((.text) inspection) `shouldBe` 2
+        (.text) inspection `shouldSatisfy` T.isInfixOf "Hospital.hospitalEventStreamDef"
+        (.text) inspection `shouldSatisfy` T.isInfixOf "Surge.surgeEventStreamDef"
+        (.text) inspection `shouldSatisfy` T.isInfixOf "inspectionAuditTargets = auditTargets"
+      it "reuses the generated projection catalog when the context declares one" $ do
+        inspection <- singleInspection "test/fixtures/projection-catalog.keiro"
+        (.text) inspection `shouldSatisfy` T.isInfixOf "ProjectionCatalog (validatedProjectionCatalog)"
+        (.text) inspection `shouldSatisfy` (not . T.isInfixOf "emptyProjectionCatalog")
+      it "uses the validated empty projection catalog for an aggregates-only context" $ do
+        inspection <- singleInspection "test/fixtures/reservation.keiro"
+        (.text) inspection `shouldSatisfy` T.isInfixOf "validateProjectionCatalog emptyProjectionCatalog"
+        (.text) inspection `shouldSatisfy` (not . T.isInfixOf "validatedProjectionCatalog")
+      it "emits empty aggregate sections for a projections-only context" $ do
+        inspection <- singleInspection "test/fixtures/keyword-segments.keiro"
+        (.text) inspection `shouldSatisfy` T.isInfixOf "aggregateInspectorCatalog = []"
+        (.text) inspection `shouldSatisfy` T.isInfixOf "inspectionAuditTargets = []"
+        (.text) inspection `shouldSatisfy` (not . T.isInfixOf "EventStream")
+        (.text) inspection `shouldSatisfy` (not . T.isInfixOf "displayFoldedState")
+      it "emits nothing for a context with neither aggregates nor a projection catalog" $ do
+        modules <- inspectionOf "test/fixtures/contract.keiro"
+        modules `shouldBe` []
+      it "passes the generated-code firewall without local extensions" $ do
+        modules <- concat <$> mapM inspectionOf ["test/fixtures/surge-service.keiro", "test/fixtures/projection-catalog.keiro", "test/fixtures/reservation.keiro", "test/fixtures/keyword-segments.keiro"]
+        length modules `shouldBe` 4
+        firewallBreaches modules `shouldBe` []
+        reservation <- scaffoldFixture "test/fixtures/reservation.keiro"
+        generatedExtensionsEndingIn "Inspection.hs" reservation `shouldBe` []
+
   describe "diff (evolution classification)" $ do
     it "covers every node family exactly once and explains exclusions" $ do
       sort (map fst familyRegistry) `shouldBe` ([minBound .. maxBound] :: [NodeFamily])
@@ -11549,6 +11592,7 @@ main = hspec $ do
             "Generated.HospitalCapacity.Nominals",
             "Generated.HospitalCapacity.Nominals.Internal",
             "Generated.HospitalCapacity.ReplayAudit",
+            "Generated.HospitalCapacity.Inspection",
             "HospitalCapacity.Reservation.BehaviorHoles",
             "HospitalCapacity.Reservation.Holes"
           ]
@@ -12624,8 +12668,8 @@ main = hspec $ do
       mods <- scaffoldFixture "test/fixtures/reservation.keiro"
       let holes = [m | m <- mods, (.kind) m == HoleStub]
       map (takeFileName . (.path)) holes `shouldBe` ["BehaviorHoles.hs", "Holes.hs"]
-      -- Context nominals/internal/replay plus the stable aggregate surface.
-      length [m | m <- mods, (.kind) m == Generated] `shouldBe` 10
+      -- Context nominals/internal/replay/inspection plus the stable aggregate surface.
+      length [m | m <- mods, (.kind) m == Generated] `shouldBe` 11
     it "is deterministic (re-scaffolding yields byte-identical text)" $ do
       a <- scaffoldFixture "test/fixtures/reservation.keiro"
       b <- scaffoldFixture "test/fixtures/reservation.keiro"
@@ -12646,7 +12690,7 @@ main = hspec $ do
     it "scaffolds the register-free OrderStream smoke target without error" $ do
       mods <- scaffoldFixture "test/fixtures/order.keiro"
       -- Stable and.aggregate.modules.context plus both hand-owned hole surfaces.
-      length mods `shouldBe` 12
+      length mods `shouldBe` 13
       firewallBreaches mods `shouldBe` []
       let harness = generatedTextEndingIn "Harness.hs" mods
       harness `shouldSatisfy` T.isInfixOf "prefix = \"forward/replay equality: PlaceOrder from OrderNotStarted -- \""
@@ -13412,6 +13456,7 @@ main = hspec $ do
         ownerOf "StructuralProjections.hs" `shouldBe` Just ContextLevel
         ownerOf "Generated/Nominals.hs" `shouldBe` Just ContextLevel
         ownerOf "ReplayAudit.hs" `shouldBe` Just ContextLevel
+        ownerOf "Inspection.hs" `shouldBe` Just ContextLevel
         ownerOf "Structural/Shape/ProjectSummary.hs"
           `shouldBe` Just (MemberOwned "domain/shared.keiro")
         ownerOf "Project/Generated/Domain.hs"
@@ -13569,13 +13614,14 @@ main = hspec $ do
               -- else names the member that produced it.
               [(.path) row | row <- (.modules) record, (.owner) row == Nothing]
                 `shouldSatisfy` \ownerless ->
-                  length ownerless == 6
+                  length ownerless == 7
                     && any (T.isSuffixOf "StructuralConformance.hs" . T.pack) ownerless
                     && any (T.isSuffixOf "BehaviorSourceMap.hs" . T.pack) ownerless
                     && any (T.isSuffixOf "StructuralProjections.hs" . T.pack) ownerless
                     && any (T.isSuffixOf "Nominals.hs" . T.pack) ownerless
                     && any (T.isSuffixOf "Nominals/Internal.hs" . T.pack) ownerless
                     && any (T.isSuffixOf "ReplayAudit.hs" . T.pack) ownerless
+                    && any (T.isSuffixOf "Inspection.hs" . T.pack) ownerless
               [ (.owner) row
                 | row <- (.modules) record,
                   "Project/Generated/Domain.hs" `T.isSuffixOf` T.pack ((.path) row)

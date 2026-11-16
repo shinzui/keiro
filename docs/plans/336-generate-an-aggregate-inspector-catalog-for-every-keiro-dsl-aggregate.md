@@ -4,6 +4,7 @@ slug: generate-an-aggregate-inspector-catalog-for-every-keiro-dsl-aggregate
 title: "Generate an aggregate inspector catalog for every keiro-dsl aggregate"
 kind: exec-plan
 created_at: 2026-11-16T02:00:42Z
+intention: intention_01m7jrjhcjezmsxe3kpfkm04ec
 provenance:
   created_by:
     model: "claude-opus-5-5"
@@ -21,6 +22,11 @@ provenance:
       at: 2026-11-16T03:58:21Z
       mode: "update"
       note: "Made Milestone 2 corpus handling concrete and required docs/ADR to state display consequences"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-16T18:05:54Z
+      mode: "implement"
+      note: "Implementing milestones 1-3"
 ---
 
 # Generate an aggregate inspector catalog for every keiro-dsl aggregate
@@ -73,10 +79,14 @@ declared aggregate.
 
 ## Progress
 
-- [ ] Milestone 1: `keiro-dsl` emits `<prefix>.Inspection` for every context with an
+- [x] Milestone 1: `keiro-dsl` emits `<prefix>.Inspection` for every context with an
   aggregate or projection catalog; `keiro-dsl-test` covers all emission shapes, and the
   regenerated `conformance-projection-catalog` suite compiles the module and proves its
-  runtime behavior.
+  runtime behavior. (2026-11-16: the six "Inspection catalog" cases and the updated
+  manifest, module-count, and workspace-ownership assertions pass;
+  `cabal test keiro-dsl-conformance-projection-catalog` compiles the module under
+  `-Werror` and prints every expected line. The remaining `keiro-dsl-test` failures are
+  corpus-freshness checks that Milestone 2's regeneration resolves.)
 - [ ] Milestone 2: every regenerated conformance suite compiles its Inspection module;
   the snapshot and projections-only suites prove the state-codec and empty-aggregate
   shapes; `scripts/check-conformance-corpus.sh` passes from a clean baseline.
@@ -88,7 +98,16 @@ declared aggregate.
 
 ## Surprises & Discoveries
 
-(None yet.)
+- `scaffoldReplayAudit` imports `Keiro.Stream qualified as Stream` beside
+  single-segment aggregate aliases, so an aggregate named `Stream` would make its
+  `Stream.categoryText` references ambiguous. The Inspection emitter avoids the hazard
+  by importing `categoryText` unqualified; ReplayAudit is left unchanged as this plan
+  directs. Evidence: the import lines in `scaffoldReplayAudit` in
+  `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`.
+- Adding a context module also changes three count assertions in `keiro-dsl/test/Main.hs`
+  that the plan did not name: the reservation Generated count (10 → 11), the
+  `order.keiro` total module count (12 → 13), and the workspace ownerless-module count
+  (6 → 7).
 
 
 ## Decision Log

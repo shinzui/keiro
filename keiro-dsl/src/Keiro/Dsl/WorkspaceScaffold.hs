@@ -266,6 +266,7 @@ workspaceModules goldens runtimePackage sourceEntries ctx workspace service = do
       <> [attributedStamped (declarationProvenance names) m | (m, names) <- scaffoldStructuralOwnersForService ctx service]
       <> [attributedStamped ContextLevel m | m <- scaffoldReplayAudit ctx merged]
       <> [attributedStamped ContextLevel m | m <- scaffoldProjectionCatalogForService ctx service]
+      <> [attributedStamped ContextLevel m | m <- scaffoldInspection ctx service]
       <> concat
         [ map (attributedStamped (nodeProvenance node)) (emittersFor node)
         | node <- (.nodes) merged

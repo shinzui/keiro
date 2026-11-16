@@ -334,6 +334,7 @@ scaffoldServiceModulesWithBehaviorSource goldens sourceEntries ctx service =
       <> scaffoldStructuralForService ctx service
       <> scaffoldReplayAudit ctx spec
       <> scaffoldProjectionCatalogForService ctx service
+      <> scaffoldInspection ctx service
       <> concat
         [ case node of
             NAggregate agg -> scaffoldAggregateForService ctx service agg <> harnessForServiceWithGoldens goldens ctx service agg

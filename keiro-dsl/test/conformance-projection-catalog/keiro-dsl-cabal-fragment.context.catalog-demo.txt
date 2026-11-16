@@ -23,6 +23,7 @@ other-modules:
     Generated.CatalogDemo.CatalogAudit.ReadModel
     Generated.CatalogDemo.CatalogAudit.ReadModelHarness
     Generated.CatalogDemo.CatalogAudit.ReadModelTable
+    Generated.CatalogDemo.Inspection
     Generated.CatalogDemo.OrderInline.QueryContract
     Generated.CatalogDemo.OrderInline.ReadModel
     Generated.CatalogDemo.OrderInline.ReadModelHarness
