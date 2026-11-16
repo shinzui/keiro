@@ -492,8 +492,8 @@ nix develop -c just release-consumer published
 
 Published mode uses exact version constraints with no local release archives. Its
 plan must show all eight packages from secure HTTPS Hackage. Index refresh and
-dependency solving retry at most five times with 15-second gaps to accommodate
-index lag. Compilation and runtime failures are not retried. A failed update is
+dependency solving retry every 60 seconds for up to 30 minutes, because Hackage
+regenerates its index only every few minutes and can cut it mid-cohort. Compilation and runtime failures are not retried. A failed update is
 reported immediately; do not rewrite the global Cabal cache or config to repair
 this isolated proof. Retain its result and proof log. Report all eight Hackage
 URLs and proceed to the required GitHub release.

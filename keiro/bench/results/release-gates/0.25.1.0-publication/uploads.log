@@ -1,0 +1,95 @@
+== keiro-core
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Uploading dist-release/0.25.1.0/keiro-core-0.25.1.0.tar.gz...
+Package successfully published. You can now view it at
+'https://hackage.haskell.org/package/keiro-core-0.25.1.0'.
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Uploading documentation
+dist-release/0.25.1.0/keiro-core-0.25.1.0-docs.tar.gz...
+Package documentation successfully published. You can now view it at
+'https://hackage.haskell.org/package/keiro-core-0.25.1.0'.
+== keiro
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Uploading dist-release/0.25.1.0/keiro-0.25.1.0.tar.gz...
+Package successfully published. You can now view it at
+'https://hackage.haskell.org/package/keiro-0.25.1.0'.
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Uploading documentation dist-release/0.25.1.0/keiro-0.25.1.0-docs.tar.gz...
+Package documentation successfully published. You can now view it at
+'https://hackage.haskell.org/package/keiro-0.25.1.0'.
+== keiro-pgmq
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Uploading dist-release/0.25.1.0/keiro-pgmq-0.25.1.0.tar.gz...
+Package successfully published. You can now view it at
+'https://hackage.haskell.org/package/keiro-pgmq-0.25.1.0'.
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Uploading documentation
+dist-release/0.25.1.0/keiro-pgmq-0.25.1.0-docs.tar.gz...
+Package documentation successfully published. You can now view it at
+'https://hackage.haskell.org/package/keiro-pgmq-0.25.1.0'.
+== keiro-migrations
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Uploading dist-release/0.25.1.0/keiro-migrations-0.25.1.0.tar.gz...
+Package successfully published. You can now view it at
+'https://hackage.haskell.org/package/keiro-migrations-0.25.1.0'.
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Uploading documentation
+dist-release/0.25.1.0/keiro-migrations-0.25.1.0-docs.tar.gz...
+Package documentation successfully published. You can now view it at
+'https://hackage.haskell.org/package/keiro-migrations-0.25.1.0'.
+== keiro-test-support
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Uploading dist-release/0.25.1.0/keiro-test-support-0.25.1.0.tar.gz...
+Package successfully published. You can now view it at
+'https://hackage.haskell.org/package/keiro-test-support-0.25.1.0'.
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Uploading documentation
+dist-release/0.25.1.0/keiro-test-support-0.25.1.0-docs.tar.gz...
+Package documentation successfully published. You can now view it at
+'https://hackage.haskell.org/package/keiro-test-support-0.25.1.0'.
+== keiro-dsl
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Uploading dist-release/0.25.1.0/keiro-dsl-0.25.1.0.tar.gz...
+Package successfully published. You can now view it at
+'https://hackage.haskell.org/package/keiro-dsl-0.25.1.0'.
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Uploading documentation
+dist-release/0.25.1.0/keiro-dsl-0.25.1.0-docs.tar.gz...
+Package documentation successfully published. You can now view it at
+'https://hackage.haskell.org/package/keiro-dsl-0.25.1.0'.
+== keiro-ops
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Uploading dist-release/0.25.1.0/keiro-ops-0.25.1.0.tar.gz...
+Package successfully published. You can now view it at
+'https://hackage.haskell.org/package/keiro-ops-0.25.1.0'.
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Uploading documentation
+dist-release/0.25.1.0/keiro-ops-0.25.1.0-docs.tar.gz...
+Package documentation successfully published. You can now view it at
+'https://hackage.haskell.org/package/keiro-ops-0.25.1.0'.
+== keiro-ops-http
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Uploading dist-release/0.25.1.0/keiro-ops-http-0.25.1.0.tar.gz...
+Package successfully published. You can now view it at
+'https://hackage.haskell.org/package/keiro-ops-http-0.25.1.0'.
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+Uploading documentation
+dist-release/0.25.1.0/keiro-ops-http-0.25.1.0-docs.tar.gz...
+Package documentation successfully published. You can now view it at
+'https://hackage.haskell.org/package/keiro-ops-http-0.25.1.0'.

@@ -21,8 +21,8 @@ from release_workflow import (
     version, workspace_lock,
 )
 
-ATTEMPTS = 5
-INDEX_DELAY = 15
+ATTEMPTS = 30
+INDEX_DELAY = 60
 
 
 def cabal_config(work):
