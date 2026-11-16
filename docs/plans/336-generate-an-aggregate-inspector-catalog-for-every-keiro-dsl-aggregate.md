@@ -27,6 +27,11 @@ provenance:
       at: 2026-11-16T18:05:54Z
       mode: "implement"
       note: "Implementing milestones 1-3"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-16T21:50:00Z
+      mode: "implement"
+      note: "Recorded the 0.25.1.0 release for Milestone 4"
 ---
 
 # Generate an aggregate inspector catalog for every keiro-dsl aggregate
@@ -105,8 +110,13 @@ declared aggregate.
   the record-field inventories counted the 40 new generated modules and shifted
   Scaffold.hs lines. Regenerating them in commit `2a1da3ee` fixed that, and
   `nix develop -c just verify` then exited 0 from a clean tree.)
-- [ ] Milestone 4: a Keiro release containing this change (proposed `0.25.1.0`) is on
+- [x] Milestone 4: a Keiro release containing this change (proposed `0.25.1.0`) is on
   Hackage and GitHub, and the consuming plans are told the exact version.
+  (2026-11-16: released as `0.25.1.0`. All eight package pages and docs roots returned
+  HTTP 200, the eight annotated tags point to `0b756a65`, and `gh release view
+  keiro-0.25.1.0` shows a non-draft release. The Hackage `keiro-dsl-0.25.1.0` tarball is
+  byte-identical to the staged archive and exports `scaffoldInspection`. One acceptance
+  check is unmet: `just release-consumer published` did not pass. See Outcomes.)
 
 
 ## Surprises & Discoveries
@@ -210,12 +220,28 @@ counts in `keiro-dsl-test` and the generated record-field inventories, which
 `record-migration-policy` checks and which count every generated corpus module.
 Future emitters that add context modules should expect both.
 
-Milestone 4 remains open. The user must invoke the `release` skill (for example
-`/release minor`, proposed `0.25.1.0`), because agents cannot start it. After
-publication, record the exact version here for consuming plans
-`mori://shinzui/seihou-modules/plans/15-mount-the-keiro-ui-inspection-surface-in-the-haskell-keiro-project-server-starter`
-and `mori://tan/chapter-service-v2/plans/1-adopt-the-generated-aggregate-inspector-catalog-in-chapter-service-v2`.
-Also note the `mori://shinzui/haskell-nix` generation hand-off described in Milestone 4.
+2026-11-16, Milestone 4: the change shipped in **Keiro `0.25.1.0`**, a PVP minor release
+across all eight packages, with no `keiro-upgrade` edge. The release commit is `c1a6c01e`
+and the tag commit is `0b756a65`. Release evidence is in
+`keiro/bench/results/release-gates/0.25.1.0-release-status.md`.
+
+For the consuming plans: depend on `keiro-dsl ^>=0.25.1.0` and `keiro ^>=0.25.1.0`, then
+regenerate and add `<prefix>.Inspection` to the generated Cabal stanza.
+- Plan B: `mori://shinzui/seihou-modules/plans/15-mount-the-keiro-ui-inspection-surface-in-the-haskell-keiro-project-server-starter`
+- Plan D: `mori://tan/chapter-service-v2/plans/1-adopt-the-generated-aggregate-inspector-catalog-in-chapter-service-v2`
+
+For D: chapter-service-v2 is on Keiro 0.24 (generation 8), so it also crosses the
+breaking 0.24.0.0 → 0.25.0.0 edge. Nix-based consumers also need a
+`mori://shinzui/haskell-nix` runtime generation that selects 0.25.1.0. None exists yet;
+that is haskell-nix `update-family` work, outside this plan.
+
+The Hackage-only consumer proof (`just release-consumer published`) did not pass, and
+the user chose to skip it. Two attempts failed to solve because Hackage cut its index at
+21:13:27Z, between the `keiro-core` upload and the other seven, and the 75-second retry
+window expired before the next index. A third attempt was refused because unrelated
+uncommitted work was in the tree. Commit `5f53fdb0` widened the retry to 60 seconds for
+up to 30 minutes. Consumer B or D is the first real proof that the published packages
+build from Hackage alone.
 
 
 ## Context and Orientation
