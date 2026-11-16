@@ -97,8 +97,14 @@ declared aggregate.
   succeeded under `-Werror`; `keiro-dsl-test` passed with 904 examples and 0 failures; the
   snapshot and keyword-segments suites printed every expected line; and the corpus check
   printed `conformance corpus: ok` after commit `3860b00f`.)
-- [ ] Milestone 3: user documentation, both changelogs, and a new ADR describe the module;
-  `nix develop -c just verify` passes.
+- [x] Milestone 3: user documentation, both changelogs, and a new ADR describe the module;
+  `nix develop -c just verify` passes. (2026-11-16: DOC-32 gained "Generated inspection
+  catalog", DOC-15 gained a pointer paragraph, both `[Unreleased]` sections have
+  entries, and [ADR-61](../adr/0061-generated-aggregate-inspector-catalogs-cover-every-dsl-aggregate.md)
+  is recorded. The first `just verify` failed only at `record-migration-policy`, because
+  the record-field inventories counted the 40 new generated modules and shifted
+  Scaffold.hs lines. Regenerating them in commit `2a1da3ee` fixed that, and
+  `nix develop -c just verify` then exited 0 from a clean tree.)
 - [ ] Milestone 4: a Keiro release containing this change (proposed `0.25.1.0`) is on
   Hackage and GitHub, and the consuming plans are told the exact version.
 
@@ -195,7 +201,21 @@ declared aggregate.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+2026-11-16, Milestones 1–3: `keiro-dsl scaffold` now emits `<prefix>.Inspection` for
+every context with an aggregate or projection catalog. The 40 regenerated corpus
+modules compile wherever their imports compile, and runtime checks cover all three
+shapes: aggregates with a catalog, a snapshot aggregate without a catalog, and
+projections only. The design held as planned. The only unplanned work was three module
+counts in `keiro-dsl-test` and the generated record-field inventories, which
+`record-migration-policy` checks and which count every generated corpus module.
+Future emitters that add context modules should expect both.
+
+Milestone 4 remains open. The user must invoke the `release` skill (for example
+`/release minor`, proposed `0.25.1.0`), because agents cannot start it. After
+publication, record the exact version here for consuming plans
+`mori://shinzui/seihou-modules/plans/15-mount-the-keiro-ui-inspection-surface-in-the-haskell-keiro-project-server-starter`
+and `mori://tan/chapter-service-v2/plans/1-adopt-the-generated-aggregate-inspector-catalog-in-chapter-service-v2`.
+Also note the `mori://shinzui/haskell-nix` generation hand-off described in Milestone 4.
 
 
 ## Context and Orientation
