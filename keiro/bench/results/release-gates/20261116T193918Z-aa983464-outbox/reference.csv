@@ -1,0 +1,4 @@
+Name,Mean (ps),2*Stdev (ps)
+All.outbox.hot-key,495411400038,22656735404
+All.outbox.hot-key-nolatency,324094400050,20322727448
+All.outbox.multi-key,356136499993,52196534740

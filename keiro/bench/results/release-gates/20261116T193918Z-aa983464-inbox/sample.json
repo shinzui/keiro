@@ -1,0 +1,15 @@
+{
+  "complete": true,
+  "finished": 1794860785.955714,
+  "key": "e84a6fd0e930d10f083f0b7e72c888e23b66873de9ff2a6cdf6b2e03d19fc3aa",
+  "load_average": [
+    7.78076171875,
+    7.58642578125,
+    8.1083984375
+  ],
+  "sha256": {
+    "reference-command.json": "8826a1b84590be8d5ad4e073f74c282dee1e0326782f08db62219f5d5a2ee77a",
+    "reference.csv": "0af4d079a84cd877312017a7b098d15af1cb4132497069af23afc15a7f53d346",
+    "reference.log": "07d0376b8151fcf1453eae4234aeef3acfa85efb6541097b6761c1b937e9eb99"
+  }
+}
