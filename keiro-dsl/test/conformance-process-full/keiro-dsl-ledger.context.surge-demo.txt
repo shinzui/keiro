@@ -9,6 +9,7 @@ module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"contex
 module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context surge-demo generated nominal declarations","path":"Generated/SurgeDemo/Nominals.hs"}
 module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context surge-demo generated nominal ID internals","path":"Generated/SurgeDemo/Nominals/Internal.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context surge-demo replay-audit assembly","path":"Generated/SurgeDemo/ReplayAudit.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context surge-demo inspection catalog","path":"Generated/SurgeDemo/Inspection.hs"}
 module-role {"family":"Process","kind":"generated","ownerKind":"process","ownerName":"process SurgeFlow (line 6)","path":"Generated/SurgeDemo/SurgeFlow/Process.hs"}
 module-role {"family":"ProcessHoles","kind":"hole","ownerKind":"process","ownerName":"process SurgeFlow (line 6)","path":"SurgeDemo/SurgeFlow/ProcessHoles.hs"}
 module-role {"family":"ProcessHarness","kind":"generated","ownerKind":"process","ownerName":"process SurgeFlow (line 6)","path":"Generated/SurgeDemo/SurgeFlow/ProcessHarness.hs"}
@@ -34,6 +35,7 @@ generated Generated/SurgeDemo/BehaviorSourceMap.hs
 generated Generated/SurgeDemo/Nominals.hs
 generated Generated/SurgeDemo/Nominals/Internal.hs
 generated Generated/SurgeDemo/ReplayAudit.hs
+generated Generated/SurgeDemo/Inspection.hs
 generated Generated/SurgeDemo/SurgeFlow/Process.hs
 hole SurgeDemo/SurgeFlow/ProcessHoles.hs
 generated Generated/SurgeDemo/SurgeFlow/ProcessHarness.hs

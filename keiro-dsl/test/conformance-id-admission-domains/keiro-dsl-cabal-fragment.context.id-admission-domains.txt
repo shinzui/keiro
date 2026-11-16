@@ -24,6 +24,7 @@ other-modules:
     Generated.IdAdmissionDomains.IdentityWork.Queue
     Generated.IdAdmissionDomains.IdentityWork.QueueCodec
     Generated.IdAdmissionDomains.IdentityWork.QueuePolicy
+    Generated.IdAdmissionDomains.Inspection
     Generated.IdAdmissionDomains.Nominals
     Generated.IdAdmissionDomains.Nominals.Internal
     Generated.IdAdmissionDomains.ReplayAudit

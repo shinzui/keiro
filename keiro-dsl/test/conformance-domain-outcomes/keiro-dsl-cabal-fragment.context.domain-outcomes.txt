@@ -13,6 +13,7 @@ default-extensions:
 other-modules:
     DomainOutcomes.Reservation.BehaviorHoles
     Generated.DomainOutcomes.BehaviorSourceMap
+    Generated.DomainOutcomes.Inspection
     Generated.DomainOutcomes.Nominals
     Generated.DomainOutcomes.ReplayAudit
     Generated.DomainOutcomes.Reservation.BehaviorContract

@@ -29,6 +29,7 @@ other-modules:
     Generated.IncidentResponse.IncidentEscalation.Input
     Generated.IncidentResponse.IncidentEscalation.Process
     Generated.IncidentResponse.IncidentEscalation.ProcessHarness
+    Generated.IncidentResponse.Inspection
     Generated.IncidentResponse.Nominals
     Generated.IncidentResponse.Nominals.Internal
     Generated.IncidentResponse.ReplayAudit

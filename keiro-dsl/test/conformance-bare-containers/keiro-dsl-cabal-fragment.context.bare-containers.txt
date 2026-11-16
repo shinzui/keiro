@@ -30,6 +30,7 @@ other-modules:
     Generated.BareContainers.BareStore.Projection
     Generated.BareContainers.BareStore.Transducer
     Generated.BareContainers.BehaviorSourceMap
+    Generated.BareContainers.Inspection
     Generated.BareContainers.Nominals
     Generated.BareContainers.Nominals.Internal
     Generated.BareContainers.ProjectionCatalog

@@ -12,6 +12,7 @@ module-role {"family":"StructuralProjections","kind":"generated","ownerKind":"co
 module-role {"family":"NominalProjections","kind":"generated","ownerKind":"context","ownerName":"context import-planning-collisions nominal scalar projection facade","path":"Generated/ImportPlanningCollisions/NominalProjections.hs"}
 module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton ImportPlanning.Bindings","path":"ImportPlanning/Bindings.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context import-planning-collisions replay-audit assembly","path":"Generated/ImportPlanningCollisions/ReplayAudit.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context import-planning-collisions inspection catalog","path":"Generated/ImportPlanningCollisions/Inspection.hs"}
 module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate CollisionLedger (line 39)","path":"Generated/ImportPlanningCollisions/CollisionLedger/Domain.hs"}
 module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate CollisionLedger (line 39)","path":"Generated/ImportPlanningCollisions/CollisionLedger/Codec.hs"}
 module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate CollisionLedger (line 39)","path":"Generated/ImportPlanningCollisions/CollisionLedger/Transducer.hs"}
@@ -27,6 +28,7 @@ generated Generated/ImportPlanningCollisions/StructuralProjections.hs
 generated Generated/ImportPlanningCollisions/NominalProjections.hs
 hole ImportPlanning/Bindings.hs
 generated Generated/ImportPlanningCollisions/ReplayAudit.hs
+generated Generated/ImportPlanningCollisions/Inspection.hs
 generated Generated/ImportPlanningCollisions/CollisionLedger/Domain.hs
 generated Generated/ImportPlanningCollisions/CollisionLedger/Codec.hs
 generated Generated/ImportPlanningCollisions/CollisionLedger/Transducer.hs

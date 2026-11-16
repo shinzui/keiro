@@ -14,6 +14,7 @@ module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context calendar-days replay-audit assembly","path":"Generated/CalendarDays/ReplayAudit.hs"}
 module-role {"family":"ProjectionCatalog","kind":"generated","ownerKind":"projection-catalog","ownerName":"projection-catalog calendar-days","path":"Generated/CalendarDays/ProjectionCatalog.hs"}
 module-role {"family":"ProjectionCatalogHoles","kind":"hole","ownerKind":"projection-catalog","ownerName":"projection-catalog calendar-days","path":"CalendarDays/ProjectionCatalog/ProjectionCatalogHoles.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context calendar-days inspection catalog","path":"Generated/CalendarDays/Inspection.hs"}
 module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate CalendarStore (line 38)","path":"Generated/CalendarDays/CalendarStore/Domain.hs"}
 module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate CalendarStore (line 38)","path":"Generated/CalendarDays/CalendarStore/Codec.hs"}
 module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate CalendarStore (line 38)","path":"Generated/CalendarDays/CalendarStore/Transducer.hs"}
@@ -39,6 +40,7 @@ hole Conformance/CalendarDays/Bindings.hs
 generated Generated/CalendarDays/ReplayAudit.hs
 generated Generated/CalendarDays/ProjectionCatalog.hs
 hole CalendarDays/ProjectionCatalog/ProjectionCatalogHoles.hs
+generated Generated/CalendarDays/Inspection.hs
 generated Generated/CalendarDays/CalendarStore/Domain.hs
 generated Generated/CalendarDays/CalendarStore/Codec.hs
 generated Generated/CalendarDays/CalendarStore/Transducer.hs

@@ -9,6 +9,7 @@ module-role {"family":"StructuralConformance","kind":"generated","ownerKind":"co
 module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context mapped-register-construction behavior source map","path":"Generated/MappedRegisterConstruction/BehaviorSourceMap.hs"}
 module-role {"family":"Lift","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton Conformance.MappedRegisterConstruction.Lift","path":"Conformance/MappedRegisterConstruction/Lift.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context mapped-register-construction replay-audit assembly","path":"Generated/MappedRegisterConstruction/ReplayAudit.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context mapped-register-construction inspection catalog","path":"Generated/MappedRegisterConstruction/Inspection.hs"}
 module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Lifecycle (line 17)","path":"Generated/MappedRegisterConstruction/Lifecycle/Domain.hs"}
 module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Lifecycle (line 17)","path":"Generated/MappedRegisterConstruction/Lifecycle/Codec.hs"}
 module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Lifecycle (line 17)","path":"Generated/MappedRegisterConstruction/Lifecycle/Transducer.hs"}
@@ -21,6 +22,7 @@ generated Generated/MappedRegisterConstruction/StructuralConformance.hs
 generated Generated/MappedRegisterConstruction/BehaviorSourceMap.hs
 hole Conformance/MappedRegisterConstruction/Lift.hs
 generated Generated/MappedRegisterConstruction/ReplayAudit.hs
+generated Generated/MappedRegisterConstruction/Inspection.hs
 generated Generated/MappedRegisterConstruction/Lifecycle/Domain.hs
 generated Generated/MappedRegisterConstruction/Lifecycle/Codec.hs
 generated Generated/MappedRegisterConstruction/Lifecycle/Transducer.hs

@@ -9,6 +9,7 @@ module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"contex
 module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context hospital-capacity generated nominal declarations","path":"Generated/HospitalCapacity/Nominals.hs"}
 module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context hospital-capacity generated nominal ID internals","path":"Generated/HospitalCapacity/Nominals/Internal.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context hospital-capacity replay-audit assembly","path":"Generated/HospitalCapacity/ReplayAudit.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context hospital-capacity inspection catalog","path":"Generated/HospitalCapacity/Inspection.hs"}
 module-role {"family":"Process","kind":"generated","ownerKind":"process","ownerName":"process HospitalSurge (line 7)","path":"Generated/HospitalCapacity/HospitalSurge/Process.hs"}
 module-role {"family":"ProcessHoles","kind":"hole","ownerKind":"process","ownerName":"process HospitalSurge (line 7)","path":"HospitalCapacity/HospitalSurge/ProcessHoles.hs"}
 module-role {"family":"ProcessHarness","kind":"generated","ownerKind":"process","ownerName":"process HospitalSurge (line 7)","path":"Generated/HospitalCapacity/HospitalSurge/ProcessHarness.hs"}
@@ -32,6 +33,7 @@ generated Generated/HospitalCapacity/BehaviorSourceMap.hs
 generated Generated/HospitalCapacity/Nominals.hs
 generated Generated/HospitalCapacity/Nominals/Internal.hs
 generated Generated/HospitalCapacity/ReplayAudit.hs
+generated Generated/HospitalCapacity/Inspection.hs
 generated Generated/HospitalCapacity/HospitalSurge/Process.hs
 hole HospitalCapacity/HospitalSurge/ProcessHoles.hs
 generated Generated/HospitalCapacity/HospitalSurge/ProcessHarness.hs

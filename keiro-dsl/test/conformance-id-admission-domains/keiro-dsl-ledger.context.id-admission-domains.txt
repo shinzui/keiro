@@ -14,6 +14,7 @@ module-role {"family":"Internal","kind":"generated","ownerKind":"context","owner
 module-role {"family":"NominalLeaves","kind":"generated","ownerKind":"context","ownerName":"context id-admission-domains structural nominal leaves","path":"Generated/IdAdmissionDomains/Structural/NominalLeaves.hs"}
 module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton Conformance.IdAdmissionDomains.Bindings","path":"Conformance/IdAdmissionDomains/Bindings.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context id-admission-domains replay-audit assembly","path":"Generated/IdAdmissionDomains/ReplayAudit.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context id-admission-domains inspection catalog","path":"Generated/IdAdmissionDomains/Inspection.hs"}
 module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IdentityLedger (line 19)","path":"Generated/IdAdmissionDomains/IdentityLedger/Domain.hs"}
 module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IdentityLedger (line 19)","path":"Generated/IdAdmissionDomains/IdentityLedger/Codec.hs"}
 module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IdentityLedger (line 19)","path":"Generated/IdAdmissionDomains/IdentityLedger/Transducer.hs"}
@@ -35,6 +36,7 @@ generated Generated/IdAdmissionDomains/Nominals/Internal.hs
 generated Generated/IdAdmissionDomains/Structural/NominalLeaves.hs
 hole Conformance/IdAdmissionDomains/Bindings.hs
 generated Generated/IdAdmissionDomains/ReplayAudit.hs
+generated Generated/IdAdmissionDomains/Inspection.hs
 generated Generated/IdAdmissionDomains/IdentityLedger/Domain.hs
 generated Generated/IdAdmissionDomains/IdentityLedger/Codec.hs
 generated Generated/IdAdmissionDomains/IdentityLedger/Transducer.hs

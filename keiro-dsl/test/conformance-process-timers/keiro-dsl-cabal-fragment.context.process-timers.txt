@@ -29,6 +29,7 @@ other-modules:
     Generated.ProcessTimers.IncidentTimers.Input
     Generated.ProcessTimers.IncidentTimers.Process
     Generated.ProcessTimers.IncidentTimers.ProcessHarness
+    Generated.ProcessTimers.Inspection
     Generated.ProcessTimers.Nominals
     Generated.ProcessTimers.Nominals.Internal
     Generated.ProcessTimers.ReplayAudit

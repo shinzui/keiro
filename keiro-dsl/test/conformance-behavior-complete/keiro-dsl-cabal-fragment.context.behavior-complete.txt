@@ -14,6 +14,7 @@ other-modules:
     BehaviorComplete.Bindings
     BehaviorComplete.Journey.BehaviorHoles
     Generated.BehaviorComplete.BehaviorSourceMap
+    Generated.BehaviorComplete.Inspection
     Generated.BehaviorComplete.Journey.BehaviorContract
     Generated.BehaviorComplete.Journey.Codec
     Generated.BehaviorComplete.Journey.Domain

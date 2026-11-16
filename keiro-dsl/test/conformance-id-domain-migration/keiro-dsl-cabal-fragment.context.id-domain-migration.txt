@@ -12,6 +12,7 @@ default-extensions:
 
 other-modules:
     Generated.IdDomainMigration.BehaviorSourceMap
+    Generated.IdDomainMigration.Inspection
     Generated.IdDomainMigration.Nominals
     Generated.IdDomainMigration.Nominals.Internal
     Generated.IdDomainMigration.OrderBook.BehaviorContract

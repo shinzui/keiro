@@ -12,6 +12,7 @@ default-extensions:
 
 other-modules:
     Generated.HospitalCapacity.BehaviorSourceMap
+    Generated.HospitalCapacity.Inspection
     Generated.HospitalCapacity.Nominals
     Generated.HospitalCapacity.Nominals.Internal
     Generated.HospitalCapacity.ReplayAudit

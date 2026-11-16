@@ -11,6 +11,7 @@ default-extensions:
     OverloadedStrings
 
 other-modules:
+    Generated.KeywordSegments.Inspection
     Generated.KeywordSegments.JobType.Queue
     Generated.KeywordSegments.JobType.QueueCodec
     Generated.KeywordSegments.JobType.QueuePolicy

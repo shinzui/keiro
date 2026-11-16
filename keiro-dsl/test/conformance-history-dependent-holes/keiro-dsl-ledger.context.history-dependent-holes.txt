@@ -8,6 +8,7 @@ naming-edition idiomatic-v2
 module-role {"family":"StructuralConformance","kind":"generated","ownerKind":"context","ownerName":"context history-dependent-holes structural conformance","path":"Generated/HistoryDependentHoles/StructuralConformance.hs"}
 module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context history-dependent-holes behavior source map","path":"Generated/HistoryDependentHoles/BehaviorSourceMap.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context history-dependent-holes replay-audit assembly","path":"Generated/HistoryDependentHoles/ReplayAudit.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context history-dependent-holes inspection catalog","path":"Generated/HistoryDependentHoles/Inspection.hs"}
 module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Assignment (line 12)","path":"Generated/HistoryDependentHoles/Assignment/Domain.hs"}
 module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Assignment (line 12)","path":"Generated/HistoryDependentHoles/Assignment/Codec.hs"}
 module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Assignment (line 12)","path":"Generated/HistoryDependentHoles/Assignment/Transducer.hs"}
@@ -20,6 +21,7 @@ module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","owne
 generated Generated/HistoryDependentHoles/StructuralConformance.hs
 generated Generated/HistoryDependentHoles/BehaviorSourceMap.hs
 generated Generated/HistoryDependentHoles/ReplayAudit.hs
+generated Generated/HistoryDependentHoles/Inspection.hs
 generated Generated/HistoryDependentHoles/Assignment/Domain.hs
 generated Generated/HistoryDependentHoles/Assignment/Codec.hs
 generated Generated/HistoryDependentHoles/Assignment/Transducer.hs

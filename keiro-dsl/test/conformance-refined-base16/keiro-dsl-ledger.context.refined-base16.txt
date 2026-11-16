@@ -14,6 +14,7 @@ module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context refined-base16 replay-audit assembly","path":"Generated/RefinedBase16/ReplayAudit.hs"}
 module-role {"family":"ProjectionCatalog","kind":"generated","ownerKind":"projection-catalog","ownerName":"projection-catalog refined-base16","path":"Generated/RefinedBase16/ProjectionCatalog.hs"}
 module-role {"family":"ProjectionCatalogHoles","kind":"hole","ownerKind":"projection-catalog","ownerName":"projection-catalog refined-base16","path":"RefinedBase16/ProjectionCatalog/ProjectionCatalogHoles.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context refined-base16 inspection catalog","path":"Generated/RefinedBase16/Inspection.hs"}
 module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate HashStore (line 38)","path":"Generated/RefinedBase16/HashStore/Domain.hs"}
 module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate HashStore (line 38)","path":"Generated/RefinedBase16/HashStore/Codec.hs"}
 module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate HashStore (line 38)","path":"Generated/RefinedBase16/HashStore/Transducer.hs"}
@@ -39,6 +40,7 @@ hole Conformance/RefinedBase16/Bindings.hs
 generated Generated/RefinedBase16/ReplayAudit.hs
 generated Generated/RefinedBase16/ProjectionCatalog.hs
 hole RefinedBase16/ProjectionCatalog/ProjectionCatalogHoles.hs
+generated Generated/RefinedBase16/Inspection.hs
 generated Generated/RefinedBase16/HashStore/Domain.hs
 generated Generated/RefinedBase16/HashStore/Codec.hs
 generated Generated/RefinedBase16/HashStore/Transducer.hs

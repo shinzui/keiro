@@ -12,6 +12,7 @@ default-extensions:
 
 other-modules:
     Generated.IncidentPaging.BehaviorSourceMap
+    Generated.IncidentPaging.Inspection
     Generated.IncidentPaging.Page.BehaviorContract
     Generated.IncidentPaging.Page.Codec
     Generated.IncidentPaging.Page.Domain

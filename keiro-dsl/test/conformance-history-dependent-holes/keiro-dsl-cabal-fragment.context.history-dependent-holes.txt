@@ -19,6 +19,7 @@ other-modules:
     Generated.HistoryDependentHoles.Assignment.Projection
     Generated.HistoryDependentHoles.Assignment.Transducer
     Generated.HistoryDependentHoles.BehaviorSourceMap
+    Generated.HistoryDependentHoles.Inspection
     Generated.HistoryDependentHoles.ReplayAudit
     Generated.HistoryDependentHoles.StructuralConformance
     HistoryDependentHoles.Assignment.BehaviorHoles

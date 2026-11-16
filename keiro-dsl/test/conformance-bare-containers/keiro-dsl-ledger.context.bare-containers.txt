@@ -19,6 +19,7 @@ module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context bare-containers replay-audit assembly","path":"Generated/BareContainers/ReplayAudit.hs"}
 module-role {"family":"ProjectionCatalog","kind":"generated","ownerKind":"projection-catalog","ownerName":"projection-catalog bare-containers","path":"Generated/BareContainers/ProjectionCatalog.hs"}
 module-role {"family":"ProjectionCatalogHoles","kind":"hole","ownerKind":"projection-catalog","ownerName":"projection-catalog bare-containers","path":"BareContainers/ProjectionCatalog/ProjectionCatalogHoles.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context bare-containers inspection catalog","path":"Generated/BareContainers/Inspection.hs"}
 module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate BareStore (line 57)","path":"Generated/BareContainers/BareStore/Domain.hs"}
 module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate BareStore (line 57)","path":"Generated/BareContainers/BareStore/Codec.hs"}
 module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate BareStore (line 57)","path":"Generated/BareContainers/BareStore/Transducer.hs"}
@@ -49,6 +50,7 @@ hole Conformance/BareContainers/Bindings.hs
 generated Generated/BareContainers/ReplayAudit.hs
 generated Generated/BareContainers/ProjectionCatalog.hs
 hole BareContainers/ProjectionCatalog/ProjectionCatalogHoles.hs
+generated Generated/BareContainers/Inspection.hs
 generated Generated/BareContainers/BareStore/Domain.hs
 generated Generated/BareContainers/BareStore/Codec.hs
 generated Generated/BareContainers/BareStore/Transducer.hs

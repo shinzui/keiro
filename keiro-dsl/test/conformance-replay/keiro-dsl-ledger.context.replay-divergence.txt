@@ -7,6 +7,7 @@ semantic-contract {"languageSupport":"compatibility-only","languageVersion":4,"r
 naming-edition idiomatic-v2
 module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context replay-divergence behavior source map","path":"Generated/ReplayDivergence/BehaviorSourceMap.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context replay-divergence replay-audit assembly","path":"Generated/ReplayDivergence/ReplayAudit.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context replay-divergence inspection catalog","path":"Generated/ReplayDivergence/Inspection.hs"}
 module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Note (line 4)","path":"Generated/ReplayDivergence/Note/Domain.hs"}
 module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Note (line 4)","path":"Generated/ReplayDivergence/Note/Codec.hs"}
 module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Note (line 4)","path":"Generated/ReplayDivergence/Note/Transducer.hs"}
@@ -17,6 +18,7 @@ module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","o
 module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Note (line 4)","path":"Generated/ReplayDivergence/Note/Harness.hs"}
 generated Generated/ReplayDivergence/BehaviorSourceMap.hs
 generated Generated/ReplayDivergence/ReplayAudit.hs
+generated Generated/ReplayDivergence/Inspection.hs
 generated Generated/ReplayDivergence/Note/Domain.hs
 generated Generated/ReplayDivergence/Note/Codec.hs
 generated Generated/ReplayDivergence/Note/Transducer.hs

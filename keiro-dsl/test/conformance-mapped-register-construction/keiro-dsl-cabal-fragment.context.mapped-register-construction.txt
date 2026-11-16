@@ -13,6 +13,7 @@ default-extensions:
 other-modules:
     Conformance.MappedRegisterConstruction.Lift
     Generated.MappedRegisterConstruction.BehaviorSourceMap
+    Generated.MappedRegisterConstruction.Inspection
     Generated.MappedRegisterConstruction.Lifecycle.BehaviorContract
     Generated.MappedRegisterConstruction.Lifecycle.Codec
     Generated.MappedRegisterConstruction.Lifecycle.Domain

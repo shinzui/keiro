@@ -14,6 +14,7 @@ module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context transfer-routing replay-audit assembly","path":"Generated/TransferRouting/ReplayAudit.hs"}
 module-role {"family":"ProjectionCatalog","kind":"generated","ownerKind":"projection-catalog","ownerName":"projection-catalog transfer-routing","path":"Generated/TransferRouting/ProjectionCatalog.hs"}
 module-role {"family":"ProjectionCatalogHoles","kind":"hole","ownerKind":"projection-catalog","ownerName":"projection-catalog transfer-routing","path":"TransferRouting/ProjectionCatalog/ProjectionCatalogHoles.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context transfer-routing inspection catalog","path":"Generated/TransferRouting/Inspection.hs"}
 module-role {"family":"ReadModelTable","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel hospital_load (line 52)","path":"Generated/TransferRouting/HospitalLoad/ReadModelTable.hs"}
 module-role {"family":"QueryContract","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel hospital_load (line 52)","path":"Generated/TransferRouting/HospitalLoad/QueryContract.hs"}
 module-role {"family":"ReadModel","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel hospital_load (line 52)","path":"Generated/TransferRouting/HospitalLoad/ReadModel.hs"}
@@ -38,6 +39,7 @@ hole Conformance/DeclarativeRouter/Bindings.hs
 generated Generated/TransferRouting/ReplayAudit.hs
 generated Generated/TransferRouting/ProjectionCatalog.hs
 hole TransferRouting/ProjectionCatalog/ProjectionCatalogHoles.hs
+generated Generated/TransferRouting/Inspection.hs
 generated Generated/TransferRouting/HospitalLoad/ReadModelTable.hs
 generated Generated/TransferRouting/HospitalLoad/QueryContract.hs
 generated Generated/TransferRouting/HospitalLoad/ReadModel.hs

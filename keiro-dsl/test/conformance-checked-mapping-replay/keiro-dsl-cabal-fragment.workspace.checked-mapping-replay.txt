@@ -18,6 +18,7 @@ other-modules:
     CheckedMappingReplay.ReplayTarget.BehaviorHoles
     Conformance.CheckedMappingReplay.Bindings
     Generated.CheckedMappingReplay.BehaviorSourceMap
+    Generated.CheckedMappingReplay.Inspection
     Generated.CheckedMappingReplay.Nominals
     Generated.CheckedMappingReplay.Nominals.Internal
     Generated.CheckedMappingReplay.ProjectionCatalog

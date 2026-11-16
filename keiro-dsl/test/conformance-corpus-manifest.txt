@@ -30,6 +30,7 @@ uncompiled-generated keiro-dsl/test/conformance-dispatch-full/Generated/Hospital
 uncompiled-generated keiro-dsl/test/conformance-dispatch-full/Generated/HospitalCapacity/TransferDecisions/ReadModel.hs
 uncompiled-generated keiro-dsl/test/conformance-dispatch-full/Generated/HospitalCapacity/TransferDecisions/ReadModelHarness.hs
 uncompiled-generated keiro-dsl/test/conformance-dispatch-full/Generated/HospitalCapacity/TransferDecisions/ReadModelTable.hs
+uncompiled-generated keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/Inspection.hs
 uncompiled-generated keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs
 uncompiled-generated keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/EventStream.hs
 uncompiled-generated keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/Harness.hs
@@ -52,6 +53,7 @@ uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/Hospit
 uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/Projection.hs
 uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/Transducer.hs
 uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/HospitalSurge/ProcessHarness.hs
+uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Inspection.hs
 uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/ReplayAudit.hs
 uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs
 uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/Harness.hs
@@ -65,6 +67,7 @@ uncompiled-generated keiro-dsl/test/conformance-process-reactions/Generated/Proc
 uncompiled-generated keiro-dsl/test/conformance-process-reactions/Generated/ProcessReactions/IncidentSaga/BehaviorContract.hs
 uncompiled-generated keiro-dsl/test/conformance-process-reactions/Generated/ProcessReactions/IncidentSaga/Harness.hs
 uncompiled-generated keiro-dsl/test/conformance-process-reactions/Generated/ProcessReactions/IncidentSaga/Projection.hs
+uncompiled-generated keiro-dsl/test/conformance-process-reactions/Generated/ProcessReactions/Inspection.hs
 uncompiled-generated keiro-dsl/test/conformance-process-reactions/Generated/ProcessReactions/ReplayAudit.hs
 uncompiled-generated keiro-dsl/test/conformance-process-timers/Generated/ProcessTimers/BehaviorSourceMap.hs
 uncompiled-generated keiro-dsl/test/conformance-process-timers/Generated/ProcessTimers/Incident/BehaviorContract.hs
@@ -74,6 +77,7 @@ uncompiled-generated keiro-dsl/test/conformance-process-timers/Generated/Process
 uncompiled-generated keiro-dsl/test/conformance-process-timers/Generated/ProcessTimers/IncidentSaga/Harness.hs
 uncompiled-generated keiro-dsl/test/conformance-process-timers/Generated/ProcessTimers/IncidentSaga/Projection.hs
 uncompiled-generated keiro-dsl/test/conformance-process-timers/Generated/ProcessTimers/IncidentTimers/ProcessHarness.hs
+uncompiled-generated keiro-dsl/test/conformance-process-timers/Generated/ProcessTimers/Inspection.hs
 uncompiled-generated keiro-dsl/test/conformance-process-timers/Generated/ProcessTimers/ReplayAudit.hs
 uncompiled-generated keiro-dsl/test/conformance-process-state-authority/Generated/IncidentResponse/BehaviorSourceMap.hs
 uncompiled-generated keiro-dsl/test/conformance-process-state-authority/Generated/IncidentResponse/Escalation/BehaviorContract.hs
@@ -83,6 +87,7 @@ uncompiled-generated keiro-dsl/test/conformance-process-state-authority/Generate
 uncompiled-generated keiro-dsl/test/conformance-process-state-authority/Generated/IncidentResponse/Incident/Harness.hs
 uncompiled-generated keiro-dsl/test/conformance-process-state-authority/Generated/IncidentResponse/Incident/Projection.hs
 uncompiled-generated keiro-dsl/test/conformance-process-state-authority/Generated/IncidentResponse/IncidentEscalation/ProcessHarness.hs
+uncompiled-generated keiro-dsl/test/conformance-process-state-authority/Generated/IncidentResponse/Inspection.hs
 uncompiled-generated keiro-dsl/test/conformance-process-state-authority/Generated/IncidentResponse/ReplayAudit.hs
 uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs
 uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/Codec.hs
@@ -92,6 +97,7 @@ uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapaci
 uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/Projection.hs
 uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/Transducer.hs
 uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/HospitalSurge/Process.hs
+uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Inspection.hs
 uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Nominals.hs
 uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Nominals/Internal.hs
 uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/ReplayAudit.hs
@@ -123,6 +129,7 @@ uncompiled-generated keiro-dsl/test/conformance-router-full/Generated/IncidentPa
 uncompiled-generated keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/ServiceOncall/ReadModel.hs
 uncompiled-generated keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/ServiceOncall/ReadModelHarness.hs
 uncompiled-generated keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/ServiceOncall/ReadModelTable.hs
+uncompiled-generated keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Inspection.hs
 uncompiled-generated keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs
 uncompiled-generated keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/Codec.hs
 uncompiled-generated keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/Domain.hs
@@ -134,6 +141,7 @@ uncompiled-generated keiro-dsl/test/conformance-router-runtime/Generated/Inciden
 uncompiled-generated keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/ServiceOncall/ReadModel.hs
 uncompiled-generated keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/ServiceOncall/ReadModelHarness.hs
 uncompiled-generated keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/ServiceOncall/ReadModelTable.hs
+uncompiled-generated keiro-dsl/test/conformance-router/Generated/IncidentPaging/Inspection.hs
 uncompiled-generated keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs
 uncompiled-generated keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/Codec.hs
 uncompiled-generated keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/Domain.hs

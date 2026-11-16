@@ -9,6 +9,7 @@ module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"contex
 module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context billing generated nominal declarations","path":"Generated/Billing/Nominals.hs"}
 module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context billing generated nominal ID internals","path":"Generated/Billing/Nominals/Internal.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context billing replay-audit assembly","path":"Generated/Billing/ReplayAudit.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context billing inspection catalog","path":"Generated/Billing/Inspection.hs"}
 module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Subscription (line 9)","path":"Generated/Billing/Subscription/Domain.hs"}
 module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Subscription (line 9)","path":"Generated/Billing/Subscription/Codec.hs"}
 module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Subscription (line 9)","path":"Generated/Billing/Subscription/Transducer.hs"}
@@ -22,6 +23,7 @@ generated Generated/Billing/BehaviorSourceMap.hs
 generated Generated/Billing/Nominals.hs
 generated Generated/Billing/Nominals/Internal.hs
 generated Generated/Billing/ReplayAudit.hs
+generated Generated/Billing/Inspection.hs
 generated Generated/Billing/Subscription/Domain.hs
 generated Generated/Billing/Subscription/Codec.hs
 generated Generated/Billing/Subscription/Transducer.hs

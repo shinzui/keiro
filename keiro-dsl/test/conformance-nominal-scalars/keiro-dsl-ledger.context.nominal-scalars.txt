@@ -10,6 +10,7 @@ module-role {"family":"OrderStatus","kind":"generated","ownerKind":"bound","owne
 module-role {"family":"NominalProjections","kind":"generated","ownerKind":"context","ownerName":"context nominal-scalars nominal scalar projection facade","path":"Generated/NominalScalars/NominalProjections.hs"}
 module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton NominalConformance.Bindings","path":"NominalConformance/Bindings.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context nominal-scalars replay-audit assembly","path":"Generated/NominalScalars/ReplayAudit.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context nominal-scalars inspection catalog","path":"Generated/NominalScalars/Inspection.hs"}
 module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate NominalLedger (line 67)","path":"Generated/NominalScalars/NominalLedger/Domain.hs"}
 module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate NominalLedger (line 67)","path":"Generated/NominalScalars/NominalLedger/Codec.hs"}
 module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate NominalLedger (line 67)","path":"Generated/NominalScalars/NominalLedger/Transducer.hs"}
@@ -23,6 +24,7 @@ generated Generated/NominalScalars/Nominal/Shape/OrderStatus.hs
 generated Generated/NominalScalars/NominalProjections.hs
 hole NominalConformance/Bindings.hs
 generated Generated/NominalScalars/ReplayAudit.hs
+generated Generated/NominalScalars/Inspection.hs
 generated Generated/NominalScalars/NominalLedger/Domain.hs
 generated Generated/NominalScalars/NominalLedger/Codec.hs
 generated Generated/NominalScalars/NominalLedger/Transducer.hs

@@ -21,6 +21,7 @@ other-modules:
     Generated.HospitalCapacity.Hospital.Transducer
     Generated.HospitalCapacity.HospitalSurge.Process
     Generated.HospitalCapacity.HospitalSurge.ProcessHarness
+    Generated.HospitalCapacity.Inspection
     Generated.HospitalCapacity.Nominals
     Generated.HospitalCapacity.Nominals.Internal
     Generated.HospitalCapacity.ReplayAudit

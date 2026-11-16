@@ -30,6 +30,7 @@ other-modules:
     Generated.CalendarDays.CalendarStore.Harness
     Generated.CalendarDays.CalendarStore.Projection
     Generated.CalendarDays.CalendarStore.Transducer
+    Generated.CalendarDays.Inspection
     Generated.CalendarDays.ProjectionCatalog
     Generated.CalendarDays.ReplayAudit
     Generated.CalendarDays.Structural.Shape.CalendarEnvelope

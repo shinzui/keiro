@@ -14,6 +14,7 @@ module-role {"family":"ArtifactMetadata","kind":"generated","ownerKind":"mapped"
 module-role {"family":"StructuralProjections","kind":"generated","ownerKind":"context","ownerName":"context structural-conformance mapped structural facade","path":"Generated/StructuralConformance/StructuralProjections.hs"}
 module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton Conformance.Structural.Bindings","path":"Conformance/Structural/Bindings.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context structural-conformance replay-audit assembly","path":"Generated/StructuralConformance/ReplayAudit.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context structural-conformance inspection catalog","path":"Generated/StructuralConformance/Inspection.hs"}
 module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ArtifactCatalog (line 69)","path":"Generated/StructuralConformance/ArtifactCatalog/Domain.hs"}
 module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ArtifactCatalog (line 69)","path":"Generated/StructuralConformance/ArtifactCatalog/Codec.hs"}
 module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ArtifactCatalog (line 69)","path":"Generated/StructuralConformance/ArtifactCatalog/Transducer.hs"}
@@ -32,6 +33,7 @@ generated Generated/StructuralConformance/Structural/Shape/ArtifactMetadata.hs
 generated Generated/StructuralConformance/StructuralProjections.hs
 hole Conformance/Structural/Bindings.hs
 generated Generated/StructuralConformance/ReplayAudit.hs
+generated Generated/StructuralConformance/Inspection.hs
 generated Generated/StructuralConformance/ArtifactCatalog/Domain.hs
 generated Generated/StructuralConformance/ArtifactCatalog/Codec.hs
 generated Generated/StructuralConformance/ArtifactCatalog/Transducer.hs

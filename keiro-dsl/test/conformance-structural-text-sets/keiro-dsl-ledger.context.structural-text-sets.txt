@@ -14,6 +14,7 @@ module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context structural-text-sets replay-audit assembly","path":"Generated/StructuralTextSets/ReplayAudit.hs"}
 module-role {"family":"ProjectionCatalog","kind":"generated","ownerKind":"projection-catalog","ownerName":"projection-catalog structural-text-sets","path":"Generated/StructuralTextSets/ProjectionCatalog.hs"}
 module-role {"family":"ProjectionCatalogHoles","kind":"hole","ownerKind":"projection-catalog","ownerName":"projection-catalog structural-text-sets","path":"StructuralTextSets/ProjectionCatalog/ProjectionCatalogHoles.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context structural-text-sets inspection catalog","path":"Generated/StructuralTextSets/Inspection.hs"}
 module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate LabelStore (line 38)","path":"Generated/StructuralTextSets/LabelStore/Domain.hs"}
 module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate LabelStore (line 38)","path":"Generated/StructuralTextSets/LabelStore/Codec.hs"}
 module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate LabelStore (line 38)","path":"Generated/StructuralTextSets/LabelStore/Transducer.hs"}
@@ -39,6 +40,7 @@ hole Conformance/StructuralTextSets/Bindings.hs
 generated Generated/StructuralTextSets/ReplayAudit.hs
 generated Generated/StructuralTextSets/ProjectionCatalog.hs
 hole StructuralTextSets/ProjectionCatalog/ProjectionCatalogHoles.hs
+generated Generated/StructuralTextSets/Inspection.hs
 generated Generated/StructuralTextSets/LabelStore/Domain.hs
 generated Generated/StructuralTextSets/LabelStore/Codec.hs
 generated Generated/StructuralTextSets/LabelStore/Transducer.hs

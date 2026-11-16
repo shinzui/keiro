@@ -26,6 +26,7 @@ other-modules:
     Generated.TransferRouting.HospitalLoad.ReadModelTable
     Generated.TransferRouting.HospitalTransferRouter.Router
     Generated.TransferRouting.HospitalTransferRouter.RouterHarness
+    Generated.TransferRouting.Inspection
     Generated.TransferRouting.ProjectionCatalog
     Generated.TransferRouting.ReplayAudit
     Generated.TransferRouting.Structural.Shape.HospitalLoadRow

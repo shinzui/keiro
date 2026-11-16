@@ -12,6 +12,7 @@ default-extensions:
 
 other-modules:
     Generated.WorkspaceNominalProof.BehaviorSourceMap
+    Generated.WorkspaceNominalProof.Inspection
     Generated.WorkspaceNominalProof.Nominals
     Generated.WorkspaceNominalProof.Nominals.Internal
     Generated.WorkspaceNominalProof.Project.BehaviorContract

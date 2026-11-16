@@ -11,6 +11,7 @@ default-extensions:
     OverloadedStrings
 
 other-modules:
+    Generated.MappedNominalQueryOnly.Inspection
     Generated.MappedNominalQueryOnly.Nominals
     Generated.MappedNominalQueryOnly.Nominals.Internal
     Generated.MappedNominalQueryOnly.ProjectionCatalog

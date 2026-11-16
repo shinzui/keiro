@@ -27,6 +27,7 @@ other-modules:
     Generated.RefinedBase16.HashStore.Harness
     Generated.RefinedBase16.HashStore.Projection
     Generated.RefinedBase16.HashStore.Transducer
+    Generated.RefinedBase16.Inspection
     Generated.RefinedBase16.ProjectionCatalog
     Generated.RefinedBase16.ReplayAudit
     Generated.RefinedBase16.Structural.Shape.ContentHash

@@ -9,6 +9,7 @@ module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"contex
 module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context hospital-capacity generated nominal declarations","path":"Generated/HospitalCapacity/Nominals.hs"}
 module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context hospital-capacity generated nominal ID internals","path":"Generated/HospitalCapacity/Nominals/Internal.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context hospital-capacity replay-audit assembly","path":"Generated/HospitalCapacity/ReplayAudit.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context hospital-capacity inspection catalog","path":"Generated/HospitalCapacity/Inspection.hs"}
 module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Reservation (line 15)","path":"Generated/HospitalCapacity/Reservation/Domain.hs"}
 module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Reservation (line 15)","path":"Generated/HospitalCapacity/Reservation/Codec.hs"}
 module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Reservation (line 15)","path":"Generated/HospitalCapacity/Reservation/Transducer.hs"}
@@ -22,6 +23,7 @@ generated Generated/HospitalCapacity/BehaviorSourceMap.hs
 generated Generated/HospitalCapacity/Nominals.hs
 generated Generated/HospitalCapacity/Nominals/Internal.hs
 generated Generated/HospitalCapacity/ReplayAudit.hs
+generated Generated/HospitalCapacity/Inspection.hs
 generated Generated/HospitalCapacity/Reservation/Domain.hs
 generated Generated/HospitalCapacity/Reservation/Codec.hs
 generated Generated/HospitalCapacity/Reservation/Transducer.hs

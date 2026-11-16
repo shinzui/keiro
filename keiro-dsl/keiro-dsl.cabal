@@ -311,6 +311,7 @@ test-suite keiro-dsl-conformance
   main-is: Main.hs
   other-modules:
     Generated.HospitalCapacity.BehaviorSourceMap
+    Generated.HospitalCapacity.Inspection
     Generated.HospitalCapacity.Nominals
     Generated.HospitalCapacity.Nominals.Internal
     Generated.HospitalCapacity.ReplayAudit
@@ -341,6 +342,7 @@ test-suite keiro-dsl-conformance-aggregate-scalars
   other-modules:
     AggregateScalars.ScalarLedger.Holes
     Generated.AggregateScalars.BehaviorSourceMap
+    Generated.AggregateScalars.Inspection
     Generated.AggregateScalars.ReplayAudit
     Generated.AggregateScalars.ScalarLedger.Codec
     Generated.AggregateScalars.ScalarLedger.Domain
@@ -369,6 +371,7 @@ test-suite keiro-dsl-conformance-aggregate-scalar-expressions
     AggregateScalarExpressions.ScalarAccount.BehaviorHoles
     AggregateScalarExpressions.ScalarAccount.Holes
     Generated.AggregateScalarExpressions.BehaviorSourceMap
+    Generated.AggregateScalarExpressions.Inspection
     Generated.AggregateScalarExpressions.Nominals
     Generated.AggregateScalarExpressions.Nominals.Internal
     Generated.AggregateScalarExpressions.ReplayAudit
@@ -412,6 +415,7 @@ test-suite keiro-dsl-conformance-history-dependent-holes
     Generated.HistoryDependentHoles.Assignment.Projection
     Generated.HistoryDependentHoles.Assignment.Transducer
     Generated.HistoryDependentHoles.BehaviorSourceMap
+    Generated.HistoryDependentHoles.Inspection
     Generated.HistoryDependentHoles.ReplayAudit
     Generated.HistoryDependentHoles.StructuralConformance
     HistoryDependentHoles.Assignment.BehaviorHoles
@@ -437,6 +441,7 @@ test-suite keiro-dsl-conformance-behavior-complete
     BehaviorComplete.Journey.BehaviorHoles
     BehaviorComplete.Journey.Holes
     Generated.BehaviorComplete.BehaviorSourceMap
+    Generated.BehaviorComplete.Inspection
     Generated.BehaviorComplete.Journey.BehaviorContract
     Generated.BehaviorComplete.Journey.Codec
     Generated.BehaviorComplete.Journey.Domain
@@ -469,6 +474,7 @@ test-suite keiro-dsl-conformance-domain-outcomes
   other-modules:
     DomainOutcomes.Reservation.BehaviorHoles
     Generated.DomainOutcomes.BehaviorSourceMap
+    Generated.DomainOutcomes.Inspection
     Generated.DomainOutcomes.Nominals
     Generated.DomainOutcomes.ReplayAudit
     Generated.DomainOutcomes.Reservation.BehaviorContract
@@ -496,6 +502,7 @@ test-suite keiro-dsl-conformance-nominal-scalars
   main-is: Main.hs
   other-modules:
     Generated.NominalScalars.BehaviorSourceMap
+    Generated.NominalScalars.Inspection
     Generated.NominalScalars.Nominal.Shape.OrderStatus
     Generated.NominalScalars.NominalLedger.BehaviorContract
     Generated.NominalScalars.NominalLedger.Codec
@@ -531,6 +538,7 @@ test-suite keiro-dsl-conformance-workspace-nominals
   main-is: Main.hs
   other-modules:
     Generated.WorkspaceNominalProof.BehaviorSourceMap
+    Generated.WorkspaceNominalProof.Inspection
     Generated.WorkspaceNominalProof.Nominals
     Generated.WorkspaceNominalProof.Nominals.Internal
     Generated.WorkspaceNominalProof.Project.BehaviorContract
@@ -588,6 +596,7 @@ test-suite keiro-dsl-conformance-structural
     Generated.StructuralConformance.ArtifactCatalog.Projection
     Generated.StructuralConformance.ArtifactCatalog.Transducer
     Generated.StructuralConformance.BehaviorSourceMap
+    Generated.StructuralConformance.Inspection
     Generated.StructuralConformance.ReplayAudit
     Generated.StructuralConformance.Structural.Shape.ArtifactInfo
     Generated.StructuralConformance.Structural.Shape.ArtifactKind
@@ -624,6 +633,7 @@ test-suite keiro-dsl-conformance-structural-nominals
     Conformance.StructuralNominals.Bindings
     Conformance.StructuralNominals.Domain
     Conformance.StructuralNominals.Historical
+    Generated.MappedNominalQueryOnly.Inspection
     Generated.MappedNominalQueryOnly.Nominals
     Generated.MappedNominalQueryOnly.Nominals.Internal
     Generated.MappedNominalQueryOnly.ProjectionCatalog
@@ -640,6 +650,7 @@ test-suite keiro-dsl-conformance-structural-nominals
     Generated.MappedNominalQueueOnly.TemplateWork.QueueCodec
     Generated.MappedNominalQueueOnly.TemplateWork.QueuePolicy
     Generated.StructuralNominalLeaves.BehaviorSourceMap
+    Generated.StructuralNominalLeaves.Inspection
     Generated.StructuralNominalLeaves.Nominal.Shape.Channel
     Generated.StructuralNominalLeaves.NominalProjections
     Generated.StructuralNominalLeaves.Nominals
@@ -725,6 +736,7 @@ test-suite keiro-dsl-conformance-bare-containers
     Generated.BareContainers.BareStore.Projection
     Generated.BareContainers.BareStore.Transducer
     Generated.BareContainers.BehaviorSourceMap
+    Generated.BareContainers.Inspection
     Generated.BareContainers.Nominals
     Generated.BareContainers.Nominals.Internal
     Generated.BareContainers.ProjectionCatalog
@@ -784,6 +796,7 @@ test-suite keiro-dsl-conformance-calendar-days
     Generated.CalendarDays.CalendarStore.Harness
     Generated.CalendarDays.CalendarStore.Projection
     Generated.CalendarDays.CalendarStore.Transducer
+    Generated.CalendarDays.Inspection
     Generated.CalendarDays.ProjectionCatalog
     Generated.CalendarDays.ReplayAudit
     Generated.CalendarDays.Structural.CodecCompare.MaybeLocalDay
@@ -822,6 +835,7 @@ test-suite keiro-dsl-conformance-structural-text-sets
     Conformance.StructuralTextSets.Domain
     Conformance.StructuralTextSets.Historical
     Generated.StructuralTextSets.BehaviorSourceMap
+    Generated.StructuralTextSets.Inspection
     Generated.StructuralTextSets.LabelJobs.Queue
     Generated.StructuralTextSets.LabelJobs.QueueCodec
     Generated.StructuralTextSets.LabelJobs.QueuePolicy
@@ -888,6 +902,7 @@ test-suite keiro-dsl-conformance-refined-base16
     Generated.RefinedBase16.HashStore.Harness
     Generated.RefinedBase16.HashStore.Projection
     Generated.RefinedBase16.HashStore.Transducer
+    Generated.RefinedBase16.Inspection
     Generated.RefinedBase16.ProjectionCatalog
     Generated.RefinedBase16.ReplayAudit
     Generated.RefinedBase16.Structural.CodecCompare.ContentHash
@@ -959,6 +974,7 @@ test-suite keiro-dsl-conformance-mapped-readmodel
     Generated.MappedReadmodel.AccountSummary.ReadModel
     Generated.MappedReadmodel.AccountSummary.ReadModelHarness
     Generated.MappedReadmodel.AccountSummary.ReadModelTable
+    Generated.MappedReadmodel.Inspection
     Generated.MappedReadmodel.ProjectionCatalog
     Generated.MappedReadmodel.Structural.Shape.AccountLookup
     Generated.MappedReadmodel.Structural.Shape.AccountProfile
@@ -996,6 +1012,7 @@ test-suite keiro-dsl-conformance-import-planning
     Generated.ImportPlanningCollisions.CollisionLedger.Harness
     Generated.ImportPlanningCollisions.CollisionLedger.Projection
     Generated.ImportPlanningCollisions.CollisionLedger.Transducer
+    Generated.ImportPlanningCollisions.Inspection
     Generated.ImportPlanningCollisions.NominalProjections
     Generated.ImportPlanningCollisions.ReplayAudit
     Generated.ImportPlanningCollisions.Structural.Shape.Details
@@ -1064,6 +1081,7 @@ test-suite keiro-dsl-conformance-replay
   main-is: Main.hs
   other-modules:
     Generated.ReplayDivergence.BehaviorSourceMap
+    Generated.ReplayDivergence.Inspection
     Generated.ReplayDivergence.Note.Codec
     Generated.ReplayDivergence.Note.Domain
     Generated.ReplayDivergence.Note.EventStream
@@ -1143,6 +1161,7 @@ test-suite keiro-dsl-conformance-snapshot
   main-is: Main.hs
   other-modules:
     Generated.HospitalCapacity.BehaviorSourceMap
+    Generated.HospitalCapacity.Inspection
     Generated.HospitalCapacity.Nominals
     Generated.HospitalCapacity.Nominals.Internal
     Generated.HospitalCapacity.ReplayAudit
@@ -1270,6 +1289,7 @@ test-suite keiro-dsl-conformance-coldstart
   other-modules:
     Billing.Subscription.Holes
     Generated.Billing.BehaviorSourceMap
+    Generated.Billing.Inspection
     Generated.Billing.Nominals
     Generated.Billing.Nominals.Internal
     Generated.Billing.ReplayAudit
@@ -1505,6 +1525,7 @@ test-suite keiro-dsl-conformance-keyword-segments
   hs-source-dirs: test/conformance-keyword-segments
   main-is: Main.hs
   other-modules:
+    Generated.KeywordSegments.Inspection
     Generated.KeywordSegments.JobType.Queue
     Generated.KeywordSegments.JobType.QueueCodec
     Generated.KeywordSegments.JobType.QueuePolicy
@@ -1678,6 +1699,7 @@ test-suite keiro-dsl-conformance-process-full
     Generated.SurgeDemo.Hospital.EventStream
     Generated.SurgeDemo.Hospital.Projection
     Generated.SurgeDemo.Hospital.Transducer
+    Generated.SurgeDemo.Inspection
     Generated.SurgeDemo.Nominals
     Generated.SurgeDemo.Nominals.Internal
     Generated.SurgeDemo.ReplayAudit
@@ -1932,6 +1954,7 @@ test-suite keiro-dsl-conformance-declarative-router
     Generated.TransferRouting.HospitalLoad.ReadModelTable
     Generated.TransferRouting.HospitalTransferRouter.Router
     Generated.TransferRouting.HospitalTransferRouter.RouterHarness
+    Generated.TransferRouting.Inspection
     Generated.TransferRouting.ProjectionCatalog
     Generated.TransferRouting.ReplayAudit
     Generated.TransferRouting.Structural.Shape.HospitalLoadRow
@@ -1984,6 +2007,7 @@ test-suite keiro-dsl-conformance-router-full
   main-is: Main.hs
   other-modules:
     Generated.IncidentPaging.BehaviorSourceMap
+    Generated.IncidentPaging.Inspection
     Generated.IncidentPaging.Page.Codec
     Generated.IncidentPaging.Page.Domain
     Generated.IncidentPaging.Page.EventStream
@@ -2026,6 +2050,7 @@ test-suite keiro-dsl-conformance-newsurface
     Generated.TransferRouting.HospitalLoad.ReadModelTable
     Generated.TransferRouting.HospitalTransferRouter.Router
     Generated.TransferRouting.HospitalTransferRouter.RouterHarness
+    Generated.TransferRouting.Inspection
     Generated.TransferRouting.ReplayAudit
     TransferRouting.Hospital.Holes
     TransferRouting.HospitalLoad.ReadModelHoles
@@ -2073,6 +2098,7 @@ test-suite keiro-dsl-conformance-v2
   main-is: Main.hs
   other-modules:
     Generated.HospitalCapacity.BehaviorSourceMap
+    Generated.HospitalCapacity.Inspection
     Generated.HospitalCapacity.Nominals
     Generated.HospitalCapacity.Nominals.Internal
     Generated.HospitalCapacity.ReplayAudit
@@ -2137,6 +2163,7 @@ test-suite keiro-dsl-conformance-id-admission-domains
     Generated.IdAdmissionDomains.IdentityWork.Queue
     Generated.IdAdmissionDomains.IdentityWork.QueueCodec
     Generated.IdAdmissionDomains.IdentityWork.QueuePolicy
+    Generated.IdAdmissionDomains.Inspection
     Generated.IdAdmissionDomains.Nominals
     Generated.IdAdmissionDomains.Nominals.Internal
     Generated.IdAdmissionDomains.ReplayAudit
@@ -2175,6 +2202,7 @@ test-suite keiro-dsl-conformance-checked-mapping-replay
     Conformance.CheckedMappingReplay.Bindings
     Conformance.CheckedMappingReplay.Domain
     Generated.CheckedMappingReplay.BehaviorSourceMap
+    Generated.CheckedMappingReplay.Inspection
     Generated.CheckedMappingReplay.Nominals
     Generated.CheckedMappingReplay.Nominals.Internal
     Generated.CheckedMappingReplay.ProjectionCatalog
@@ -2246,6 +2274,7 @@ test-suite keiro-dsl-conformance-mapped-register-construction
     Conformance.MappedRegisterConstruction.Domain
     Conformance.MappedRegisterConstruction.Lift
     Generated.MappedRegisterConstruction.BehaviorSourceMap
+    Generated.MappedRegisterConstruction.Inspection
     Generated.MappedRegisterConstruction.Lifecycle.BehaviorContract
     Generated.MappedRegisterConstruction.Lifecycle.Codec
     Generated.MappedRegisterConstruction.Lifecycle.Domain
@@ -2278,6 +2307,7 @@ test-suite keiro-dsl-conformance-mapped-structural-enum-equality
     Conformance.MappedStructuralEnumEquality.Bindings
     Conformance.MappedStructuralEnumEquality.Domain
     Generated.MappedStructuralEnumEquality.BehaviorSourceMap
+    Generated.MappedStructuralEnumEquality.Inspection
     Generated.MappedStructuralEnumEquality.ReplayAudit
     Generated.MappedStructuralEnumEquality.ScopeGate.BehaviorContract
     Generated.MappedStructuralEnumEquality.ScopeGate.Codec

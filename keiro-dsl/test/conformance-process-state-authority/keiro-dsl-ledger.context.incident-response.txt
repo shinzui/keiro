@@ -9,6 +9,7 @@ module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"contex
 module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context incident-response generated nominal declarations","path":"Generated/IncidentResponse/Nominals.hs"}
 module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context incident-response generated nominal ID internals","path":"Generated/IncidentResponse/Nominals/Internal.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context incident-response replay-audit assembly","path":"Generated/IncidentResponse/ReplayAudit.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context incident-response inspection catalog","path":"Generated/IncidentResponse/Inspection.hs"}
 module-role {"family":"Input","kind":"generated","ownerKind":"process","ownerName":"process input IncidentEscalation (line 9)","path":"Generated/IncidentResponse/IncidentEscalation/Input.hs"}
 module-role {"family":"Process","kind":"generated","ownerKind":"process","ownerName":"process reaction IncidentEscalation (line 9)","path":"Generated/IncidentResponse/IncidentEscalation/Process.hs"}
 module-role {"family":"ProcessHoles","kind":"hole","ownerKind":"process","ownerName":"process decoder IncidentEscalation (line 9)","path":"IncidentResponse/IncidentEscalation/ProcessHoles.hs"}
@@ -33,6 +34,7 @@ generated Generated/IncidentResponse/BehaviorSourceMap.hs
 generated Generated/IncidentResponse/Nominals.hs
 generated Generated/IncidentResponse/Nominals/Internal.hs
 generated Generated/IncidentResponse/ReplayAudit.hs
+generated Generated/IncidentResponse/Inspection.hs
 generated Generated/IncidentResponse/IncidentEscalation/Input.hs
 generated Generated/IncidentResponse/IncidentEscalation/Process.hs
 hole IncidentResponse/IncidentEscalation/ProcessHoles.hs

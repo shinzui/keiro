@@ -13,6 +13,7 @@ module-role {"family":"Nominals","kind":"generated","ownerKind":"context","owner
 module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context behavior-complete generated nominal ID internals","path":"Generated/BehaviorComplete/Nominals/Internal.hs"}
 module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton BehaviorComplete.Bindings","path":"BehaviorComplete/Bindings.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context behavior-complete replay-audit assembly","path":"Generated/BehaviorComplete/ReplayAudit.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context behavior-complete inspection catalog","path":"Generated/BehaviorComplete/Inspection.hs"}
 module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Journey (line 18)","path":"Generated/BehaviorComplete/Journey/Domain.hs"}
 module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Journey (line 18)","path":"Generated/BehaviorComplete/Journey/Codec.hs"}
 module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Journey (line 18)","path":"Generated/BehaviorComplete/Journey/Transducer.hs"}
@@ -29,6 +30,7 @@ generated Generated/BehaviorComplete/Nominals.hs
 generated Generated/BehaviorComplete/Nominals/Internal.hs
 hole BehaviorComplete/Bindings.hs
 generated Generated/BehaviorComplete/ReplayAudit.hs
+generated Generated/BehaviorComplete/Inspection.hs
 generated Generated/BehaviorComplete/Journey/Domain.hs
 generated Generated/BehaviorComplete/Journey/Codec.hs
 generated Generated/BehaviorComplete/Journey/Transducer.hs

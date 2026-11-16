@@ -8,6 +8,7 @@ naming-edition idiomatic-v2
 module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context domain-outcomes behavior source map","path":"Generated/DomainOutcomes/BehaviorSourceMap.hs"}
 module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context domain-outcomes generated nominal declarations","path":"Generated/DomainOutcomes/Nominals.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context domain-outcomes replay-audit assembly","path":"Generated/DomainOutcomes/ReplayAudit.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context domain-outcomes inspection catalog","path":"Generated/DomainOutcomes/Inspection.hs"}
 module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Reservation (line 7)","path":"Generated/DomainOutcomes/Reservation/Domain.hs"}
 module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Reservation (line 7)","path":"Generated/DomainOutcomes/Reservation/Codec.hs"}
 module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Reservation (line 7)","path":"Generated/DomainOutcomes/Reservation/Transducer.hs"}
@@ -19,6 +20,7 @@ module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","owne
 generated Generated/DomainOutcomes/BehaviorSourceMap.hs
 generated Generated/DomainOutcomes/Nominals.hs
 generated Generated/DomainOutcomes/ReplayAudit.hs
+generated Generated/DomainOutcomes/Inspection.hs
 generated Generated/DomainOutcomes/Reservation/Domain.hs
 generated Generated/DomainOutcomes/Reservation/Codec.hs
 generated Generated/DomainOutcomes/Reservation/Transducer.hs

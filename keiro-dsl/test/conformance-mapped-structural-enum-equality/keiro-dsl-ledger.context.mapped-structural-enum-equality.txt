@@ -12,6 +12,7 @@ module-role {"family":"RequiredScope","kind":"generated","ownerKind":"mapped","o
 module-role {"family":"StructuralProjections","kind":"generated","ownerKind":"context","ownerName":"context mapped-structural-enum-equality mapped structural facade","path":"Generated/MappedStructuralEnumEquality/StructuralProjections.hs"}
 module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton Conformance.MappedStructuralEnumEquality.Bindings","path":"Conformance/MappedStructuralEnumEquality/Bindings.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context mapped-structural-enum-equality replay-audit assembly","path":"Generated/MappedStructuralEnumEquality/ReplayAudit.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context mapped-structural-enum-equality inspection catalog","path":"Generated/MappedStructuralEnumEquality/Inspection.hs"}
 module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ScopeGate (line 25)","path":"Generated/MappedStructuralEnumEquality/ScopeGate/Domain.hs"}
 module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ScopeGate (line 25)","path":"Generated/MappedStructuralEnumEquality/ScopeGate/Codec.hs"}
 module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ScopeGate (line 25)","path":"Generated/MappedStructuralEnumEquality/ScopeGate/Transducer.hs"}
@@ -27,6 +28,7 @@ generated Generated/MappedStructuralEnumEquality/Structural/Shape/RequiredScope.
 generated Generated/MappedStructuralEnumEquality/StructuralProjections.hs
 hole Conformance/MappedStructuralEnumEquality/Bindings.hs
 generated Generated/MappedStructuralEnumEquality/ReplayAudit.hs
+generated Generated/MappedStructuralEnumEquality/Inspection.hs
 generated Generated/MappedStructuralEnumEquality/ScopeGate/Domain.hs
 generated Generated/MappedStructuralEnumEquality/ScopeGate/Codec.hs
 generated Generated/MappedStructuralEnumEquality/ScopeGate/Transducer.hs

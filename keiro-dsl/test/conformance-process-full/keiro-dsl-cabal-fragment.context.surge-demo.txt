@@ -19,6 +19,7 @@ other-modules:
     Generated.SurgeDemo.Hospital.Harness
     Generated.SurgeDemo.Hospital.Projection
     Generated.SurgeDemo.Hospital.Transducer
+    Generated.SurgeDemo.Inspection
     Generated.SurgeDemo.Nominals
     Generated.SurgeDemo.Nominals.Internal
     Generated.SurgeDemo.ReplayAudit

@@ -22,6 +22,7 @@ module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context structural-nominal-leaves replay-audit assembly","path":"Generated/StructuralNominalLeaves/ReplayAudit.hs"}
 module-role {"family":"ProjectionCatalog","kind":"generated","ownerKind":"projection-catalog","ownerName":"projection-catalog structural-nominal-leaves","path":"Generated/StructuralNominalLeaves/ProjectionCatalog.hs"}
 module-role {"family":"ProjectionCatalogHoles","kind":"hole","ownerKind":"projection-catalog","ownerName":"projection-catalog structural-nominal-leaves","path":"StructuralNominalLeaves/ProjectionCatalog/ProjectionCatalogHoles.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context structural-nominal-leaves inspection catalog","path":"Generated/StructuralNominalLeaves/Inspection.hs"}
 module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate TemplateCatalog (line 101)","path":"Generated/StructuralNominalLeaves/TemplateCatalog/Domain.hs"}
 module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate TemplateCatalog (line 101)","path":"Generated/StructuralNominalLeaves/TemplateCatalog/Codec.hs"}
 module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate TemplateCatalog (line 101)","path":"Generated/StructuralNominalLeaves/TemplateCatalog/Transducer.hs"}
@@ -57,6 +58,7 @@ hole Conformance/StructuralNominals/Bindings.hs
 generated Generated/StructuralNominalLeaves/ReplayAudit.hs
 generated Generated/StructuralNominalLeaves/ProjectionCatalog.hs
 hole StructuralNominalLeaves/ProjectionCatalog/ProjectionCatalogHoles.hs
+generated Generated/StructuralNominalLeaves/Inspection.hs
 generated Generated/StructuralNominalLeaves/TemplateCatalog/Domain.hs
 generated Generated/StructuralNominalLeaves/TemplateCatalog/Codec.hs
 generated Generated/StructuralNominalLeaves/TemplateCatalog/Transducer.hs

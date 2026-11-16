@@ -13,6 +13,7 @@ module-role {"family":"Nominals","kind":"generated","ownerKind":"context","owner
 module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context aggregate-scalar-expressions generated nominal ID internals","path":"Generated/AggregateScalarExpressions/Nominals/Internal.hs"}
 module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton ScalarExpressions.Bindings","path":"ScalarExpressions/Bindings.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context aggregate-scalar-expressions replay-audit assembly","path":"Generated/AggregateScalarExpressions/ReplayAudit.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context aggregate-scalar-expressions inspection catalog","path":"Generated/AggregateScalarExpressions/Inspection.hs"}
 module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ScalarAccount (line 20)","path":"Generated/AggregateScalarExpressions/ScalarAccount/Domain.hs"}
 module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ScalarAccount (line 20)","path":"Generated/AggregateScalarExpressions/ScalarAccount/Codec.hs"}
 module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ScalarAccount (line 20)","path":"Generated/AggregateScalarExpressions/ScalarAccount/Transducer.hs"}
@@ -30,6 +31,7 @@ generated Generated/AggregateScalarExpressions/Nominals.hs
 generated Generated/AggregateScalarExpressions/Nominals/Internal.hs
 hole ScalarExpressions/Bindings.hs
 generated Generated/AggregateScalarExpressions/ReplayAudit.hs
+generated Generated/AggregateScalarExpressions/Inspection.hs
 generated Generated/AggregateScalarExpressions/ScalarAccount/Domain.hs
 generated Generated/AggregateScalarExpressions/ScalarAccount/Codec.hs
 generated Generated/AggregateScalarExpressions/ScalarAccount/Transducer.hs

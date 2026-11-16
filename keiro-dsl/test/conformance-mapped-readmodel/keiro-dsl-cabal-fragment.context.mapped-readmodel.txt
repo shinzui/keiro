@@ -16,6 +16,7 @@ other-modules:
     Generated.MappedReadmodel.AccountSummary.ReadModel
     Generated.MappedReadmodel.AccountSummary.ReadModelHarness
     Generated.MappedReadmodel.AccountSummary.ReadModelTable
+    Generated.MappedReadmodel.Inspection
     Generated.MappedReadmodel.ProjectionCatalog
     Generated.MappedReadmodel.Structural.Shape.AccountLookup
     Generated.MappedReadmodel.Structural.Shape.AccountProfile

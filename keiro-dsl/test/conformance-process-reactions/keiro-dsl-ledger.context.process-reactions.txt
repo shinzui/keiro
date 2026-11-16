@@ -9,6 +9,7 @@ module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"contex
 module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context process-reactions generated nominal declarations","path":"Generated/ProcessReactions/Nominals.hs"}
 module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context process-reactions generated nominal ID internals","path":"Generated/ProcessReactions/Nominals/Internal.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context process-reactions replay-audit assembly","path":"Generated/ProcessReactions/ReplayAudit.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context process-reactions inspection catalog","path":"Generated/ProcessReactions/Inspection.hs"}
 module-role {"family":"Input","kind":"generated","ownerKind":"process","ownerName":"process input IncidentReaction (line 7)","path":"Generated/ProcessReactions/IncidentReaction/Input.hs"}
 module-role {"family":"Process","kind":"generated","ownerKind":"process","ownerName":"process reaction IncidentReaction (line 7)","path":"Generated/ProcessReactions/IncidentReaction/Process.hs"}
 module-role {"family":"ProcessHoles","kind":"hole","ownerKind":"process","ownerName":"process decoder IncidentReaction (line 7)","path":"ProcessReactions/IncidentReaction/ProcessHoles.hs"}
@@ -41,6 +42,7 @@ generated Generated/ProcessReactions/BehaviorSourceMap.hs
 generated Generated/ProcessReactions/Nominals.hs
 generated Generated/ProcessReactions/Nominals/Internal.hs
 generated Generated/ProcessReactions/ReplayAudit.hs
+generated Generated/ProcessReactions/Inspection.hs
 generated Generated/ProcessReactions/IncidentReaction/Input.hs
 generated Generated/ProcessReactions/IncidentReaction/Process.hs
 hole ProcessReactions/IncidentReaction/ProcessHoles.hs

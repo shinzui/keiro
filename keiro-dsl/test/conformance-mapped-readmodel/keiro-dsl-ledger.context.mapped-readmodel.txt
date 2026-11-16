@@ -15,6 +15,7 @@ module-role {"family":"StructuralProjections","kind":"generated","ownerKind":"co
 module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton Conformance.MappedReadModel.Bindings","path":"Conformance/MappedReadModel/Bindings.hs"}
 module-role {"family":"ProjectionCatalog","kind":"generated","ownerKind":"projection-catalog","ownerName":"projection-catalog mapped-readmodel","path":"Generated/MappedReadmodel/ProjectionCatalog.hs"}
 module-role {"family":"ProjectionCatalogHoles","kind":"hole","ownerKind":"projection-catalog","ownerName":"projection-catalog mapped-readmodel","path":"MappedReadmodel/ProjectionCatalog/ProjectionCatalogHoles.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context mapped-readmodel inspection catalog","path":"Generated/MappedReadmodel/Inspection.hs"}
 module-role {"family":"ReadModelTable","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel account_summary (line 85)","path":"Generated/MappedReadmodel/AccountSummary/ReadModelTable.hs"}
 module-role {"family":"QueryContract","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel account_summary (line 85)","path":"Generated/MappedReadmodel/AccountSummary/QueryContract.hs"}
 module-role {"family":"ReadModel","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel account_summary (line 85)","path":"Generated/MappedReadmodel/AccountSummary/ReadModel.hs"}
@@ -30,6 +31,7 @@ generated Generated/MappedReadmodel/StructuralProjections.hs
 hole Conformance/MappedReadModel/Bindings.hs
 generated Generated/MappedReadmodel/ProjectionCatalog.hs
 hole MappedReadmodel/ProjectionCatalog/ProjectionCatalogHoles.hs
+generated Generated/MappedReadmodel/Inspection.hs
 generated Generated/MappedReadmodel/AccountSummary/ReadModelTable.hs
 generated Generated/MappedReadmodel/AccountSummary/QueryContract.hs
 generated Generated/MappedReadmodel/AccountSummary/ReadModel.hs

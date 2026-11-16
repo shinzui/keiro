@@ -14,6 +14,7 @@ other-modules:
     Billing.Subscription.BehaviorHoles
     Billing.Subscription.Holes
     Generated.Billing.BehaviorSourceMap
+    Generated.Billing.Inspection
     Generated.Billing.Nominals
     Generated.Billing.Nominals.Internal
     Generated.Billing.ReplayAudit

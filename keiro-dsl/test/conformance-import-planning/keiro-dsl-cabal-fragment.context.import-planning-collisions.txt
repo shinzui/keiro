@@ -19,6 +19,7 @@ other-modules:
     Generated.ImportPlanningCollisions.CollisionLedger.Harness
     Generated.ImportPlanningCollisions.CollisionLedger.Projection
     Generated.ImportPlanningCollisions.CollisionLedger.Transducer
+    Generated.ImportPlanningCollisions.Inspection
     Generated.ImportPlanningCollisions.NominalProjections
     Generated.ImportPlanningCollisions.ReplayAudit
     Generated.ImportPlanningCollisions.Structural.Shape.Details

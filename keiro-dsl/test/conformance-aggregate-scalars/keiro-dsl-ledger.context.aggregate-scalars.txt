@@ -7,6 +7,7 @@ semantic-contract {"languageSupport":"compatibility-only","languageVersion":4,"r
 naming-edition idiomatic-v2
 module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context aggregate-scalars behavior source map","path":"Generated/AggregateScalars/BehaviorSourceMap.hs"}
 module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context aggregate-scalars replay-audit assembly","path":"Generated/AggregateScalars/ReplayAudit.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context aggregate-scalars inspection catalog","path":"Generated/AggregateScalars/Inspection.hs"}
 module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ScalarLedger (line 4)","path":"Generated/AggregateScalars/ScalarLedger/Domain.hs"}
 module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ScalarLedger (line 4)","path":"Generated/AggregateScalars/ScalarLedger/Codec.hs"}
 module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ScalarLedger (line 4)","path":"Generated/AggregateScalars/ScalarLedger/Transducer.hs"}
@@ -18,6 +19,7 @@ module-role {"family":"Holes","kind":"hole","ownerKind":"aggregate","ownerName":
 module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate ScalarLedger (line 4)","path":"Generated/AggregateScalars/ScalarLedger/Harness.hs"}
 generated Generated/AggregateScalars/BehaviorSourceMap.hs
 generated Generated/AggregateScalars/ReplayAudit.hs
+generated Generated/AggregateScalars/Inspection.hs
 generated Generated/AggregateScalars/ScalarLedger/Domain.hs
 generated Generated/AggregateScalars/ScalarLedger/Codec.hs
 generated Generated/AggregateScalars/ScalarLedger/Transducer.hs
