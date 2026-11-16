@@ -133,5 +133,14 @@ in  AgentPlans.AgentPlansCatalog::{
             }
           ]
         }
+      , AgentPlans.ExposedPlan::{
+        , kind = AgentPlans.PlanKind.ExecPlan
+        , file = "docs/plans/336-generate-an-aggregate-inspector-catalog-for-every-keiro-dsl-aggregate.md"
+        , status = AgentPlans.PlanStatus.NotStarted
+        , owner = None Text
+        , summary = Some
+            "Generate a validated aggregate inspector catalog for every keiro-dsl aggregate and release it"
+        , dependencies = [] : List AgentPlans.PlanDependency.Type
+        }
       ]
     }
