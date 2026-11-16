@@ -9,6 +9,18 @@ provenance:
     model: "claude-opus-5-5"
     harness: "claude-code"
     at: 2026-11-16T02:00:42Z
+  reviews:
+    - model: "claude-fable-5-2"
+      harness: "claude-code"
+      at: 2026-11-16T03:58:21Z
+      verdict: "comments"
+      note: "Claims verified against the tree; Milestone 2 missed the service-package Cabal file, the eight exempt suites, and containers deps"
+  revisions:
+    - model: "claude-fable-5-2"
+      harness: "claude-code"
+      at: 2026-11-16T03:58:21Z
+      mode: "update"
+      note: "Made Milestone 2 corpus handling concrete and required docs/ADR to state display consequences"
 ---
 
 # Generate an aggregate inspector catalog for every keiro-dsl aggregate
@@ -255,7 +267,8 @@ and `aggregates :: Maybe AggregateInspectors`. `emptyAppHooks` sets every field 
 `Nothing`. The HTTP transport (`keiro-ops-http`) derives its routes from these hooks. The
 reference consumer in chapter-service-v2 fills exactly these three fields.
 
-**The conformance corpus.** The directories `keiro-dsl/test/conformance-*` contain
+**The conformance corpus.** The directories `keiro-dsl/test/conformance` and
+`keiro-dsl/test/conformance-*` contain
 committed scaffold output, hand-filled holes, and a `Main.hs` per Cabal test suite
 declared in `keiro-dsl/keiro-dsl.cabal`. `keiro-dsl/test/README.md` describes the
 workflow. The driver `keiro-dsl-corpus-regen` (package `keiro-dsl/tools/corpus-regen`)
@@ -265,7 +278,8 @@ refuses generated files that no Cabal stanza lists, unless a
 `uncompiled-generated <path>` row in `keiro-dsl/test/conformance-corpus-manifest.txt`
 exempts them. `scripts/check-conformance-corpus.sh` (also `just conformance-corpus-policy`)
 verifies that regeneration changes no byte. `keiro-dsl/test/conformance-skeletons` is
-`frozen` and is not regenerated. About 40 suites emit ReplayAudit. Of these,
+`frozen` and is not regenerated. Thirty-seven regenerated suites emit ReplayAudit
+(`conformance` and 36 of the `conformance-*` directories). Of these,
 `conformance-bare-containers`, `conformance-calendar-days`,
 `conformance-checked-mapping-replay`, `conformance-declarative-router`,
 `conformance-projection-catalog`, `conformance-refined-base16`,
@@ -273,6 +287,25 @@ verifies that regeneration changes no byte. `keiro-dsl/test/conformance-skeleton
 ProjectionCatalog. Three suites emit a ProjectionCatalog with no aggregate:
 `conformance-keyword-segments`, `conformance-mapped-readmodel`, and
 `conformance-nominal-query-only`. `conformance-snapshot` is the snapshot-codec fixture.
+Regeneration therefore adds 40 Inspection modules.
+
+Two groups of suites need special handling. Eight suites already exempt their ReplayAudit
+module, and some of them an aggregate EventStream module, from compilation with
+`uncompiled-generated` rows: `conformance-id-domain-migration`, `conformance-process`,
+`conformance-process-runtime`, `conformance-process-reactions`,
+`conformance-process-timers`, `conformance-process-state-authority`,
+`conformance-router`, and `conformance-router-runtime`. Their Inspection module imports
+those uncompiled modules, so it cannot be compiled either. Separately,
+`conformance-service-package` is not compiled by `keiro-dsl/keiro-dsl.cabal`. Its
+generated tree under `keiro-dsl/test/conformance-service-package/runtime/src` belongs to
+the hand-maintained package
+`keiro-dsl/test/conformance-service-package/runtime/keiro-dsl-conformance-service-runtime.cabal`,
+which lists `Proof.WorkspaceProof.Generated.ReplayAudit` in `other-modules`. The corpus
+driver's Cabal inventory check deliberately skips this package (`checkCabalInventory` in
+`keiro-dsl/tools/corpus-regen/src/CorpusPlan.hs`), and the package builds with plain
+`-Wall`, so a generated module missing from its `other-modules` is silently left
+uncompiled.
+
 Corpus Cabal stanzas compile with warnings as errors, including `-Wunused-imports`, and
 generated modules must have explicit signatures for every top-level binding and declare
 no warning suppressions.
@@ -508,12 +541,22 @@ prints the lines shown under Validation and Acceptance.
 Run the full corpus regeneration. Every suite that emits ReplayAudit or ProjectionCatalog
 gains `Generated/<Ctx>/Inspection.hs` (or the collocated or rooted equivalent), with
 updated ledger `module-role`/`generated` rows and Cabal fragments. Add each new module
-to its suite's `other-modules` in `keiro-dsl/keiro-dsl.cabal`. When a suite deliberately
-does not compile a module the Inspection module imports (its ReplayAudit, an aggregate
-EventStream, or its ProjectionCatalog), add an `uncompiled-generated <path>` row under
-the existing "Reviewed legacy suites" comment in
-`keiro-dsl/test/conformance-corpus-manifest.txt`, and list each such suite in Surprises &
-Discoveries. Compiling is the default, and an exemption needs that reason.
+to its suite's `other-modules` in `keiro-dsl/keiro-dsl.cabal`, with two exceptions.
+
+First, add `Proof.WorkspaceProof.Generated.Inspection` to `other-modules` in
+`keiro-dsl/test/conformance-service-package/runtime/keiro-dsl-conformance-service-runtime.cabal`,
+not to `keiro-dsl.cabal`. No check reports this module if it is forgotten, so confirm it
+was compiled: `cabal build keiro-dsl-conformance-service-runtime` must print a
+`Compiling Proof.WorkspaceProof.Generated.Inspection` line. That package already depends
+on `aeson`, `keiki`, `keiro`, and `text`.
+
+Second, a suite that deliberately does not compile a module the Inspection module imports
+(its ReplayAudit, an aggregate EventStream, or its ProjectionCatalog) cannot compile the
+Inspection module. For each, add an `uncompiled-generated <path>` row under the existing
+"Reviewed legacy suites" comment in `keiro-dsl/test/conformance-corpus-manifest.txt`. The
+eight suites named in Context and Orientation are the expected set. Record in Surprises &
+Discoveries any suite outside that set that needs a row, with the reason. Compiling is the
+default, and an exemption needs that reason.
 
 Prove the two remaining shapes at runtime:
 
@@ -526,8 +569,13 @@ Prove the two remaining shapes at runtime:
   sources, or the fingerprint equals that of the validated `emptyProjectionCatalog`.
 - `keiro-dsl/test/conformance-keyword-segments/Main.hs` (projections-only):
   `Map.null aggregateInspectors`, `null inspectionAuditTargets`, and the projection
-  fingerprint equals that of the suite's `validatedProjectionCatalog`. Add `containers`
-  to that stanza's `build-depends` only if it is missing.
+  fingerprint equals that of the suite's `validatedProjectionCatalog`.
+
+Neither of these two stanzas depends on `containers` today (the projection-catalog stanza
+does). Add `containers >=0.6 && <0.8` to a stanza's `build-depends` only if its `Main.hs`
+imports `Data.Map`. Both checks can avoid it: `null aggregateInspectors` works through
+`Foldable`, and the snapshot suite can take its single inspector from
+`aggregateInspectorCatalog`.
 
 Acceptance for Milestone 2: `cabal build keiro-dsl:tests` compiles every suite with
 warnings as errors; the snapshot and keyword-segments suites pass with the new output;
@@ -539,7 +587,12 @@ after committing, `scripts/check-conformance-corpus.sh` reports no drift.
 In `docs/user/keiro-dsl-workspaces-and-generated-code.md`, add a short subsection under
 "Generated and hand-owned files" describing `<prefix>.Inspection`: its four exports,
 when it is emitted, the display rule, and the empty-value behavior. Show the three-line
-`emptyAppHooks` mount. In `docs/user/operations.md`, after the `AppHooks` example near
+`emptyAppHooks` mount. State the two visible consequences of the display rule. A
+snapshot aggregate displays every register through its codec with no redaction, and
+before a register is first written it shows the generated placeholder initial value
+(for example the sample ID in `initial<Agg>Regs`). An aggregate without a snapshot clause
+displays only its vertex, even when it has registers. A service that needs redaction or
+a different shape writes its own inspector instead of mounting the generated one. In `docs/user/operations.md`, after the `AppHooks` example near
 line 53, add one paragraph saying DSL services can take all three read-only values from
 the generated Inspection module. Both files are OKF documents in the `docs/user` bundle,
 so advance each edited file's frontmatter `timestamp` and add a log entry with
@@ -555,7 +608,8 @@ unchanged. In the root `CHANGELOG.md`, a one-line **keiro-dsl** summary under
 Create one ADR capturing the durable decisions from this plan's Decision Log. Suggested
 title: "Generated aggregate inspector catalogs cover every DSL aggregate". It covers
 completeness by construction, placement beside ReplayAudit and ProjectionCatalog, the
-display rule and its relation to ADR-54, empty values instead of `Maybe`, and no
+display rule and its relation to ADR-54 (including the unredacted registers and
+placeholder initial values described above), empty values instead of `Maybe`, and no
 `keiro-ops` dependency. `docs/adr` is a profile-governed OKF bundle, so allocate the
 handle with `okf id next docs/adr --profile docs/adr/profile.dhall ADR` (do not count
 files). Write
@@ -618,7 +672,8 @@ Milestone 1, after editing the emitter, registries, and tests:
 ```bash
 nix develop -c cabal test keiro-dsl-test --test-options='--match "Inspection"'
 nix develop -c cabal test keiro-dsl-test
-nix develop -c cabal run -v0 keiro-dsl-corpus-regen -- regenerate \
+nix develop -c python3 scripts/release_workflow.py locked -- \
+  cabal run -v0 keiro-dsl-corpus-regen -- regenerate \
   --only keiro-dsl/test/conformance-projection-catalog
 git status --short keiro-dsl/test/conformance-projection-catalog
 ```
@@ -638,8 +693,13 @@ Milestone 2:
 nix develop -c just corpus-regen
 git status --short keiro-dsl/test | grep 'Inspection.hs'
 nix develop -c cabal build keiro-dsl:tests
+nix develop -c cabal build keiro-dsl-conformance-service-runtime
 nix develop -c cabal test keiro-dsl-conformance-snapshot keiro-dsl-conformance-keyword-segments
 ```
+
+`git status` should list 40 new `Inspection.hs` files. The focused regeneration uses the
+same `release_workflow.py locked` wrapper as `just corpus-regen`, so it takes the
+workspace lock.
 
 Commit the regenerated corpus together with the Cabal and manifest edits, then:
 
@@ -796,3 +856,16 @@ need the Milestone 4 release. Plan C
 (`mori://tan/tan-seihou-modules/plans/7-enable-keiro-ui-inspection-by-default-in-the-tan-keiro-project-recipe`)
 depends on B, not on this plan. Nix-based consumers also need a
 `mori://shinzui/haskell-nix` runtime generation that selects the released Keiro version.
+
+
+## Revision Notes
+
+2026-11-16: Review against the working tree. The design, the cited source locations, and
+the expected test output were confirmed. Milestone 2 was made concrete where the tree
+differs from the original text: `conformance-service-package` is compiled by its own
+Cabal file and is invisible to the inventory check, eight suites are named as needing
+`uncompiled-generated` rows, the snapshot and keyword-segments stanzas lack `containers`,
+and the corpus count is 40 new modules including the plain `conformance` suite.
+Milestone 3 now requires the documentation and ADR to state that the codec display shows
+unredacted registers and placeholder initial values. The focused regeneration command
+now takes the workspace lock.
