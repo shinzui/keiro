@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-11-16
+* **Request**: IR-62 proposed from `mori://shinzui/mori`: add `keiro-dsl topology` emitting a byte-stable `keiro-dsl/service-topology/1` document (nodes, node-to-node edges, member digests), with `scaffold --topology-out` and a freshness check for service gates.
+* **Request**: IR-63 proposed from `mori://shinzui/mori`: let a process or router input declare the intake that feeds it, check that the intake accepts the events the input is built from, and expose the link as a service-topology edge.
 * **Request**: IR-61 proposed from `mori://shinzui/shikigami`: declare workflow fragments from separate packages, so the labels a separately built package journals inside a host workflow are visible to check, diff and replay-impact, with a store-free recording interpreter for label inventories.
 
 ## 2026-11-05
