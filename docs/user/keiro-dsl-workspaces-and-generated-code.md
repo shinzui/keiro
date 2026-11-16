@@ -7,7 +7,7 @@ tags: [keiro, dsl, workspaces, scaffold, reference]
 generated:
   by: anthropic-claude-code/claude-opus-5
   at: 2026-10-13T23:30:33Z
-timestamp: 2026-10-27T21:15:00Z
+timestamp: 2026-11-16T18:36:00Z
 ---
 
 # Keiro DSL Workspaces and Generated Code
@@ -170,6 +170,59 @@ case-folded module/path collisions, import cycles, generated-name safety,
 lowering support, and existing-file ownership. One refusal stops the write.
 `--force-generated-overwrite` bypasses only the missing-banner protection for
 a generated target; it does not overwrite create-once hand code.
+
+### Generated inspection catalog
+
+Every service context with at least one aggregate or projection-catalog
+declaration also gets `<generated prefix>.Inspection`, beside `ReplayAudit` and
+`ProjectionCatalog`. For the default layout that is `Generated.<Ctx>.Inspection`;
+for a collocated layout it is `<root>.<Ctx>.Generated.Inspection`. A context with
+neither, such as a contract-only service, emits no Inspection module. The module
+exports four read-only values:
+
+- `aggregateInspectorCatalog :: [SomeAggregateInspector]` holds one inspector per
+  declared aggregate, including process saga aggregates.
+- `aggregateInspectors :: AggregateInspectors` is that list, validated and keyed
+  by each aggregate's stream category, which is also its replay-audit category.
+- `inspectionAuditTargets :: [SomeAuditTarget]` is the context's replay-audit
+  target list.
+- `inspectionProjectionCatalog :: ValidatedProjectionCatalog` is the generated
+  validated projection catalog.
+
+The catalog is regenerated from the same checked specification as the
+aggregates, so a newly declared aggregate cannot be left out. An absent section
+is an empty value rather than `Maybe`. A context with aggregates but no
+projection catalog gets the validated empty catalog. A projections-only context
+gets empty inspector and audit-target lists. Mounting those values lists nothing
+and does not fail.
+
+An aggregate's state display follows its `snapshot` clause. A snapshot aggregate
+displays through its generated state codec as `{"state": …, "registers": {…}}`.
+That shows every register without redaction. Before a register is first
+written, it shows the generated placeholder initial value, such as the sample ID
+in `initial<Agg>Regs`. An aggregate without a snapshot clause displays only its
+vertex as `{"state": "<vertex>"}`, even when it has registers. A service that
+needs redaction or another shape should write its own `AggregateInspector`
+instead of mounting the generated catalog.
+
+Mount the read-only inspection surface with existing `keiro-ops` APIs. The
+generated module itself depends only on `keiro`, `keiki`, `aeson`, and `text`:
+
+```haskell
+import Keiro.Ops (AppHooks (..), OpsAuditConfig (..), emptyAppHooks)
+import Keiro.Projection.Catalog.Operations (projectionCatalogOperations)
+
+operationsHooks :: AppHooks
+operationsHooks =
+  emptyAppHooks
+    { replayAudit = Just (OpsAuditConfig inspectionAuditTargets),
+      projectionCatalog = Just (projectionCatalogOperations inspectionProjectionCatalog),
+      aggregates = Just aggregateInspectors
+    }
+```
+
+When a scaffold first adds the module, list it in the consuming Cabal stanza's
+`other-modules`. The emitted Cabal fragment already includes it.
 
 ### Scaffold sidecars
 

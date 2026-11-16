@@ -2,7 +2,7 @@
 type: Runbook
 title: Operations
 description: Deploy and operate Keiro applications, workers, rebuilds, retries, and production checks.
-timestamp: 2026-11-15T01:15:00Z
+timestamp: 2026-11-16T18:36:00Z
 docId: DOC-15
 tags: [keiro, operations, deployment, runbook]
 generated:
@@ -60,6 +60,14 @@ Ops.emptyAppHooks
   , processManagers = Just applicationProcessManagerInspectors
   }
 ```
+
+A DSL service can take all three read-only values from its generated
+`<generated prefix>.Inspection` module: `inspectionAuditTargets` for
+`replayAudit`, `projectionCatalogOperations inspectionProjectionCatalog` for
+`projectionCatalog`, and `aggregateInspectors` for `aggregates`. That module has
+one inspector for every declared aggregate. See
+[Generated inspection catalog](keiro-dsl-workspaces-and-generated-code.md#generated-inspection-catalog)
+for what it displays and when it is emitted.
 
 A hook-dependent command is absent from help when its hook is absent. The
 worked mounting point is `jitsurei/app/Main.hs`; inspect it with:

@@ -1,5 +1,8 @@
 # Keiro User Documentation Log
 
+## 2026-11-16
+* **Update**: DOC-32 and DOC-15: document the generated Inspection module, its display rule and empty values, and its read-only AppHooks mount (plan 336).
+
 ## 2026-11-15
 
 * **Update**: DOC-11: clarify that producer cutoffs require a real global event position, not the zero reported by source-stream reads.

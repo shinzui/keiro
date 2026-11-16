@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-16
+* **Addition**: ADR-61: generated aggregate inspector catalogs cover every DSL aggregate (plan 336).
+
 ## 2026-11-15
 
 * **Update**: Account for the full reference benchmark inventory when recovering missing historical timing rows; keep functional-only omissions blocking.

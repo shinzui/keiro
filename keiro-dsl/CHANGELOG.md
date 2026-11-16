@@ -6,6 +6,21 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+### New Features
+
+- Scaffolding emits `<generated prefix>.Inspection` for every service context with at
+  least one aggregate or projection-catalog declaration, beside `ReplayAudit` and
+  `ProjectionCatalog`. It exports `aggregateInspectorCatalog` (one
+  `SomeAggregateInspector` per declared aggregate, including process saga aggregates),
+  the validated `aggregateInspectors` map keyed by stream category,
+  `inspectionAuditTargets`, and `inspectionProjectionCatalog`. Absent sections are empty
+  values, and the validated empty projection catalog stands in for a missing catalog. A
+  snapshot aggregate displays through its state codec. Any other aggregate displays
+  `{"state": "<vertex>"}`. The library exports
+  `Keiro.Dsl.Scaffold.scaffoldInspection`. Regenerating adds one context module, which
+  the consuming Cabal stanza must list (the emitted Cabal fragment includes it). DSL
+  source, checking, language versions, and existing generated modules are unchanged.
+
 ## 0.25.0.0 — 2026-11-14
 
 ### Other Changes

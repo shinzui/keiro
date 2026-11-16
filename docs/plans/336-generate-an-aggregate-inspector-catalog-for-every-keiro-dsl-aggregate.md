@@ -87,9 +87,16 @@ declared aggregate.
   `cabal test keiro-dsl-conformance-projection-catalog` compiles the module under
   `-Werror` and prints every expected line. The remaining `keiro-dsl-test` failures are
   corpus-freshness checks that Milestone 2's regeneration resolves.)
-- [ ] Milestone 2: every regenerated conformance suite compiles its Inspection module;
+- [x] Milestone 2: every regenerated conformance suite compiles its Inspection module;
   the snapshot and projections-only suites prove the state-codec and empty-aggregate
   shapes; `scripts/check-conformance-corpus.sh` passes from a clean baseline.
+  (2026-11-16: regeneration added 40 Inspection modules. 31 compile in their
+  `keiro-dsl.cabal` stanzas, one in the service-package runtime (its build printed
+  `Compiling Proof.WorkspaceProof.Generated.Inspection`), and exactly the eight expected
+  legacy suites gained `uncompiled-generated` rows. `cabal build keiro-dsl:tests`
+  succeeded under `-Werror`; `keiro-dsl-test` passed with 904 examples and 0 failures; the
+  snapshot and keyword-segments suites printed every expected line; and the corpus check
+  printed `conformance corpus: ok` after commit `3860b00f`.)
 - [ ] Milestone 3: user documentation, both changelogs, and a new ADR describe the module;
   `nix develop -c just verify` passes.
 - [ ] Milestone 4: a Keiro release containing this change (proposed `0.25.1.0`) is on
@@ -108,6 +115,13 @@ declared aggregate.
   that the plan did not name: the reservation Generated count (10 → 11), the
   `order.keiro` total module count (12 → 13), and the workspace ownerless-module count
   (6 → 7).
+- `conformance-nominal-query-only` has no stanza of its own. Its modules, now including
+  `Generated.MappedNominalQueryOnly.Inspection`, compile in
+  `keiro-dsl-conformance-structural-nominals`. The `conformance-structural` tree is also
+  read by `keiro-dsl-conformance-codec-compare` and `keiro-dsl-codec-bench`. Those stanzas
+  compile neither its ReplayAudit nor its EventStream modules, so they leave the Inspection
+  module out. `keiro-dsl-conformance-structural` compiles it, so no exemption is needed.
+  No suite outside the expected eight needed an `uncompiled-generated` row.
 
 
 ## Decision Log
@@ -160,6 +174,12 @@ declared aggregate.
   module must not depend on `keiro-ops`, which pulls in migrations and PGMQ. Consumers
   write:
   `emptyAppHooks {replayAudit = Just (OpsAuditConfig inspectionAuditTargets), projectionCatalog = Just (projectionCatalogOperations inspectionProjectionCatalog), aggregates = Just aggregateInspectors}`.
+  Date: 2026-11-16
+
+- Decision: Leave ADR-54 unchanged. ADR-61 links to it.
+  Rationale: the profile requires a timestamp and log entry for every edit, and ADR-54's
+  decision is unchanged. ADR-61 records the DSL-specific display choice and cites ADR-54,
+  which keeps the relationship discoverable.
   Date: 2026-11-16
 
 - Decision: No DSL language-version bump, no new `DiagnosticCode`, and no
