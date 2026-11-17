@@ -21,9 +21,14 @@ import Keiki.Core (HsPred, inpProj, (./=))
 import Keiki.Symbolic (symIsBot)
 import Keiro.Codec.Structural (FixtureCases (..))
 import System.Exit (exitFailure)
+import Generated.StructuralConformance.ArtifactCatalog.Transducer (artifactCatalogTransducer)
+import TopologyMachineProof (proveTopologyMachines, topologyMachineProofLine, walkMachine)
 
 main :: IO ()
 main = do
+    -- Structural registers, one edge emitting two events into a terminal state.
+    proof <- proveTopologyMachines "test/fixtures/structural-conformance.keiro" [] [walkMachine "ArtifactCatalog" artifactCatalogTransducer]
+    putStrLn (topologyMachineProofLine proof)
     goldenAssertions <- loadGoldenAssertions
     let assertions =
             [("structural/" <> label, passed) | (label, passed) <- structuralConformanceAssertions]

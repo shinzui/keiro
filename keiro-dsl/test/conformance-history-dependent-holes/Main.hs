@@ -9,9 +9,14 @@ import HistoryDependentHoles.Assignment.BehaviorHoles (behaviorWitnesses)
 import Keiki.Core qualified as K
 import System.Exit (exitFailure)
 import Control.Monad (unless)
+import TopologyMachineProof (proveTopologyMachines, topologyMachineProofLine, walkMachine)
 
 main :: IO ()
 main = do
+  -- Hole-bodied transitions: the edges stay generated even though their
+  -- bodies are hand-written, so the exported machine must still match keiki.
+  proof <- proveTopologyMachines "test/fixtures/history-dependent-holes.keiro" [] [walkMachine "Assignment" assignmentTransducer]
+  putStrLn (topologyMachineProofLine proof)
   mapM_ printRow harnessAssertions
   TIO.putStr (renderBehaviorConformanceText report)
   mapM_ printRow directAssertions

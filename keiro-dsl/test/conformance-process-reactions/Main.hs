@@ -34,6 +34,9 @@ import Shibuya.Core.Types (Envelope (..))
 import Streamly.Data.Stream qualified as Streamly
 import System.Environment (getArgs)
 import System.IO (hPutStrLn, stderr)
+import Generated.ProcessReactions.Incident.Transducer (incidentTransducer)
+import Generated.ProcessReactions.IncidentSaga.Transducer (incidentSagaTransducer)
+import TopologyMachineProof (proveTopologyMachines, topologyMachineProofLine, walkMachine)
 
 main :: IO ()
 main = getArgs >>= \case
@@ -42,7 +45,15 @@ main = getArgs >>= \case
   arguments -> fail ("unexpected arguments: " <> show arguments)
 
 regularMain :: IO ()
-regularMain =
+regularMain = do
+  -- A reaction-process saga (IncidentSaga) shared by three processes, with two
+  -- edges out of one state, and the dispatch target (Incident).
+  proof <-
+    proveTopologyMachines
+      "test/fixtures/process-reactions.keiro"
+      []
+      [walkMachine "IncidentSaga" incidentSagaTransducer, walkMachine "Incident" incidentTransducer]
+  putStrLn (topologyMachineProofLine proof)
   withMigratedSuite $ \fixture ->
     withFreshResourceStore fixture $ \(_storeHandle, StoreRunner runStore) -> do
       incidentId <- either (fail . show) pure (mkIncidentId "inc_01h455vb4pex5vsknk084sn02q")

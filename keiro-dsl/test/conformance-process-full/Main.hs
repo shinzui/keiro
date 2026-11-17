@@ -14,9 +14,20 @@ import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Keiro.ProcessManager (ProcessManager (..), ProcessManagerAction (..))
 import SurgeDemo.SurgeFlow.Manager (SurgeInput (..), surgeManager)
 import System.Exit (exitFailure)
+import TopologyMachineProof (proveTopologyMachines, topologyMachineProofLine, walkMachine)
+import Generated.SurgeDemo.Hospital.Transducer (hospitalTransducer)
+import Generated.SurgeDemo.Surge.Transducer (surgeTransducer)
 
 main :: IO ()
 main = do
+    -- A Language 4 legacy-process saga (Surge) with a chain to a terminal
+    -- state, and its dispatch target (Hospital).
+    proof <-
+        proveTopologyMachines
+            "test/fixtures/surge-service.keiro"
+            []
+            [walkMachine "Surge" surgeTransducer, walkMachine "Hospital" hospitalTransducer]
+    putStrLn (topologyMachineProofLine proof)
     let hospitalIdValue = "hosp_01h455vb4pex5vsknk084sn02q"
         input = SurgeInput{hospitalId = hospitalIdValue, observedAt = posixSecondsToUTCTime 0}
         action = surgeManager.handle input
