@@ -67,8 +67,8 @@ which node kind joins to which inspection route and by which field.
 ## Progress
 
 - [ ] Milestone 1: `keiro-dsl topology` exports each aggregate's stream `category`, equal
-      to the name its generated inspector is mounted under. Goldens, the JSON Schemas and
-      `docs/user/keiro-dsl-service-topology.md` are updated, and a test proves the equality.
+      to the name its generated inspector is mounted under. Delivered by Milestone 1 of
+      `docs/plans/343-close-the-review-findings-on-the-keiro-dsl-service-topology-export.md`.
 - [ ] Milestone 2: `keiro-ops` decodes and mounts a topology document
       (`Keiro.Ops.Topology`, `AppHooks.serviceTopology`), and `keiro-ops topology show` and
       `topology summary` exist only when it is mounted. Unit tests cover decoding, refusal of
@@ -298,34 +298,12 @@ read-only first (`mori://shinzui/keiro-ui/okf/adrs/concepts/ADR-7`).
 
 ### Milestone 1: export the aggregate category from keiro-dsl
 
-In `keiro-dsl/src/Keiro/Dsl/Topology.hs`, add `category` to the `details` of an
-`aggregate` node in `nodeSummary`. Its value must be the text the generated inspector
-catalog mounts that aggregate under. Take it from the same derivation the scaffold uses
-(`categoryName` beside `lowerFirst ((.name) a) <> "Category"` in
-`keiro-dsl/src/Keiro/Dsl/Scaffold.hs`); if that derivation is local to the scaffold, move
-it to a shared function both call, so the two cannot drift. Do not write a second copy.
-
-A process's saga aggregate needs care. The process declares its own saga category
-(`saga.category`, for example `hospitalSurge` for the aggregate `Surge`), and the
-inspector catalog covers saga aggregates too (ADR-61). Find out which category the
-generated catalog uses for a saga aggregate and export that one. Record what you find in
-Surprises & Discoveries, because keiro-ui's join for `Surge` depends on it.
-
-Prove the equality with a test in the keiro-dsl suite: for a fixture that scaffolds an
-inspector catalog (`hospital-capacity.keiro` has five aggregates including a saga
-aggregate), the set of `details.category` values of the topology's aggregate nodes equals
-the set of inspector names in the generated catalog. Compare against the generated output,
-not against a list typed into the test.
-
-Regenerate the goldens under `keiro-dsl/test/fixtures/topology/` by running
-`keiro-dsl topology` on each fixture source, as plan 338 produced them, and read the diff: it must add one `category` line per aggregate node
-and change nothing else. Add `category` as an optional string property of the aggregate
-`details` in `docs/user/schemas/keiro-dsl-service-topology-1.schema.json` and
-`-2.schema.json`. It must not be `required`, so documents emitted before this change stay
-valid. Update the `aggregate` row of the node-kind table in
-`docs/user/keiro-dsl-service-topology.md`. Add a `keiro-dsl/CHANGELOG.md` entry that says
-committed topology documents must be regenerated (`scaffold --topology-out`), because
-`topology --check` reports them stale after the upgrade.
+This milestone is delivered by Milestone 1 of
+`docs/plans/343-close-the-review-findings-on-the-keiro-dsl-service-topology-export.md`,
+which adds `category` to aggregate nodes together with another added field, so that
+services regenerate their committed topology once. Do not implement it here. Mark it
+complete when that milestone is accepted, and record the saga-aggregate category it
+found, because the join table in Milestone 4 depends on it.
 
 ### Milestone 2: mount and read the document in keiro-ops
 
@@ -513,8 +491,7 @@ library functions) and `keiro-ops-http/CHANGELOG.md` (the routes, `--topology` a
 `HostOptions` field). Update
 ADR-62's Consequences with one bullet: keiro-ops serves the document opaquely and checks
 only its schema id and envelope, so adding a schema id requires adding it to
-`Keiro.Ops.Topology`. Add a second bullet: aggregate nodes carry the inspector `category`
-so consumers join to live inspection without re-deriving it. Advance its `timestamp` and add an `okf log add` entry to
+`Keiro.Ops.Topology`. Advance its `timestamp` and add an `okf log add` entry to
 `docs/adr/log.md`.
 
 
@@ -668,3 +645,6 @@ nodes could not be joined to `/aggregate/*`; added `document_sha256`, `document_
 file a startup failure; recorded the `HostOptions` construction break; and replaced the
 handoff's JSON Schema validation with a zod-oriented description, a read order, fixtures
 and a verified join table.
+
+Revision note (2026-11-17, second): Milestone 1 now defers to plan 343, which exports the
+aggregate category together with the dispatch dedupe read model.
