@@ -10,6 +10,12 @@ provenance:
     model: "claude-opus-5-5"
     harness: "claude-code"
     at: 2026-11-17T17:35:09Z
+  revisions:
+    - model: "claude-fable-5-2"
+      harness: "claude-code"
+      at: 2026-11-17T17:49:16Z
+      mode: "update"
+      note: "Reviewed for keiro-ui DX: aggregate category join key, summary digest and size, startup size check, zod-oriented handoff with verified join table"
 ---
 
 # Serve the committed service topology to keiro-ui through keiro-ops-http
@@ -42,29 +48,40 @@ cmp served.json services/orders/topology.json && echo identical
 
 `/topology/show` returns the committed document byte for byte. `/topology/summary` returns
 a small snake_case header for a console page: schema id, service name, generator version,
-member digests, and node and edge counts. Like `/aggregate/*` and `/pm/*`, the routes exist
+member digests, node and edge counts, and the document's own size and SHA-256 digest, which
+the console uses as a cache key and to notice a redeployed document. Like `/aggregate/*` and `/pm/*`, the routes exist
 only when the host mounts the hook. A host mounts it in code
 (`AppHooks.serviceTopology`) or from the command line (`--topology FILE` on any
 `Keiro.Ops.Http.mainWithHooks` host, including `jitsurei-ops-http`).
 
 The keiro-ui page that renders the topology is not part of this plan. It belongs to
-`mori://shinzui/keiro-ui`. Milestone 3 writes the handoff keiro-ui needs.
+`mori://shinzui/keiro-ui`. What this plan owes keiro-ui is a document the console can use
+without guessing. A structure page is only useful if a node links to the live data keiro-ui
+already shows, so an aggregate node must name the same key `/aggregate/list?name=…` takes.
+Today it does not: the inspector catalog names each aggregate by its stream category
+(`capacity`), and the topology node carries only the declared name (`Capacity`). Milestone 1
+adds the category to the document. Milestone 4 writes the handoff, including a table of
+which node kind joins to which inspection route and by which field.
 
 
 ## Progress
 
-- [ ] Milestone 1: `keiro-ops` decodes and mounts a topology document
+- [ ] Milestone 1: `keiro-dsl topology` exports each aggregate's stream `category`, equal
+      to the name its generated inspector is mounted under. Goldens, the JSON Schemas and
+      `docs/user/keiro-dsl-service-topology.md` are updated, and a test proves the equality.
+- [ ] Milestone 2: `keiro-ops` decodes and mounts a topology document
       (`Keiro.Ops.Topology`, `AppHooks.serviceTopology`), and `keiro-ops topology show` and
       `topology summary` exist only when it is mounted. Unit tests cover decoding, refusal of
       unknown schema ids, the summary shape and the hook gating.
-- [ ] Milestone 2: `keiro-ops-http` serves `GET /topology/show` with the committed bytes and
+- [ ] Milestone 3: `keiro-ops-http` serves `GET /topology/show` with the committed bytes and
       `GET /topology/summary`, refuses other methods, and reports oversize documents with
       `inspection_result_too_large`; `--topology FILE` mounts a file on any `mainWithHooks`
-      host and refuses to start on an undecodable file. Tests in
-      `keiro-ops-http/test/Main.hs` pass.
-- [ ] Milestone 3: `jitsurei-ops-http --topology FILE` works locally against a keiro-dsl
-      golden; the HTTP guide, the operations page, both CHANGELOGs and ADR-62 are updated;
-      the keiro-ui handoff is written into `docs/user/keiro-dsl-service-topology.md`.
+      host and refuses to start on a file that is undecodable or larger than the response
+      limit. Tests in `keiro-ops-http/test/Main.hs` pass.
+- [ ] Milestone 4: `jitsurei-ops-http --topology FILE` works locally against a keiro-dsl
+      golden; the HTTP guide, the operations page, the CHANGELOGs and ADR-62 are updated;
+      the keiro-ui handoff, with its verified join table, is written into
+      `docs/user/keiro-dsl-service-topology.md`.
 
 
 ## Surprises & Discoveries
@@ -122,6 +139,44 @@ The keiro-ui page that renders the topology is not part of this plan. It belongs
   Rationale: A running host has no specification sources to digest. Freshness is enforced
   where the sources are, by `topology --check` in the service's gate. The summary exposes
   `generator_version` and member digests, so a reader can compare them with a checkout.
+  Date: 2026-11-17
+
+
+- Decision: The topology document gains an optional `category` on aggregate nodes, under
+  the existing schema ids. keiro-ui does not re-derive it.
+  Rationale: The generated inspector catalog names each aggregate by its category text
+  ([ADR-61](../adr/0061-generated-aggregate-inspector-catalogs-cover-every-dsl-aggregate.md)),
+  so `/aggregate/types` reports `capacity` where the topology node is named `Capacity`. The
+  derivation (`staticCategory … (lowerFirst name)` in `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`)
+  is a code-generation detail. A console that copies it breaks silently when it changes.
+  ADR-62's compatibility policy allows added object fields within a schema id, so this needs
+  no `/3`. The field is optional in the JSON Schemas because documents emitted before it
+  stay valid; a console shows no live link for a node without it.
+  Date: 2026-11-17
+
+- Decision: The summary carries `document_sha256` and `document_bytes`.
+  Rationale: The document is static for the life of a host process, but every HTTP read
+  takes one of four admission slots and a schema verification, and keiro-ui keeps only
+  three reads in flight. With the digest the console fetches `show` once per digest and
+  detects a redeployed document from the cheap summary. The size lets it explain a 413
+  instead of offering to narrow a read that has no parameters. `cryptohash-sha256` is
+  already a dependency of `keiro`, so `keiro-ops` adds it directly without a new
+  transitive package.
+  Date: 2026-11-17
+
+- Decision: A standalone host refuses to start when the `--topology` file is larger than
+  `maxResponseBytes`.
+  Rationale: `/topology/show` has no way to return part of the document. Mounting a
+  document that can never be served would give the console a page that always fails with
+  413. Failing at startup puts the error in front of the person who can raise the limit.
+  Date: 2026-11-17
+
+- Decision: The handoff tells keiro-ui which joins to live inspection routes are guaranteed,
+  and lists only joins this plan has verified in code or by test.
+  Rationale: The value of the page is the link from structure to state. Each join key is a
+  different field (`details.category`, `details.saga.category`, `details.stableName`,
+  `details.subscription`, `details.physical`), and a wrong one is a dead link. An unverified
+  join is recorded as not guaranteed, not guessed.
   Date: 2026-11-17
 
 
@@ -189,6 +244,32 @@ routes exist only when a hook is mounted as "hook-gated" (`HOOK_GATED_WORDS = ["
 "pm"]` in `packages/client-keiro/src/errors.ts`). A topology page needs a `topology` entry
 there. That work is in keiro-ui, not here.
 
+Four facts about keiro-ui shape what this plan must deliver. First, its client validates
+every response with a zod schema (`packages/client-keiro/src/schemas.ts`, zod 4). It has no
+JSON Schema validator, so the handoff describes the document for a zod schema and does not
+ask the console to run the published JSON Schema. Second, the client keeps three reads in
+flight (`KEIRO_MAX_CONCURRENT = 3` in `client.ts`) because the host admits four, so a
+static document should be read once and cached. Third, keiro-ui's documented integration
+(`docs/user/application-integration.md` there) is an application that embeds
+`opsApplicationWithBudget` and `feedsMiddleware` under `/keiro` in a composed host. For it
+the mount is `AppHooks.serviceTopology` in code, and `--topology` matters only for
+standalone hosts. Fourth, keiro-ui's local stack and recorded fixtures use `jitsurei`,
+which is hand-written and has no keiro-dsl specification. keiro-ui can therefore develop
+the page against a keiro-dsl golden, but it cannot see topology nodes joined to live
+jitsurei data. This plan does not change that; see Milestone 4.
+
+**How topology names relate to inspection names.** The live inspection routes do not all
+key on a node's `name`. `/aggregate/types` and `/aggregate/list?name=` use the name the
+generated catalog mounts each inspector under, which is the aggregate's category text
+(`inspectorLine` in `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`, ADR-61). For a plain aggregate
+the category is the declared name with its first letter lowered (`Capacity` → `capacity`).
+`/pm/types` reports a host-chosen lookup `name` and the saga `category`
+(`listProcessManagerTypes` in `keiro/src/Keiro/ProcessManager/Inspect.hs`); the topology
+`process` node already exports `details.saga.category`. A `projection-owner` node exports
+`details.subscription`, and a `workqueue` node exports `details.physical`. The aggregate
+node (`nodeSummary` in `keiro-dsl/src/Keiro/Dsl/Topology.hs`) exports `states`,
+`commands`, `events` and `machine`, and no category.
+
 **Relevant ADRs.**
 [ADR-40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md)
 sanctions keiro's inspection surface as a bounded exception to the no-UI stance. It may
@@ -215,7 +296,38 @@ read-only first (`mori://shinzui/keiro-ui/okf/adrs/concepts/ADR-7`).
 
 ## Plan of Work
 
-### Milestone 1: mount and read the document in keiro-ops
+### Milestone 1: export the aggregate category from keiro-dsl
+
+In `keiro-dsl/src/Keiro/Dsl/Topology.hs`, add `category` to the `details` of an
+`aggregate` node in `nodeSummary`. Its value must be the text the generated inspector
+catalog mounts that aggregate under. Take it from the same derivation the scaffold uses
+(`categoryName` beside `lowerFirst ((.name) a) <> "Category"` in
+`keiro-dsl/src/Keiro/Dsl/Scaffold.hs`); if that derivation is local to the scaffold, move
+it to a shared function both call, so the two cannot drift. Do not write a second copy.
+
+A process's saga aggregate needs care. The process declares its own saga category
+(`saga.category`, for example `hospitalSurge` for the aggregate `Surge`), and the
+inspector catalog covers saga aggregates too (ADR-61). Find out which category the
+generated catalog uses for a saga aggregate and export that one. Record what you find in
+Surprises & Discoveries, because keiro-ui's join for `Surge` depends on it.
+
+Prove the equality with a test in the keiro-dsl suite: for a fixture that scaffolds an
+inspector catalog (`hospital-capacity.keiro` has five aggregates including a saga
+aggregate), the set of `details.category` values of the topology's aggregate nodes equals
+the set of inspector names in the generated catalog. Compare against the generated output,
+not against a list typed into the test.
+
+Regenerate the goldens under `keiro-dsl/test/fixtures/topology/` by running
+`keiro-dsl topology` on each fixture source, as plan 338 produced them, and read the diff: it must add one `category` line per aggregate node
+and change nothing else. Add `category` as an optional string property of the aggregate
+`details` in `docs/user/schemas/keiro-dsl-service-topology-1.schema.json` and
+`-2.schema.json`. It must not be `required`, so documents emitted before this change stay
+valid. Update the `aggregate` row of the node-kind table in
+`docs/user/keiro-dsl-service-topology.md`. Add a `keiro-dsl/CHANGELOG.md` entry that says
+committed topology documents must be regenerated (`scaffold --topology-out`), because
+`topology --check` reports them stale after the upgrade.
+
+### Milestone 2: mount and read the document in keiro-ops
 
 Create `keiro-ops/src/Keiro/Ops/Topology.hs` and list it in `keiro-ops/keiro-ops.cabal`. It
 defines an opaque `ServiceTopologyDocument` that holds the exact bytes and the decoded
@@ -250,27 +362,38 @@ returns this snake_case object (field values computed from the document):
   "schema_id": "keiro-dsl/service-topology/1",
   "service": "hospital-capacity",
   "generator_version": "0.25.1.0",
+  "source": {"kind": "source", "path": "hospital-capacity.keiro"},
   "members": [{"path": "hospital-capacity.keiro", "sha256": "sha256:…"}],
   "node_counts": {"aggregate": 5, "read-model": 4},
-  "edge_counts": {"dispatches": 3, "projects": 3}
+  "edge_counts": {"dispatches": 3, "projects": 3},
+  "document_bytes": 19412,
+  "document_sha256": "sha256:…"
 }
 ```
 
-Count keys are the document's own `kind` and `relation` strings, sorted. In
+Count keys are the document's own `kind` and `relation` strings, sorted. `document_bytes`
+is the length of the mounted bytes and `document_sha256` is the text `sha256:` followed by
+the lowercase hex SHA-256 of those bytes, the same spelling the document uses for member
+digests. Compute both once in `decodeServiceTopology` and keep them in
+`ServiceTopologyDocument`, not on every request. `source` is copied from the document when
+it has the documented shape and omitted otherwise; the decoder does not require it. In
 `runCommandWithReadEncoding`, add a case for `Topology Show` that returns the mounted
 bytes as the prepared body, as the process-manager `types` case does. The HTTP body is then
-byte-identical to the mounted file.
+byte-identical to the mounted file. Two paths re-encode the decoded value instead and are
+not byte-identical: `keiro-ops topology show --json`, and an application built with the
+test seam `opsApplicationWithOperations`. Say so in the Haddock of `serviceTopologyBytes`.
 
 Tests in `keiro-ops/test/Main.hs` (or a new `TopologySpec.hs` listed in the test stanza):
 decode every golden in `keiro-dsl/test/fixtures/topology/` (resolve the path from the
 package or repository root, as other keiro-ops tests do for repository files); refuse `{}`,
 `[]`, invalid JSON and a document whose `schema` is `keiro-dsl/service-topology/9`;
-accept a document with an extra unknown top-level field; `summary` of
+accept a document with an extra unknown top-level field; `document_sha256` of a golden
+equals `sha256sum` of the file and `document_bytes` equals its length; `summary` of
 `hospital-capacity.topology.golden.json` gives the counts that a direct count of its `nodes`
 and `edges` gives; `commandParser emptyAppHooks` rejects `["topology","show"]` and
 `commandParser` with the hook accepts it; `isMutation` is false for both commands.
 
-### Milestone 2: serve it over HTTP and mount it from the command line
+### Milestone 3: serve it over HTTP and mount it from the command line
 
 `keiro-ops-http` needs no routing change, because `/topology/show` and
 `/topology/summary` follow from the command tree. Add tests to `keiro-ops-http/test/Main.hs`
@@ -286,25 +409,41 @@ Ops.emptyAppHooks {…} store`:
    an unmounted `/aggregate/types` gets.
 5. With `maxResponseBytes` set below the document size, `/topology/show` returns 413
    `inspection_result_too_large`.
+6. With an allowed origin configured, `GET /topology/show` carrying that `Origin` returns
+   `Access-Control-Allow-Origin`, as every other read does. The console is usually served
+   from another origin, so this is the request it actually makes.
 
 Extend the host options in `keiro-ops-http/src/Keiro/Ops/Http/Host.hs` with an optional
 `--topology FILE`. In `withHost`, when it is given, call `loadServiceTopology` before
 starting the listener. On `Left message`, print `--topology FILE: <message>` to standard
-error and exit non-zero without listening. On success, set `serviceTopology` in the hooks
-the host was given. If the application already mounted a document in code, the flag
+error and exit non-zero without listening. Do the same when the document is larger than
+`config.inspectionLimits.maxResponseBytes`, with a message that gives both numbers, because
+`/topology/show` could then only ever answer 413. On success, set `serviceTopology` in the
+hooks the host was given. If the application already mounted a document in code, the flag
 replaces it and the startup line says so. Add a test using `withHost` with port 0 that
-mounts a golden from the flag and reads `/topology/summary`, and a test that a file whose
-`schema` is unknown makes `withHost` fail before serving.
+mounts a golden from the flag and reads `/topology/summary`, a test that a file whose
+`schema` is unknown makes `withHost` fail before serving, and a test that a file larger
+than the response limit does the same.
 
-### Milestone 3: local demo, documentation and the keiro-ui handoff
+`HostOptions` is exported with its constructor and its fields are strict, so the new field
+breaks every record construction of it. Update `options` in
+`jitsurei/ops-http/test/Main.hs` (`HostOptions {databaseUrl = …, http = …, server = …}`)
+and state in the `keiro-ops-http` CHANGELOG that code constructing `HostOptions` must set
+the new field.
+
+### Milestone 4: local demo, documentation and the keiro-ui handoff
 
 `jitsurei-ops-http` gets `--topology` for free through `mainWithHooks`. Check it by hand
 with a keiro-dsl golden (jitsurei has no DSL specification, so this is a demo of the route,
 not of jitsurei's structure) and record the transcript in this plan.
 
 In `docs/guides/serve-keiro-ops-over-http.md`, add a "Service topology" section. It says how
-to mount the document (`--topology FILE`, or `AppHooks.serviceTopology` with
-`loadServiceTopology` or embedded bytes), shows the two routes with `curl`, states that
+to mount the document. Lead with the embedded form, because that is how an application
+that composes `opsApplicationWithBudget` into its own server mounts it: read the file at
+startup with `loadServiceTopology` and fail startup on `Left`, or compile the bytes in and
+call `decodeServiceTopology`. Give a complete snippet for each, and say that with
+`loadServiceTopology` the file must be shipped in the deployment image. Then give
+`--topology FILE` for standalone hosts. The section shows the two routes with `curl`, states that
 `show` is the committed bytes under their own published contract and casing, that
 `summary` is snake_case, that schema ids other than `/1` and `/2` are refused at mount, and
 that freshness is enforced by `keiro-dsl topology --check` in the service's gate, not at
@@ -315,18 +454,67 @@ library functions to `docs/user/api-reference.md`. Advance each page's `timestam
 `nix develop -c just user-documentation-validate`.
 
 Add a "Serving the document" subsection to `docs/user/keiro-dsl-service-topology.md` for
-consumers. It gives the two routes and, for keiro-ui, the handoff: a client read for each
-route in `packages/client-keiro/src/client.ts`, `topology` added to `HOOK_GATED_WORDS`,
-validation of `show` against the JSON Schema its `schema` field names, and rejection of an
-unknown schema id, node kind or relation (ADR-62). Mention that the edges
-`consumes`/`writes`/`observes` trace aggregate events to read models, and that `machine`
-gives each aggregate's keiki state machine.
+consumers. It gives the two routes and the handoff for keiro-ui, written so that keiro-ui's
+own plan can be drafted from it alone:
+
+- Client: a read for each route in `packages/client-keiro/src/client.ts`, a key for each in
+  `query-keys.ts`, and `topology` added to `HOOK_GATED_WORDS` in `errors.ts`, so an
+  unmounted host gives `RouteUnavailable` and the page can say the host mounts no topology.
+- Read order and caching: read `/topology/summary` first. It is the mount probe, it carries
+  `schema_id` so the console can say "this console does not understand schema X" before
+  fetching anything large, and it carries `document_sha256`. Key the `show` query on that
+  digest and give it a long stale time; the document cannot change while the host process
+  runs.
+- Validation: a zod schema in `schemas.ts` that is loose on object fields (keiro may add
+  fields within a schema id) and strict on `schema`, node `kind` and edge `relation`, which
+  ADR-62 requires a consumer to reject when unknown. List the kinds and relations of each
+  schema id, so the enums can be copied.
+- Errors: 413 `inspection_result_too_large` means the host's response limit is below
+  `document_bytes`; it is fixed by the host, not by narrowing the read. 409 `schema_drift`
+  and 503 `inspection_busy` mean what they mean for every keiro read.
+- Fixtures: the goldens under `keiro-dsl/test/fixtures/topology/` in `mori://shinzui/keiro`
+  (artifact-level URI pending), including the `/2` document, and a recorded
+  `/topology/summary` response from this milestone's transcript.
+- The join table below.
+
+The join table has one row per node kind that has live state: the inspection route, the
+query parameter, and the topology field that supplies its value. Start from these
+candidates and keep only rows you have verified against the code or a running host. For
+each kept row, name the code location that makes the two values equal.
+
+| Node kind | Live route | Join |
+| --- | --- | --- |
+| `aggregate` | `/aggregate/list?name=`, `/aggregate/show?name=&id=` | `details.category` (Milestone 1) equals `name` in `/aggregate/types` |
+| `process` | `/pm/list?name=` | `details.saga.category` equals `category` in `/pm/types`; the route takes that entry's `name` |
+| `workflow` | `/wf/inspect/list?workflow_name=` | `details.stableName` (verify) |
+| `projection-owner` | `/projection/position?subscription=` | `details.subscription`, when not `null` (verify) |
+| `workqueue` | the pgmq surface's queue | `details.physical` (verify) |
+| `intake`, `emit` | `/inbox/list?source=`, `/outbox/list?source=` | verify whether any exported field is the `source` |
+
+A row that cannot be verified is moved to a short "Not guaranteed" list with the reason.
+Do not leave a guessed join in the table. State also that a node has no link when its join
+field is absent (a document emitted before the field existed) or when the matching route's
+hook is not mounted.
+
+The subsection says plainly that the document describes the committed specification, not
+the running binary. The console can detect disagreement by comparing aggregate `category`
+values with `/aggregate/types`; it should show a mismatch, not hide it. It also says that
+keiro's demo host `jitsurei` has no specification, so `jitsurei-ops-http --topology` serves
+a document about another service and none of its nodes join to jitsurei's live data.
+Finally it mentions that the edges `consumes`/`writes`/`observes` trace aggregate events to
+read models, that `machine` gives each aggregate's keiki state machine, and that `member`
+and `line` locate each node in the specification source.
+
+keiro-ui's `docs/user/application-integration.md` and its capability pages are keiro-ui's
+to update; name them in the handoff as the pages that need the new hook.
 
 Add entries under `## [Unreleased]` to `keiro-ops/CHANGELOG.md` (new hook, commands and
-library functions) and `keiro-ops-http/CHANGELOG.md` (the routes and `--topology`). Update
+library functions) and `keiro-ops-http/CHANGELOG.md` (the routes, `--topology` and the new
+`HostOptions` field). Update
 ADR-62's Consequences with one bullet: keiro-ops serves the document opaquely and checks
 only its schema id and envelope, so adding a schema id requires adding it to
-`Keiro.Ops.Topology`. Advance its `timestamp` and add an `okf log add` entry to
+`Keiro.Ops.Topology`. Add a second bullet: aggregate nodes carry the inspector `category`
+so consumers join to live inspection without re-deriving it. Advance its `timestamp` and add an `okf log add` entry to
 `docs/adr/log.md`.
 
 
@@ -335,12 +523,14 @@ only its schema id and envelope, so adding a schema id requires adding it to
 From the repository root:
 
 ```bash
+nix develop -c z3 --version
+nix develop -c cabal test keiro-dsl:tests --test-show-details=direct
 nix develop -c cabal build keiro-ops keiro-ops-http
 nix develop -c cabal test keiro-ops:keiro-ops-test --test-show-details=direct
 nix develop -c cabal test keiro-ops-http:keiro-ops-http-test --test-show-details=direct
 ```
 
-Local demo for Milestone 3, in two terminals inside `nix develop`:
+Local demo for Milestone 4, in two terminals inside `nix develop`:
 
 ```bash
 just jitsurei-all
@@ -355,7 +545,7 @@ curl -fsS http://127.0.0.1:9092/topology/show | cmp - keiro-dsl/test/fixtures/to
 Expected:
 
 ```text
-{"edge_counts":{…},"generator_version":"<version>","members":[{"path":"hospital-capacity.keiro","sha256":"sha256:…"}],"node_counts":{…},"schema_id":"keiro-dsl/service-topology/1","service":"hospital-capacity"}
+{"document_bytes":…,"document_sha256":"sha256:…","edge_counts":{…},"generator_version":"<version>","members":[{"path":"hospital-capacity.keiro","sha256":"sha256:…"}],"node_counts":{…},"schema_id":"keiro-dsl/service-topology/1","service":"hospital-capacity","source":{"kind":"source","path":"hospital-capacity.keiro"}}
 identical
 ```
 
@@ -373,9 +563,15 @@ Intention: intention_01m7n03hbfem79q2brf07rneyq
 
 Accepted when all of the following hold.
 
+Every aggregate node of a document emitted by `keiro-dsl topology` has a
+`details.category`, and for a scaffolded fixture those categories equal the names of the
+generated aggregate inspectors. The topology goldens differ from their previous versions
+only by those added fields.
+
 A host mounted with a topology document answers `GET /topology/show` with 200 and a body
 byte-identical to the mounted file, and `GET /topology/summary` with the summary object
-whose counts equal a direct count of the document. Both run under the same admission,
+whose counts equal a direct count of the document and whose `document_sha256` equals the
+SHA-256 of the mounted file. Both run under the same admission,
 deadline, schema-verification and byte limits as every other read: a too-small
 `maxResponseBytes` gives 413 `inspection_result_too_large`, and `POST` gives 405.
 
@@ -384,7 +580,11 @@ A host without the hook does not expose the routes (400 `invalid_request`, as fo
 
 `decodeServiceTopology` accepts every golden under `keiro-dsl/test/fixtures/topology/`,
 including the `/2` document, and refuses an unknown schema id. A host given `--topology` with
-such a file exits non-zero before listening.
+such a file, or with a file larger than its response limit, exits non-zero before
+listening.
+
+The handoff in `docs/user/keiro-dsl-service-topology.md` has a join table in which every
+row names the code that makes the join hold, and a "Not guaranteed" list for the rest.
 
 Guarantees that must not weaken, and the check that measures each. Existing hosts are
 unchanged: `emptyAppHooks` gains a `Nothing` field and no existing route changes, measured
@@ -392,7 +592,11 @@ by the unchanged existing `keiro-ops` and `keiro-ops-http` test suites. The insp
 budget still bounds the new reads, measured by the 413 test. Read-only stays read-only:
 `isMutation` is false for both commands, measured by a unit test and the 405 test.
 `keiro-ops` gains no dependency on `keiro-dsl`, measured by its Cabal stanza and
-`just dsl-api-boundaries`.
+`just dsl-api-boundaries`. The topology contract stays backward compatible: the schema ids
+are unchanged and `category` is optional in both JSON Schemas, measured by
+`scripts/check-topology-schemas.sh`, which validates the goldens and the examples under
+`keiro-dsl/test/fixtures/topology/schema-examples/`, still passing with
+`aggregate-without-machine.valid.json` unedited.
 
 Finally the documentation gates and the repository gate pass:
 
@@ -408,7 +612,10 @@ nix develop -c just verify
 
 ## Idempotence and Recovery
 
-All changes are additive. The new `AppHooks` field defaults to `Nothing`, so reverting a
+All changes are additive, with two exceptions that are compile-time or gate-time and
+have a one-line fix: code that constructs `HostOptions` must set the new field, and a
+service's committed topology must be regenerated after upgrading keiro-dsl, or
+`topology --check` reports it stale. The new `AppHooks` field defaults to `Nothing`, so reverting a
 host's mount is removing one field or one flag. Tests read goldens from
 `keiro-dsl/test/fixtures/topology/` and never write them. If a later keiro-dsl schema id is
 added, `decodeServiceTopology` refuses documents under it until `Keiro.Ops.Topology` lists
@@ -417,8 +624,10 @@ it. That refusal is deliberate and is fixed by adding the id, not by relaxing th
 
 ## Interfaces and Dependencies
 
-No new package dependency. `keiro-ops` already depends on `aeson`, `bytestring` and `text`.
-It must not depend on `keiro-dsl`.
+`keiro-ops` gains a direct dependency on `cryptohash-sha256`, with the bounds `keiro`
+already uses (`>=0.11.102 && <0.12` in `keiro/keiro.cabal`), for `document_sha256`. It is
+already in the build plan through `keiro`. `keiro-ops` already depends on `aeson`,
+`bytestring` and `text`. It must not depend on `keiro-dsl`.
 
 In `keiro-ops/src/Keiro/Ops/Topology.hs`:
 
@@ -432,6 +641,8 @@ loadServiceTopology :: FilePath -> IO (Either Text ServiceTopologyDocument)
 serviceTopologySchemaId :: ServiceTopologyDocument -> Text
 serviceTopologyBytes :: ServiceTopologyDocument -> ByteString
 serviceTopologyValue :: ServiceTopologyDocument -> Value
+-- | @sha256:@ and the lowercase hex digest of the mounted bytes.
+serviceTopologyDigest :: ServiceTopologyDocument -> Text
 
 data Command = Show | Summary
 commandParser :: Parser Command
@@ -441,7 +652,19 @@ runCommand :: ServiceTopologyDocument -> Command -> OpsOutcome
 
 In `keiro-ops/src/Keiro/Ops/Embed.hs`, `AppHooks` gains
 `serviceTopology :: !(Maybe ServiceTopologyDocument)`. In
-`keiro-ops-http/src/Keiro/Ops/Http/Host.hs`, the host options gain `--topology FILE`.
+`keiro-ops-http/src/Keiro/Ops/Http/Host.hs`, `HostOptions` gains
+`topology :: !(Maybe FilePath)` and the host options gain `--topology FILE`.
+
+In `keiro-dsl/src/Keiro/Dsl/Topology.hs`, an `aggregate` node's `details` gain
+`category`, a string.
 
 Consumers outside this repository: keiro-ui reads `/topology/show` and `/topology/summary`.
 Its client and page are its own follow-up work in `mori://shinzui/keiro-ui`.
+
+Revision note (2026-11-17): reviewed against the keiro-ui checkout for console developer
+experience. Added Milestone 1 (aggregate `category` in the document) because aggregate
+nodes could not be joined to `/aggregate/*`; added `document_sha256`, `document_bytes` and
+`source` to the summary for caching and error explanation; made an oversize `--topology`
+file a startup failure; recorded the `HostOptions` construction break; and replaced the
+handoff's JSON Schema validation with a zod-oriented description, a read order, fixtures
+and a verified join table.
