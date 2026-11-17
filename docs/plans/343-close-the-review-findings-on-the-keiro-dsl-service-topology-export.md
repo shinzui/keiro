@@ -68,8 +68,10 @@ which prints each aggregate with its category, for example `('Capacity', 'capaci
       all three. Evidence: `--match topology` 44 examples, 0 failures, with the five
       goldens (including the workspace golden) unchanged by this milestone; the
       export-error sweep reports `files=428 internal=0`.
-- [ ] Milestone 3: `scripts/check-topology-schemas.sh` accepts an `*.invalid.json` example
-      only on a real schema violation, shown by a deliberately broken run.
+- [x] Milestone 3 (2026-11-17): `scripts/check-topology-schemas.sh` accepts an
+      `*.invalid.json` example only on a real schema violation, shown by a deliberately
+      broken run. Evidence: the committed tree passes and prints each violation it relied
+      on; both breakages below exit 1; `git status` was clean afterwards.
 - [ ] Milestone 4: the machine proof runs against at least three more generated corpora
       and prints how many aggregates it compared; `just verify` passes.
 
@@ -112,6 +114,25 @@ which prints each aggregate with its category, for example `('Capacity', 'capaci
   directories (innermost first, only while empty), so a refused run still leaves no
   trace; a test covers it with a hand-written file at a generated module path.
 
+
+- check-jsonschema 0.38.0 with `--output-format json` reports a violation as
+  `{"status": "fail", "errors": [{"path", "message", …}], "parse_errors": []}` and an
+  unparsable instance as `errors: []` with a non-empty `parse_errors`. A schema file that
+  cannot be loaded prints no JSON report at all, only `Error: Unexpected Error building
+  schema validator` and a `FileNotFoundError`, still with exit 1. The gate now accepts an
+  invalid example only on the first shape. The two deliberate breakages of
+  `malformed-machine.invalid.json`, restored with `git checkout` afterwards:
+
+  ```text
+  $ # "schema" set to "keiro-dsl/service-topology/9"
+  $ just topology-schema-validate
+  …/malformed-machine.invalid.json: no schema file for 'keiro-dsl/service-topology/9' (…/docs/user/schemas/keiro-dsl-service-topology-9.schema.json)
+  error: recipe `topology-schema-validate` failed on line 70 with exit code 1
+  $ # file truncated to "{"
+  $ just topology-schema-validate
+  …/malformed-machine.invalid.json: not a JSON document: Expecting property name enclosed in double quotes: line 2 column 1 (char 2)
+  error: recipe `topology-schema-validate` failed on line 70 with exit code 1
+  ```
 
 ## Decision Log
 
