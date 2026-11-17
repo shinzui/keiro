@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- `HostOptions` gains `topology :: Maybe FilePath`; code constructing `HostOptions`
+  must set it to `Nothing` or `Just path`.
+
+### New Features
+
+- `GET /topology/show` and `GET /topology/summary` exist when a host mounts
+  `AppHooks.serviceTopology`. `show` returns the committed bytes unchanged under the
+  usual admission, deadline, schema-verification and response-size limits.
+- `--topology FILE` on every `mainWithHooks` host mounts a topology file at startup,
+  replacing any document mounted in code. `withHost` throws `HostStartupError` before
+  opening the database when the file is unreadable, undecodable or larger than
+  `maxResponseBytes`; the executable prints the diagnostic and exits 1.
+  `loadHostTopology` exposes the same bounded reader.
+
 ## 0.25.1.0 — 2026-11-16
 
 ### Other Changes

@@ -126,7 +126,7 @@ main = do
             stream `shouldReturn` originalStream
 
 options :: Text -> OpsHttpConfig -> HostOptions
-options url config = HostOptions {databaseUrl = Just url, http = config, server = defaultOpsHttpServerConfig {port = 0}}
+options url config = HostOptions {databaseUrl = Just url, http = config, server = defaultOpsHttpServerConfig {port = 0}, topology = Nothing}
 
 seed :: StoreRunner -> IO ()
 seed (StoreRunner runner) = do

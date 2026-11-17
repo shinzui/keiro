@@ -184,15 +184,21 @@ test-suite keiro-ops-http-test
   other-modules:
     Test.ComposeSpec
     Test.FeedSpec
+    Test.TopologySpec
     Test.WebSocketSpec
 
-  build-tool-depends: keiro-ops:keiro-ops
+  build-tool-depends:
+    keiro-ops:keiro-ops,
+    keiro-ops-http:keiro-ops-http,
+
   build-depends:
     aeson >=2.2.2 && <2.3,
     async >=2.2 && <2.3,
     base >=4.21 && <5,
     bytestring >=0.12 && <0.13,
     containers >=0.6 && <0.8,
+    cryptohash-sha256 >=0.11.102 && <0.12,
+    directory >=1.3 && <1.4,
     effectful >=2.6 && <2.8,
     hasql >=1.10 && <1.11,
     hasql-pool >=1.2 && <1.5,

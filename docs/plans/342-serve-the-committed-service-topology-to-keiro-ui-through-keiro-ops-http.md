@@ -21,6 +21,11 @@ provenance:
       at: 2026-11-17T20:20:19Z
       mode: "update"
       note: "Reconciled Plan 343, aligned mount validation with ADR-62, specified constructor migration and byte limits, and corrected fixture, CLI and demo acceptance."
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-17T20:46:50Z
+      mode: "implement"
+      note: "Implemented milestones 2-4: Keiro.Ops.Topology, hook-gated topology commands, --topology host mounting, docs and the keiro-ui handoff"
   reviews:
     - model: "gpt-6.2-astra"
       harness: "codex-cli"
@@ -86,15 +91,20 @@ which node kind joins to which inspection route and by which field.
       checks all five hospital aggregates, including `Surge` → `surge`. The focused
       producer suite passed all 44 examples and the schema gate verified five goldens
       and three compatibility examples during this review.
-- [ ] Milestone 2: `keiro-ops` decodes and mounts a topology document
+- [x] Milestone 2 (2026-11-17): `keiro-ops` decodes and mounts a topology document
       (`Keiro.Ops.Topology`, `AppHooks.serviceTopology`), and the CLI subcommands `topology show` and
-      `topology summary` exist only when it is mounted. Unit tests cover decoding, refusal of
-      unsupported schema ids, node kinds and relations, the summary shape and hook gating.
-- [ ] Milestone 3: `keiro-ops-http` serves `GET /topology/show` with the committed bytes and
+      `topology summary` exist only when it is mounted. `keiro-ops/test/TopologySpec.hs`
+      covers decoding, refusals, the summary, hook gating and CLI JSON through
+      `runOpsInvocation`. With `KEIRO_TOPOLOGY_FIXTURES` set, all five goldens decode and
+      the hospital summary matches direct counts, size and digest. The full
+      `keiro-ops-test` suite passed 71 examples.
+- [x] Milestone 3 (2026-11-17): `keiro-ops-http` serves `GET /topology/show` with the committed bytes and
       `GET /topology/summary`, refuses other methods, and reports oversize documents with
       `inspection_result_too_large`; `--topology FILE` mounts a file on any `mainWithHooks`
       host and refuses to start on a file that is undecodable or larger than the response
-      limit. Tests in `keiro-ops-http/test/Main.hs` pass.
+      limit. The tests live in `keiro-ops-http/test/Test/TopologySpec.hs`, registered from
+      `keiro-ops-http/test/Main.hs`. `keiro-ops-http-test` passed 70 examples and
+      `jitsurei-ops-http-test` passed 5.
 - [ ] Milestone 4: `jitsurei-ops-http --topology FILE` works locally against a keiro-dsl
       golden; the HTTP guide, the operations page, the CHANGELOGs and ADR-62 are updated;
       the keiro-ui handoff, with its verified join table, is written into
@@ -189,6 +199,21 @@ Use the former for aggregate reads and resolve the latter through the process-ma
   Rationale: `/topology/show` has no way to return part of the document. Mounting a
   document that can never be served would give the console a page that always fails with
   413. Failing at startup puts the error in front of the person who can raise the limit.
+  Date: 2026-11-17
+
+- Decision: `withHost` reports a bad `--topology` file by throwing a new exported
+  exception, `HostStartupError`, before resolving the database. `mainWithHooks` catches it, prints
+  `<program>: --topology PATH: <cause>` to stderr and exits 1. The bounded reader is
+  exported as `loadHostTopology`.
+  Rationale: Tests and embedding hosts need a typed failure they can match without
+  parsing `userError` text. Existing schema-verification failures keep their current
+  behavior. Exporting the reader lets a composed host apply the same size rule.
+  Date: 2026-11-17
+
+- Decision: The keiro-ops changelog records the new hook field and `Command`
+  constructor under Breaking Changes, and the changelog entries ship in the Milestone 2
+  and 3 commits rather than waiting for Milestone 4.
+  Rationale: Each commit should describe its own public change.
   Date: 2026-11-17
 
 - Decision: The handoff tells keiro-ui which joins to live inspection routes are guaranteed,

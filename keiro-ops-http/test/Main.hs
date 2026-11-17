@@ -77,6 +77,7 @@ import System.Timeout (timeout)
 import Test.ComposeSpec qualified as ComposeSpec
 import Test.FeedSpec qualified as FeedSpec
 import Test.Hspec
+import Test.TopologySpec qualified as TopologySpec
 import Test.WebSocketSpec qualified as WebSocketSpec
 
 main :: IO ()
@@ -88,6 +89,7 @@ spec :: Fixture -> Spec
 spec fixture = do
   ComposeSpec.spec fixture
   FeedSpec.spec fixture
+  TopologySpec.spec fixture
   WebSocketSpec.spec fixture
   describe "live view parameters" $ do
     it "canonicalizes equivalent status sets and bounds subscription inputs" $ do
