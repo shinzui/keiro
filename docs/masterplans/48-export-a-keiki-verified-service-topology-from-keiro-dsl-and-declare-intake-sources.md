@@ -21,6 +21,11 @@ provenance:
       at: 2026-11-17T15:26:59Z
       mode: "update"
       note: "Correct schema handoffs, compatibility checks and fixture acceptance after repository review"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-17T16:05:58Z
+      mode: "implement"
+      note: "EP-1 complete; registry, progress, discoveries and gate decision updated"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -186,8 +191,8 @@ source is checked documentation with no runtime or identity effect.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Emit a versioned service topology document from keiro-dsl topology | docs/plans/338-emit-a-versioned-service-topology-document-from-keiro-dsl-topology.md | None | None | Not Started |
-| 2 | Keep committed topology exports fresh and publish the service-topology contract | docs/plans/339-keep-committed-topology-exports-fresh-and-publish-the-service-topology-contract.md | EP-1 | None | Not Started |
+| 1 | Emit a versioned service topology document from keiro-dsl topology | docs/plans/338-emit-a-versioned-service-topology-document-from-keiro-dsl-topology.md | None | None | Complete |
+| 2 | Keep committed topology exports fresh and publish the service-topology contract | docs/plans/339-keep-committed-topology-exports-fresh-and-publish-the-service-topology-contract.md | EP-1 | None | In Progress |
 | 3 | Export aggregate machines in keiki vocabulary and verify them against generated transducers | docs/plans/340-export-aggregate-machines-in-keiki-vocabulary-and-verify-them-against-generated-transducers.md | EP-1 | EP-2 M3 | Not Started |
 | 4 | Declare and check the intake that feeds a process or router input and export it as a topology edge | docs/plans/341-declare-and-check-the-intake-that-feeds-a-process-or-router-input-and-export-it-as-a-topology-edge.md | EP-1 (for its M3 only) | EP-2 M3 | Not Started |
 
@@ -279,9 +284,8 @@ questions in the record; EP-4 marks IR-63. Both follow the status vocabulary alr
 
 ## Progress
 
-No child plan has started. All four were reviewed on 2026-11-17 and corrected in this update. No implementation
-acceptance has run. Dependency source, sibling fixtures and the cross-repository ADR have
-now been verified through Mori; no review blocker remains. EP-1 is ready to start.
+EP-1 is Complete (2026-11-17): `keiro-dsl topology` exports `/1` with the projection catalog,
+pinned by four golden documents. EP-2 is In Progress. EP-3 and EP-4 M3 are now unblocked.
 
 Cross-plan gates not owned by a single child:
 
@@ -321,6 +325,15 @@ Cross-plan gates not owned by a single child:
 
 - No JSON Schema file and no JSON Schema validator exist in this repository or its Nix
   development shell. EP-2 adds one to the shell.
+
+- Migrating the two keiro-runtime-jitsurei specifications to Language 6 required adding
+  projection-catalog declarations (Language 6 requires every read model not supplied by an
+  aggregate `projection` to bind to a catalog group), vertex enums, `cmd.` qualification and
+  read-model columns. Both service fixtures therefore also contain catalog nodes, and EP-4's
+  `incident-command-sourced.keiro` inherits them. Details are in EP-1's Surprises.
+
+- Process policies are spelled `deadLetter` in the language and the export, not
+  `dead-letter`. EP-2's schema and documentation use the source spelling.
 
 
 ## Decision Log
@@ -380,6 +393,18 @@ Cross-plan gates not owned by a single child:
   specification names them, because the conversion is hand-written Haskell. Naming them lets
   `check` reject a source whose intake stops accepting the event the component depends on.
   Language 5 is published and frozen, so ADR-16 places new syntax in the candidate.
+  Date: 2026-11-17
+
+- Decision: The repository gate `nix develop -c just verify` runs once, on the final tree,
+  as the first cross-plan gate under Progress, instead of separately at the end of each
+  child. Each child still runs its focused suites, the full `keiro-dsl:keiro-dsl-test`
+  suite and the specific gates (`dsl-api-boundaries`, `conformance-corpus-policy`,
+  `user-documentation-validate`, `topology-schema-validate`) that measure the paths it
+  changes.
+  Rationale: The four children are implemented back to back in one session on one tree. A
+  full gate per child would mean either rebuilding every package in a parallel worktree or
+  pausing implementation for each run. A failure found by the final run is traced to its
+  child and fixed there.
   Date: 2026-11-17
 
 - Decision: Adoption in `mori://shinzui/keiro-runtime-jitsurei` is excluded. IR-63's fourth

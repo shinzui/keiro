@@ -1,0 +1,724 @@
+language keiro-dsl 6
+
+context hospital-capacity
+layout collocated
+
+id CommandId prefix=cmd
+id HospitalId prefix=hosp
+id CapacitySnapshotId prefix=cap
+id TransferReservationId prefix=rsv
+id IncidentId prefix=inc
+id TriageRecordId prefix=tri
+
+enum BedType {
+  Icu=icu
+  MedicalSurgical=medical-surgical
+  EmergencyDepartment=emergency-department
+  Pediatric=pediatric
+}
+
+enum CapacityLevel {
+  Normal=normal
+  Constrained=constrained
+  Surge=surge
+  Critical=critical
+}
+
+enum DivertStatus {
+  Open=open
+  PartialDivert=partial-divert
+  TotalDivert=total-divert
+}
+
+enum PatientAcuity {
+  RedTag=red
+  YellowTag=yellow
+  GreenTag=green
+}
+
+enum ServiceLine {
+  Trauma=trauma
+  IcuService=icu
+  EmergencyMedicine=emergency-medicine
+  Pediatrics=pediatrics
+}
+
+enum SupplyCode {
+  BloodOPositive=blood-o-positive
+  Ventilator=ventilator
+  PersonalProtectiveEquipment=ppe
+}
+
+enum HospitalVertex {
+  HospitalUnreported=hospital-unreported
+  HospitalOperational=hospital-operational
+  HospitalInSurge=hospital-in-surge
+  HospitalConstrained=hospital-constrained
+}
+
+enum CapacityVertex {
+  CapacityUnreported=capacity-unreported
+  CapacityOpen=capacity-open
+  CapacityReserved=capacity-reserved
+}
+
+enum ReservationVertex {
+  ReservationUnrequested=reservation-unrequested
+  ReservationHeld=reservation-held
+  ReservationConfirmed=reservation-confirmed
+  ReservationExpired=reservation-expired
+  ReservationAdmitted=reservation-admitted
+  ReservationReleased=reservation-released
+}
+
+enum SupplyVertex {
+  SupplyUnreported=supply-unreported
+  SupplyAdequate=supply-adequate
+  SupplyConstrained=supply-constrained
+}
+
+enum SurgeVertex {
+  SurgeIdle=surge-idle
+  SurgeRequested=surge-requested
+  SurgeFollowedUp=surge-followed-up
+}
+
+target transfer_candidates_table {
+  schema = "hospital_capacity"
+  table = "hospital_readiness"
+  reset = clear
+}
+
+target accepted_transfer_needs_table {
+  schema = "hospital_capacity"
+  table = "accepted_transfer_needs"
+  reset = clear
+}
+
+rebuild-group hospital_routing {
+  targets = [ transfer_candidates_table accepted_transfer_needs_table ]
+  order = [ transfer_candidates_table accepted_transfer_needs_table ]
+}
+
+projection-owner transfer_candidates_writer {
+  source = aggregate Capacity
+  delivery = subscription
+  group = hospital_routing
+  targets = [ transfer_candidates_table ]
+  order = 10
+  subscription = "hospital-capacity-transfer-candidates-router"
+  dedup = "hospital-capacity-transfer-candidates-router-v1"
+  checkpoint-on-missing = from-beginning
+  replay = explicit
+}
+
+projection-owner accepted_transfer_needs_writer {
+  source = category "incidentInbox"
+  delivery = subscription
+  group = hospital_routing
+  targets = [ accepted_transfer_needs_table ]
+  order = 20
+  subscription = "hospital-capacity-accepted-transfer-needs"
+  dedup = "hospital-capacity-accepted-transfer-needs-v1"
+  checkpoint-on-missing = from-beginning
+  replay = explicit
+}
+
+readmodel hospital_readiness {
+  table = "hospital_readiness"
+  schema = "hospital_capacity"
+  columns {
+    hospital_id text required
+    divert_status text required
+    capacity_level text required
+    surge_mode bool required
+    supply_constrained bool required
+    available_service_lines text required
+    active_regional_demand bigint required
+    available_icu_beds bigint
+    reserved_icu_beds bigint
+    occupied_icu_beds bigint
+    last_seen bigint required
+  }
+  version = 1
+  shape = "fnv1a:bdba8264c0857a2f"
+  freshness = immediate
+}
+
+readmodel transfer_decisions {
+  table = "transfer_decisions"
+  schema = "hospital_capacity"
+  columns {
+    reservation_id text required
+    hospital_id text required
+    patient_acuity text required
+    required_bed_type text required
+    status text required
+    source_message_id text required
+    expiration_deadline text required
+    admission_outcome text
+    last_seen bigint required
+  }
+  version = 1
+  shape = "fnv1a:9df0bdb5c8d16660"
+  freshness = immediate
+}
+
+readmodel transfer_candidates {
+  columns {
+    hospital_id text required
+    divert_status text required
+    available_icu_beds bigint required
+    reservation_id text required
+    command_id text required
+    expiration_deadline text required
+    life_critical_override bool required
+  }
+  version = 1
+  shape = "fnv1a:317282c2634acbfa"
+  freshness = immediate
+  group = hospital_routing
+  targets = [ transfer_candidates_table ]
+}
+
+readmodel accepted_transfer_needs {
+  columns {
+    message_id text required
+    reservation_id text required
+    idempotency_key text required
+    incident_id text required
+    triage_record_id text required
+    region text required
+    patient_acuity text required
+    required_bed_type text required
+    red_count bigint required
+    requested_by_service text required
+    source text required
+    kafka_topic text required
+    kafka_partition bigint required
+    kafka_offset bigint required
+    accepted_at timestamptz required
+  }
+  version = 1
+  shape = "fnv1a:171f7280df5863fc"
+  freshness = immediate
+  group = hospital_routing
+  targets = [ accepted_transfer_needs_table ]
+}
+
+aggregate Hospital
+  regs
+    hospitalId HospitalId = placeholder
+    divertStatus DivertStatus = Open
+    surgeMode Bool = False
+    capacityLevel CapacityLevel = Normal
+    activeRegionalDemand Int = 0
+    supplyConstrained Bool = False
+    hospitalState HospitalVertex = HospitalUnreported
+  states HospitalUnreported HospitalOperational HospitalInSurge HospitalConstrained
+
+  command ReportHospitalStatus { hospitalId commandId divertStatus capacityLevel activeRegionalDemand:Int }
+  command ActivateSurge { hospitalId commandId }
+  command NoteSupplyLevel { hospitalId commandId supplyCode availableUnits:Int thresholdUnits:Int }
+
+  event HospitalStatusReported = fields(ReportHospitalStatus)
+  event HospitalSurgeActivated = fields(ActivateSurge)
+  event HospitalSupplyConstraintNoted = fields(NoteSupplyLevel)
+
+  HospitalUnreported -- ReportHospitalStatus -->
+    write hospitalId := cmd.hospitalId
+    write divertStatus := cmd.divertStatus
+    write capacityLevel := cmd.capacityLevel
+    write activeRegionalDemand := cmd.activeRegionalDemand
+    write hospitalState := HospitalVertex.HospitalOperational
+    emit HospitalStatusReported
+    goto HospitalOperational
+  HospitalOperational -- ReportHospitalStatus -->
+    write divertStatus := cmd.divertStatus
+    write capacityLevel := cmd.capacityLevel
+    write activeRegionalDemand := cmd.activeRegionalDemand
+    emit HospitalStatusReported
+    goto HospitalOperational
+  HospitalOperational -- ActivateSurge -->
+    guard surgeMode == false
+    write surgeMode := true
+    write capacityLevel := CapacityLevel.Surge
+    write hospitalState := HospitalVertex.HospitalInSurge
+    emit HospitalSurgeActivated
+    goto HospitalInSurge
+  HospitalOperational -- NoteSupplyLevel -->
+    guard availableUnits < thresholdUnits
+    write supplyConstrained := true
+    write hospitalState := HospitalVertex.HospitalConstrained
+    emit HospitalSupplyConstraintNoted
+    goto HospitalConstrained
+  HospitalInSurge -- ReportHospitalStatus -->
+    write divertStatus := cmd.divertStatus
+    write capacityLevel := cmd.capacityLevel
+    write activeRegionalDemand := cmd.activeRegionalDemand
+    emit HospitalStatusReported
+    goto HospitalInSurge
+  HospitalInSurge -- NoteSupplyLevel -->
+    guard availableUnits < thresholdUnits
+    write supplyConstrained := true
+    write hospitalState := HospitalVertex.HospitalConstrained
+    emit HospitalSupplyConstraintNoted
+    goto HospitalConstrained
+  HospitalConstrained -- ReportHospitalStatus -->
+    write divertStatus := cmd.divertStatus
+    write capacityLevel := cmd.capacityLevel
+    write activeRegionalDemand := cmd.activeRegionalDemand
+    write hospitalState := HospitalVertex.HospitalOperational
+    emit HospitalStatusReported
+    goto HospitalOperational
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  projection hospital_readiness key=hospitalId
+    status-map {
+      HospitalStatusReported=>operational
+      HospitalSurgeActivated=>surge
+      HospitalSupplyConstraintNoted=>constrained
+    }
+
+aggregate Capacity
+  regs
+    hospitalId HospitalId = placeholder
+    snapshotId CapacitySnapshotId = placeholder
+    availableIcuBeds Int = 0
+    staffedIcuBeds Int = 0
+    reservedIcuBeds Int = 0
+    occupiedIcuBeds Int = 0
+    surgeMode Bool = False
+    capacityState CapacityVertex = CapacityUnreported
+  states CapacityUnreported CapacityOpen CapacityReserved
+
+  command ReportCapacity { hospitalId commandId snapshotId availableIcuBeds:Int staffedIcuBeds:Int reservedIcuBeds:Int occupiedIcuBeds:Int surgeMode:Bool }
+  command ReserveIcuBed { hospitalId commandId reservationId }
+  command ReleaseIcuReservation { hospitalId commandId reservationId }
+
+  event CapacityReported = fields(ReportCapacity)
+  event IcuBedReserved = fields(ReserveIcuBed)
+  event IcuReservationReleased = fields(ReleaseIcuReservation)
+
+  CapacityUnreported -- ReportCapacity -->
+    write hospitalId := cmd.hospitalId
+    write snapshotId := cmd.snapshotId
+    write availableIcuBeds := cmd.availableIcuBeds
+    write staffedIcuBeds := cmd.staffedIcuBeds
+    write reservedIcuBeds := cmd.reservedIcuBeds
+    write occupiedIcuBeds := cmd.occupiedIcuBeds
+    write surgeMode := cmd.surgeMode
+    write capacityState := CapacityVertex.CapacityOpen
+    emit CapacityReported
+    goto CapacityOpen
+  CapacityOpen -- ReserveIcuBed -->
+    write capacityState := CapacityVertex.CapacityReserved
+    emit IcuBedReserved
+    goto CapacityReserved
+  CapacityReserved -- ReserveIcuBed -->
+    emit IcuBedReserved
+    goto CapacityReserved
+  CapacityReserved -- ReleaseIcuReservation -->
+    write capacityState := CapacityVertex.CapacityOpen
+    emit IcuReservationReleased
+    goto CapacityOpen
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  projection hospital_readiness key=hospitalId
+    status-map {
+      CapacityReported=>reported
+      IcuBedReserved=>reserved
+      IcuReservationReleased=>open
+    }
+
+aggregate Reservation
+  regs
+    reservationId TransferReservationId = placeholder
+    hospitalId HospitalId = placeholder
+    patientAcuity PatientAcuity = GreenTag
+    requiredBedType BedType = MedicalSurgical
+    sourceMessageId Text = ""
+    reservationState ReservationVertex = ReservationUnrequested
+    expirationDeadline Text = ""
+    admissionOutcome Text = ""
+  states ReservationUnrequested ReservationHeld ReservationConfirmed ReservationExpired! ReservationAdmitted! ReservationReleased!
+
+  command RequestTransferReservation { reservationId hospitalId commandId patientAcuity requiredBedType sourceMessageId:Text expirationDeadline:Text divertStatus lifeCriticalOverride:Bool }
+  command ConfirmReservation { reservationId hospitalId commandId }
+  command ExpireReservation { reservationId hospitalId commandId }
+  command AdmitPatient { reservationId hospitalId commandId admissionOutcome:Text }
+  command ReleaseReservation { reservationId hospitalId commandId }
+
+  event TransferReservationCreated = fields(RequestTransferReservation)
+  event TransferReservationConfirmed = fields(ConfirmReservation)
+  event TransferReservationExpired = fields(ExpireReservation)
+  event PatientAdmitted = fields(AdmitPatient)
+  event TransferReservationReleased = fields(ReleaseReservation)
+
+  ReservationUnrequested -- RequestTransferReservation -->
+    guard divertStatus != DivertStatus.TotalDivert || lifeCriticalOverride
+    write reservationId := cmd.reservationId
+    write hospitalId := cmd.hospitalId
+    write patientAcuity := cmd.patientAcuity
+    write requiredBedType := cmd.requiredBedType
+    write sourceMessageId := cmd.sourceMessageId
+    write expirationDeadline := cmd.expirationDeadline
+    write reservationState := ReservationVertex.ReservationHeld
+    emit TransferReservationCreated
+    goto ReservationHeld
+  ReservationHeld -- ConfirmReservation -->
+    write reservationState := ReservationVertex.ReservationConfirmed
+    emit TransferReservationConfirmed
+    goto ReservationConfirmed
+  ReservationHeld -- ExpireReservation -->
+    write reservationState := ReservationVertex.ReservationExpired
+    emit TransferReservationExpired
+    goto ReservationExpired
+  ReservationHeld -- ReleaseReservation -->
+    write reservationState := ReservationVertex.ReservationReleased
+    emit TransferReservationReleased
+    goto ReservationReleased
+  ReservationConfirmed -- AdmitPatient -->
+    write admissionOutcome := cmd.admissionOutcome
+    write reservationState := ReservationVertex.ReservationAdmitted
+    emit PatientAdmitted
+    goto ReservationAdmitted
+  ReservationConfirmed -- ReleaseReservation -->
+    write reservationState := ReservationVertex.ReservationReleased
+    emit TransferReservationReleased
+    goto ReservationReleased
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  projection transfer_decisions key=reservationId
+    status-map {
+      TransferReservationCreated=>held
+      TransferReservationConfirmed=>confirmed
+      TransferReservationExpired=>expired
+      PatientAdmitted=>admitted
+      TransferReservationReleased=>released
+    }
+
+aggregate Supply
+  regs
+    hospitalId HospitalId = placeholder
+    supplyCode SupplyCode = BloodOPositive
+    availableUnits Int = 0
+    thresholdUnits Int = 0
+    constrained Bool = False
+    supplyState SupplyVertex = SupplyUnreported
+  states SupplyUnreported SupplyAdequate SupplyConstrained
+
+  command ReportSupplyLevel { hospitalId commandId supplyCode availableUnits:Int thresholdUnits:Int }
+  command NoteSupplyConstraint { hospitalId commandId supplyCode availableUnits:Int thresholdUnits:Int }
+  command ReplenishSupply { hospitalId commandId supplyCode availableUnits:Int thresholdUnits:Int }
+
+  event SupplyLevelReported = fields(ReportSupplyLevel)
+  event SupplyConstraintNoted = fields(NoteSupplyConstraint)
+  event SupplyReplenished = fields(ReplenishSupply)
+
+  SupplyUnreported -- ReportSupplyLevel -->
+    write hospitalId := cmd.hospitalId
+    write supplyCode := cmd.supplyCode
+    write availableUnits := cmd.availableUnits
+    write thresholdUnits := cmd.thresholdUnits
+    write constrained := false
+    write supplyState := SupplyVertex.SupplyAdequate
+    emit SupplyLevelReported
+    goto SupplyAdequate
+  SupplyUnreported -- NoteSupplyConstraint -->
+    guard cmd.availableUnits < cmd.thresholdUnits
+    write hospitalId := cmd.hospitalId
+    write supplyCode := cmd.supplyCode
+    write availableUnits := cmd.availableUnits
+    write thresholdUnits := cmd.thresholdUnits
+    write constrained := true
+    write supplyState := SupplyVertex.SupplyConstrained
+    emit SupplyConstraintNoted
+    goto SupplyConstrained
+  SupplyAdequate -- NoteSupplyConstraint -->
+    guard cmd.availableUnits < cmd.thresholdUnits
+    write hospitalId := cmd.hospitalId
+    write supplyCode := cmd.supplyCode
+    write availableUnits := cmd.availableUnits
+    write thresholdUnits := cmd.thresholdUnits
+    write constrained := true
+    write supplyState := SupplyVertex.SupplyConstrained
+    emit SupplyConstraintNoted
+    goto SupplyConstrained
+  SupplyConstrained -- ReplenishSupply -->
+    guard cmd.availableUnits >= cmd.thresholdUnits
+    write hospitalId := cmd.hospitalId
+    write supplyCode := cmd.supplyCode
+    write availableUnits := cmd.availableUnits
+    write thresholdUnits := cmd.thresholdUnits
+    write constrained := false
+    write supplyState := SupplyVertex.SupplyAdequate
+    emit SupplyReplenished
+    goto SupplyAdequate
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+
+aggregate Surge
+  regs
+    hospitalId HospitalId = placeholder
+    availableIcuBeds Int = 0
+    redDemand Int = 0
+    timerIdScheduled Text = ""
+    surgeRequested Bool = False
+    timerFired Bool = False
+    surgeState SurgeVertex = SurgeIdle
+  states SurgeIdle SurgeRequested SurgeFollowedUp!
+
+  command NoteSurgeThreshold { hospitalId availableIcuBeds:Int redDemand:Int timerId:Text }
+  command MarkSurgeTimerFired { hospitalId timerId:Text }
+
+  event SurgeThresholdNoted = fields(NoteSurgeThreshold)
+  event SurgeTimerFired = fields(MarkSurgeTimerFired)
+
+  SurgeIdle -- NoteSurgeThreshold -->
+    write hospitalId := cmd.hospitalId
+    write availableIcuBeds := cmd.availableIcuBeds
+    write redDemand := cmd.redDemand
+    write timerIdScheduled := timerId
+    write surgeRequested := true
+    write surgeState := SurgeVertex.SurgeRequested
+    emit SurgeThresholdNoted
+    goto SurgeRequested
+  SurgeRequested -- MarkSurgeTimerFired -->
+    write timerFired := true
+    write surgeState := SurgeVertex.SurgeFollowedUp
+    emit SurgeTimerFired
+    goto SurgeFollowedUp
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+
+process HospitalSurge
+  name "hospital-surge"
+  input SurgeInput { hospitalId availableIcuBeds:Int redDemand:Int observedAt:Time }
+  correlate input.hospitalId via idText
+  saga Surge category "hospitalSurge"
+  target Hospital
+  projections [ hospital_readiness ]
+
+  on SurgeInput
+    advance NoteSurgeThreshold { hospitalId availableIcuBeds redDemand timerId=timer.id }
+    dispatch Hospital@input.hospitalId ActivateSurge { hospitalId }
+      on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+    schedule surgeFollowUp
+
+  dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, emitIndex)
+  rejected => halt
+  poison => halt
+
+  timer surgeFollowUp
+    id uuidv5 "hospital-surge-timer:" <> correlationId
+    fireAt input.observedAt + 5m
+    payload { kind="hospital-surge-follow-up" hospitalId }
+    fire dispatch Surge@correlationId MarkSurgeTimerFired { hospitalId timerId }
+      fired-event-id uuidv5 "hospital-surge-fired:" <> correlationId
+      on-ok Fired ; on-reject Fired ; on-ambiguous Retry ; on-error Retry ; not-mine Retry
+    decode unknown-status => Cancelled
+    max-attempts 5 dead-letter "hospital surge timer exceeded ceiling"
+
+router TransferNeedRouter
+  name "hospital-capacity-transfer-need"
+  input AcceptedTransferNeed { messageId incidentId triageRecordId region patientAcuity requiredBedType redCount:Int requestedByService }
+  key input.messageId via raw
+  resolve stable via read-model transfer_candidates row { hospitalId divertStatus availableIcuBeds reservationId commandId expirationDeadline lifeCriticalOverride }
+  target Reservation
+  projections [ transfer_decisions ]
+  dispatch-each RequestTransferReservation {
+    reservationId=resolved.reservationId
+    hospitalId=resolved.hospitalId
+    commandId=resolved.commandId
+    patientAcuity=input.patientAcuity
+    requiredBedType=input.requiredBedType
+    sourceMessageId=input.messageId
+    expirationDeadline=resolved.expirationDeadline
+    divertStatus=resolved.divertStatus
+    lifeCriticalOverride=resolved.lifeCriticalOverride
+  }
+    on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+  dispatch-id strategy=uuidv5 from=(name, key, sourceEventId, targetStreamName, occurrence)
+  rejected => halt
+  poison => halt
+
+workflow HospitalTransferReservation
+  name "hospital-transfer-reservation"
+  in ReservationWorkflowInput { reservationId:Id hospitalId:Id patientAcuity:PatientAcuity requiredBedType:BedType }
+  out ReservationWorkflowSummary
+  id from input.reservationId via idText
+  body
+    step create-transfer-hold -> ReservationHold
+    await reservation-confirmation -> ReservationConfirmation
+    step release-or-retain-capacity -> CapacityRelease
+    step summarize-reservation -> ReservationWorkflowSummary
+
+operation SignalReservationConfirmation
+  signal reservation-confirmation of HospitalTransferReservation
+    key from reservationId via reservationWorkflowId
+    value ReservationConfirmation
+
+operation RunReservationWorkflow
+  run HospitalTransferReservation
+    input ReservationWorkflowInput
+    outcome -> ReservationWorkflowRun
+
+contract emergency {
+  schemaVersion 1
+  discriminator messageType
+
+  topic incidentEvents "emergency.incident.events"
+  topic hospitalEvents "emergency.hospital.events"
+
+  event IncidentTransferNeedDeclared on incidentEvents {
+    incidentId: typeid "inc"
+    triageRecordId: typeid "tri"
+    region: text
+    patientAcuity: text
+    requiredBedType: text
+    redCount: int
+    requestedByService: text
+  }
+  event TransferReservationRequested on incidentEvents {
+    incidentId: typeid "inc"
+    reservationId: typeid "rsv"
+    region: text
+    patientAcuity: text
+    requiredBedType: text
+    expirationDeadline: text
+  }
+  event HospitalCapacitySnapshotPublished on hospitalEvents {
+    hospitalId: typeid "hosp"
+    snapshotId: typeid "cap"
+    region: text
+    divertStatus: text
+    capacityLevel: text
+    availableIcuBeds: int
+    staffedIcuBeds: int
+    reservedIcuBeds: int
+    occupiedIcuBeds: int
+  }
+  event TransferReservationAccepted on hospitalEvents {
+    incidentId: typeid "inc"
+    reservationId: typeid "rsv"
+    hospitalId: typeid "hosp"
+    patientAcuity: text
+    requiredBedType: text
+    expirationDeadline: text
+  }
+  event TransferReservationRejected on hospitalEvents {
+    incidentId: typeid "inc"
+    reservationId: typeid "rsv"
+    hospitalId: typeid "hosp"
+    reason: text
+  }
+  event PatientAdmitted on hospitalEvents {
+    incidentId: typeid "inc"
+    reservationId: typeid "rsv"
+    hospitalId: typeid "hosp"
+    admissionOutcome: text
+  }
+  event TransferExpired on hospitalEvents {
+    incidentId: typeid "inc"
+    reservationId: typeid "rsv"
+    hospitalId: typeid "hosp"
+    expiredAt: text
+  }
+}
+
+intake incidentInbox {
+  contract emergency
+  topic incidentEvents
+  accept IncidentTransferNeedDeclared
+
+  bind source from header "keiro-source" required
+  bind schemaVersion from header "keiro-schema-version" required cross-check body
+  bind messageId from header "keiro-message-id" required cross-check body
+  bind key from kafka-key
+  bind occurredAt from kafka-cursor
+  bind idempotencyKey from body
+
+  dedupe key messageId policy PreferIntegrationMessageId
+  persist = full-envelope
+
+  decode {
+    envelope strict-required lenient-optional
+    body strict schemaVersion == 1
+  }
+
+  disposition {
+    processed => ackOk
+    duplicate => ackOk
+    inProgress => retry 5s
+    previouslyFailed => deadLetter "previous inbox failure"
+    decodeFailed => deadLetter
+    dedupeFailed => deadLetter
+    storeFailed => retry 5s
+  }
+}
+
+emit hospitalIntegrationOutbox {
+  contract emergency
+  topic hospitalEvents
+  source "hospital-capacity"
+  key incidentId
+  map status {
+    "confirmed" => TransferReservationAccepted
+    "released" => TransferReservationRejected
+    "expired" => TransferExpired
+    "admitted" => PatientAdmitted
+    "published" => HospitalCapacitySnapshotPublished
+    _ => skip
+  }
+  messageId derive "msg" hole
+  idempotencyKey derive hole
+}
+
+publisher hospitalPublisher {
+  emit hospitalIntegrationOutbox
+  ordering PerKeyHeadOfLine
+  maxAttempts 10
+  backoff constant 2s
+  outboxId stable from messageId
+}
+
+workqueue reservation_work {
+  queue logical = "hospital_capacity.reservation_work"
+  derive physical = "hospital_capacity_reservation_work"
+         dlq = "hospital_capacity_reservation_work_dlq"
+         table = "pgmq.q_hospital_capacity_reservation_work"
+
+  ordering unordered
+  provision standard
+
+  payload ReservationWorkItem {
+    reservationId -> "reservation_id" text required
+    hospitalId -> "hospital_id" text required
+    commandId -> "command_id" text required
+    patientAcuity -> "patient_acuity" text required
+    requiredBedType -> "required_bed_type" text required
+    sourceMessageId -> "source_message_id" text required
+    expirationDeadline -> "expiration_deadline" text required
+    divertStatus -> "divert_status" text required
+    lifeCriticalOverride -> "life_critical_override" bool required
+  }
+
+  retry maxRetries = 3 delay = 5s dlq = on
+
+  disposition {
+    storeFailure -> retry 5s
+    commandRejected -> deadLetter
+    decodeFailure -> deadLetter
+    onCodecReject -> deadLetter
+  }
+}
+
+dispatch reservation_work_dispatch {
+  source readModel = accepted_transfer_needs key = messageId
+  fanout body = resolveTransferCandidates
+  dedup key = reservationId
+        seenIn readModel = transfer_decisions field = reservation_id
+        seenIn queue = reservation_work field = reservation_id
+  enqueue to = reservation_work
+}

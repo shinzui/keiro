@@ -6,9 +6,11 @@ import Control.Monad (when)
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Text qualified as AesonText
+import Data.ByteString qualified as BS
 import Data.List.NonEmpty qualified as NE
 import Data.Maybe (fromMaybe)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import Data.Text.IO qualified as TIO
 import Data.Text.Lazy.IO qualified as TLIO
 import Keiro.Dsl.BehaviorCoverage qualified as Behavior
@@ -33,8 +35,9 @@ import Keiro.Dsl.ScaffoldRun (checkIndexedServiceDiagnostics, executeServiceScaf
 import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract (..), checkedLanguageContract, checkedSource, checkedSpec, languageContractNotice)
 import Keiro.Dsl.Skeleton (skeletonFor)
 import Keiro.Dsl.SourceIndex (ParsedSourceDocument (..), SemanticSourceIndex, emptySemanticSourceIndex)
+import Keiro.Dsl.Topology (TopologySourceKind (..), buildServiceTopology, encodeServiceTopology, memberDigest, renderTopologyError)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), DiagnosticOrigin (..), Severity (..), diagnosticCodeText, diagnosticOrigin, minimumLanguageDiagnostics, parseDiagnosticCode, renderDiagnostic, validateService)
-import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure (..), WorkspaceFile (..), WorkspaceLocation (..), WorkspaceManifest (..), WorkspaceMember (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, checkWorkspaceForService, checkedWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, nodeOwner, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
+import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure (..), WorkspaceFile (..), WorkspaceLocation (..), WorkspaceManifest (..), WorkspaceMember (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, checkWorkspaceForService, checkedWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, nodeOwner, oneMemberParsedDocumentWorkspace, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest, workspaceDisplayPath)
 import Keiro.Dsl.WorkspaceDiff (WorkspaceChange (..), WorkspaceMeta (..), diffWorkspaces, renderWorkspaceFinding, workspaceDiffReportWithImpacts)
 import Keiro.Dsl.WorkspaceScaffold (executeWorkspaceScaffoldWithMigrations, planWorkspaceScaffoldWithRuntimePackageAndGoldens, renderWorkspaceScaffoldReport)
 import Numeric.Natural (Natural)
@@ -51,12 +54,15 @@ data Command
   | Pretty FilePath
   | Check FilePath CheckOptions
   | Inspect FilePath InspectionFormat
+  | Topology FilePath TopologyFormat
   | BehaviorObligations FilePath BehaviorFormat
   | Scaffold FilePath FilePath (Maybe String) (Maybe RuntimePackageName) Bool Bool Bool Bool (Maybe FilePath) (Maybe (String, FilePath))
   | Diff FilePath String (Maybe FilePath) (Maybe FilePath) [CompatibilitySurface] Bool (Maybe FilePath) (Maybe DiffCoverageOptions) [DiagnosticCode]
   | New String
 
 data InspectionFormat = InspectionJson
+
+data TopologyFormat = TopologyJson
 
 data BehaviorFormat = BehaviorText | BehaviorJson
 
@@ -103,6 +109,9 @@ commands =
         <> command
           "inspect"
           (info (Inspect <$> fileArg <*> inspectionFormatOpt <**> helper) (progDesc "Inspect source-language provenance for a .keiro file or workspace as JSON"))
+        <> command
+          "topology"
+          (info (Topology <$> fileArg <*> topologyFormatOpt <**> helper) (progDesc "Export the service topology (keiro-dsl/service-topology/1) of a .keiro file or workspace as canonical JSON"))
         <> command
           "behavior-obligations"
           (info (BehaviorObligations <$> fileArg <*> behaviorFormatOpt <**> helper) (progDesc "List static aggregate behavior obligations for a .keiro file or workspace"))
@@ -347,6 +356,15 @@ inspectionFormatOpt =
     parseFormat "json" = Right InspectionJson
     parseFormat other = Left ("unsupported inspection format: " <> other <> " (expected json)")
 
+topologyFormatOpt :: Parser TopologyFormat
+topologyFormatOpt =
+  option
+    (eitherReader parseFormat)
+    (long "format" <> metavar "json" <> value TopologyJson <> help "Topology output format (json)")
+  where
+    parseFormat "json" = Right TopologyJson
+    parseFormat other = Left ("unsupported topology format: " <> other <> " (expected json)")
+
 behaviorFormatOpt :: Parser BehaviorFormat
 behaviorFormatOpt =
   option
@@ -536,6 +554,8 @@ run (Check fp checkOptionsValue)
   | isWorkspacePath fp = runWorkspaceCheck fp checkOptionsValue
 run (Inspect fp format)
   | isWorkspacePath fp = runWorkspaceInspect fp format
+run (Topology fp format)
+  | isWorkspacePath fp = runWorkspaceTopology fp format
 run (BehaviorObligations fp format)
   | isWorkspacePath fp = runWorkspaceBehaviorObligations fp format
 run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite applyNameMigrations applyGeneratedHaskellEdition cliGoldens comparisonRequest)
@@ -633,6 +653,24 @@ run (Inspect fp InspectionJson) = do
     Right ParsedSourceDocument {parsedSource = parsedSource} ->
       TLIO.putStrLn
         (AesonText.encodeToLazyText (sourceInspection fp ((.sourceLanguage) parsedSource) (checkedSource parsedSource)))
+run (Topology fp TopologyJson) = do
+  -- Read the bytes once: the digest and the parse must see the same content,
+  -- and /dev/stdin cannot be read twice.
+  bytes <- BS.readFile fp
+  input <- case TE.decodeUtf8' bytes of
+    Left decodeError -> hPutStrLn stderr (fp <> ": not valid UTF-8: " <> show decodeError) >> exitFailure
+    Right text -> pure text
+  case parseSourceDocument fp input of
+    Left failure -> hPutStrLn stderr (T.unpack (renderParseFailure failure)) >> exitFailure
+    Right document@ParsedSourceDocument {parsedSource = parsedSource, sourceIndex = sourceIndex} -> do
+      let service = checkedSource parsedSource
+          diagnostics = checkIndexedServiceDiagnostics Nothing sourceIndex (mkContext Nothing False (checkedSpec service)) service
+      when (any ((== Error) . (.severity)) diagnostics) $ do
+        mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diagnostics
+        exitFailure
+      case oneMemberParsedDocumentWorkspace fp document of
+        Left failure -> hPutStrLn stderr ("topology: cannot index " <> fp <> ": " <> show failure) >> exitFailure
+        Right workspace -> writeTopology TopologySingleSource fp workspace [(takeFileName fp, memberDigest bytes)]
 run (BehaviorObligations fp format) = do
   input <- TIO.readFile fp
   case parseSourceDocument fp input of
@@ -747,6 +785,30 @@ runWorkspaceInspect fp InspectionJson = do
         ]
       where
         sourceLanguage = (.sourceLanguage) member
+
+-- | @topology@ on a workspace manifest. Validation is the whole-service check
+-- @check@ runs; any error refuses the export before a byte reaches stdout.
+runWorkspaceTopology :: FilePath -> TopologyFormat -> IO ()
+runWorkspaceTopology fp TopologyJson = do
+  loaded <- loadWorkspace (fileContentSource (takeDirectory fp)) fp
+  case loaded of
+    Left failure -> mapM_ (TIO.hPutStrLn stderr) (renderWorkspaceFailure fp failure) >> exitFailure
+    Right workspace -> do
+      let diagnostics = checkWorkspace workspace
+      when (any ((== Error) . (.severity)) diagnostics) $ do
+        mapM_ (TIO.hPutStrLn stderr . renderWorkspaceDiagnostic fp) diagnostics
+        exitFailure
+      digests <-
+        mapM
+          (\member -> (,) ((.path) member) . memberDigest <$> BS.readFile (workspaceDisplayPath fp (WorkspaceMemberFile ((.path) member))))
+          ((.members) workspace)
+      writeTopology TopologyWorkspace fp workspace digests
+
+writeTopology :: TopologySourceKind -> FilePath -> WorkspaceSpec -> [(FilePath, T.Text)] -> IO ()
+writeTopology sourceKind fp workspace digests =
+  case buildServiceTopology sourceKind fp workspace digests of
+    Left topologyError -> TIO.hPutStrLn stderr (renderTopologyError topologyError) >> exitFailure
+    Right topology -> BS.putStr (encodeServiceTopology topology)
 
 runWorkspaceBehaviorObligations :: FilePath -> BehaviorFormat -> IO ()
 runWorkspaceBehaviorObligations fp format = do

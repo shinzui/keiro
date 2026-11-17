@@ -1,0 +1,18 @@
+language keiro-dsl 6
+context incident-reaction
+
+id IncidentId prefix=inc
+
+aggregate IncidentSaga
+  regs
+  states Open
+  command RecordIncident { incidentId }
+  event IncidentRecorded = fields(RecordIncident)
+  Open -- RecordIncident --> emit IncidentRecorded ; goto Open
+
+aggregate Incident
+  regs
+  states Open
+  command EscalateIncident { incidentId }
+  event IncidentEscalated = fields(EscalateIncident)
+  Open -- EscalateIncident --> emit IncidentEscalated ; goto Open

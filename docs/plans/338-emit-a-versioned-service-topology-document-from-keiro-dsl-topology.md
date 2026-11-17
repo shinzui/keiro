@@ -22,6 +22,11 @@ provenance:
       at: 2026-11-17T15:26:59Z
       mode: "update"
       note: "Correct schema handoffs, compatibility checks and fixture acceptance after repository review"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-17T16:05:58Z
+      mode: "implement"
+      note: "EP-1 implemented: topology module, command, fixtures, goldens and stability tests"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -86,23 +91,56 @@ Three later plans build on it and are not needed to implement it:
 
 ## Progress
 
-- [ ] Milestone 1: the library module `Keiro.Dsl.Topology` builds a topology value from a
-      checked service and encodes it canonically; unit tests cover every node kind and
-      relation.
-- [ ] Milestone 2: `keiro-dsl topology` works for a single source and a workspace, refuses
-      sources that fail `check`, and golden tests pass for the hospital-capacity and
-      incident-command fixtures and a workspace fixture.
-- [ ] Milestone 3: the five projection-catalog kinds and their relations are exported, and
-      a golden test passes for a Language 6 projection-catalog fixture in which an aggregate
-      can be traced through a projection owner and target to a read model.
-- [ ] Milestone 4: byte stability is proven: two runs give equal bytes, the output does not
-      depend on the working directory, and reordering declarations leaves nodes and edges
-      unchanged.
+- [x] Milestone 1 (2026-11-17): `keiro-dsl/src/Keiro/Dsl/Topology.hs` builds and encodes the
+      document; ten library tests in `keiro-dsl/test/Keiro/Dsl/TopologySpec.hs` cover the
+      closed kind and relation spellings, digests, owner/line/context attribution, reaction
+      dispatch collection with duplicate removal, `projects` resolution, every operation form,
+      sort order, and refusal of dangling endpoints and missing digests.
+- [x] Milestone 2 (2026-11-17): `keiro-dsl topology` exports single sources and workspaces and
+      refuses a source with error diagnostics (non-zero exit, empty stdout). Goldens for
+      hospital-capacity, incident-command and the two-member workspace pass byte-for-byte;
+      hospital-capacity covers all twelve non-catalog kinds; the services' publish and subscribe
+      topics pair up.
+- [x] Milestone 3 (2026-11-17): the five catalog kinds and ten catalog relations are exported;
+      `projection-catalog.topology.golden.json` contains all of them and the test traces
+      `Orders` through `order_summary_writer` and `order_summary` to `order_inline`.
+- [x] Milestone 4 (2026-11-17): repeat runs, absolute-versus-relative paths from different
+      working directories, and a copy with reversed top-level declarations all agree (the last
+      after removing member `sha256` and node `line`). `keiro-dsl/CHANGELOG.md` has the entry.
+      Evidence: `cabal test keiro-dsl:keiro-dsl-test --test-options='--match "service topology"'`
+      reports 24 examples, 0 failures; `just dsl-api-boundaries` reports OK.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- The Language 6 migration of the two keiro-runtime-jitsurei specifications was larger than a
+  header line. Language 6 rejects `consistency`, `feed` and `subscription` on read models and
+  `consistency=` on aggregate projections; requires unqualified expression roots that name both
+  a register and a command field to be written `cmd.<name>`; requires enum values as
+  `Type.Constructor`, and the `…Vertex` register types were undeclared, so each fixture gains an
+  `enum <Aggregate>Vertex` whose constructors are the aggregate's states; requires every read
+  model not supplied by an aggregate `projection` to bind to a projection catalog group; and
+  checks router resolve rows and dispatch keys against read-model columns. The fixtures keep
+  every original declaration and name, and add: read-model `freshness = immediate`; one
+  rebuild group with one target and one owner per unbound read model (hospital-capacity:
+  `hospital_routing`, owners for `transfer_candidates` and `accepted_transfer_needs`;
+  incident-command: `incident_reporting`, owners for `evacuation_zones`,
+  `command_audit_history` and `capacity_change_candidates`), reusing the original subscription
+  names; the router/dispatch columns `reservation_id`, `command_id`, `expiration_deadline`,
+  `life_critical_override` (transfer_candidates), `reservation_id` (accepted_transfer_needs) and
+  `command_id` (capacity_change_candidates), with recomputed shapes; and the dispatch source key
+  `messageId` instead of the column spelling `message_id`. As a result both service fixtures
+  also exercise catalog nodes. The legacy process body is still accepted by Language 6.
+
+- The pretty printer, and the parser, spell the process policy `deadLetter`, not `dead-letter`.
+  See the Decision Log.
+
+- No byte golden in the suite embedded the package version, so the topology goldens store
+  `"version":"<version>"` and the tests substitute it before comparing.
+
+- A `projects` entry can resolve to more than one aggregate: in hospital-capacity both
+  `Hospital` and `Capacity` declare `projection hospital_readiness`, so `HospitalSurge` has two
+  `projects` edges with `table: hospital_readiness`.
 
 
 ## Decision Log
@@ -154,6 +192,35 @@ Three later plans build on it and are not needed to implement it:
   (`kind`, `name`) must be unique in a document.
   Date: 2026-11-17
 
+- Decision: Process `rejected` and `poison` policies are spelled `halt`, `deadLetter` or `skip`.
+  Rationale: That is the source language's spelling (parser and pretty printer), and the
+  contract's general rule is to use the specification's spelling. The plan text said
+  `dead-letter`, which the language does not accept.
+  Date: 2026-11-17
+
+- Decision: Nodes are sorted by the spelled `kind` string, and edges by the spelled kind and
+  relation strings, rather than by Haskell constructor order.
+  Rationale: The order a consumer sees should be the codepoint order of the document's own
+  strings, so it can be verified without knowing keiro's internal declaration order.
+  Date: 2026-11-17
+
+- Decision: Diagnostics are printed only when the export is refused; a successful export
+  writes nothing to standard error. A read model's `table` and `schema` are null when the
+  model is catalog-bound (they are then on its targets). A projection owner's `replay` is an
+  object `{"mode", "reason"}` with `reason` null for `explicit`. A publisher's `backoff` is an
+  object `{"kind", "window", "max", "multiplier"}`.
+  Rationale: A scaffold run that refreshes the export should stay quiet, and fixed object
+  shapes are easier to decode than strings that need a second parser.
+  Date: 2026-11-17
+
+- Decision: The tests live in a separate module `keiro-dsl/test/Keiro/Dsl/TopologySpec.hs`,
+  called from `keiro-dsl/test/Main.hs` as `topologySpec`, with its own copies of the small
+  executable and golden helpers.
+  Rationale: The same pattern as the other `*Spec` modules in `keiro-dsl/test/Keiro/Dsl/`;
+  it avoids recompiling the 17,000-line `Main.hs` on every topology change. The `--match
+  "service topology"` selector in this plan still works.
+  Date: 2026-11-17
+
 - Decision: Fixture specifications are Language 6 copies of the two keiro-runtime-jitsurei
   services, vendored into this repository.
   Rationale: The originals live in another repository and are legacy-unversioned sources.
@@ -164,7 +231,20 @@ Three later plans build on it and are not needed to implement it:
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-11-17. `keiro-dsl topology` exports `keiro-dsl/service-topology/1` for single
+sources and workspaces with all seventeen node kinds and twenty-two relations. Four golden
+documents pin the bytes, and the stability tests prove repeatability, path independence and
+reorder invariance. The full `keiro-dsl:keiro-dsl-test` suite passed apart from one existing
+fixture-inventory test ("keeps only the named source-version and candidate fixtures outside
+published Language 4"), which lists every non-Language-4 fixture by path. The new topology
+fixtures were added to it and it now passes. `just dsl-api-boundaries` accepts the new
+exposed module. The repository gate `just verify` is run once on the final initiative tree
+under the MasterPlan's cross-plan gate rather than per child; its result is recorded there.
+
+What remained open for later plans: EP-2 owns `--topology-out`, `--check`, the documentation
+page and the JSON Schema; EP-3 adds `machine`; EP-4 adds `feeds` and `/2`. The biggest
+unplanned cost was migrating the two example services to Language 6 (see Surprises). Later
+fixture work should budget for the same rules.
 
 
 ## Context and Orientation

@@ -112,6 +112,7 @@ import Keiro.Dsl.SidecarNames
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
 import Keiro.Dsl.Source (SourcePoint (..), SourceSpan (..))
 import Keiro.Dsl.SourceIndex
+import Keiro.Dsl.TopologySpec (topologySpec)
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, diagnosticCodeText, parseDiagnosticCode, renderDiagnostic, validateService, validateSpec)
 import Keiro.Dsl.Workspace
@@ -249,6 +250,7 @@ main = hspec $ do
   mappedStructuralEnumEqualitySpec
   consumerEnumLiteralsSpec
   frontendProfilesSpec
+  topologySpec
 
   describe "calendar-day codec policy v1" $ do
     it "pins the stable identity and Aeson-compatible full-carrier writer" $ do
@@ -2015,6 +2017,11 @@ main = hspec $ do
             "structural-nominal-leaves-text-to-nominal.keiro",
             "structural-nominal-leaves.keiro",
             "structural-text-sets.keiro",
+            "topology/hospital-capacity.keiro",
+            "topology/incident-command.keiro",
+            "topology/projection-catalog.keiro",
+            "topology/workspace/coordination/reaction.keiro",
+            "topology/workspace/domain/incident.keiro",
             "process-reactions-accepted-requires-event.keiro",
             "process-reactions-accepted-unverified.keiro",
             "process-reactions-badmapping.keiro",

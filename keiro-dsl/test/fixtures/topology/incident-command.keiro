@@ -1,0 +1,665 @@
+language keiro-dsl 6
+
+context incident-command
+layout collocated
+
+id CommandId prefix=cmd
+id IncidentId prefix=inc
+id ResourceId prefix=res
+id TriageRecordId prefix=tri
+id HospitalId prefix=hosp
+id CapacitySnapshotId prefix=cap
+id TransferReservationId prefix=rsv
+
+enum Severity {
+  Minor=Minor
+  Major=Major
+  MassCasualty=MassCasualty
+  HazardousMaterials=HazardousMaterials
+}
+
+enum ResourceCapability {
+  Ambulance=Ambulance
+  EngineCompany=EngineCompany
+  HazmatTeam=HazmatTeam
+  EvacuationTransport=EvacuationTransport
+}
+
+enum IncidentVertex {
+  IncidentNotDeclared=incident-not-declared
+  IncidentOpen=incident-open
+  IncidentEvacuating=incident-evacuating
+  IncidentStabilized=incident-stabilized
+  IncidentClosedVertex=incident-closed-vertex
+}
+
+enum TriageVertex {
+  TriageNotStarted=triage-not-started
+  TriageCollecting=triage-collecting
+}
+
+enum FieldResourceVertex {
+  ResourceUnregistered=resource-unregistered
+  ResourceAvailable=resource-available
+  ResourceAssignedVertex=resource-assigned-vertex
+}
+
+enum EscalationVertex {
+  EscalationIdle=escalation-idle
+  AwaitingAcknowledgement=awaiting-acknowledgement
+  Escalated=escalated
+  EscalationSettled=escalation-settled
+}
+
+target evacuation_zones_table {
+  schema = "incident_command"
+  table = "evacuation_zones"
+  reset = clear
+}
+
+target command_audit_history_table {
+  schema = "incident_command"
+  table = "command_audit_history"
+  reset = clear
+}
+
+target capacity_change_candidates_table {
+  schema = "incident_command"
+  table = "pending_transfer_needs"
+  reset = clear
+}
+
+rebuild-group incident_reporting {
+  targets = [ evacuation_zones_table command_audit_history_table capacity_change_candidates_table ]
+  order = [ evacuation_zones_table command_audit_history_table capacity_change_candidates_table ]
+}
+
+projection-owner evacuation_zones_writer {
+  source = aggregate Incident
+  delivery = inline
+  group = incident_reporting
+  targets = [ evacuation_zones_table ]
+  order = 10
+  replay = explicit
+}
+
+projection-owner command_audit_history_writer {
+  source = aggregate Incident
+  delivery = subscription
+  group = incident_reporting
+  targets = [ command_audit_history_table ]
+  order = 20
+  subscription = "incident-command-command-audit"
+  dedup = "incident-command-command-audit-v1"
+  checkpoint-on-missing = from-beginning
+  replay = explicit
+}
+
+projection-owner capacity_change_candidates_writer {
+  source = category "hospitalInbox"
+  delivery = subscription
+  group = incident_reporting
+  targets = [ capacity_change_candidates_table ]
+  order = 30
+  subscription = "incident-command-capacity-change-router"
+  dedup = "incident-command-capacity-change-router-v1"
+  checkpoint-on-missing = from-beginning
+  replay = explicit
+}
+
+readmodel incident_dashboard {
+  table = "incident_dashboard"
+  schema = "incident_command"
+  columns {
+    incident_id text required
+    severity text required
+    status text required
+    commander text
+    safety_perimeter_established bool required
+    evacuation_ordered bool required
+    evacuation_complete bool required
+    active_resource_ids text required
+    red_count bigint required
+    yellow_count bigint required
+    green_count bigint required
+    pending_transfer_needs bigint required
+    last_seen bigint required
+  }
+  version = 1
+  shape = "fnv1a:9d42f7941cb4eb1a"
+  freshness = immediate
+}
+
+readmodel evacuation_zones {
+  columns {
+    incident_id text required
+    zone_id text required
+    status text required
+    evacuation_ordered bool required
+    evacuation_complete bool required
+    last_seen bigint required
+  }
+  version = 1
+  shape = "fnv1a:dddb5c896a540dd1"
+  freshness = immediate
+  group = incident_reporting
+  targets = [ evacuation_zones_table ]
+}
+
+readmodel field_resource_assignments {
+  table = "field_resource_assignments"
+  schema = "incident_command"
+  columns {
+    resource_id text required
+    capability text required
+    status text required
+    current_incident_id text
+    last_seen bigint required
+  }
+  version = 1
+  shape = "fnv1a:d6b2ee1c42287d01"
+  freshness = immediate
+}
+
+readmodel pending_transfer_needs {
+  table = "pending_transfer_needs"
+  schema = "incident_command"
+  columns {
+    incident_id text required
+    triage_record_id text required
+    region text required
+    red_count bigint required
+    status text required
+    last_seen bigint required
+  }
+  version = 1
+  shape = "fnv1a:a960a62a26114735"
+  freshness = immediate
+}
+
+readmodel command_audit_history {
+  columns {
+    command_id text required
+    aggregate_type text required
+    aggregate_id text required
+    event_type text required
+    global_position bigint required
+    stream_version bigint required
+  }
+  version = 1
+  shape = "fnv1a:1d41b65d6c4579ba"
+  freshness = immediate
+  group = incident_reporting
+  targets = [ command_audit_history_table ]
+}
+
+readmodel capacity_change_candidates {
+  columns {
+    command_id text required
+    incident_id text required
+    pending_transfer_needs bigint required
+  }
+  version = 1
+  shape = "fnv1a:88efe4aaf1475cb6"
+  freshness = immediate
+  group = incident_reporting
+  targets = [ capacity_change_candidates_table ]
+}
+
+aggregate Incident
+  regs
+    incidentId IncidentId = placeholder
+    commander Text = ""
+    hasCommander Bool = False
+    severity Severity = Minor
+    redCount Int = 0
+    yellowCount Int = 0
+    greenCount Int = 0
+    safetyPerimeterEstablished Bool = False
+    evacuationOrdered Bool = False
+    evacuationComplete Bool = False
+    pendingTransferNeeds Int = 0
+    closed Bool = False
+    incidentState IncidentVertex = IncidentNotDeclared
+  states IncidentNotDeclared IncidentOpen IncidentEvacuating IncidentStabilized IncidentClosedVertex!
+
+  command DeclareIncident { incidentId commandId severity hazardousMaterial:Bool }
+  command AssignCommander { incidentId commandId commander:Text }
+  command EstablishSafetyPerimeter { incidentId commandId }
+  command DispatchResource { incidentId commandId resourceId }
+  command OrderEvacuation { incidentId commandId }
+  command RecordTriage { incidentId commandId redCount:Int yellowCount:Int greenCount:Int pendingTransferNeeds:Int }
+  command CompleteEvacuation { incidentId commandId }
+  command ReconsiderTransferPlan { incidentId commandId hospitalId:Text snapshotId:Text region:Text availableIcuBeds:Int pendingTransferNeeds:Int }
+  command CloseIncident { incidentId commandId }
+
+  event IncidentDeclared = fields(DeclareIncident)
+  event CommanderAssigned = fields(AssignCommander)
+  event SafetyPerimeterEstablished = fields(EstablishSafetyPerimeter)
+  event ResourceDispatched = fields(DispatchResource)
+  event EvacuationOrdered = fields(OrderEvacuation)
+  event IncidentTriageRecorded = fields(RecordTriage)
+  event EvacuationCompleted = fields(CompleteEvacuation)
+  event TransferPlanReconsidered = fields(ReconsiderTransferPlan)
+  event IncidentClosed = fields(CloseIncident)
+
+  IncidentNotDeclared -- DeclareIncident -->
+    write incidentId := cmd.incidentId
+    write severity := cmd.severity
+    write incidentState := IncidentVertex.IncidentOpen
+    emit IncidentDeclared
+    goto IncidentOpen
+  IncidentOpen -- AssignCommander -->
+    write commander := cmd.commander
+    write hasCommander := true
+    emit CommanderAssigned
+    goto IncidentOpen
+  IncidentOpen -- EstablishSafetyPerimeter -->
+    write safetyPerimeterEstablished := true
+    emit SafetyPerimeterEstablished
+    goto IncidentOpen
+  IncidentOpen -- DispatchResource --> emit ResourceDispatched ; goto IncidentOpen
+  IncidentOpen -- RecordTriage -->
+    write redCount := cmd.redCount
+    write yellowCount := cmd.yellowCount
+    write greenCount := cmd.greenCount
+    write pendingTransferNeeds := cmd.pendingTransferNeeds
+    emit IncidentTriageRecorded
+    goto IncidentOpen
+  IncidentOpen -- ReconsiderTransferPlan -->
+    write pendingTransferNeeds := cmd.pendingTransferNeeds
+    emit TransferPlanReconsidered
+    goto IncidentOpen
+  IncidentOpen -- OrderEvacuation -->
+    guard severity == Severity.MassCasualty && hasCommander
+    write evacuationOrdered := true
+    write incidentState := IncidentVertex.IncidentEvacuating
+    emit EvacuationOrdered
+    goto IncidentEvacuating
+  IncidentOpen -- CloseIncident -->
+    guard closed == false && evacuationComplete
+    write closed := true
+    write incidentState := IncidentVertex.IncidentClosedVertex
+    emit IncidentClosed
+    goto IncidentClosedVertex
+  IncidentEvacuating -- RecordTriage -->
+    write redCount := cmd.redCount
+    write yellowCount := cmd.yellowCount
+    write greenCount := cmd.greenCount
+    write pendingTransferNeeds := cmd.pendingTransferNeeds
+    emit IncidentTriageRecorded
+    goto IncidentEvacuating
+  IncidentEvacuating -- ReconsiderTransferPlan -->
+    write pendingTransferNeeds := cmd.pendingTransferNeeds
+    emit TransferPlanReconsidered
+    goto IncidentEvacuating
+  IncidentEvacuating -- CompleteEvacuation -->
+    write evacuationComplete := true
+    write incidentState := IncidentVertex.IncidentStabilized
+    emit EvacuationCompleted
+    goto IncidentStabilized
+  IncidentStabilized -- CloseIncident -->
+    guard closed == false && evacuationComplete
+    write closed := true
+    write incidentState := IncidentVertex.IncidentClosedVertex
+    emit IncidentClosed
+    goto IncidentClosedVertex
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  projection incident_dashboard key=incidentId
+    status-map {
+      IncidentDeclared=>open
+      CommanderAssigned=>open
+      SafetyPerimeterEstablished=>open
+      ResourceDispatched=>open
+      EvacuationOrdered=>evacuating
+      IncidentTriageRecorded=>active
+      EvacuationCompleted=>stabilized
+      TransferPlanReconsidered=>active
+      IncidentClosed=>closed
+    }
+
+aggregate Triage
+  regs
+    triageRecordId TriageRecordId = placeholder
+    incidentId IncidentId = placeholder
+    redCount Int = 0
+    yellowCount Int = 0
+    greenCount Int = 0
+    transportPriority Int = 0
+    transferNeedEmitted Bool = False
+    triageState TriageVertex = TriageNotStarted
+  states TriageNotStarted TriageCollecting
+
+  command StartTriage { triageRecordId incidentId commandId }
+  command MarkRed { triageRecordId incidentId commandId redCount:Int transportPriority:Int }
+  command MarkYellow { triageRecordId incidentId commandId yellowCount:Int }
+  command MarkGreen { triageRecordId incidentId commandId greenCount:Int }
+
+  event TriageStarted = fields(StartTriage)
+  event RedPatientMarked = fields(MarkRed)
+  event YellowPatientMarked = fields(MarkYellow)
+  event GreenPatientMarked = fields(MarkGreen)
+  event TransferNeedEmitted = fields(MarkRed)
+
+  TriageNotStarted -- StartTriage -->
+    write triageRecordId := cmd.triageRecordId
+    write incidentId := cmd.incidentId
+    write triageState := TriageVertex.TriageCollecting
+    emit TriageStarted
+    goto TriageCollecting
+  TriageCollecting -- MarkRed -->
+    guard transferNeedEmitted == false
+    write redCount := cmd.redCount
+    write transportPriority := cmd.transportPriority
+    write transferNeedEmitted := true
+    emit RedPatientMarked
+    emit TransferNeedEmitted
+    goto TriageCollecting
+  TriageCollecting -- MarkYellow -->
+    write yellowCount := cmd.yellowCount
+    emit YellowPatientMarked
+    goto TriageCollecting
+  TriageCollecting -- MarkGreen -->
+    write greenCount := cmd.greenCount
+    emit GreenPatientMarked
+    goto TriageCollecting
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  projection pending_transfer_needs key=incidentId
+    status-map partial { TransferNeedEmitted=>pending }
+
+aggregate FieldResource
+  regs
+    resourceId ResourceId = placeholder
+    capability ResourceCapability = Ambulance
+    assignedIncidentId IncidentId = placeholder
+    available Bool = False
+    resourceState FieldResourceVertex = ResourceUnregistered
+  states ResourceUnregistered ResourceAvailable ResourceAssignedVertex
+
+  command RegisterResource { resourceId commandId capability }
+  command AssignResource { resourceId commandId incidentId }
+  command ReleaseResource { resourceId commandId incidentId }
+
+  event ResourceRegistered = fields(RegisterResource)
+  event ResourceAssigned = fields(AssignResource)
+  event ResourceReleased = fields(ReleaseResource)
+
+  ResourceUnregistered -- RegisterResource -->
+    write resourceId := cmd.resourceId
+    write capability := cmd.capability
+    write available := true
+    write resourceState := FieldResourceVertex.ResourceAvailable
+    emit ResourceRegistered
+    goto ResourceAvailable
+  ResourceAvailable -- AssignResource -->
+    guard available
+    write assignedIncidentId := incidentId
+    write available := false
+    write resourceState := FieldResourceVertex.ResourceAssignedVertex
+    emit ResourceAssigned
+    goto ResourceAssignedVertex
+  ResourceAssignedVertex -- AssignResource -->
+    guard available
+    write assignedIncidentId := incidentId
+    write available := false
+    emit ResourceAssigned
+    goto ResourceAssignedVertex
+  ResourceAssignedVertex -- ReleaseResource -->
+    write available := true
+    write resourceState := FieldResourceVertex.ResourceAvailable
+    emit ResourceReleased
+    goto ResourceAvailable
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  projection field_resource_assignments key=resourceId
+    status-map {
+      ResourceRegistered=>available
+      ResourceAssigned=>assigned
+      ResourceReleased=>available
+    }
+
+aggregate Escalation
+  regs
+    incidentId IncidentId = placeholder
+    lastSeverity Severity = Minor
+    escalationLevel Int = 0
+    timerIdScheduled Text = ""
+    acknowledged Bool = False
+    mutualAidDispatched Bool = False
+    terminal Bool = False
+    escalationState EscalationVertex = EscalationIdle
+  states EscalationIdle AwaitingAcknowledgement Escalated EscalationSettled!
+
+  command NoteCriticalIncident { incidentId severity timerId:Text }
+  command AcknowledgeEscalation { incidentId }
+  command MarkEscalationTimerFired { incidentId timerId:Text }
+
+  event CriticalIncidentNoted = fields(NoteCriticalIncident)
+  event EscalationAcknowledged = fields(AcknowledgeEscalation)
+  event EscalationTimerFired = fields(MarkEscalationTimerFired)
+
+  EscalationIdle -- NoteCriticalIncident -->
+    write incidentId := cmd.incidentId
+    write lastSeverity := severity
+    write timerIdScheduled := timerId
+    write escalationState := EscalationVertex.AwaitingAcknowledgement
+    emit CriticalIncidentNoted
+    goto AwaitingAcknowledgement
+  AwaitingAcknowledgement -- AcknowledgeEscalation -->
+    write acknowledged := true
+    write terminal := true
+    write escalationState := EscalationVertex.EscalationSettled
+    emit EscalationAcknowledged
+    goto EscalationSettled
+  AwaitingAcknowledgement -- MarkEscalationTimerFired -->
+    write mutualAidDispatched := true
+    write escalationState := EscalationVertex.Escalated
+    emit EscalationTimerFired
+    goto Escalated
+  Escalated -- AcknowledgeEscalation -->
+    write acknowledged := true
+    write terminal := true
+    write escalationState := EscalationVertex.EscalationSettled
+    emit EscalationAcknowledged
+    goto EscalationSettled
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+
+process IncidentEscalation
+  name "incident-escalation"
+  input CriticalIncidentDeclared { incidentId severity raisedAt:Time }
+  correlate input.incidentId via idText
+  saga Escalation category "incidentEscalation"
+  target Incident
+  projections [ incident_dashboard ]
+
+  on CriticalIncidentDeclared
+    advance NoteCriticalIncident { incidentId severity timerId=timer.id }
+    schedule escalationDeadline
+
+  dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, emitIndex)
+  rejected => halt
+  poison => halt
+
+  timer escalationDeadline
+    id uuidv5 "incident-escalation-timer:" <> correlationId
+    fireAt input.raisedAt + 5m
+    payload { kind="incident-escalation-deadline" incidentId }
+    fire dispatch Escalation@correlationId MarkEscalationTimerFired { incidentId timerId }
+      fired-event-id uuidv5 "incident-escalation-fired:" <> correlationId
+      on-ok Fired ; on-reject Fired ; on-ambiguous Retry ; on-error Retry ; not-mine Retry
+    decode unknown-status => Cancelled
+    max-attempts 5 dead-letter "incident escalation timer exceeded ceiling"
+
+router ResourceDispatchRouter
+  name "incident-command-resource-dispatch"
+  input ResourceDispatchedInput { incidentId resourceId commandId }
+  key input.resourceId via resourceDispatchKey
+  resolve stable via read-model field_resource_assignments row { resourceId status currentIncidentId }
+  target FieldResource
+  projections [ field_resource_assignments ]
+  dispatch-each AssignResource { resourceId=resolved.resourceId commandId=input.commandId incidentId=input.incidentId }
+    on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+  dispatch-id strategy=uuidv5 from=(name, key, sourceEventId, targetStreamName, occurrence)
+  rejected => halt
+  poison => halt
+
+router CapacityChangeRouter
+  name "incident-command-capacity-change"
+  input AcceptedHospitalCapacitySnapshot { messageId hospitalId snapshotId region divertStatus availableIcuBeds:Int }
+  key input.messageId via raw
+  resolve stable via read-model capacity_change_candidates row { incidentId pendingTransferNeeds commandId }
+  target Incident
+  projections [ incident_dashboard ]
+  dispatch-each ReconsiderTransferPlan {
+    incidentId=resolved.incidentId
+    commandId=resolved.commandId
+    hospitalId=input.hospitalId
+    snapshotId=input.snapshotId
+    region=input.region
+    availableIcuBeds=input.availableIcuBeds
+    pendingTransferNeeds=resolved.pendingTransferNeeds
+  }
+    on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+  dispatch-id strategy=uuidv5 from=(name, key, sourceEventId, targetStreamName, occurrence)
+  rejected => halt
+  poison => halt
+
+workflow IncidentEvacuation
+  name "incident-evacuation"
+  in IncidentEvacuationInput { incidentId:Id commander:Text requestedTransportUnits:Int }
+  out EvacuationWorkflowSummary
+  id from input.incidentId via idText
+  body
+    step establish-command-post -> Text
+    step request-transport -> TransportRequest
+    step notify-hospital-capacity -> HospitalNotification
+    await hospital-capacity-acknowledgement -> HospitalCapacityAcknowledgement
+    step mark-evacuation-ready -> EvacuationWorkflowSummary
+
+operation SignalHospitalCapacityAcknowledgement
+  signal hospital-capacity-acknowledgement of IncidentEvacuation
+    key from incidentId via evacuationWorkflowId
+    value HospitalCapacityAcknowledgement
+
+operation RunIncidentEvacuation
+  run IncidentEvacuation
+    input IncidentEvacuationInput
+    outcome -> IncidentEvacuationRun
+
+contract emergency {
+  schemaVersion 1
+  discriminator messageType
+
+  topic incidentEvents "emergency.incident.events"
+  topic hospitalEvents "emergency.hospital.events"
+
+  event IncidentTransferNeedDeclared on incidentEvents {
+    incidentId: typeid "inc"
+    triageRecordId: typeid "tri"
+    region: text
+    patientAcuity: text
+    requiredBedType: text
+    redCount: int
+    requestedByService: text
+  }
+  event TransferReservationRequested on incidentEvents {
+    incidentId: typeid "inc"
+    reservationId: typeid "rsv"
+    region: text
+    patientAcuity: text
+    requiredBedType: text
+    expirationDeadline: text
+  }
+  event HospitalCapacitySnapshotPublished on hospitalEvents {
+    hospitalId: typeid "hosp"
+    snapshotId: typeid "cap"
+    region: text
+    divertStatus: text
+    capacityLevel: text
+    availableIcuBeds: int
+    staffedIcuBeds: int
+    reservedIcuBeds: int
+    occupiedIcuBeds: int
+  }
+  event TransferReservationAccepted on hospitalEvents {
+    incidentId: typeid "inc"
+    reservationId: typeid "rsv"
+    hospitalId: typeid "hosp"
+    patientAcuity: text
+    requiredBedType: text
+    expirationDeadline: text
+  }
+  event TransferReservationRejected on hospitalEvents {
+    incidentId: typeid "inc"
+    reservationId: typeid "rsv"
+    hospitalId: typeid "hosp"
+    reason: text
+  }
+  event PatientAdmitted on hospitalEvents {
+    incidentId: typeid "inc"
+    reservationId: typeid "rsv"
+    hospitalId: typeid "hosp"
+    admissionOutcome: text
+  }
+  event TransferExpired on hospitalEvents {
+    incidentId: typeid "inc"
+    reservationId: typeid "rsv"
+    hospitalId: typeid "hosp"
+    expiredAt: text
+  }
+}
+
+intake hospitalInbox {
+  contract emergency
+  topic hospitalEvents
+  accept HospitalCapacitySnapshotPublished TransferReservationAccepted TransferReservationRejected PatientAdmitted TransferExpired
+
+  bind source from header "keiro-source" required
+  bind schemaVersion from header "keiro-schema-version" required cross-check body
+  bind messageId from header "keiro-message-id" required cross-check body
+  bind key from kafka-key
+  bind occurredAt from kafka-cursor
+  bind idempotencyKey from body
+
+  dedupe key messageId policy PreferIntegrationMessageId
+  persist = full-envelope
+
+  decode {
+    envelope strict-required lenient-optional
+    body strict schemaVersion == 1
+  }
+
+  disposition {
+    processed => ackOk
+    duplicate => ackOk
+    inProgress => retry 5s
+    previouslyFailed => deadLetter "previous inbox failure"
+    decodeFailed => deadLetter
+    dedupeFailed => deadLetter
+    storeFailed => retry 5s
+  }
+}
+
+emit incidentTransferNeed {
+  contract emergency
+  topic incidentEvents
+  source "incident-command"
+  key incidentId
+  map eventType {
+    "TransferNeedEmitted" => IncidentTransferNeedDeclared
+    _ => skip
+  }
+  messageId derive "msg" hole
+  idempotencyKey derive hole
+}
+
+publisher incidentPublisher {
+  emit incidentTransferNeed
+  ordering PerKeyHeadOfLine
+  maxAttempts 10
+  backoff constant 2s
+  outboxId stable from messageId
+}

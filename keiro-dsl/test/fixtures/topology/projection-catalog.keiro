@@ -1,0 +1,309 @@
+language keiro-dsl 6
+context catalog-demo
+
+mapped opaque OrderPayload {
+  haskell package=keiro-dsl module=CatalogDemo.MappedDomain type=OrderPayload
+  codec = "catalog-demo.order-payload.json"
+  version = "1"
+  fixtures = "CatalogDemo.MappedBindings.orderPayloadCases"
+}
+
+mapped opaque SharedReference {
+  haskell package=keiro-dsl module=CatalogDemo.MappedDomain type=SharedReference
+  codec = "catalog-demo.shared-reference.json"
+  version = "1"
+  fixtures = "CatalogDemo.MappedBindings.sharedReferenceCases"
+}
+
+mapped structural record QualificationPayload {
+  haskell package=keiro-dsl module=CatalogDemo.MappedDomain type=QualificationPayload
+  binding = "CatalogDemo.MappedBindings.qualificationPayloadBinding"
+  binding-version = "1"
+  canonical-type = "catalog-demo.QualificationPayload.v1"
+  fixtures = "CatalogDemo.MappedBindings.qualificationPayloadCases"
+  wire object constructor=QualificationPayload unknown-fields=reject {
+    qualificationId as "qualification_id" : Text          required
+    note            as "note"             : Optional Text required
+  }
+}
+
+mapped opaque QueueMetadata {
+  haskell package=keiro-dsl module=CatalogDemo.MappedDomain type=QueueMetadata
+  codec = "catalog-demo.queue-metadata.json"
+  version = "1"
+  fixtures = "CatalogDemo.MappedBindings.queueMetadataCases"
+}
+
+mapped opaque QueryCriteria {
+  haskell package=keiro-dsl module=CatalogDemo.MappedDomain type=QueryCriteria
+  codec = "catalog-demo.query-criteria.json"
+  version = "1"
+  fixtures = "CatalogDemo.MappedBindings.queryCriteriaCases"
+}
+
+mapped opaque QualificationResult {
+  haskell package=keiro-dsl module=CatalogDemo.MappedDomain type=QualificationResult
+  codec = "catalog-demo.qualification-result.json"
+  version = "1"
+  fixtures = "CatalogDemo.MappedBindings.qualificationResultCases"
+}
+
+mapped opaque RegisterState {
+  haskell package=keiro-dsl module=CatalogDemo.MappedDomain type=RegisterState
+  codec = "catalog-demo.register-state.json"
+  version = "1"
+  fixtures = "CatalogDemo.MappedBindings.registerStateCases"
+  initial = "CatalogDemo.MappedBindings.initialRegisterState"
+}
+
+mapped opaque UnusedQualification {
+  haskell package=keiro-dsl module=CatalogDemo.MappedDomain type=UnusedQualification
+  codec = "catalog-demo.unused-qualification.json"
+  version = "1"
+  fixtures = "CatalogDemo.MappedBindings.unusedQualificationCases"
+}
+
+target order_summary {
+  schema = "sales"
+  table = "order_summary"
+  reset = clear
+}
+
+target audit_log {
+  schema = "sales"
+  table = "audit_log"
+  reset = preserve
+}
+
+target order_totals {
+  schema = "sales"
+  table = "order_totals"
+  reset = clear
+  depends-on = [ order_summary ]
+}
+
+target shipment_summary {
+  schema = "sales"
+  table = "shipment_summary"
+  reset = preserve
+}
+
+rebuild-group reporting {
+  targets = [ order_summary order_totals audit_log ]
+  order = [ order_summary order_totals audit_log ]
+}
+
+rebuild-group shipping {
+  targets = [ shipment_summary ]
+  order = [ shipment_summary ]
+}
+
+projection-revision reporting_v1 {
+  group = reporting
+  target order_summary {
+    schema-version = "v1"
+    provisioner = "reporting-v1-order-summary"
+    provisioner-version = 1
+    expected-shape = "order-summary-v1"
+    validator = "reporting-v1-order-summary-validator"
+    validator-version = 1
+    promotion index "order_summary_status_idx__v1" -> "order_summary_status_idx"
+  }
+  target order_totals {
+    schema-version = "v1"
+    provisioner = "reporting-v1-order-totals"
+    provisioner-version = 1
+    expected-shape = "order-totals-v1"
+    validator = "reporting-v1-order-totals-validator"
+    validator-version = 1
+    promotion constraint "order_totals_pkey__v1" -> "order_totals_pkey"
+  }
+  target audit_log {
+    schema-version = "v1"
+    provisioner = "reporting-v1-audit-log"
+    provisioner-version = 1
+    expected-shape = "audit-log-v1"
+    validator = "reporting-v1-audit-log-validator"
+    validator-version = 1
+    promotion owned-sequence "audit_log_id_seq__v1" -> "audit_log_id_seq"
+  }
+}
+
+projection-revision reporting_v2 {
+  group = reporting
+  target order_summary {
+    schema-version = "v2"
+    provisioner = "reporting-v2-order-summary"
+    provisioner-version = 1
+    expected-shape = "order-summary-v2"
+    validator = "reporting-v2-order-summary-validator"
+    validator-version = 1
+    promotion index "order_summary_status_idx__v2" -> "order_summary_status_idx"
+  }
+  target order_totals {
+    schema-version = "v2"
+    provisioner = "reporting-v2-order-totals"
+    provisioner-version = 1
+    expected-shape = "order-totals-v2"
+    validator = "reporting-v2-order-totals-validator"
+    validator-version = 1
+    promotion constraint "order_totals_pkey__v2" -> "order_totals_pkey"
+  }
+  target audit_log {
+    schema-version = "v2"
+    provisioner = "reporting-v2-audit-log"
+    provisioner-version = 1
+    expected-shape = "audit-log-v2"
+    validator = "reporting-v2-audit-log-validator"
+    validator-version = 1
+    promotion owned-sequence "audit_log_id_seq__v2" -> "audit_log_id_seq"
+  }
+}
+
+projection-owner order_summary_writer {
+  source = aggregate Orders
+  delivery = inline
+  group = reporting
+  targets = [ order_summary order_totals ]
+  order = 10
+  replay = explicit
+}
+
+projection-owner shipment_writer {
+  source = aggregate Shipments
+  delivery = inline
+  group = shipping
+  targets = [ shipment_summary ]
+  order = 10
+  replay = live-only "carrier events cannot be replayed"
+}
+
+readmodel order_inline {
+  columns {
+    order_id text required
+  }
+  query input = QueryCriteria
+  query result = Optional QualificationResult
+  version = 1
+  shape = "fnv1a:784e511a19f74c58"
+  freshness = immediate
+  group = reporting
+  targets = [ order_summary ]
+}
+
+readmodel order_totals_lookup {
+  columns {
+    total bigint required
+  }
+  version = 1
+  shape = "fnv1a:768a23d719dcb4d4"
+  freshness = immediate
+  group = reporting
+  targets = [ order_totals ]
+}
+
+readmodel order_overview {
+  columns {
+    order_id text required
+    total bigint required
+  }
+  version = 1
+  shape = "fnv1a:99577ebb66c83b81"
+  freshness = immediate
+  group = reporting
+  targets = [ order_summary order_totals ]
+  backing = order_summary
+}
+
+external-read order_totals_reader {
+  version = 1
+  query = order_totals_lookup
+  result-schema = "app_contract"
+  result-type = "order_totals_row_v1"
+  compatible-revisions = [ reporting_v1 reporting_v2 ]
+  surface-generation = 1
+}
+
+workqueue qualification_jobs {
+  queue logical = "catalog-demo.qualification-jobs"
+  derive physical = "catalog_demo_qualification_jobs"
+         dlq = "catalog_demo_qualification_jobs_dlq"
+         table = "pgmq.q_catalog_demo_qualification_jobs"
+
+  payload QualificationJob {
+    sharedReference -> "shared_reference" : SharedReference
+    qualification   -> "payload"          : QualificationPayload
+    metadata        -> "metadata"         : QueueMetadata
+    maybeMetadata   -> "maybe_metadata"   : Optional QueueMetadata
+    attempt         -> "attempt"          int
+    trace           -> "trace"            : Json
+  }
+
+  retry maxRetries = 3 delay = 1s dlq = on
+
+  disposition {
+    storeFailure -> retry 1s
+    commandRejected -> deadLetter
+    decodeFailure -> deadLetter
+    onCodecReject -> deadLetter
+  }
+}
+
+readmodel shipmentLookup {
+  columns {
+    shipment_id text required
+  }
+  version = 1
+  shape = "fnv1a:d0c39c966ea2f0b4"
+  freshness = immediate
+  group = shipping
+  targets = [ shipment_summary ]
+}
+
+readmodel catalogAudit {
+  columns {
+    event_id text required
+  }
+  version = 1
+  shape = "fnv1a:9682af3ada04bf50"
+  freshness = immediate
+  group = reporting
+  targets = [ audit_log ]
+}
+
+projection-owner audit_writer {
+  source = category "audit"
+  delivery = subscription
+  group = reporting
+  targets = [ audit_log ]
+  order = 20
+  subscription = "catalog-demo-audit"
+  dedup = "catalog-demo-audit-v1"
+  checkpoint-on-missing = from-current-head
+  replay = explicit
+}
+
+aggregate Orders
+  regs
+    total Natural = 0
+    qualificationState RegisterState = initial
+  states Empty Recorded!
+
+  command RecordOrder { amount:Natural orderPayload:OrderPayload sharedReference:SharedReference }
+  event OrderRecorded = fields(RecordOrder)
+
+  Empty -- RecordOrder --> write total := amount ; emit OrderRecorded ; goto Recorded
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+
+aggregate Shipments
+  regs
+    accepted Bool = False
+  states Empty Recorded!
+
+  command RecordShipment { sharedReference:SharedReference accepted:Bool }
+  event ShipmentRecorded = fields(RecordShipment)
+
+  Empty -- RecordShipment --> write accepted := cmd.accepted ; emit ShipmentRecorded ; goto Recorded
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

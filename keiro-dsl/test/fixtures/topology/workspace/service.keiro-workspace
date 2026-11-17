@@ -1,0 +1,3 @@
+service incident-reaction
+spec domain/incident.keiro
+spec coordination/reaction.keiro

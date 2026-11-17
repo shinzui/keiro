@@ -6,6 +6,23 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+### New Features
+
+- `keiro-dsl topology <source-or-workspace> --format json` exports the service
+  topology as one canonical JSON document with schema id
+  `keiro-dsl/service-topology/1`. It has a node for every aggregate, process,
+  workflow, router, contract, intake, emit, publisher, workqueue, dispatch, read model
+  and operation, and for the projection catalog (projection targets, rebuild groups,
+  projection owners, projection revisions and external reads). It has an edge for each
+  relation between them, such as `dispatches`, `projects`, `publishes`, `subscribes`,
+  `consumes`, `writes` and `observes`. Each source member carries a `sha256` digest
+  of its exact bytes. The bytes do not depend on the working directory or on how the
+  path was typed. Reordering top-level declarations changes only member digests and
+  node lines. The command refuses a service with error diagnostics and prints nothing
+  on standard output. The library exports `Keiro.Dsl.Topology`
+  (`buildServiceTopology`, `encodeServiceTopology`, `topologySchemaId`,
+  `memberDigest`). Existing commands and outputs are unchanged.
+
 ## 0.25.1.0 — 2026-11-16
 
 ### New Features
