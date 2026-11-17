@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-17
+* **Addition**: ADR-62, ADR-63 and ADR-64: the service topology is a versioned keiro-owned contract under the lowest sufficient schema id; topology machines are derived from the specification and proven against keiki; declared input sources are checked documentation with no runtime or identity effect (MasterPlan 48).
+
 ## 2026-11-16
 * **Addition**: ADR-61: generated aggregate inspector catalogs cover every DSL aggregate (plan 336).
 
