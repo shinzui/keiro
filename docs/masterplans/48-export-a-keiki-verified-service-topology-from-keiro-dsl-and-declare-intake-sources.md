@@ -292,12 +292,23 @@ remaining work is the two cross-plan gates below.
 
 Cross-plan gates not owned by a single child:
 
-- [ ] After all four children are Complete, `nix develop -c just verify` passes on the final
+- [x] After all four children are Complete, `nix develop -c just verify` passes on the final
       tree, and the ADR distillation pass has recorded the three decisions named under
-      Decomposition Strategy.
-- [ ] The contract divergences from Mori's draft, listed in the Decision Log, are communicated
+      Decomposition Strategy. Done 2026-11-17. The full run on `e7221bbf` passed every step
+      through `topology-schema-validate`, including all Haskell test suites (keiro-dsl 954
+      examples, 0 failures), the new machine proof, `adr-validate` (64 concepts) and
+      `user-documentation-validate`. It then stopped at `record-migration-policy` because the
+      generated inventories `keiro-dsl/record-field-migration-0.15.md` and
+      `keiro-dsl/generated-haskell-edition-idiomatic-v2.md` did not yet list this
+      initiative's new records and corpus. After regenerating them, `record-migration-policy`,
+      every remaining `_verify` step (`generated-name-policy`, `conformance-corpus-policy` with
+      59 corpora, `process-reaction-proof`, `initial-hole-proof`, `replay-compatibility`,
+      `checked-mapping-adoption`) and `keiro-migrations-test` passed individually. ADR-62,
+      ADR-63 and ADR-64 record the three decisions.
+- [x] The contract divergences from Mori's draft, listed in the Decision Log, are communicated
       to `mori://shinzui/mori/masterplans/45-expose-keiro-service-topology-through-a-mori-extension-and-the-http-api`
-      by updating the IR-62 and IR-63 records in this repository.
+      by updating the IR-62 and IR-63 records in this repository. Done 2026-11-17: both
+      records are `completed` with a "Keiro's response" section listing every difference.
 
 
 ## Surprises & Discoveries
@@ -337,6 +348,11 @@ Cross-plan gates not owned by a single child:
 
 - Process policies are spelled `deadLetter` in the language and the export, not
   `dead-letter`. EP-2's schema and documentation use the source spelling.
+
+- New records and generated corpora must be followed by
+  `python3 scripts/generate-record-migration-manifests.py`. The two inventories it writes are
+  checked by `just record-migration-policy` late in `just verify`, and none of the child plans
+  named them.
 
 - The keiki edge-index rule existed twice in the generator. EP-3 unified it on
   `transitionLayout` in `keiro-dsl/src/Keiro/Dsl/AggregateGenerationPlan.hs`, which the
@@ -425,7 +441,29 @@ Cross-plan gates not owned by a single child:
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+All four child plans were implemented on 2026-11-17, in registry order, in one session.
+
+What exists now: `keiro-dsl topology` exports a canonical, digest-stamped
+`keiro-dsl/service-topology/1` document. It has seventeen node kinds including the
+projection catalog, twenty-two relations, and a keiki `machine` on every aggregate node.
+`scaffold --topology-out` writes it, `topology --check` gates it, and DOC-35 with two JSON
+Schemas documents it. Candidate Language 6 input sources are checked by `check` and exported
+as `feeds` edges under `/2`. The keiki proof (`keiro-dsl-conformance-topology-machine`) and
+the input-source non-interference proof are part of the repository's tests. IR-62 and IR-63
+are completed, and ADR-62, ADR-63 and ADR-64 record the three durable decisions.
+
+Compared with the plan: the Language 6 migration of the two example services cost more than
+expected, because Language 6 requires catalog bindings for read models. As a side effect both
+service fixtures exercise the projection catalog. Two pieces of duplication turned out to
+exist already and were unified rather than added to: the keiki edge-index rule
+(`transitionLayout`) and the topology rendering path (`renderTopology`). The plans'
+assumption that a declared source could leak into identities did not hold, because every
+identity encoder is field-by-field. The non-interference tests now guard that property.
+
+Lessons for later initiatives: run the full gate in a quiet tree, because mutation tests in
+`just verify` edit tracked files while it runs and a pre-commit stash in that window can
+disturb them. Budget explicitly for Language 6 fixture migration. Remember that scaffold
+ledgers are git-ignored, so new corpora need `git add -f`.
 
 
 Revision note, 2026-11-17: at the user's request the projection catalog moved from out of
