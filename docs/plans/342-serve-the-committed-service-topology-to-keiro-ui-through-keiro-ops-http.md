@@ -270,6 +270,9 @@ HTTP/1.1 405 Method Not Allowed
 
 The served summary equals the value specified in Milestone 2.
 
+`nix develop -c just verify` passed on the final candidate (commit `57d56b78`), including
+`record-migration-policy`, `topology-schema-validate` and every package test suite.
+
 Evidence for each guarantee:
 
 - Gating: without the hook, both commands fail to parse (`keiro-ops/test/TopologySpec.hs`).
