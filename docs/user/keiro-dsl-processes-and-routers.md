@@ -221,3 +221,44 @@ Bare bindings copy an input field of the same name. Target aggregate, command,
 command fields, read model, and projection references are checked. The
 dispatch-ID expression is fixed runtime policy and must be written exactly as
 shown.
+
+## Declared input sources
+
+Candidate Language 6 lets a process or router input name the intake that feeds
+it and the contract events the input is built from:
+
+```text
+language keiro-dsl 6
+
+router CapacityChangeRouter
+  name "incident-command-capacity-change"
+  input AcceptedHospitalCapacitySnapshot from intake hospitalInbox event HospitalCapacitySnapshotPublished { messageId hospitalId snapshotId region divertStatus availableIcuBeds:Int }
+```
+
+The clause `from intake <Intake> event <Event>…` sits between the input's name
+and its `{ fields }` body (or its `: Type` annotation on a router). It names at
+least one event. It is allowed on a router input, a legacy process input and
+every input of a reaction process. `from`, `intake` and `event` are recognized
+only in this position and are not reserved words.
+
+`check` verifies the link:
+
+- `InputSourceUnresolvedIntake`: the named intake is not declared in the
+  service. In a workspace, any member's intake counts.
+- `InputSourceEventNotAccepted`: the intake's `accept` list does not contain a
+  named event. One error is reported per such event.
+
+A declared source is checked documentation. The hand-written code that turns an
+accepted inbox message into the input value stays hand-written. Declaring,
+changing or removing a source changes no generated module, fold or
+process-reaction fingerprint, router-selection fingerprint, scaffold ledger
+entry or `diff` compatibility verdict. Adopting it in a running service needs no
+drain or migration.
+
+`keiro-dsl topology` shows each declared source as a `feeds` edge from the
+intake to the process or router, with attributes `input` and `events`. A
+document with at least one `feeds` edge uses schema id
+`keiro-dsl/service-topology/2`; see
+[Keiro DSL Service Topology](keiro-dsl-service-topology.md).
+
+Languages 1 to 5 refuse the clause with `LanguageFeatureRequiresVersion`.

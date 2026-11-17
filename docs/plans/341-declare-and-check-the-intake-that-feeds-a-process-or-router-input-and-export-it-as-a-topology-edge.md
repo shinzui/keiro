@@ -17,6 +17,11 @@ provenance:
       at: 2026-11-17T15:26:59Z
       mode: "update"
       note: "Correct schema handoffs, compatibility checks and fixture acceptance after repository review"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-17T16:45:59Z
+      mode: "implement"
+      note: "EP-4 implemented: input-source syntax, checks, non-interference proof, feeds edge and /2 schema"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -74,20 +79,54 @@ filed by the Mori project. This plan is child EP-4 of
 
 ## Progress
 
-- [ ] Milestone 1: Language 6 parses and pretty-prints an input source on process and router
-      inputs; earlier languages reject it; a specification without one is unchanged.
-- [ ] Milestone 2: `check` reports a named error for an unknown intake and for an event the
-      intake does not accept, and scaffolding a sourced specification produces generated
-      code, fingerprints and a ledger identical to the unsourced one.
-- [ ] Milestone 3: `topology` emits a `feeds` edge and schema id
-      `keiro-dsl/service-topology/2` for a sourced specification and keeps `/1`, byte for
-      byte, for every unsourced one; documentation, the `/2` JSON Schema and the IR-63 record
-      are updated.
+- [x] Milestone 1 (2026-11-17): `InputSource` and `InputDecl.source` in `Grammar.hs`,
+      `InputSourceSyntax` in candidate `profileV5`, `pOptionalInputSource` in
+      `Parser/Coordination.hs` for router, legacy-process and reaction inputs, and
+      `docInputSource` in `PrettyPrint.hs`. Tests in `keiro-dsl/test/Keiro/Dsl/InputSourceSpec.hs`
+      parse a typed router input, a braces router input, a legacy process input and a
+      two-input reaction process; print and reparse both sourced fixtures; refuse the clause in
+      Languages 1 to 5 for a router and a process probe; and show that removing the parsed
+      sources from `sourced.keiro` gives exactly the parsed `unsourced.keiro`.
+- [x] Milestone 2 (2026-11-17): `InputSourceUnresolvedIntake` and `InputSourceEventNotAccepted`
+      (appended to `DiagnosticCode`, origin `check`) with the planned wording, one per
+      distinct unaccepted event; a workspace whose intake and router are in different members
+      checks clean. Non-interference: scaffolding `sourced.keiro` and `unsourced.keiro` (copied
+      to separate directories as `service.keiro`, run from those directories) writes the same
+      file set with identical bytes including the ledger and Cabal fragment; fold, reaction and
+      router-selection fingerprints are equal and non-empty; `diffSources` reports no
+      `Breaking` change and replay impact is `ReplayNeutral`.
+- [x] Milestone 3 (2026-11-17): `Feeds` relation and lowest-id `topologySchemaId`; golden
+      `incident-command-sourced.topology.golden.json` is `/2` with one `feeds` edge; it equals
+      the unsourced export apart from `schema`, that edge, the member digest and lines; every
+      existing golden passed without regeneration (still `/1`). `/2` JSON Schema, DOC-35 "Schema
+      id /2", DOC-28 "Declared input sources", the Language 6 table row, NOTATION, IR-63 and
+      the changelog are updated. Evidence: `--match "declared input sources" --match "service
+      topology"` 51 examples, 0 failures; `just topology-schema-validate` 5 goldens and 3
+      compatibility examples as expected (including a `/1`-labelled document with a `feeds`
+      edge, rejected).
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- No identity encoder needed a change. The process-reaction fingerprint
+  (`canonicalReactionSurface` in `CanonicalEncoding.hs`) and `diff`'s input comparison encode
+  `InputDecl` field by field (`name`, `fields`, `valueType`), and scaffold output never
+  renders inputs generically, so the new field could not leak in. The non-interference
+  tests prove it rather than assume it.
+
+- The scaffold ledger records the specification path as given on the command line, so the
+  byte-identity proof copies both fixtures to separate directories under the same name and
+  scaffolds with that directory as the working directory. No digest of the specification
+  file appears in the ledger or banners.
+
+- A reaction body that fails to parse is retried as a legacy body, so its real error is
+  hidden behind "expecting input". `silent no-action` without `accepted` is not an arm form;
+  the fixture uses bare `advance` arms.
+
+- The `/1` and `/2` schemas inherit `machine` because EP-3 landed first and `/2` was created
+  from the `/1` schema. The sourced golden (a `/2` document with machines) validates against
+  `/2`, which is the reconciliation the MasterPlan's Integration Points ask of the second of
+  EP-3 and EP-4 to finish.
 
 
 ## Decision Log
@@ -131,6 +170,27 @@ filed by the Mori project. This plan is child EP-4 of
   readable by `/1` consumers.
   Date: 2026-11-17
 
+- Decision: Repeated event names in a source are deduplicated before checking (`nub`), so an
+  unaccepted event is reported once.
+  Rationale: The plan's default; `Validate.hs` has no convention that reports duplicate list
+  entries for this kind of reference list.
+  Date: 2026-11-17
+
+- Decision: The QuickCheck generators `genProcess` and `genRouter` keep `source = Nothing`.
+  Sourced round trips are covered by targeted tests over Language 6 fixtures instead.
+  Rationale: The generated specifications are printed without a `language` line (Language 1),
+  where the clause is refused by design. A generated source would make the round-trip
+  property fail for the wrong reason.
+  Date: 2026-11-17
+
+- Decision: The EP-4 tests live in a new module `keiro-dsl/test/Keiro/Dsl/InputSourceSpec.hs`
+  (`describe "declared input sources"`), and the `feeds` tests in
+  `keiro-dsl/test/Keiro/Dsl/TopologySpec.hs`, rather than in the router and process blocks
+  of `keiro-dsl/test/Main.hs`.
+  Rationale: The same separate-module pattern EP-1 used, which avoids recompiling `Main.hs`
+  for every change.
+  Date: 2026-11-17
+
 - Decision: The acceptance in IR-63 that the keiro-runtime-jitsurei incident-command suite
   passes unchanged is replaced here by a byte-identity proof inside this repository.
   Rationale: That service lives in `mori://shinzui/keiro-runtime-jitsurei`, pins an older
@@ -142,7 +202,11 @@ filed by the Mori project. This plan is child EP-4 of
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-11-17. A specification can now say which intake feeds a process or router
+input. `check` verifies the link, the topology shows it as a `feeds` edge under `/2`, and
+adopting it changes nothing a running service depends on, which is proven byte for byte
+inside this repository. Adoption in keiro-runtime-jitsurei waits for that service to migrate
+to Language 6. The full `just verify` gate runs once on the final tree (MasterPlan decision).
 
 
 ## Context and Orientation

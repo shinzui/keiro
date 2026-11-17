@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-11-17
+
+* **Completion**: IR-63 completed under ExecPlan 341: candidate Language 6 input sources (from intake … event …), InputSourceUnresolvedIntake and InputSourceEventNotAccepted, the feeds relation under keiro-dsl/service-topology/2, and an in-repository byte-identity proof replacing the jitsurei criterion.
+
 * **Completion**: IR-62 completed under ExecPlans 338 and 339: keiro-dsl topology emits keiro-dsl/service-topology/1 with the projection catalog, scaffold --topology-out, topology --check, DOC-35 and a gated JSON Schema; contract differences from the draft recorded in the request.
 
 ## 2026-11-16

@@ -1,4 +1,5 @@
--- | The versioned service topology document (@keiro-dsl/service-topology/1@).
+-- | The versioned service topology document (@keiro-dsl/service-topology/1@,
+-- or @/2@ for a service that declares an input source).
 --
 -- A topology is computed from a checked service alone. It lists every
 -- declaration of the exported node kinds and every relation between them, plus
@@ -126,6 +127,8 @@ data Relation
   | BackedBy
   | Exposes
   | CompatibleWith
+  | -- | Schema id @/2@ only: an intake feeds a process or router input.
+    Feeds
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 allNodeKinds :: [NodeKind]
@@ -178,6 +181,7 @@ relationText = \case
   BackedBy -> "backed-by"
   Exposes -> "exposes"
   CompatibleWith -> "compatible-with"
+  Feeds -> "feeds"
 
 -- | Whether keiro generates the aggregate's keiki transducer from the
 -- specification ('MachineGenerated', including per-transition Hole bodies,
@@ -329,9 +333,13 @@ data ServiceTopology = ServiceTopology
   }
   deriving stock (Eq, Show)
 
--- | The schema id a document is emitted under.
+-- | The schema id a document is emitted under: the lowest id able to represent
+-- it. A document with a @feeds@ edge needs @/2@; every other document is @/1@,
+-- byte-for-byte what it was before @/2@ existed.
 topologySchemaId :: ServiceTopology -> Text
-topologySchemaId _ = "keiro-dsl/service-topology/1"
+topologySchemaId topology
+  | any ((== Feeds) . (.relation)) topology.edges = "keiro-dsl/service-topology/2"
+  | otherwise = "keiro-dsl/service-topology/1"
 
 -- | An internal inconsistency. A checked service never produces one.
 data TopologyError
@@ -691,9 +699,12 @@ orderingText = \case
   WqFifoHeads -> "fifo-heads"
 
 processInputs :: ProcessBody -> [Name]
-processInputs = \case
-  LegacyProcessBody input _ _ -> [input.name]
-  ReactionProcessBody body -> map (.name) (NE.toList body.inputs)
+processInputs = map (.name) . processBodyInputs
+
+processBodyInputs :: ProcessBody -> [InputDecl]
+processBodyInputs = \case
+  LegacyProcessBody input _ _ -> [input]
+  ReactionProcessBody body -> NE.toList body.inputs
 
 processTimers :: ProcessBody -> [Name]
 processTimers = \case
@@ -744,11 +755,13 @@ nodeEdges spec = \case
     ]
       <> [mkEdge ProcessKind process.id Saga AggregateKind process.saga.agg [("category", String process.saga.category)]]
       <> projectsEdges ProcessKind process.id process.projections
+      <> concatMap (feedsEdges ProcessKind process.id) (processBodyInputs process.body)
   NWorkflow _ -> []
   NRouter router ->
     [mkEdge RouterKind router.id Dispatches AggregateKind router.target [("command", String router.dispatch.command)]]
       <> [mkEdge RouterKind router.id Reads ReadModelKind readModel [("role", String "resolve")] | Just readModel <- [routerReadModel router]]
       <> projectsEdges RouterKind router.id router.projections
+      <> feedsEdges RouterKind router.id router.input
   NContract _ -> []
   NIntake intake ->
     [ mkEdge
@@ -815,6 +828,10 @@ nodeEdges spec = \case
         | NAggregate aggregate <- spec.nodes,
           Just projection <- [aggregate.projection]
         ]
+    feedsEdges kind name input =
+      [ mkEdge IntakeKind source.intake Feeds kind name [("input", String input.name), ("events", names (NE.toList source.events))]
+      | Just source <- [input.source]
+      ]
     projectsEdges kind name tables =
       [ mkEdge kind name Projects AggregateKind aggregate [("table", String table)]
       | table <- tables,

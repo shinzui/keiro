@@ -30,7 +30,7 @@ where
 import Data.Bits (xor)
 import Data.Char (isControl, isSpace, ord, toLower)
 import Data.Graph (SCC (..), stronglyConnComp)
-import Data.List (sortOn)
+import Data.List (nub, sortOn)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -615,6 +615,10 @@ data DiagnosticCode
   | AggregateExpressionWriteInitialShadowed
   | MappedWriteLiftChanged
   | MappedWriteLiftFixturesChanged
+  | -- MasterPlan 48 EP-4: a declared input source must name a declared intake
+    -- that accepts every named event.
+    InputSourceUnresolvedIntake
+  | InputSourceEventNotAccepted
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | Which command pipeline can actually produce a given 'DiagnosticCode'.
@@ -2439,8 +2443,12 @@ nodeIdentity (NOperation o) = ("operation", (.name) o, (.loc) o)
 
 validateNode :: EffectiveLanguageContract -> Either (NE.NonEmpty TypeGraphError) TypeGraph -> ProjectionSupplyAnalysis -> Spec -> Node -> [Diagnostic]
 validateNode languageContract typeGraphResult _supplyAnalysis spec (NAggregate agg) = validateAggregate languageContract typeGraphResult spec agg
-validateNode languageContract typeGraphResult _supplyAnalysis spec (NProcess p) = validateProcess languageContract typeGraphResult spec p
-validateNode languageContract typeGraphResult _supplyAnalysis spec (NRouter router) = validateRouter languageContract typeGraphResult spec router
+validateNode languageContract typeGraphResult _supplyAnalysis spec (NProcess p) =
+  validateProcess languageContract typeGraphResult spec p
+    <> concatMap (validateInputSource spec ("process '" <> (.id) p <> "'")) (processBodyInputs ((.body) p))
+validateNode languageContract typeGraphResult _supplyAnalysis spec (NRouter router) =
+  validateRouter languageContract typeGraphResult spec router
+    <> validateInputSource spec ("router '" <> (.id) router <> "'") ((.input) router)
 validateNode languageContract _typeGraphResult _supplyAnalysis spec (NContract contract) = validateContract languageContract spec contract
 validateNode languageContract _typeGraphResult _supplyAnalysis spec (NIntake i) = validateIntake languageContract i ++ intakeCoupling languageContract spec i
 validateNode languageContract _typeGraphResult _supplyAnalysis spec (NEmit e) = validateEmit languageContract spec e
@@ -4025,6 +4033,45 @@ canonicalIntakeEnvelopeFields =
     ]
 
 -- | EP-3 rules for a process manager + its nested timer.
+-- | Every input a process body declares, in order.
+processBodyInputs :: ProcessBody -> [InputDecl]
+processBodyInputs = \case
+  LegacyProcessBody input _ _ -> [input]
+  ReactionProcessBody reaction -> NE.toList ((.inputs) reaction)
+
+-- | A declared input source (candidate Language 6) must name an intake of the
+-- service, and that intake must accept every named event. Repeated event names
+-- are reported once. The source is documentation that is checked; nothing here
+-- feeds generated code or identity.
+validateInputSource :: Spec -> Text -> InputDecl -> [Diagnostic]
+validateInputSource spec owner input = case (.source) input of
+  Nothing -> []
+  Just source -> case [intake | NIntake intake <- (.nodes) spec, (.name) intake == (.intake) source] of
+    [] ->
+      [ mkErr (locLine ((.loc) source)) InputSourceUnresolvedIntake $
+          "input '"
+            <> (.name) input
+            <> "' of "
+            <> owner
+            <> " names intake '"
+            <> (.intake) source
+            <> "', which is not declared in this service"
+      ]
+    intake : _ ->
+      [ mkErr (locLine ((.loc) source)) InputSourceEventNotAccepted $
+          "input '"
+            <> (.name) input
+            <> "' of "
+            <> owner
+            <> " is fed by intake '"
+            <> (.intake) source
+            <> "' event '"
+            <> event
+            <> "', which the intake does not accept"
+      | event <- nub (NE.toList ((.events) source)),
+        event `notElem` (.accept) intake
+      ]
+
 validateProcess :: EffectiveLanguageContract -> Either (NE.NonEmpty TypeGraphError) TypeGraph -> Spec -> ProcessNode -> [Diagnostic]
 validateProcess languageContract typeGraphResult spec p = case (.body) p of
   LegacyProcessBody input handle timer -> validateLegacyProcess languageContract spec p input handle timer

@@ -17,8 +17,11 @@ service connect. It lists the service's declarations and every relation between
 them, plus a sha256 digest of each source file. Tools that need the service's
 shape read a committed copy of this document instead of parsing `.keiro` files.
 The document is a public contract owned by keiro. Its schema id is
-`keiro-dsl/service-topology/1`, and the JSON Schema is
-[`schemas/keiro-dsl-service-topology-1.schema.json`](schemas/keiro-dsl-service-topology-1.schema.json).
+`keiro-dsl/service-topology/1`, or `keiro-dsl/service-topology/2` for a service
+that declares an input source (see Schema id /2). The JSON Schemas are
+[`schemas/keiro-dsl-service-topology-1.schema.json`](schemas/keiro-dsl-service-topology-1.schema.json)
+and
+[`schemas/keiro-dsl-service-topology-2.schema.json`](schemas/keiro-dsl-service-topology-2.schema.json).
 
 The command is described in the [Keiro DSL Command Reference](keiro-dsl-cli.md).
 This page defines the document.
@@ -56,7 +59,7 @@ that the document differs although the sources are unchanged (usually after a
 
 | Field | Meaning |
 | --- | --- |
-| `schema` | The schema id, `keiro-dsl/service-topology/1`. |
+| `schema` | The schema id: `keiro-dsl/service-topology/1`, or `/2` when the document has a `feeds` edge. |
 | `service` | The workspace manifest's `service` name, or the source file's base name. |
 | `source` | `kind` (`source` or `workspace`) and `path`, the file name of the source or manifest. |
 | `effectiveSemanticContract` | `languageVersion`, `languageSupport` and `runtimeSemantics`, as `keiro-dsl inspect` reports them. |
@@ -200,6 +203,25 @@ gets an edge.
 
 Workflows have no `dispatches` edges: a workflow body lists labelled steps and
 names no target aggregate or command.
+
+## Schema id /2
+
+A process or router input may declare the intake that feeds it
+(`input X from intake <Intake> event <Event>… { … }`, candidate Language 6; see
+[Declared input sources](keiro-dsl-processes-and-routers.md#declared-input-sources)).
+Each declared source is exported as an edge:
+
+| `relation` | From | To | `attributes` |
+| --- | --- | --- | --- |
+| `feeds` | intake | process, router | `input` (the input's name), `events` (the named events, in declared order). |
+
+`feeds` is a new relation, so it needs a new schema id. A document is emitted
+under the lowest schema id able to represent it. A document with at least one
+`feeds` edge is `keiro-dsl/service-topology/2`, which is `/1` plus that relation
+and is otherwise identical in shape, including `machine`. Every other document
+stays `keiro-dsl/service-topology/1`, byte for byte what it was before `/2`
+existed. A `/1` consumer that receives `/2` must reject it rather than drop the
+edges.
 
 ## What is not exported
 

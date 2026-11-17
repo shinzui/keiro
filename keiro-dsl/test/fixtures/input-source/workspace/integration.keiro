@@ -1,0 +1,48 @@
+language keiro-dsl 6
+context input-source
+
+contract transfers {
+  schemaVersion 1
+  discriminator messageType
+
+  topic needs "transfers.needs"
+
+  event TransferNeedAccepted on needs {
+    transferNeedId: text
+    region: text
+  }
+  event TransferNeedWithdrawn on needs {
+    transferNeedId: text
+  }
+}
+
+intake transferInbox {
+  contract transfers
+  topic needs
+  accept TransferNeedAccepted TransferNeedWithdrawn
+
+  bind source from header "keiro-source"
+  bind schemaVersion from header "keiro-schema-version"
+  bind messageId from header "keiro-message-id"
+  bind key from kafka-key
+  bind occurredAt from kafka-cursor
+  bind idempotencyKey from body
+
+  dedupe key messageId policy PreferIntegrationMessageId
+  persist = full-envelope
+
+  decode {
+    envelope strict-required lenient-optional
+    body strict schemaVersion == 1
+  }
+
+  disposition {
+    processed => ackOk
+    duplicate => ackOk
+    inProgress => retry 5s
+    previouslyFailed => deadLetter "previous inbox failure"
+    decodeFailed => deadLetter
+    dedupeFailed => deadLetter
+    storeFailed => retry 5s
+  }
+}

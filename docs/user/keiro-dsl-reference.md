@@ -7,7 +7,7 @@ tags: [keiro, dsl, language-5, language-6, reference]
 generated:
   by: process:codex-cli
   at: 2026-10-14T04:19:11Z
-timestamp: 2026-10-27T21:15:00Z
+timestamp: 2026-11-17T00:00:00Z
 ---
 
 # Keiro DSL Reference
@@ -54,6 +54,7 @@ is published. It extends Language 5 with the following additions:
 | `domain=typeid-v5-or-v7` ID admission | [IDs](keiro-dsl-types-and-mappings.md#ids) |
 | Complete mapped-register `initial` and `mapped(expression)` writes through versioned `write-lift` | [Mapped register construction](keiro-dsl-aggregates.md#mapped-register-construction-in-candidate-language-6) |
 | Same-declaration structural enum equality and qualified constructor literals | [Structural enum equality](keiro-dsl-types-and-mappings.md#exact-equality-for-structural-enums-candidate-language-6) |
+| `from intake … event …` sources on process and router inputs | [Declared input sources](keiro-dsl-processes-and-routers.md#declared-input-sources) |
 
 Each addition is refused below Language 6 with
 `LanguageFeatureRequiresVersion`, and each is inert for a source that does not

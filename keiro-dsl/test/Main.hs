@@ -83,6 +83,7 @@ import Keiro.Dsl.Harness (harnessFor, harnessForService, harnessForWithGoldens, 
 import Keiro.Dsl.HaskellImport
 import Keiro.Dsl.HaskellSourceMove
 import Keiro.Dsl.IdDomain (IdDomainContract (..), contractIdDomainContractFor, idDomainContractFor, idDomainIdentitiesForService)
+import Keiro.Dsl.InputSourceSpec (inputSourceSpec)
 import Keiro.Dsl.LanguageVersion
 import Keiro.Dsl.Manifest (manifestDependencies, manifestDependenciesForService, moduleNameOf, renderManifest, renderManifestForService, renderManifestForServiceWithFacade)
 import Keiro.Dsl.MappedCodecPlan
@@ -251,6 +252,7 @@ main = hspec $ do
   consumerEnumLiteralsSpec
   frontendProfilesSpec
   topologySpec
+  inputSourceSpec
 
   describe "calendar-day codec policy v1" $ do
     it "pins the stable identity and Aeson-compatible full-carrier writer" $ do
@@ -2017,8 +2019,13 @@ main = hspec $ do
             "structural-nominal-leaves-text-to-nominal.keiro",
             "structural-nominal-leaves.keiro",
             "structural-text-sets.keiro",
+            "input-source/sourced.keiro",
+            "input-source/unsourced.keiro",
+            "input-source/workspace/integration.keiro",
+            "input-source/workspace/routing.keiro",
             "topology-machine.keiro",
             "topology/hospital-capacity.keiro",
+            "topology/incident-command-sourced.keiro",
             "topology/incident-command.keiro",
             "topology/projection-catalog.keiro",
             "topology/workspace/coordination/reaction.keiro",
@@ -16402,7 +16409,7 @@ processWithLiteral value =
       projections = [],
       body =
         LegacyProcessBody
-          (InputDecl "Input" [] Nothing noLoc)
+          (InputDecl "Input" [] Nothing Nothing noLoc)
           ( HandleNode
               { on = "Input",
                 advance = AdvanceNode "Advance" [FieldBinding "literal" (Just ("\"" <> value <> "\""))],
@@ -16640,7 +16647,7 @@ genProcess =
     <*> genName
     <*> smallList genName
     <*> ( LegacyProcessBody
-            <$> (InputDecl <$> genName <*> smallList genField <*> pure Nothing <*> pure noLoc)
+            <$> (InputDecl <$> genName <*> smallList genField <*> pure Nothing <*> pure Nothing <*> pure noLoc)
             <*> (HandleNode <$> genName <*> (AdvanceNode <$> genName <*> smallList genFieldBinding) <*> smallList genDispatchNode <*> genName)
             <*> genTimerNode
         )
@@ -16656,7 +16663,7 @@ genRouter =
   RouterNode
     <$> genName
     <*> genAdversarialText
-    <*> (InputDecl <$> genName <*> smallList genField <*> pure Nothing <*> pure noLoc)
+    <*> (InputDecl <$> genName <*> smallList genField <*> pure Nothing <*> pure Nothing <*> pure noLoc)
     <*> (CorrelateDecl <$> genName <*> genName)
     <*> (ResolveDecl <$> genResolveSource <*> smallList genName <*> pure noLoc)
     <*> genName

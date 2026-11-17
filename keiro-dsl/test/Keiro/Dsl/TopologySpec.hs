@@ -3,7 +3,7 @@
 module Keiro.Dsl.TopologySpec (topologySpec) where
 
 import Control.Exception (bracket)
-import Control.Monad (filterM, forM_)
+import Control.Monad (filterM, forM, forM_)
 import Data.Aeson (Value (..))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
@@ -17,6 +17,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
+import Data.Vector qualified as Vector
 import Data.Version (showVersion)
 import Keiro.Dsl.Grammar (Aggregate, Node (..))
 
@@ -45,6 +46,7 @@ topologySpec = describe "service topology" $ do
   scaffoldExportTests
   freshnessCheckTests
   machineTests
+  feedsTests
 
 --------------------------------------------------------------------------------
 -- Milestone 1: the library
@@ -94,7 +96,8 @@ libraryTests = do
                    "observes",
                    "backed-by",
                    "exposes",
-                   "compatible-with"
+                   "compatible-with",
+                   "feeds"
                  ]
 
   it "digests the exact member bytes" $
@@ -171,7 +174,8 @@ goldenCases =
   [ ("test/fixtures/topology/hospital-capacity.keiro", "test/fixtures/topology/hospital-capacity.topology.golden.json"),
     ("test/fixtures/topology/incident-command.keiro", "test/fixtures/topology/incident-command.topology.golden.json"),
     ("test/fixtures/topology/workspace/service.keiro-workspace", "test/fixtures/topology/workspace/service.topology.golden.json"),
-    ("test/fixtures/topology/projection-catalog.keiro", "test/fixtures/topology/projection-catalog.topology.golden.json")
+    ("test/fixtures/topology/projection-catalog.keiro", "test/fixtures/topology/projection-catalog.topology.golden.json"),
+    ("test/fixtures/topology/incident-command-sourced.keiro", "test/fixtures/topology/incident-command-sourced.topology.golden.json")
   ]
 
 commandTests :: Spec
@@ -447,6 +451,61 @@ machineTests = do
     aggregates `shouldSatisfy` (not . null)
     forM_ aggregates $ \node ->
       (field "details" node >>= field "machine" >>= field "ownership") `shouldBe` Just (String "generated")
+
+--------------------------------------------------------------------------------
+-- EP-4: the feeds relation and schema id /2
+--------------------------------------------------------------------------------
+
+feedsTests :: Spec
+feedsTests = do
+  it "a declared source becomes one feeds edge under schema id /2; unsourced documents stay /1" $ do
+    sourced <- readGolden "test/fixtures/topology/incident-command-sourced.topology.golden.json"
+    field "schema" sourced `shouldBe` Just (String "keiro-dsl/service-topology/2")
+    [ (endpoint "from" e, endpoint "to" e, attribute "input" e, attribute "events" e)
+      | e <- edgeObjects sourced,
+        relationOf e == "feeds"
+      ]
+      `shouldBe` [ ( ("intake", "hospitalInbox"),
+                     ("router", "CapacityChangeRouter"),
+                     Just (String "AcceptedHospitalCapacitySnapshot"),
+                     Just (Aeson.toJSON ["HospitalCapacitySnapshotPublished" :: Text])
+                   )
+                 ]
+    forM_ [golden | (source, golden) <- goldenCases, not ("-sourced" `T.isInfixOf` T.pack source)] $ \golden -> do
+      document <- readGolden golden
+      field "schema" document `shouldBe` Just (String "keiro-dsl/service-topology/1")
+
+  it "the sourced document differs from the unsourced one only by schema, the feeds edge, and its member digest" $
+    withTempDirectory "keiro-dsl-topology-feeds" $ \directory -> do
+      documents <- forM ["incident-command-sourced.keiro", "incident-command.keiro"] $ \fixture -> do
+        original <- resolveTestPath ("test/fixtures/topology/" <> fixture)
+        let variantDirectory = directory </> takeWhile (/= '.') fixture
+            copy = variantDirectory </> "incident-command.keiro"
+        createDirectory variantDirectory
+        BS.readFile original >>= BS.writeFile copy
+        (exitCode, bytes, _) <- runTopology [copy]
+        exitCode `shouldBe` ExitSuccess
+        maybe (fail "topology output is not JSON") pure (decodeDocument bytes)
+      case documents of
+        [sourced, unsourced] -> do
+          let normalize = withoutPositions . withoutFeeds . setField "schema" (String "keiro-dsl/service-topology/1")
+          normalize sourced `shouldBe` withoutPositions unsourced
+          length (edgeObjects sourced) `shouldBe` length (edgeObjects unsourced) + 1
+        _ -> expectationFailure "expected two documents"
+
+withoutFeeds :: Value -> Value
+withoutFeeds = \case
+  Object document -> Object (KeyMap.mapWithKey (\key value -> if Key.toText key == "edges" then dropFeeds value else value) document)
+  other -> other
+  where
+    dropFeeds = \case
+      Array edges -> Array (Vector.filter ((/= "feeds") . relationOf) edges)
+      other -> other
+
+setField :: Text -> Value -> Value -> Value
+setField name value = \case
+  Object document -> Object (KeyMap.insert (Key.fromText name) value document)
+  other -> other
 
 fixtureMachine :: FilePath -> Text -> IO MachineTopology
 fixtureMachine path aggregateName = do

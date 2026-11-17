@@ -44,6 +44,16 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   transducers walked with keiki's accessors. The keiki edge index now comes from one shared
   layout function used by the transducer builder, the behavior source map and the export;
   generated code is unchanged.
+- Candidate Language 6 input sources: a router input, a legacy process input or any
+  reaction-process input may declare `from intake <Intake> event <Event>…` between its
+  name and its body. `check` reports `InputSourceUnresolvedIntake` for an undeclared intake
+  and `InputSourceEventNotAccepted` for each named event the intake does not accept.
+  Languages 1 to 5 refuse the clause with `LanguageFeatureRequiresVersion`. A declared
+  source changes no generated module, fingerprint, scaffold ledger or `diff` verdict.
+  `keiro-dsl topology` exports each source as a `feeds` edge from the intake. A document
+  with a `feeds` edge uses schema id `keiro-dsl/service-topology/2`; every other document
+  stays `/1` and is byte-identical. The library exports `InputSource` and the new `source`
+  field of `InputDecl`.
 
 ## 0.25.1.0 — 2026-11-16
 

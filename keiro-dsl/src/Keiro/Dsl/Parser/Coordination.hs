@@ -11,7 +11,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Frontend.Internal (FrontendContext)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.LanguageVersion (LanguageFeature (DeclarativeRouterSelectionSyntax, ProcessReactionSyntax))
+import Keiro.Dsl.LanguageVersion (LanguageFeature (DeclarativeRouterSelectionSyntax, InputSourceSyntax, ProcessReactionSyntax))
 import Keiro.Dsl.Parser.Core
 import Keiro.Dsl.Parser.Expression (pExpr)
 import Keiro.Dsl.Parser.Mapped (pMappedTypeExpr)
@@ -30,7 +30,7 @@ pProcess context = do
   pid <- ident
   keyword "name"
   nm <- stringLit
-  (processBody, corr, saga, tgt, projs, rejected, poison, reactionSpans) <- try (pReactionProcessBody context) <|> pLegacyProcessBody
+  (processBody, corr, saga, tgt, projs, rejected, poison, reactionSpans) <- try (pReactionProcessBody context) <|> pLegacyProcessBody context
   let processNode =
         ProcessNode
           { id = pid,
@@ -50,9 +50,9 @@ pProcess context = do
         ]
   pure (processNode, elements)
 
-pLegacyProcessBody :: P (ProcessBody, CorrelateDecl, SagaRef, Name, [Name], PolicyChoice, PolicyChoice, [(Name, Int, SourceSpan)])
-pLegacyProcessBody = do
-  inp <- pInputDecl
+pLegacyProcessBody :: FrontendContext -> P (ProcessBody, CorrelateDecl, SagaRef, Name, [Name], PolicyChoice, PolicyChoice, [(Name, Int, SourceSpan)])
+pLegacyProcessBody context = do
+  inp <- pInputDecl context
   corr <- pCorrelate
   saga <- pSaga
   keyword "target"
@@ -72,7 +72,7 @@ pReactionProcessBody context = do
   versionLoc <- getLoc
   keyword "version"
   reactionVersion <- fromIntegral <$> boundedDecimal
-  inputs <- NE.fromList <$> some pInputDecl
+  inputs <- NE.fromList <$> some (pInputDecl context)
   corr <- pCorrelate
   saga <- pSaga
   keyword "target"
@@ -408,28 +408,44 @@ pPolicyChoice =
       PolSkip <$ keyword "skip"
     ]
 
-pInputDecl :: P InputDecl
-pInputDecl = do
+pInputDecl :: FrontendContext -> P InputDecl
+pInputDecl context = do
   loc <- getLoc
   keyword "input"
   nm <- ident
+  source <- pOptionalInputSource context
   fs <- braces (many pField)
-  pure InputDecl {name = nm, fields = fs, valueType = Nothing, loc = loc}
+  pure InputDecl {name = nm, fields = fs, valueType = Nothing, source = source, loc = loc}
 
 pRouterInputDecl :: FrontendContext -> P (InputDecl, Maybe SourceSpan)
 pRouterInputDecl context = do
   loc <- getLoc
   keyword "input"
   name <- ident
+  source <- pOptionalInputSource context
   choice
     [ do
         marker <- withOwnedSpan (symbol ":")
         inputType <- pMappedTypeExpr context
-        pure (InputDecl {name = name, fields = [], valueType = Just inputType, loc = loc}, Just (spanOf marker)),
+        pure (InputDecl {name = name, fields = [], valueType = Just inputType, source = source, loc = loc}, Just (spanOf marker)),
       do
         fields <- braces (many pField)
-        pure (InputDecl {name = name, fields = fields, valueType = Nothing, loc = loc}, Nothing)
+        pure (InputDecl {name = name, fields = fields, valueType = Nothing, source = source, loc = loc}, Nothing)
     ]
+
+-- | Candidate Language 6 @from intake <Intake> event <Event>+@ between an
+-- input's name and its body. @from@, @intake@ and @event@ are contextual: an
+-- input name followed directly by @{@ or @:@ parses exactly as before, and a
+-- predecessor language reports the version requirement at @from@.
+pOptionalInputSource :: FrontendContext -> P (Maybe InputSource)
+pOptionalInputSource context =
+  optionalLanguageFeature context InputSourceSyntax "from" $ do
+    loc <- getLoc
+    try (keyword "from" *> keyword "intake")
+    intakeName <- ident
+    keyword "event"
+    events <- some ident
+    pure InputFromIntake {intake = intakeName, events = NE.fromList events, loc = loc}
 
 pCorrelate :: P CorrelateDecl
 pCorrelate = do

@@ -1,0 +1,3 @@
+service input-source
+spec integration.keiro
+spec routing.keiro

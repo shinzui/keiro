@@ -1,0 +1,179 @@
+language keiro-dsl 6
+context input-source
+
+mapped structural record TransferRouteInput {
+  haskell package=keiro-dsl module=Conformance.InputSource.Domain type=TransferRouteInput
+  binding = "Conformance.InputSource.Bindings.transferRouteInputBinding"
+  binding-version = "1"
+  canonical-type = "conformance.input-source.TransferRouteInput.v1"
+  fixtures = "Conformance.InputSource.Bindings.transferRouteInputCases"
+  wire object constructor=TransferRouteInput unknown-fields=reject {
+    transferNeedId as "transfer_need_id" : Text required
+    region         as "region"           : Text required
+  }
+}
+
+mapped structural record HospitalLoadRow {
+  haskell package=keiro-dsl module=Conformance.InputSource.Domain type=HospitalLoadRow
+  binding = "Conformance.InputSource.Bindings.hospitalLoadRowBinding"
+  binding-version = "1"
+  canonical-type = "conformance.input-source.HospitalLoadRow.v1"
+  fixtures = "Conformance.InputSource.Bindings.hospitalLoadRowCases"
+  wire object constructor=HospitalLoadRow unknown-fields=reject {
+    hospitalId    as "hospital_id"    : Text required
+    region        as "region"         : Text required
+    availableBeds as "available_beds" : Int  required
+  }
+}
+
+target hospital_load_table {
+  schema = "public"
+  table = "hospital_load"
+  reset = clear
+}
+
+rebuild-group reporting {
+  targets = [ hospital_load_table ]
+  order = [ hospital_load_table ]
+}
+
+projection-owner hospital_load_writer {
+  source = category "hospitalLoad"
+  delivery = subscription
+  group = reporting
+  targets = [ hospital_load_table ]
+  order = 10
+  subscription = "input-source-hospital-load"
+  dedup = "input-source-hospital-load-v1"
+  checkpoint-on-missing = fail
+  replay = explicit
+}
+
+readmodel hospital_load {
+  columns {}
+  query input = TransferRouteInput
+  query result = List HospitalLoadRow
+  version = 1
+  shape = "fnv1a:3c07a19c552c3547"
+  freshness = wait-for-head category "hospitalLoad"
+  group = reporting
+  targets = [ hospital_load_table ]
+}
+
+aggregate Hospital
+  regs
+    routed Bool = False
+  states Open Routed!
+
+  command RouteAcceptedTransferNeed { transferNeedId:Text hospitalId:Text }
+  event TransferNeedRouted = fields(RouteAcceptedTransferNeed)
+
+  Open -- RouteAcceptedTransferNeed --> write routed := true ; emit TransferNeedRouted ; goto Routed
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+
+router HospitalTransferRouter
+  name "hospital-transfer-router"
+  input AcceptedHospitalTransferNeed from intake transferInbox event TransferNeedAccepted : TransferRouteInput
+  key input.transferNeedId
+  resolve declarative {
+    identity = "hospital-transfer-selection"
+    version = 1
+    query = read-model hospital_load with input
+    where = row.region == input.region && row.availableBeds > 0
+    recipient = row.hospitalId
+    order = target-stream
+    dedupe = target-stream
+    max-recipients = 64
+    empty => ack
+    failure => retry
+    redelivery = stable-union
+    partial = retain-successes
+  }
+  target Hospital
+  projections []
+  dispatch-each RouteAcceptedTransferNeed {
+    transferNeedId=input.transferNeedId
+    hospitalId=row.hospitalId
+  }
+    on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+  dispatch-id strategy=uuidv5 from=(name, key, sourceEventId, targetStreamName, occurrence)
+  rejected => deadLetter
+  poison => halt
+
+id TransferNeedId prefix=tneed
+
+contract transfers {
+  schemaVersion 1
+  discriminator messageType
+
+  topic needs "transfers.needs"
+
+  event TransferNeedAccepted on needs {
+    transferNeedId: text
+    region: text
+  }
+  event TransferNeedWithdrawn on needs {
+    transferNeedId: text
+  }
+}
+
+intake transferInbox {
+  contract transfers
+  topic needs
+  accept TransferNeedAccepted TransferNeedWithdrawn
+
+  bind source from header "keiro-source"
+  bind schemaVersion from header "keiro-schema-version"
+  bind messageId from header "keiro-message-id"
+  bind key from kafka-key
+  bind occurredAt from kafka-cursor
+  bind idempotencyKey from body
+
+  dedupe key messageId policy PreferIntegrationMessageId
+  persist = full-envelope
+
+  decode {
+    envelope strict-required lenient-optional
+    body strict schemaVersion == 1
+  }
+
+  disposition {
+    processed => ackOk
+    duplicate => ackOk
+    inProgress => retry 5s
+    previouslyFailed => deadLetter "previous inbox failure"
+    decodeFailed => deadLetter
+    dedupeFailed => deadLetter
+    storeFailed => retry 5s
+  }
+}
+
+aggregate TransferSaga
+  regs
+  states Waiting
+  command NoteTransferNeed { transferNeedId:Text }
+  command NoteWithdrawal { transferNeedId:Text }
+  event TransferNeedNoted = fields(NoteTransferNeed)
+  event WithdrawalNoted = fields(NoteWithdrawal)
+  Waiting -- NoteTransferNeed --> emit TransferNeedNoted ; goto Waiting
+  Waiting -- NoteWithdrawal --> emit WithdrawalNoted ; goto Waiting
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+
+process TransferNeedTracking
+  name "transfer-need-tracking"
+  reactions version 1
+  input TransferNeedArrived from intake transferInbox event TransferNeedAccepted { transferNeedId:Text }
+  input TransferNeedWithdrawnInput { transferNeedId:Text }
+  correlate input.transferNeedId via raw
+  saga TransferSaga category "transferSaga"
+  target TransferSaga
+  projections [ ]
+  on TransferNeedArrived
+    advance NoteTransferNeed { transferNeedId }
+  on TransferNeedWithdrawnInput
+    advance NoteWithdrawal { transferNeedId }
+  dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, targetStreamName, occurrence)
+  rejected => halt
+  poison => halt

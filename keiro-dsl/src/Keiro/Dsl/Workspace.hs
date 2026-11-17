@@ -1474,6 +1474,8 @@ instance HasLocs InkPersist
 
 instance HasLocs InputDecl
 
+instance HasLocs InputSource
+
 instance HasLocs IntakeNode
 
 instance HasLocs MappedWriteLiftDecl

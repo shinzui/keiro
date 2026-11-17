@@ -468,6 +468,20 @@ typed effectful resolver. Bindings may read declared `input.*` and `resolved.*` 
 The target aggregate and command must resolve. Router name, key derivation, and target are
 identity-bearing and therefore Breaking in `diff`. The generated `WorkerOptions` must be
 passed to `runRouterWorkerWith`; dispatch-level `CommandAmbiguous` follows `rejected =>`.
+
+Candidate Language 6 input sources. A router input, a legacy process input or any reaction
+process input may name the intake that feeds it, between the input name and its body:
+
+```text
+input IncidentRaised from intake pagingInbox event IncidentRaisedV1 { incidentId service }
+input CapacitySnapshot from intake hospitalInbox event HospitalCapacitySnapshotPublished : CapacitySnapshotInput
+```
+
+`check` reports `InputSourceUnresolvedIntake` when no intake of the service has that name
+and `InputSourceEventNotAccepted` for each named event the intake does not `accept`. The
+clause is documentation that is checked: it changes no generated code, fingerprint, ledger
+or `diff` verdict. `keiro-dsl topology` exports it as a `feeds` edge (schema id `/2`).
+`from`, `intake` and `event` are contextual words here, not reserved.
 Maps to a generated `Router` module plus a create-once `RouterHoles` module for the resolver,
 target stream/projections, and assembled runtime value. Checked: router/readmodel/aggregate/
 command references resolve; key and binding fields are in scope; worker policy agrees with

@@ -72,6 +72,7 @@ module Keiro.Dsl.Grammar
     -- * The process + timer nodes (EP-3)
     FieldBinding (..),
     InputDecl (..),
+    InputSource (..),
     CorrelateDecl (..),
     SagaRef (..),
     Disp (..),
@@ -761,6 +762,19 @@ data InputDecl = InputDecl
   { name :: !Name,
     fields :: ![Field],
     valueType :: !(Maybe TypeExpr),
+    -- | Candidate Language 6: the intake that feeds this input
+    -- (@from intake <Intake> event <Event>+@). Checked documentation only: it
+    -- takes no part in generated code, fingerprints, ledgers or diff.
+    source :: !(Maybe InputSource),
+    loc :: !Loc
+  }
+  deriving stock (Eq, Show, Generic)
+
+-- | @from intake hospitalInbox event HospitalCapacitySnapshotPublished@: the
+-- intake whose accepted contract events the input is built from.
+data InputSource = InputFromIntake
+  { intake :: !Name,
+    events :: !(NonEmpty Name),
     loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)

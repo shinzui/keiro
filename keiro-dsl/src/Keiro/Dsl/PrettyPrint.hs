@@ -889,8 +889,14 @@ docPolicyChoice PolSkip = "skip"
 
 docInput :: InputDecl -> Doc ann
 docInput input = case (.valueType) input of
-  Just inputType -> "input" <+> pretty ((.name) input) <+> ":" <+> docTypeExpr inputType
-  Nothing -> "input" <+> pretty ((.name) input) <+> braced (map docField ((.fields) input))
+  Just inputType -> header <+> ":" <+> docTypeExpr inputType
+  Nothing -> header <+> braced (map docField ((.fields) input))
+  where
+    header = "input" <+> pretty ((.name) input) <> maybe mempty ((" " <>) . docInputSource) ((.source) input)
+
+docInputSource :: InputSource -> Doc ann
+docInputSource source =
+  "from intake" <+> pretty ((.intake) source) <+> "event" <+> hsep (map pretty (NE.toList ((.events) source)))
 
 docCorrelate :: CorrelateDecl -> Doc ann
 docCorrelate c = "correlate" <+> ("input." <> pretty ((.field) c)) <+> "via" <+> pretty ((.via) c)
