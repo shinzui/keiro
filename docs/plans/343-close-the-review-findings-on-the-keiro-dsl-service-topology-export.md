@@ -80,7 +80,14 @@ which prints each aggregate with its category, for example `('Capacity', 'capaci
       aggregates neither compared nor excluded: Hospital`, and walking the wrong
       transducer fails with `machine Hospital: exported machine differs from keiki`;
       `just conformance-corpus-policy`, `just initial-hole-proof` and
-      `just process-reaction-proof` pass.
+      `just process-reaction-proof` pass. `just verify` ran every stage through
+      `keiro-reexports` green (68 test suites passed) and stopped at
+      `record-migration-policy` on a stale `keiro-dsl/record-field-migration-0.15.md`
+      (line numbers shifted by the new `Scaffold` export). After regenerating it with
+      `python3 scripts/generate-record-migration-manifests.py` (commit `01d611f2`), that
+      gate and every later one (`generated-name-policy`, `conformance-corpus-policy`,
+      `process-reaction-proof`, `initial-hole-proof`, `replay-compatibility`,
+      `checked-mapping-adoption`, `cabal test keiro-migrations-test`) exit 0.
 
 
 ## Surprises & Discoveries
@@ -224,7 +231,40 @@ which prints each aggregate with its category, for example `('Capacity', 'capaci
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-11-17. All seven review findings are closed:
+
+1. Aggregate nodes carry `details.category`, from the scaffold's own derivation
+   (`aggregateStreamCategory`), and a test checks it against the categories the scaffolded
+   `Inspection` module actually mounts. The Purpose command prints
+   `[('Capacity', 'capacity'), ('Hospital', 'hospital'), ('Reservation', 'reservation'), ('Supply', 'supply'), ('Surge', 'surge')]`.
+2. The keiki machine proof runs on five corpora (eight aggregates) through one shared
+   module, which also refuses to skip a generated aggregate silently.
+3. `--topology-out` proves the target writable before the scaffold writes anything, and a
+   refused run leaves no file or directory behind.
+4. The schema gate reads check-jsonschema's JSON report and accepts an invalid example
+   only on a real violation.
+5. `--check` names a changed service or manifest file name, and otherwise falls back
+   honestly instead of blaming an unchanged keiro-dsl version.
+6. Workspace digests are of the bytes the loader parsed, and the five goldens did not
+   change in Milestone 2.
+7. Dispatch nodes carry `details.dedupReadModel`.
+
+None of the guarantees listed in Validation and Acceptance got weaker. The schema ids are
+unchanged and `aggregate-without-machine.valid.json` validates unedited. The tests that
+compare `topology`, `scaffold --topology-out` and `--check` bytes pass unedited. The
+workspace golden is byte-identical across Milestone 2. Generated code is unchanged, as
+`just conformance-corpus-policy` confirms. The export sweep reports `internal=0` over 428
+sources.
+
+Follow-up outside this plan: a saga aggregate's inspector is mounted under the
+aggregate's own category, not the saga category its process writes streams under. That
+is a question for the inspector catalog (ADR-61). Plan 342 can now use
+`details.category` as its join key.
+
+Lessons. Check a CLI failure path against the state the filesystem will be in, not the
+state it is in now: the original reproduction targeted a directory the scaffold had not
+created yet. A shared test module added to a corpus suite must also fit every other
+package that builds the same `Main.hs`.
 
 
 ## Context and Orientation
