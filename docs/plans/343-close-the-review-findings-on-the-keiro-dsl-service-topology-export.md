@@ -62,9 +62,12 @@ which prints each aggregate with its category, for example `('Capacity', 'capaci
       each regenerated golden against the previous commit with the two fields removed is
       identical for all five; `just topology-schema-validate` passes with the unedited
       `aggregate-without-machine.valid.json`.
-- [ ] Milestone 2: `scaffold --topology-out` refuses an unwritable target before writing
-      anything; `topology --check` reports a changed manifest as such; workspace member
-      digests are computed from the bytes that were parsed. Tests cover all three.
+- [x] Milestone 2 (2026-11-17): `scaffold --topology-out` refuses an unwritable target
+      before writing anything; `topology --check` reports a changed manifest as such;
+      workspace member digests are computed from the bytes that were parsed. Tests cover
+      all three. Evidence: `--match topology` 44 examples, 0 failures, with the five
+      goldens (including the workspace golden) unchanged by this milestone; the
+      export-error sweep reports `files=428 internal=0`.
 - [ ] Milestone 3: `scripts/check-topology-schemas.sh` accepts an `*.invalid.json` example
       only on a real schema violation, shown by a deliberately broken run.
 - [ ] Milestone 4: the machine proof runs against at least three more generated corpora
@@ -87,9 +90,39 @@ which prints each aggregate with its category, for example `('Capacity', 'capaci
   `aggregateStreamCategory :: Name -> Text`, called by both the EventStream emitter and
   `Keiro.Dsl.Topology`; `Topology` importing `Scaffold` creates no cycle and passes
   `just dsl-api-boundaries`.
+- The reproduction in Concrete Steps (`--out /tmp/gen --topology-out /tmp/gen` with
+  `/tmp/gen` absent) is not caught by an "is a directory" check, because the target
+  does not exist yet when the preflight runs; the scaffold creates it later. The
+  preflight therefore also refuses a target that is `--out` or a directory above any
+  planned module, with the reason `it is a directory the scaffold creates`. The observed
+  transcript, with paths shortened:
+
+  ```text
+  scaffold: --topology-out …/m2/gen cannot be written: it is a directory the scaffold creates; nothing was written
+  exit=1
+  $ ls …/m2
+  svc.keiro
+  ```
+
+  An existing directory reports `it is a directory`, and an unwritable parent reports the
+  `createDirectory: permission denied` error, each with `nothing was written` and no
+  `--out` tree.
+- The preflight creates the target's missing parent directories to hold the temporary
+  file. A scaffold that is refused afterwards removes the temporary file and those
+  directories (innermost first, only while empty), so a refused run still leaves no
+  trace; a test covers it with a hand-written file at a generated module path.
 
 
 ## Decision Log
+
+- Decision: `topology --check` keeps today's version message whenever the recorded and
+  current generator versions differ, even if the service also changed, and reports a
+  changed manifest file name together with the service in the service-or-manifest line.
+  Rationale: the plan orders the checks generator first; a version difference alone
+  explains a document difference, and the manifest file name is the other non-member
+  fact the document records (`source.path`). The version-upgrade test therefore needed
+  no change.
+  Date: 2026-11-17
 
 - Decision: This plan owns the aggregate `category` field. Plan
   `docs/plans/342-serve-the-committed-service-topology-to-keiro-ui-through-keiro-ops-http.md`

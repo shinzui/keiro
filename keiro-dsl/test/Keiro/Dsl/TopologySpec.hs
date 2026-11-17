@@ -29,7 +29,7 @@ import Keiro.Dsl.SourceIndex (ParsedSourceDocument (..))
 import Keiro.Dsl.Topology
 import Keiro.Dsl.Workspace (WorkspaceSpec, oneMemberParsedDocumentWorkspace)
 import Paths_keiro_dsl qualified as Package
-import System.Directory (createDirectory, doesFileExist, getTemporaryDirectory, makeAbsolute, removeFile, removePathForcibly)
+import System.Directory (createDirectory, createDirectoryIfMissing, doesFileExist, doesPathExist, getTemporaryDirectory, listDirectory, makeAbsolute, removeFile, removePathForcibly)
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..))
 import System.FilePath (takeDirectory, takeFileName, (</>))
@@ -350,6 +350,37 @@ scaffoldExportTests = do
       BS.readFile source `shouldReturn` sourceBytes
       BS.readFile ledger `shouldReturn` ledgerBytes
 
+  it "refuses an export path that is a directory before the scaffold writes anything" $
+    withTempDirectory "keiro-dsl-topology-directory" $ \directory -> do
+      source <- resolveTestPath "test/fixtures/topology/hospital-capacity.keiro" >>= makeAbsolute
+      let out = directory </> "out"
+          existing = directory </> "exports"
+      createDirectory existing
+      forM_ [(existing, "it is a directory"), (out, "it is a directory the scaffold creates")] $ \(target, reason) -> do
+        (exitCode, _, stderrText) <- runCli Nothing ["scaffold", source, "--out", out, "--topology-out", target]
+        exitCode `shouldBe` ExitFailure 1
+        stderrText `shouldSatisfy` T.isInfixOf ("scaffold: --topology-out " <> T.pack target <> " cannot be written: " <> reason <> "; nothing was written")
+        doesPathExist out `shouldReturn` False
+      listDirectory directory `shouldReturn` ["exports"]
+      listDirectory existing `shouldReturn` []
+
+  it "a successful export and a refused scaffold both leave no temporary file" $
+    withTempDirectory "keiro-dsl-topology-temporary" $ \directory -> do
+      original <- resolveTestPath "test/fixtures/topology/hospital-capacity.keiro"
+      let source = directory </> "hospital-capacity.keiro"
+          out = directory </> "out"
+          exports = directory </> "exports"
+      BS.readFile original >>= BS.writeFile source
+      (exitCode, _, _) <- runCli Nothing ["scaffold", source, "--out", out, "--topology-out", exports </> "topology.json"]
+      exitCode `shouldBe` ExitSuccess
+      listDirectory exports `shouldReturn` ["topology.json"]
+      -- A hand-written file at a generated path refuses the scaffold after the
+      -- export was prepared; the temporary file and its new directory go away.
+      BS.writeFile (out </> "HospitalCapacity/Surge/Generated/EventStream.hs") "module Hand where\n"
+      (refusedExit, _, _) <- runCli Nothing ["scaffold", source, "--out", out, "--topology-out", directory </> "fresh" </> "topology.json"]
+      refusedExit `shouldBe` ExitFailure 1
+      doesPathExist (directory </> "fresh") `shouldReturn` False
+
 freshnessCheckTests :: Spec
 freshnessCheckTests = do
   it "topology --check passes silently on fresh sources and names an edited member" $
@@ -395,6 +426,36 @@ freshnessCheckTests = do
                        <> T.pack (showVersion Package.version)
                        <> "); regenerate it\n"
                    )
+
+  it "topology --check blames a renamed workspace service, not the keiro-dsl version" $
+    withTempDirectory "keiro-dsl-topology-check-service" $ \directory -> do
+      manifest <- copyWorkspaceFixture directory
+      let committed = directory </> "topology.json"
+      (_, document, _) <- runCli Nothing ["topology", manifest]
+      BS.writeFile committed document
+      manifestBytes <- BS.readFile manifest
+      BS.writeFile manifest (replaceBytes "service incident-reaction" "service incident-response" manifestBytes)
+      (exitCode, _, stderrText) <- runCli Nothing ["topology", manifest, "--check", committed]
+      exitCode `shouldBe` ExitFailure 1
+      stderrText
+        `shouldBe` "topology stale: the service or manifest changed (recorded service 'incident-reaction', current 'incident-response'); regenerate it\n"
+      stderrText `shouldNotSatisfy` T.isInfixOf "keiro-dsl"
+      BS.writeFile manifest manifestBytes
+      BS.appendFile (directory </> "domain" </> "incident.keiro") "# edited\n"
+      (memberExit, _, memberErr) <- runCli Nothing ["topology", manifest, "--check", committed]
+      memberExit `shouldBe` ExitFailure 1
+      memberErr `shouldSatisfy` T.isPrefixOf "topology stale: member 'domain/incident.keiro' changed (recorded sha256:"
+      memberErr `shouldSatisfy` T.isInfixOf ", current sha256:"
+
+  it "topology --check falls back honestly when nothing it compares differs" $
+    withTempDirectory "keiro-dsl-topology-check-fallback" $ \directory -> do
+      source <- resolveTestPath "test/fixtures/topology/hospital-capacity.keiro"
+      let committed = directory </> "topology.json"
+      (_, document, _) <- runCli Nothing ["topology", source]
+      BS.writeFile committed (replaceBytes "\"line\":" "\"line\":1" document)
+      (exitCode, _, stderrText) <- runCli Nothing ["topology", source, "--check", committed]
+      exitCode `shouldBe` ExitFailure 1
+      stderrText `shouldBe` "topology stale: document differs with unchanged sources and the same keiro-dsl version; regenerate it\n"
 
   it "topology --check refuses a file that is not a topology document" $
     withTempDirectory "keiro-dsl-topology-check-invalid" $ \directory -> do
@@ -594,6 +655,16 @@ fixtureMachine path aggregateName = do
   where
     aggregateNamed :: Aggregate -> Bool
     aggregateNamed aggregate = aggregate.name == aggregateName
+
+-- | Copy the topology workspace fixture into a directory and return the
+-- manifest path of the copy.
+copyWorkspaceFixture :: FilePath -> IO FilePath
+copyWorkspaceFixture directory = do
+  forM_ ["service.keiro-workspace", "domain/incident.keiro", "coordination/reaction.keiro"] $ \relative -> do
+    original <- resolveTestPath ("test/fixtures/topology/workspace/" <> relative)
+    createDirectoryIfMissing True (takeDirectory (directory </> relative))
+    BS.readFile original >>= BS.writeFile (directory </> relative)
+  pure (directory </> "service.keiro-workspace")
 
 replaceBytes :: BS.ByteString -> BS.ByteString -> BS.ByteString -> BS.ByteString
 replaceBytes needle replacement haystack =

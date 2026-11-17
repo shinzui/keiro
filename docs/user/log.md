@@ -2,6 +2,9 @@
 
 ## 2026-11-17
 
+* **Update**: DOC-33, DOC-35: document the --topology-out writability preflight and the --check service-or-manifest and same-version messages (plan 343).
+
+
 * **Update**: DOC-35: document the aggregate category and dispatch dedupReadModel topology fields (plan 343).
 
 

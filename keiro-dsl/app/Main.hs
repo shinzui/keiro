@@ -2,13 +2,14 @@
 -- scaffolding, and explicit generated-Haskell edition migration.
 module Main (main) where
 
-import Control.Exception (IOException, try)
+import Control.Exception (IOException, onException, try)
 import Control.Monad (unless, when)
 import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Text qualified as AesonText
 import Data.Aeson.Types qualified as AesonTypes
 import Data.ByteString qualified as BS
+import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.List (isPrefixOf)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
@@ -46,9 +47,9 @@ import Keiro.Dsl.WorkspaceDiff (WorkspaceChange (..), WorkspaceMeta (..), diffWo
 import Keiro.Dsl.WorkspaceScaffold (WorkspacePlan (..), executeWorkspaceScaffoldWithMigrations, planWorkspaceScaffoldWithRuntimePackageAndGoldens, renderWorkspaceScaffoldReport)
 import Numeric.Natural (Natural)
 import Options.Applicative
-import System.Directory (canonicalizePath, createDirectoryIfMissing, doesFileExist)
+import System.Directory (canonicalizePath, createDirectory, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, doesPathExist, removeDirectory, removeFile, renameFile)
 import System.Exit (ExitCode (..), exitFailure, exitSuccess, exitWith)
-import System.FilePath (isAbsolute, makeRelative, normalise, takeDirectory, takeFileName, (</>))
+import System.FilePath (addTrailingPathSeparator, isAbsolute, makeRelative, normalise, takeDirectory, takeFileName, (</>))
 import System.IO (hPutStrLn, stderr)
 import System.Process (readProcessWithExitCode)
 import Text.Read (readMaybe)
@@ -644,7 +645,7 @@ run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwr
         (Right modules, Right comparisonModule) -> do
           topologyExport <- prepareTopologyOut fp out [fp] (map (.path) modules) topologyOut
           comparisonReady <- preflightComparison out comparisonRequest comparisonModule
-          case comparisonReady of
+          discardTopologyOutOnFailure topologyExport $ case comparisonReady of
             Left comparisonError -> TIO.hPutStrLn stderr comparisonError >> exitFailure
             Right () -> do
               result <- executeServiceScaffoldWithRuntimePackageAndMigrations cliRuntimePackage applyNameMigrations applyGeneratedHaskellEdition out forceGeneratedOverwrite fp ((.sourceLanguage) parsedSource) ctx service modules
@@ -794,7 +795,8 @@ runWorkspaceInspect fp InspectionJson = do
 renderTopology :: FilePath -> IO (Either [T.Text] BS.ByteString)
 renderTopology fp
   | isWorkspacePath fp = do
-      loaded <- loadWorkspace (fileContentSource (takeDirectory fp)) fp
+      (source, recorded) <- digestingContentSource (takeDirectory fp)
+      loaded <- loadWorkspace source fp
       case loaded of
         Left failure -> pure (Left (renderWorkspaceFailure fp failure))
         Right workspace -> do
@@ -803,10 +805,15 @@ renderTopology fp
           if any ((== Error) . (.severity)) diagnostics
             then pure (Left (map (renderWorkspaceDiagnostic fp) diagnostics))
             else do
-              digests <-
-                mapM
-                  (\member -> (,) ((.path) member) . memberDigest <$> BS.readFile (workspaceDisplayPath fp (WorkspaceMemberFile ((.path) member))))
-                  ((.members) workspace)
+              -- Digests of the bytes the loader parsed, never a second read. A
+              -- member missing here is reported as TopologyMissingDigest.
+              digestOf <- readIORef recorded
+              let digests =
+                    [ (path, digest)
+                    | member <- (.members) workspace,
+                      let path = (.path) member,
+                      Just digest <- [Map.lookup path digestOf]
+                    ]
               pure (exportTopology TopologyWorkspace fp workspace digests)
   | otherwise = do
       -- Read the bytes once: the digest and the parse must see the same
@@ -824,6 +831,29 @@ renderTopology fp
                   else case oneMemberParsedDocumentWorkspace fp document of
                     Left failure -> Left [T.pack ("topology: cannot index " <> fp <> ": " <> show failure)]
                     Right workspace -> exportTopology TopologySingleSource fp workspace [(takeFileName fp, memberDigest bytes)]
+
+-- | Read files under a directory like 'fileContentSource', but read bytes,
+-- record each file's 'memberDigest' under the relative path it was asked for,
+-- and decode it as UTF-8 regardless of the process locale. The topology export
+-- digests exactly the bytes the workspace loader parsed.
+digestingContentSource :: FilePath -> IO (ContentSource, IORef (Map.Map FilePath T.Text))
+digestingContentSource root = do
+  recorded <- newIORef Map.empty
+  let readRelative relative = do
+        let full = if root == "." then relative else root </> relative
+        exists <- doesFileExist full
+        if not exists
+          then pure (Left ("no such file: " <> T.pack full))
+          else do
+            attempt <- try (BS.readFile full)
+            case attempt of
+              Left readError -> pure (Left (T.pack (show (readError :: IOException))))
+              Right bytes -> case TE.decodeUtf8' bytes of
+                Left decodeError -> pure (Left ("not valid UTF-8: " <> T.pack (show decodeError)))
+                Right text -> do
+                  modifyIORef' recorded (Map.insert relative (memberDigest bytes))
+                  pure (Right text)
+  pure (ContentSource {csRead = readRelative}, recorded)
 
 exportTopology :: TopologySourceKind -> FilePath -> WorkspaceSpec -> [(FilePath, T.Text)] -> Either [T.Text] BS.ByteString
 exportTopology sourceKind fp workspace digests =
@@ -846,10 +876,8 @@ checkTopology fp committedPath = do
   current <- case topologySummary currentBytes of
     Nothing -> TIO.hPutStrLn stderr "topology check: internal error: the regenerated document does not decode" >> exitFailure
     Just summary -> pure summary
-  let (recordedMembers, recordedVersion) = committed
-      (currentMembers, currentVersion) = current
-      recorded = Map.fromList recordedMembers
-      present = Map.fromList currentMembers
+  let recorded = Map.fromList committed.members
+      present = Map.fromList current.members
       memberLines =
         [ case Map.lookup path recorded of
             Nothing -> "topology stale: member '" <> T.pack path <> "' is not recorded in " <> T.pack committedPath
@@ -861,12 +889,29 @@ checkTopology fp committedPath = do
              | path <- Map.keys recorded,
                not (Map.member path present)
              ]
-      unchangedLine =
-        "topology stale: document differs with unchanged sources (generated by keiro-dsl "
-          <> recordedVersion
-          <> ", current keiro-dsl "
-          <> currentVersion
-          <> "); regenerate it"
+      -- With every member digest equal, blame the first remaining fact that
+      -- differs: the generator, then the manifest (service name or source file
+      -- name, which are not members and carry no digest).
+      unchangedLine
+        | committed.generatorVersion /= current.generatorVersion =
+            "topology stale: document differs with unchanged sources (generated by keiro-dsl "
+              <> committed.generatorVersion
+              <> ", current keiro-dsl "
+              <> current.generatorVersion
+              <> "); regenerate it"
+        | committed.service /= current.service || committed.source /= current.source =
+            "topology stale: the service or manifest changed (recorded service '"
+              <> committed.service
+              <> "', current '"
+              <> current.service
+              <> "'"
+              <> ( if committed.source /= current.source
+                     then "; recorded source '" <> committed.source <> "', current '" <> current.source <> "'"
+                     else ""
+                 )
+              <> "); regenerate it"
+        | otherwise =
+            "topology stale: document differs with unchanged sources and the same keiro-dsl version; regenerate it"
   mapM_ (TIO.hPutStrLn stderr) (if null memberLines then [unchangedLine] else memberLines)
   exitWith (ExitFailure 1)
   where
@@ -875,23 +920,57 @@ checkTopology fp committedPath = do
       TIO.hPutStrLn stderr ("topology check: cannot read '" <> T.pack committedPath <> "' as a keiro-dsl service-topology document")
       exitWith (ExitFailure 1)
 
--- | The members (path and digest) and generator version a topology document
--- records, or Nothing when the bytes are not a service-topology document.
-topologySummary :: BS.ByteString -> Maybe ([(FilePath, T.Text)], T.Text)
+-- | The facts @topology --check@ compares when two documents differ.
+data TopologySummary = TopologySummary
+  { schema :: T.Text,
+    service :: T.Text,
+    -- | The source kind and file name, as @kind:path@.
+    source :: T.Text,
+    members :: [(FilePath, T.Text)],
+    generatorVersion :: T.Text
+  }
+
+-- | The schema id, service, source, members (path and digest) and generator
+-- version a topology document records, or Nothing when the bytes are not a
+-- service-topology document.
+topologySummary :: BS.ByteString -> Maybe TopologySummary
 topologySummary bytes = Aeson.decodeStrict bytes >>= AesonTypes.parseMaybe parser
   where
     parser = Aeson.withObject "service topology" $ \document -> do
       schema <- document .: "schema"
       unless ("keiro-dsl/service-topology/" `T.isPrefixOf` schema) (fail "not a service-topology schema id")
+      service <- document .: "service"
+      sourceObject <- document .: "source"
+      sourceKind <- sourceObject .: "kind"
+      sourcePath <- sourceObject .: "path"
       members <- document .: "members" >>= mapM (Aeson.withObject "member" (\member -> (,) <$> member .: "path" <*> member .: "sha256"))
       generator <- document .: "generator"
       version <- generator .: "version"
-      pure (members, version)
+      pure
+        TopologySummary
+          { schema = schema,
+            service = service,
+            source = sourceKind <> ":" <> sourcePath,
+            members = members,
+            generatorVersion = version
+          }
+
+-- | A prepared @scaffold --topology-out@: the document already written to a
+-- temporary file beside the target, and the directories created to hold it.
+data TopologyExport = TopologyExport
+  { target :: FilePath,
+    temporary :: FilePath,
+    -- | Innermost first, so they can be removed in order.
+    createdDirectories :: [FilePath]
+  }
 
 -- | Prepare @scaffold --topology-out@ before anything is written: refuse a
--- path that would overwrite a scaffold input or output, then render the
--- document. The caller writes it only after the scaffold succeeds.
-prepareTopologyOut :: FilePath -> FilePath -> [FilePath] -> [FilePath] -> Maybe FilePath -> IO (Maybe (FilePath, BS.ByteString))
+-- path that would overwrite a scaffold input or output, render the document,
+-- and prove the target writable by writing the document to
+-- @<target>.keiro-dsl-tmp@ in the target's directory. The caller renames it
+-- onto the target only after the scaffold succeeds ('writeTopologyOut') and
+-- removes it on every other path ('discardTopologyOutOnFailure').
+prepareTopologyOut :: FilePath -> FilePath -> [FilePath] -> [FilePath] -> Maybe FilePath -> IO (Maybe TopologyExport)
 prepareTopologyOut _ _ _ _ Nothing = pure Nothing
 prepareTopologyOut fp out inputs plannedModules (Just exportPath) = do
   exportCanonical <- canonicalizePath exportPath
@@ -903,15 +982,58 @@ prepareTopologyOut fp out inputs plannedModules (Just exportPath) = do
   when (exportCanonical `elem` protected || scaffoldRecord) $ do
     hPutStrLn stderr ("scaffold: --topology-out " <> exportPath <> " names a scaffold input, a generated or create-once module, or a keiro-dsl record under --out; nothing was written")
     exitFailure
+  let cannotWrite :: String -> IO a
+      cannotWrite reason = do
+        hPutStrLn stderr ("scaffold: --topology-out " <> exportPath <> " cannot be written: " <> reason <> "; nothing was written")
+        exitFailure
+      -- The scaffold creates --out and every directory above a planned module.
+      scaffoldDirectory = exportCanonical == outCanonical || any ((addTrailingPathSeparator exportCanonical `isPrefixOf`) . normalise) (outCanonical : protected)
+  isDirectory <- doesDirectoryExist exportPath
+  when isDirectory (cannotWrite "it is a directory")
+  when scaffoldDirectory (cannotWrite "it is a directory the scaffold creates")
+  let temporary = exportPath <> ".keiro-dsl-tmp"
+  temporaryExists <- doesPathExist temporary
+  when temporaryExists (cannotWrite ("its temporary file " <> temporary <> " already exists"))
   rendered <- renderTopology fp
-  case rendered of
+  bytes <- case rendered of
     Left diagnostics -> mapM_ (TIO.hPutStrLn stderr) diagnostics >> exitFailure
-    Right bytes -> pure (Just (exportPath, bytes))
+    Right bytes -> pure bytes
+  missing <- missingDirectories (takeDirectory exportPath)
+  created <- try (mapM_ createDirectory (reverse missing) >> BS.writeFile temporary bytes) :: IO (Either IOException ())
+  case created of
+    Left writeError -> do
+      removeCreatedDirectories missing
+      cannotWrite (show writeError)
+    Right () -> pure (Just TopologyExport {target = exportPath, temporary = temporary, createdDirectories = missing})
+  where
+    -- The directories that do not exist yet, innermost first.
+    missingDirectories directory = do
+      exists <- doesPathExist directory
+      if exists || takeDirectory directory == directory
+        then pure []
+        else (directory :) <$> missingDirectories (takeDirectory directory)
 
-writeTopologyOut :: Maybe (FilePath, BS.ByteString) -> IO ()
-writeTopologyOut = mapM_ $ \(path, bytes) -> do
-  createDirectoryIfMissing True (takeDirectory path)
-  BS.writeFile path bytes
+-- | Publish a prepared export after a successful scaffold.
+writeTopologyOut :: Maybe TopologyExport -> IO ()
+writeTopologyOut = mapM_ $ \export -> renameFile export.temporary export.target
+
+-- | Run the scaffold; if it exits or fails before 'writeTopologyOut' published
+-- the export, remove the temporary file and the directories made for it.
+discardTopologyOutOnFailure :: Maybe TopologyExport -> IO a -> IO a
+discardTopologyOutOnFailure export scaffold = scaffold `onException` mapM_ discard export
+  where
+    discard prepared = do
+      _ <- try (removeFile prepared.temporary) :: IO (Either IOException ())
+      removeCreatedDirectories prepared.createdDirectories
+
+-- | Remove directories innermost first, stopping silently at one that is not
+-- empty or cannot be removed.
+removeCreatedDirectories :: [FilePath] -> IO ()
+removeCreatedDirectories = \case
+  [] -> pure ()
+  directory : rest -> do
+    removed <- try (removeDirectory directory) :: IO (Either IOException ())
+    either (const (pure ())) (const (removeCreatedDirectories rest)) removed
 
 runWorkspaceBehaviorObligations :: FilePath -> BehaviorFormat -> IO ()
 runWorkspaceBehaviorObligations fp format = do
@@ -1091,7 +1213,7 @@ runWorkspaceScaffold fp out cliRoot cliRuntimePackage cliCollocate forceGenerate
           let memberInputs = [workspaceDisplayPath fp (WorkspaceMemberFile ((.path) member)) | member <- (.members) workspace]
           topologyExport <- prepareTopologyOut fp out (fp : memberInputs) (map ((.path) . fst) ((.modules) plan)) topologyOut
           comparisonReady <- preflightComparison out comparisonRequest comparisonModule
-          case comparisonReady of
+          discardTopologyOutOnFailure topologyExport $ case comparisonReady of
             Left comparisonError -> TIO.hPutStrLn stderr comparisonError >> exitFailure
             Right () -> do
               result <- executeWorkspaceScaffoldWithMigrations out forceGeneratedOverwrite applyNameMigrations applyGeneratedHaskellEdition plan

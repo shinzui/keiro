@@ -61,6 +61,18 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   must be regenerated with `scaffold --topology-out` after the upgrade, because
   `topology --check` reports it stale. The library exports
   `Keiro.Dsl.Scaffold.aggregateStreamCategory`; generated code is unchanged.
+- `scaffold --topology-out FILE` now writes the document to `FILE.keiro-dsl-tmp` before
+  the scaffold writes anything and renames it onto `FILE` after success. A `FILE` that is
+  a directory, is `--out` or cannot be created fails with
+  `--topology-out FILE cannot be written: <reason>; nothing was written` instead of an
+  uncaught exception after the generated tree was written. A refused scaffold removes
+  the temporary file.
+- `topology --check` no longer blames the keiro-dsl version when the versions are equal.
+  A changed workspace service name or manifest file name is reported as
+  `the service or manifest changed (recorded service 'A', current 'B')`; any other
+  difference with matching digests and version says so. Workspace member digests are now
+  computed from the bytes the loader parsed, read once and decoded as UTF-8 independent
+  of the locale.
 
 ## 0.25.1.0 — 2026-11-16
 

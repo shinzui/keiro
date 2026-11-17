@@ -7,7 +7,7 @@ tags: [keiro, dsl, topology, reference]
 generated:
   by: anthropic-claude-code/claude-opus-5-5
   at: 2026-11-17T00:00:00Z
-timestamp: 2026-11-17T18:58:00Z
+timestamp: 2026-11-17T19:20:00Z
 ---
 
 # Keiro DSL Service Topology
@@ -52,8 +52,13 @@ keiro-dsl topology service.keiro --check topology.json
 `FILE`. It prints nothing and exits zero when they are equal. Otherwise it exits
 1 and names the cause on standard error: each member whose digest changed, each
 member that is new or no longer a member, or, when every digest still matches,
-that the document differs although the sources are unchanged (usually after a
-`keiro-dsl` upgrade, because the generator version is part of the document).
+the first other difference. That is a `keiro-dsl` upgrade (the generator version
+is part of the document), then a changed service name or manifest file name,
+which are not members and carry no digest. Otherwise it says the document
+differs with unchanged sources and the same `keiro-dsl` version, for example
+after a change to the manifest's member order or a different build of one
+version. For a workspace, each member's digest is of the exact bytes the loader
+parsed.
 
 ## Top-level fields
 

@@ -7,7 +7,7 @@ tags: [keiro, dsl, cli, reference]
 generated:
   by: anthropic-claude-code/claude-opus-5
   at: 2026-09-28T00:00:00Z
-timestamp: 2026-11-17T00:00:00Z
+timestamp: 2026-11-17T19:20:00Z
 ---
 
 # Keiro DSL Command Reference
@@ -144,9 +144,12 @@ Options:
 - `--check FILE` prints no document. It regenerates the document and compares
   it with `FILE`, exiting zero when they are byte-identical and 1 otherwise.
   Each failure line starts with `topology stale:` and names the changed, new or
-  removed member, or says that the document differs although every member
-  digest matches (for example after upgrading `keiro-dsl`). A `FILE` that is
-  missing or is not a topology document fails with `topology check: cannot
+  removed member. When every member digest matches it names the first other
+  difference: a different `keiro-dsl` version (both versions are printed), then a
+  changed service name or manifest file name (`the service or manifest changed`,
+  with the recorded and current service), and otherwise says that the document
+  differs with unchanged sources and the same `keiro-dsl` version. A `FILE` that
+  is missing or is not a topology document fails with `topology check: cannot
   read …`.
 
 A service keeps a committed export fresh by writing it from its scaffold run and
@@ -193,11 +196,17 @@ Options:
   non-production historical codec comparison module for one structural mapped
   type.
 - `--topology-out FILE` also writes the service topology, byte-identical to
-  `keiro-dsl topology` for the same input. The document is computed before
-  anything is written and the file is written only after the scaffold succeeds;
-  a refused scaffold writes no topology. The path must not name an input file,
-  a generated or create-once module, or a `keiro-dsl-*` ledger, fragment or
-  report file under `--out`. The file is not recorded in the scaffold ledger.
+  `keiro-dsl topology` for the same input. Before the scaffold writes anything,
+  the document is computed and written to `FILE.keiro-dsl-tmp` beside `FILE`,
+  creating missing directories. That proves `FILE` writable; if it is not (for
+  example `FILE` is a directory, or is `--out` itself), the command prints
+  `scaffold: --topology-out FILE cannot be written: <reason>; nothing was
+  written` and exits 1. The temporary file is renamed onto `FILE` only after the
+  scaffold succeeds; a refused scaffold removes it and any directory it created,
+  and writes no topology. An existing `FILE.keiro-dsl-tmp` is refused rather than
+  overwritten. The path must not name an input file, a generated or create-once
+  module, or a `keiro-dsl-*` ledger, fragment or report file under `--out`. The
+  file is not recorded in the scaffold ledger.
 
 The scaffold report includes a `no-modules:` line for every declared emit,
 pgmq dispatch, or operation. Those nodes remain validated and diff-classified;
