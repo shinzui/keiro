@@ -7,7 +7,7 @@ tags: [keiro, dsl, topology, reference]
 generated:
   by: anthropic-claude-code/claude-opus-5-5
   at: 2026-11-17T00:00:00Z
-timestamp: 2026-11-17T19:20:00Z
+timestamp: 2026-11-17T21:10:00Z
 ---
 
 # Keiro DSL Service Topology
@@ -260,3 +260,136 @@ fields they do not know. A new node kind, a new relation or a change in the
 meaning of an existing field requires a new schema id. A consumer must therefore
 reject a document whose schema id, node kind or relation it does not know,
 rather than drop what it cannot read.
+
+## Serving the document
+
+A keiro inspection host can serve the committed document. The host mounts it with
+`AppHooks.serviceTopology` in code or with `--topology FILE` on a standalone
+`mainWithHooks` host (see
+[Serve Keiro Ops Over HTTP](../guides/serve-keiro-ops-over-http.md#service-topology)).
+It then answers two `GET` routes, under `/keiro/topology/` on a composed host:
+
+- `/topology/show` returns the mounted bytes unchanged, in this page's contract and
+  camelCase fields.
+- `/topology/summary` returns a snake_case header computed when the document was
+  mounted.
+
+Mounting refuses any schema id other than `/1` and `/2`, and any node kind or
+relation unknown to the declared id. The document describes the committed
+specification, not the running binary. The host never checks freshness;
+`keiro-dsl topology --check` does that in the service's gate.
+
+Summary served for `hospital-capacity.topology.golden.json` by
+`jitsurei-ops-http --topology` (recorded 2026-11-17):
+
+```json
+{"document_bytes":18760,"document_sha256":"sha256:d34a4e1580e7af6e4a9dab8984419048b737230c88b47536925d75bb6ed914d0","edge_counts":{"consumes":1,"delivers":1,"dispatches":3,"enqueues":1,"groups":2,"member-of":4,"observes":2,"projects":3,"publishes":1,"reads":3,"runs":1,"saga":1,"signals":1,"subscribes":1,"writes":2},"generator_version":"<version>","members":[{"path":"hospital-capacity.keiro","sha256":"sha256:0c849100a91719ea9e034eb042187f3f4ab41f85689a90b85dedf651dfb3ae5e"}],"node_counts":{"aggregate":5,"contract":1,"dispatch":1,"emit":1,"intake":1,"operation":2,"process":1,"projection-owner":2,"projection-target":2,"publisher":1,"read-model":4,"rebuild-group":1,"router":1,"workflow":1,"workqueue":1},"schema_id":"keiro-dsl/service-topology/1","service":"hospital-capacity","source":{"kind":"source","path":"hospital-capacity.keiro"}}
+```
+
+`source` is present only when the document's `source` has `kind` `source` or
+`workspace` and a string `path`. `node_counts` and `edge_counts` list only the kinds
+and relations that occur.
+
+### Handoff for keiro-ui
+
+This section is the input for the console page in `mori://shinzui/keiro-ui`. The
+client paths below are relative to that repository (artifact-level URIs pending).
+
+**Client.** Add a read for each route in `packages/client-keiro/src/client.ts` and a
+query key for each in `packages/client-keiro/src/query-keys.ts`. Add `topology` to
+`HOOK_GATED_WORDS` in `packages/client-keiro/src/errors.ts`. An unmounted host then
+yields `RouteUnavailable`, and the page can say that the host mounts no topology.
+
+**Read order and caching.** Read `/topology/summary` first. It is the mount probe.
+Its `schema_id` lets the console say "this console does not understand schema X"
+before fetching anything large, and `document_sha256` is the cache key. Key the
+`show` query on that digest within the selected host. Hash the raw `show` response
+bytes before caching them under the summary's digest, because a deployment can
+change between the two requests. On a mismatch, discard the pair and refresh the
+summary once. If the second pair also disagrees, report that the deployment is
+changing. The document is fixed for the life of a host process. Each read takes one
+of the host's four admission slots and the client keeps three in flight
+(`KEIRO_MAX_CONCURRENT`), so fetch `show` once per digest.
+
+**Validation.** The client validates with zod (`packages/client-keiro/src/schemas.ts`)
+and has no JSON Schema validator. Make the schema loose on object fields, because
+keiro may add fields within a schema id. Make it strict on `schema`, node `kind`,
+edge endpoint `kind` and edge `relation`, which this page's compatibility policy
+requires a consumer to reject when unknown. Both ids use the same 17 node kinds:
+
+```text
+aggregate process workflow router contract intake emit publisher workqueue dispatch
+read-model operation projection-target rebuild-group projection-owner
+projection-revision external-read
+```
+
+`keiro-dsl/service-topology/1` has 22 relations, and `/2` adds `feeds`:
+
+```text
+dispatches saga reads projects publishes subscribes delivers enqueues commands
+queries signals runs depends-on groups consumes writes member-of revises observes
+backed-by exposes compatible-with
+```
+
+**Errors.** A `413 inspection_result_too_large` on `show` means the mounted bytes
+exceed the host's response limit. Standalone hosts refuse such a file at startup, so
+in practice this comes from a composed host. A 413 on `summary` applies to the
+encoded summary, which grows with the member list. In both cases the host operator
+can raise `inspectionLimits.maxResponseBytes`; the read has no parameters to narrow.
+`409 schema_drift` and `503 inspection_busy` mean what they mean for every keiro
+read.
+
+**Fixtures.** Use the goldens under `keiro-dsl/test/fixtures/topology/` in
+`mori://shinzui/keiro` (artifact-level URI pending):
+`hospital-capacity.topology.golden.json`, `incident-command.topology.golden.json`,
+`projection-catalog.topology.golden.json`, `workspace/service.topology.golden.json`
+and the `/2` document `incident-command-sourced.topology.golden.json`. The recorded
+summary above matches the hospital golden.
+
+**Joins to live inspection routes.** A node links to live state only through the
+field in this table. Every row names the code that makes the two values equal.
+
+| Node kind | Live route | Join | Holds because |
+| --- | --- | --- | --- |
+| `aggregate` | `/aggregate/list?name=`, `/aggregate/show?name=&id=` | `details.category` equals a mounted `name` in `/aggregate/types`; take the instance `id` for `show` from a list row | The generated inspector catalog mounts each aggregate under `categoryText` of its generated `<agg>Category` (`inspectorLine` in `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`), which is built from `aggregateStreamCategory`. The topology node calls the same function (`keiro-dsl/src/Keiro/Dsl/Topology.hs`). `keiro-dsl/test/Keiro/Dsl/TopologySpec.hs` checks every hospital aggregate against the scaffolded catalog. Holds when the host mounts the generated `aggregateInspectorCatalog`. |
+| `process` | `/pm/list?name=`, `/pm/show?name=&correlation=` | `details.saga.category` equals the `category` of an item in `/pm/types`; use that item's `name` only when exactly one item matches | `/pm/types` reports `categoryText` of the category the inspector was built with (`listProcessManagerTypes` in `keiro/src/Keiro/ProcessManager/Inspect.hs`). The generated `<process>Category` is `Stream.categoryUnsafe` of the declared saga category (`keiro-dsl/src/Keiro/Dsl/Scaffold.hs`), the value the topology exports. keiro-dsl does not generate the process-manager catalog, so this holds when the host builds the inspector from that generated category. The lookup `name` is host-chosen. |
+| `workflow` | `/wf/inspect/list?workflow_name=`, `/wf/inspect/counts?workflow_name=` | `details.stableName` | The generated workflow module defines `workflowName = WorkflowName "<stable name>"` (`keiro-dsl/src/Keiro/Dsl/Harness.hs`), and the topology exports the same declared stable name. Holds when the application runs the workflow under that binding. |
+| `projection-owner` | `/projection/position?subscription=` | `details.subscription`, when it is not `null` | The generated projection catalog declares `SubscriptionDeclaration` with the owner's subscription text as its durable subscription name (`subscriptionExpr` in `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`). `/projection/position` takes that durable Kiroku subscription name. `null` means inline delivery, which has no subscription. Holds when the host runs the generated catalog. |
+
+Not guaranteed:
+
+- `workqueue`: the only keiro surface for a job queue is `pgmq dlq read|redrive|archive|purge`.
+  It takes the *logical* queue name (`details.logical`, mapped to the physical name
+  by `queueRef` in `keiro-pgmq/src/Keiro/PGMQ/Runtime.hs`), not `details.physical`.
+  Every one of those commands is a mutation reached by `POST`, including `read`,
+  which reserves entries. A read-only console has no live queue route to link.
+- `intake`: `/inbox/list?source=` filters by the producing bounded context's source.
+  No exported intake field is that source, so a link would be a guess.
+- `emit`: `details.source` is the declared outbox source, but the scaffold generates
+  no code from it, and the application supplies `source` when it writes an
+  integration event. A link from `details.source` to `/outbox/list?source=` is
+  plausible but not enforced by generated code.
+
+A node has no link when its join field is absent (`details.category` is missing
+from documents emitted before it existed) or when the matching route's hook is not
+mounted. The console can detect a document that disagrees with the running binary
+by comparing aggregate `category` values with `/aggregate/types`. It should show
+the mismatch rather than hide it.
+
+keiro's demo host Jitsurei is hand-written and has no specification, so
+`jitsurei-ops-http --topology` serves a document about another service. None of its
+nodes join to Jitsurei's live data. The goldens support page development; live joins
+need a keiro-dsl service.
+
+Beyond links, the edges `consumes`, `writes` and `observes` trace aggregate events
+to read models, `details.machine` gives each aggregate's keiki state machine (see
+Aggregate machines), and `member` and `line` locate each node in the specification
+source.
+
+Consumer documentation follow-up belongs to keiro-ui: the integration guide
+(`mori://shinzui/keiro-ui/okf/user-documentation/concepts/DOC-5`) and the
+capability pages for aggregate inspection
+(`mori://shinzui/keiro-ui/okf/capabilities/concepts/CAP-6`), process-manager
+inspection (`mori://shinzui/keiro-ui/okf/capabilities/concepts/CAP-7`), workflow
+inspection (`mori://shinzui/keiro-ui/okf/capabilities/concepts/CAP-5`) and
+projection monitoring (`mori://shinzui/keiro-ui/okf/capabilities/concepts/CAP-9`).

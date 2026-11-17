@@ -105,10 +105,11 @@ which node kind joins to which inspection route and by which field.
       limit. The tests live in `keiro-ops-http/test/Test/TopologySpec.hs`, registered from
       `keiro-ops-http/test/Main.hs`. `keiro-ops-http-test` passed 70 examples and
       `jitsurei-ops-http-test` passed 5.
-- [ ] Milestone 4: `jitsurei-ops-http --topology FILE` works locally against a keiro-dsl
+- [x] Milestone 4 (2026-11-17): `jitsurei-ops-http --topology FILE` works locally against a keiro-dsl
       golden; the HTTP guide, the operations page, the CHANGELOGs and ADR-62 are updated;
       the keiro-ui handoff, with its verified join table, is written into
-      `docs/user/keiro-dsl-service-topology.md`.
+      `docs/user/keiro-dsl-service-topology.md`. The demo transcript is under Outcomes.
+      `just user-documentation-validate` and `just adr-validate` passed.
 
 
 ## Surprises & Discoveries
@@ -116,6 +117,23 @@ which node kind joins to which inspection route and by which field.
 The hospital fixture has two live lookup keys for the saga. Its aggregate inspector
 is mounted under `surge`. Its process node carries `details.saga.category = "hospitalSurge"`.
 Use the former for aggregate reads and resolve the latter through the process-manager catalog.
+
+Two candidate joins in the plan's starting table did not hold. The pgmq operator surface
+takes the logical queue name (`details.logical`, mapped by `queueRef` in
+`keiro-pgmq/src/Keiro/PGMQ/Runtime.hs`), not `details.physical`. All four `pgmq dlq`
+commands are mutations, including `read`, which reserves entries, so a read-only
+console has no queue route to link. An emit's `details.source` is declared, but the
+scaffold generates no code from it (`NEmit _ -> []` in
+`keiro-dsl/src/Keiro/Dsl/ScaffoldRun.hs`). The application supplies the outbox source.
+Both went to the handoff's "Not guaranteed" list with `intake`.
+
+keiro-dsl generates the aggregate inspector catalog but not the process-manager catalog,
+and the generated workflow and projection bindings must be used by the application. The
+handoff therefore states the condition under which each kept row holds. Only the aggregate
+row comes entirely from generated wiring.
+
+Port 9092 was already held by an unrelated local process during the demo, so the
+transcript below used `--port 9095`. The recipe itself is unchanged.
 
 
 ## Decision Log
@@ -227,7 +245,53 @@ Use the former for aggregate reads and resolve the latter through the process-ma
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-11-17. A host can mount a committed topology document in code
+(`AppHooks.serviceTopology` with `loadServiceTopology` or `decodeServiceTopology`) or with
+`--topology FILE` on any `mainWithHooks` host. `GET /topology/show` returns the exact bytes
+and `GET /topology/summary` the snake_case header. keiro-ops still does not depend on
+`keiro-dsl`; its new library dependency is `cryptohash-sha256`.
+
+Demo transcript (Milestone 4), against the hospital golden:
+
+```bash
+just jitsurei-ops-http --port 9095 --topology keiro-dsl/test/fixtures/topology/hospital-capacity.topology.golden.json
+curl -fsS http://127.0.0.1:9095/topology/summary
+set -o pipefail
+curl -fsS http://127.0.0.1:9095/topology/show | cmp - keiro-dsl/test/fixtures/topology/hospital-capacity.topology.golden.json && echo identical
+curl -sS -X POST -i http://127.0.0.1:9095/topology/show | head -1
+```
+
+```text
+jitsurei-ops-http: listening on 127.0.0.1:9095 (mutations disabled)
+{"document_bytes":18760,"document_sha256":"sha256:d34a4e1580e7af6e4a9dab8984419048b737230c88b47536925d75bb6ed914d0","edge_counts":{"consumes":1,"delivers":1,"dispatches":3,"enqueues":1,"groups":2,"member-of":4,"observes":2,"projects":3,"publishes":1,"reads":3,"runs":1,"saga":1,"signals":1,"subscribes":1,"writes":2},"generator_version":"<version>","members":[{"path":"hospital-capacity.keiro","sha256":"sha256:0c849100a91719ea9e034eb042187f3f4ab41f85689a90b85dedf651dfb3ae5e"}],"node_counts":{"aggregate":5,"contract":1,"dispatch":1,"emit":1,"intake":1,"operation":2,"process":1,"projection-owner":2,"projection-target":2,"publisher":1,"read-model":4,"rebuild-group":1,"router":1,"workflow":1,"workqueue":1},"schema_id":"keiro-dsl/service-topology/1","service":"hospital-capacity","source":{"kind":"source","path":"hospital-capacity.keiro"}}
+identical
+HTTP/1.1 405 Method Not Allowed
+```
+
+The served summary equals the value specified in Milestone 2.
+
+Evidence for each guarantee:
+
+- Gating: without the hook, both commands fail to parse (`keiro-ops/test/TopologySpec.hs`).
+  Over HTTP, `/topology/*` returns `400 invalid_request`, as `/aggregate/types` does
+  (`keiro-ops-http/test/Test/TopologySpec.hs`).
+- Byte exactness: the HTTP test mounts a document with non-canonical whitespace, key
+  order and a final newline, then compares the response body byte for byte. The demo
+  `cmp` checks the committed golden.
+- Limits: a body exactly at `maxResponseBytes` is served, one byte less gives `413`,
+  `POST` gives `405` with `Allow: GET`, and an allowed `Origin` receives
+  `Access-Control-Allow-Origin`.
+- Startup refusal: `withHost` raises `HostStartupError` before its continuation for a
+  missing file, invalid JSON, schema `/9` and a file one byte over the limit. The
+  `keiro-ops-http` executable exits 1 with the path on stderr.
+- Performance: existing reads take the same path. The new reads use the existing
+  admission and encoding path, and the summary is computed once at mount.
+  No benchmark measures this path. Nothing on a pre-existing route changed.
+
+Retrospective: Routing through the existing command tree meant no HTTP route code was
+needed. The `runCommandWithReadEncoding` seam provided byte identity directly. Most of
+the effort went to verifying the join table. Two of six candidate rows fell to "Not
+guaranteed" once their keys were traced to code.
 
 
 ## Context and Orientation

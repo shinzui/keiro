@@ -2,7 +2,7 @@
 type: Runbook
 title: Serve Keiro Ops Over HTTP
 description: Mount bounded HTTP inspection and explicitly confirmed operator actions using the supported Keiro command tree.
-timestamp: 2026-11-05T15:15:59Z
+timestamp: 2026-11-17T21:10:00Z
 docId: DOC-30
 tags: [keiro, operations, http, inspection]
 generated:
@@ -280,6 +280,100 @@ to get the standalone host's flags, schema verification, origin policy,
 mutation gate, and WebSocket feeds. `Keiro.Ops.Http.Host.withHost` exposes the
 same lifecycle with explicit options and a continuation receiving the bound
 port; it releases the listener, feeds, and inspection connections on return.
+
+## Service topology
+
+A service built with keiro-dsl commits a topology document next to its
+specification (`keiro-dsl scaffold --topology-out`) and gates it with
+`keiro-dsl topology --check`; see
+[Keiro DSL Service Topology](../user/keiro-dsl-service-topology.md). A host that
+mounts the document serves it beside every other inspection route:
+
+```bash
+curl -fsS http://127.0.0.1:9092/topology/summary
+curl -fsS http://127.0.0.1:9092/topology/show > served.json
+cmp served.json services/orders/topology.json && echo identical
+```
+
+An application that composes `opsApplicationWithBudget` into its own server
+mounts the document in code. Read the file at startup and refuse to start on
+`Left`. With `loadServiceTopology` the file must ship in the deployment image:
+
+```haskell
+import Data.Text.IO qualified as Text
+import Keiro.Ops (AppHooks (..), emptyAppHooks, loadServiceTopology)
+import System.Exit (exitFailure)
+import System.IO (stderr)
+
+loadHooks :: IO AppHooks
+loadHooks = do
+  loaded <- loadServiceTopology "services/orders/topology.json"
+  case loaded of
+    Left problem -> Text.hPutStrLn stderr problem >> exitFailure
+    Right document -> pure emptyAppHooks {serviceTopology = Just document}
+```
+
+To compile the document into the binary instead, embed its bytes (for example
+with the `file-embed` package) and decode them once:
+
+```haskell
+{-# LANGUAGE TemplateHaskell #-}
+
+import Data.ByteString (ByteString)
+import Data.FileEmbed (embedFile)
+import Data.Text qualified as Text
+import Keiro.Ops (AppHooks (..), ServiceTopologyDocument, decodeServiceTopology, emptyAppHooks)
+
+topologyBytes :: ByteString
+topologyBytes = $(embedFile "services/orders/topology.json")
+
+topologyDocument :: Either Text.Text ServiceTopologyDocument
+topologyDocument = decodeServiceTopology topologyBytes
+
+hooks :: ServiceTopologyDocument -> AppHooks
+hooks document = emptyAppHooks {serviceTopology = Just document}
+```
+
+A standalone host built on `mainWithHooks`, including `keiro-ops-http` and
+`jitsurei-ops-http`, takes `--topology FILE`. The flag replaces any document mounted
+in code and reports that override on stderr. Before opening the database or listener,
+the host refuses to start and exits 1 when the file cannot be read or decoded, or
+when it is larger than the response limit (`inspectionLimits.maxResponseBytes`, 1 MiB
+by default). `/topology/show` cannot return part of a document, so an oversize mount
+would always fail. `withHost` raises the same failure as `HostStartupError`, and
+`loadHostTopology` exposes the bounded reader to a composed host.
+
+`/topology/show` returns the mounted bytes unchanged, in the document's own
+published contract and camelCase fields. A console can validate the body against
+the published schema and hash it. `/topology/summary` is new keiro-ops wire and
+uses snake_case: `schema_id`, `service`, `generator_version`, `source`, `members`
+(`path` and `sha256`), `node_counts`, `edge_counts`, `document_bytes` and
+`document_sha256`. The last is `sha256:` followed by the lowercase hex digest of the
+mounted bytes, the spelling the document uses for member digests.
+
+Mounting accepts the schema ids `keiro-dsl/service-topology/1` and `/2` only. It
+also refuses node kinds and edge relations unknown to the declared id, including a
+`feeds` edge under `/1`, and ignores additional object fields. Both routes are reads:
+they need `GET`, take an admission slot, verify the live schema and obey the
+response cap. A host without the hook answers `400 invalid_request`, as it does for
+`/aggregate/*`. The host does not check freshness at runtime, since it has no
+specification sources. `keiro-dsl topology --check` enforces freshness in the
+service's gate, and the summary's `generator_version` and member digests can be
+compared with a checkout.
+
+To see the routes locally, mount a keiro-dsl golden on the worked example's host.
+Jitsurei has no specification, so this shows the route rather than Jitsurei's own
+structure:
+
+```bash
+just jitsurei-ops-http --topology keiro-dsl/test/fixtures/topology/hospital-capacity.topology.golden.json
+```
+
+```bash
+curl -fsS http://127.0.0.1:9092/topology/summary
+set -o pipefail
+curl -fsS http://127.0.0.1:9092/topology/show | cmp - keiro-dsl/test/fixtures/topology/hospital-capacity.topology.golden.json && echo identical
+```
 
 ## Workflow counts
 

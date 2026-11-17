@@ -1,7 +1,7 @@
 ---
 type: Reference
 title: API Reference
-timestamp: 2026-11-14T23:41:04Z
+timestamp: 2026-11-17T21:10:00Z
 description: Map Keiro's public modules and their user-facing interfaces.
 docId: DOC-2
 tags: [keiro, api, modules, reference]
@@ -1077,6 +1077,22 @@ Build application capabilities by updating `emptyAppHooks`. `aggregates` and
 `aggregate types` and `pm types` list mounted descriptors. `OpsOutcome` includes
 `InspectionFailed` for structured inspection errors; exhaustive embedders must
 handle it. The optional HTTP package uses these same hooks.
+
+`serviceTopology` mounts an application's committed keiro-dsl service topology
+(`Keiro.Ops.Topology`, re-exported from `Keiro.Ops`). `decodeServiceTopology ::
+ByteString -> Either Text ServiceTopologyDocument` accepts the schema ids
+`keiro-dsl/service-topology/1` and `/2` and checks `service`, `generator.version`,
+each member's `path` and `sha256`, and every node kind, edge endpoint kind and
+relation against the declared id. It ignores additional fields and keeps the exact
+bytes. `loadServiceTopology :: FilePath -> IO (Either Text ServiceTopologyDocument)`
+returns I/O and decode failures as `Left` with the path. The opaque document exposes
+`serviceTopologySchemaId`, `serviceTopologyBytes`, `serviceTopologyValue`,
+`serviceTopologyDigest` (`sha256:` and lowercase hex of the bytes) and
+`serviceTopologySummary`. With the hook, `topology show` and `topology summary` are
+reads. `runCommandWithReadEncoding` pairs `show` with the mounted bytes so HTTP
+hosts return them unchanged. `Keiro.Ops.Http.Host` adds `HostOptions.topology`,
+the `--topology FILE` flag, `loadHostTopology` (decoding bounded by the response
+limit) and `HostStartupError`.
 
 `pgmq dlq read|redrive|archive|purge --queue NAME` operates a Keiro job's
 dead-letter queue without a hook. `read` decodes visible entries, including

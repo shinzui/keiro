@@ -2,6 +2,9 @@
 
 ## 2026-11-17
 
+* **Update**: ADR-62: record that keiro-ops serves the topology opaquely and checks each schema id's vocabulary at mount (plan 342).
+
+
 * **Update**: ADR-63: record the corpora the topology machine proof now covers and its every-generated-aggregate rule (plan 343).
 
 

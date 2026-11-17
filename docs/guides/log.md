@@ -1,5 +1,8 @@
 # Keiro Guides Log
 
+## 2026-11-17
+* **Update**: Document serving the committed service topology at /topology/show and /topology/summary, in code and with --topology FILE (plan 342).
+
 ## 2026-11-14
 
 * **Update**: Explain PGMQ ParentAndLink and LinkOnly tuning, sampling, span rename and W3C-only consumer extraction.

@@ -2,7 +2,7 @@
 type: Runbook
 title: Operations
 description: Deploy and operate Keiro applications, workers, rebuilds, retries, and production checks.
-timestamp: 2026-11-16T18:36:00Z
+timestamp: 2026-11-17T21:10:00Z
 docId: DOC-15
 tags: [keiro, operations, deployment, runbook]
 generated:
@@ -794,6 +794,32 @@ These are observational reads: the folded state, history head and snapshot can
 observe concurrent writes at different times. Snapshot age uses the returned
 database `observed_at` clock. See the [API reference](api-reference.md#keiroinspectionaggregate)
 for the library contract.
+
+## Service topology
+
+An application built with keiro-dsl can mount its committed
+[service topology](keiro-dsl-service-topology.md) with
+`AppHooks.serviceTopology = Just document`, using `loadServiceTopology` at startup or
+`decodeServiceTopology` on embedded bytes. Mounting fails for schema ids other than
+`keiro-dsl/service-topology/1` and `/2` and for node kinds or edge relations unknown
+to the declared id. An application CLI built with `Keiro.Ops.mainWithHooks` then has
+two reads:
+
+```bash
+<app-ops> --json topology summary
+<app-ops> --json topology show
+```
+
+`summary` prints the snake_case header: schema id, service, generator version,
+member paths and digests, node and edge counts, and the document's size and
+`sha256:` digest. `show` prints the document. The CLI re-encodes the decoded value,
+so its key order and whitespace can differ from the file, while the HTTP route
+returns the committed bytes. The shipped `keiro-ops` binary uses `emptyAppHooks`
+and has no `topology` group. HTTP hosts can also mount a file with
+`--topology FILE`; see
+[Serve Keiro Ops Over HTTP](../guides/serve-keiro-ops-over-http.md#service-topology).
+The host serves the committed document and never checks it against the running
+binary. `keiro-dsl topology --check` keeps it fresh in the service's gate.
 
 ## Manager, pending-timer and shard inspection
 

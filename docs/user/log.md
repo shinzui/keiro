@@ -2,6 +2,9 @@
 
 ## 2026-11-17
 
+* **Update**: DOC-15, DOC-2, DOC-35: document the mounted service topology, the topology show and summary reads, and the keiro-ui serving handoff with its verified join table (plan 342).
+
+
 * **Update**: DOC-33, DOC-35: document the --topology-out writability preflight and the --check service-or-manifest and same-version messages (plan 343).
 
 
