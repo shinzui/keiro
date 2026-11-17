@@ -4,6 +4,14 @@ module Keiro.Ops
     AppHooks (..),
     AggregateInspectors,
     ProcessManagerInspectors,
+    ServiceTopologyDocument,
+    decodeServiceTopology,
+    loadServiceTopology,
+    serviceTopologySchemaId,
+    serviceTopologyBytes,
+    serviceTopologyValue,
+    serviceTopologyDigest,
+    serviceTopologySummary,
     OpsAuditConfig (..),
     emptyAppHooks,
     OpsInvocation (..),
@@ -43,6 +51,17 @@ import Keiro.Ops.Shard qualified as Shard
 import Keiro.Ops.Snapshot qualified as Snapshot
 import Keiro.Ops.Stream qualified as Stream
 import Keiro.Ops.Timer qualified as Timer
+import Keiro.Ops.Topology
+  ( ServiceTopologyDocument,
+    decodeServiceTopology,
+    loadServiceTopology,
+    serviceTopologyBytes,
+    serviceTopologyDigest,
+    serviceTopologySchemaId,
+    serviceTopologySummary,
+    serviceTopologyValue,
+  )
+import Keiro.Ops.Topology qualified as Topology
 import Keiro.Ops.Workflow qualified as Workflow
 import Keiro.Ops.WorkflowHeaderCache (WorkflowHeaderCache, runHeaderCached)
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
@@ -90,6 +109,7 @@ data Command
   | Stream Stream.Command
   | ReplayAudit ReplayAudit.Command
   | Rebuild Rebuild.Command
+  | Topology Topology.Command
 
 opsCommandTree :: AppHooks -> ParserInfo OpsInvocation
 opsCommandTree hooks =
@@ -144,8 +164,12 @@ commandParser hooks =
         <> rebuildCommand
         <> aggregateCommand
         <> processManagerCommand
+        <> topologyCommand
     )
   where
+    topologyCommand = case hooks.serviceTopology of
+      Nothing -> mempty
+      Just _ -> command "topology" (info (Topology <$> Topology.commandParser) (progDesc "Read the mounted service-topology document"))
     processManagerCommand = case hooks.processManagers of
       Nothing -> mempty
       Just _ -> command "pm" (info (ProcessManager <$> ProcessManager.commandParser) (progDesc "Inspect mounted process managers"))
@@ -218,6 +242,7 @@ isMutation = \case
   Stream streamCommand -> Stream.isMutation streamCommand
   ReplayAudit _ -> False
   Rebuild rebuildCommand -> Rebuild.isMutation rebuildCommand
+  Topology topologyCommand -> Topology.isMutation topologyCommand
 
 -- | Reuse only pure header presentation after an exact fresh database check.
 -- The optional bytes encode this outcome's successful read result. Other
@@ -247,6 +272,10 @@ runCommandWithReadEncoding encode cache hooks env command = case command of
       pure $ case encoded of
         Nothing -> (InspectionFailed "inspection_result_too_large" "encoded result exceeds the host limit; narrow the read", Nothing)
         Just body -> (Succeeded result, Just body)
+  -- The committed bytes are the response; never re-encode the document.
+  Topology Topology.Show | Just document <- hooks.serviceTopology -> do
+    outcome <- runCommand hooks env command
+    pure (outcome, Just (serviceTopologyBytes document))
   _ -> runCommandWithHeaderCache cache hooks env command
 
 -- | Execute a parsed command after schema verification. Front ends must use
@@ -274,6 +303,8 @@ runCommand hooks env = \case
       (pure (Failed "projection catalog hook is not mounted"))
       (\operations -> Rebuild.runCommand env operations rebuildCommand)
       hooks.projectionCatalog
+  Topology topologyCommand ->
+    pure (maybe (Failed "service topology hook is not mounted") (\document -> Topology.runCommand document topologyCommand) hooks.serviceTopology)
 
 finishOutcome :: OpsEnv -> OpsOutcome -> IO Exit.ExitCode
 finishOutcome env = \case

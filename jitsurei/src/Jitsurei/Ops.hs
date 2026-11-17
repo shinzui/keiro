@@ -27,7 +27,8 @@ jitsureiOpsHooks metrics =
       projectionCatalog = Just orderCatalogOperations,
       aggregates = Just jitsureiAggregateInspectors,
       durableConsumers = Nothing,
-      processManagers = Just jitsureiProcessManagerInspectors
+      processManagers = Just jitsureiProcessManagerInspectors,
+      serviceTopology = Nothing
     }
 
 jitsureiWorkflowRunOptions :: Maybe Telemetry.KeiroMetrics -> WorkflowRunOptions

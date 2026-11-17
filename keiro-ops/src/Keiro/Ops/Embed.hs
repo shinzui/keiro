@@ -16,6 +16,7 @@ import Keiro.Inspection.Aggregate (AggregateInspectors)
 import Keiro.Inspection.Consumers (DurableConsumerRegistry)
 import Keiro.Ops.ReplayAudit (OpsAuditConfig (..))
 import Keiro.Ops.Timer (TimerFire)
+import Keiro.Ops.Topology (ServiceTopologyDocument)
 import Keiro.Ops.Workflow (ResumeHook)
 import Keiro.ProcessManager.Inspect (ProcessManagerInspectors)
 import Keiro.Projection.Catalog.Operations (ProjectionCatalogOperations)
@@ -27,7 +28,10 @@ data AppHooks = AppHooks
     projectionCatalog :: !(Maybe ProjectionCatalogOperations),
     aggregates :: !(Maybe AggregateInspectors),
     durableConsumers :: !(Maybe DurableConsumerRegistry),
-    processManagers :: !(Maybe ProcessManagerInspectors)
+    processManagers :: !(Maybe ProcessManagerInspectors),
+    -- | The application's committed keiro-dsl service topology. Mounts
+    -- @topology show@ and @topology summary@.
+    serviceTopology :: !(Maybe ServiceTopologyDocument)
   }
 
 emptyAppHooks :: AppHooks
@@ -39,5 +43,6 @@ emptyAppHooks =
       projectionCatalog = Nothing,
       aggregates = Nothing,
       durableConsumers = Nothing,
-      processManagers = Nothing
+      processManagers = Nothing,
+      serviceTopology = Nothing
     }

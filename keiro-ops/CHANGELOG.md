@@ -6,6 +6,26 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- `AppHooks` gains `serviceTopology :: Maybe ServiceTopologyDocument`; direct record
+  constructors must supply it (`Nothing` keeps the previous behavior). Updating
+  `emptyAppHooks` remains the preferred embedding pattern.
+- `Keiro.Ops.Command` gains a `Topology` constructor; exhaustive matches must handle it.
+
+### New Features
+
+- `Keiro.Ops.Topology` mounts an application's committed keiro-dsl service-topology
+  document. `decodeServiceTopology` and `loadServiceTopology` accept schema ids
+  `keiro-dsl/service-topology/1` and `/2`, check the envelope and each id's node kinds
+  and edge relations, and keep the exact bytes. The type, loader, decoder and accessors
+  are re-exported from `Keiro.Ops`.
+- With the hook mounted, `topology show` returns the document and `topology summary`
+  returns a snake_case header with member digests, node and edge counts, and the
+  document's size and SHA-256. Both are reads. HTTP hosts serve `show` as the mounted
+  bytes; the CLI's `--json topology show` re-encodes the decoded value.
+- Adds a direct dependency on `cryptohash-sha256`, already required by `keiro`.
+
 ## 0.25.1.0 — 2026-11-16
 
 ### Other Changes

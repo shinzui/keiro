@@ -82,6 +82,7 @@ import ReactionInspectionSpec qualified
 import System.Exit (ExitCode (..))
 import System.Process (readProcessWithExitCode)
 import Test.Hspec
+import TopologySpec qualified
 
 main :: IO ()
 main = do
@@ -97,7 +98,8 @@ embeddedHooks =
       projectionCatalog = Just emptyCatalogOperations,
       aggregates = Just Map.empty,
       durableConsumers = Nothing,
-      processManagers = Just Map.empty
+      processManagers = Just Map.empty,
+      serviceTopology = Nothing
     }
 
 emptyCatalogOperations :: CatalogOperations.ProjectionCatalogOperations
@@ -121,6 +123,7 @@ spec :: Fixture -> Spec
 spec fixture = do
   CategoryConsumersSpec.spec fixture
   ReactionInspectionSpec.spec fixture
+  TopologySpec.spec fixture
   describe "embedded command tree" do
     it "omits code-dependent commands from the standalone tree" do
       isParseSuccess (parseOps Ops.emptyAppHooks ["pm", "show", "--name", "test", "--correlation", "one"]) `shouldBe` False
