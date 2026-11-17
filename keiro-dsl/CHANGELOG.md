@@ -22,6 +22,19 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   on standard output. The library exports `Keiro.Dsl.Topology`
   (`buildServiceTopology`, `encodeServiceTopology`, `topologySchemaId`,
   `memberDigest`). Existing commands and outputs are unchanged.
+- `keiro-dsl scaffold … --topology-out FILE` also writes the service topology,
+  byte-identical to `keiro-dsl topology` for the same input. The document is computed
+  before scaffold writes anything and written only after it succeeds. A path that names a
+  scaffold input, a planned module or a `keiro-dsl-*` record under `--out` is refused. The
+  file is not recorded in the scaffold ledger, and scaffold without the flag is unchanged.
+- `keiro-dsl topology SOURCE --check FILE` prints nothing and exits zero when `FILE` equals
+  the regenerated document. Otherwise it exits 1 and names each changed, new or removed
+  member, or, when every digest matches, the recorded and current generator versions.
+- The contract is documented in `docs/user/keiro-dsl-service-topology.md` with the JSON
+  Schema `docs/user/schemas/keiro-dsl-service-topology-1.schema.json`. The repository gate
+  `just topology-schema-validate` (part of `just verify`, using `check-jsonschema` from the
+  development shell) validates every golden document against the schema its `schema` field
+  names.
 
 ## 0.25.1.0 — 2026-11-16
 

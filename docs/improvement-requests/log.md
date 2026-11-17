@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-17
+* **Completion**: IR-62 completed under ExecPlans 338 and 339: keiro-dsl topology emits keiro-dsl/service-topology/1 with the projection catalog, scaffold --topology-out, topology --check, DOC-35 and a gated JSON Schema; contract differences from the draft recorded in the request.
+
 ## 2026-11-16
 * **Request**: IR-62 proposed from `mori://shinzui/mori`: add `keiro-dsl topology` emitting a byte-stable `keiro-dsl/service-topology/1` document (nodes, node-to-node edges, member digests), with `scaffold --topology-out` and a freshness check for service gates.
 * **Request**: IR-63 proposed from `mori://shinzui/mori`: let a process or router input declare the intake that feeds it, check that the intake accepts the events the input is built from, and expose the link as a service-topology edge.

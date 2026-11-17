@@ -22,7 +22,7 @@
     #        the shell, scripts/record-release.sh dies on `git for-each-ref`.
     #   z3:  SMT solver used by the keiro-syntax / property test tooling.
     #   python3: release orchestration and repository policy checks.
-    haskellProject.extraDevPackages = [ pkgs.git pkgs.z3 pkgs.python3 ];
+    haskellProject.extraDevPackages = [ pkgs.git pkgs.z3 pkgs.python3 pkgs.check-jsonschema ];
 
     treefmt = {
       # Take fourmolu from the ghc9124 package set so it matches the project

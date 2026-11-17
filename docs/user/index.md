@@ -2,6 +2,10 @@
 okf_version: "0.2"
 ---
 
+# Subdirectories
+
+- [schemas/](schemas/index.md)
+
 # Explanation
 
 - [Codecs And Event Evolution](codecs-and-event-evolution.md) - Explain event tags, schema versions, upcasters, codec authority, and decode failures.
@@ -26,11 +30,12 @@ okf_version: "0.2"
 - [Durable Workflows](durable-workflows.md) - Reference named steps, durable waits, awakeables, child workflows, resume workers, and journal snapshots.
 - [Idempotent Inbox](inbox.md) - Reference inbox deduplication policies and transactional handler semantics.
 - [Keiro DSL Aggregates](keiro-dsl-aggregates.md) - Write Keiro DSL aggregate expressions, registers, commands, events, transitions, outcomes, projections, and snapshots.
-- [Keiro DSL Command Reference](keiro-dsl-cli.md) - Run the keiro-dsl new, parse, pretty, check, inspect, behavior-obligations, scaffold, and diff commands.
+- [Keiro DSL Command Reference](keiro-dsl-cli.md) - Run the keiro-dsl new, parse, pretty, check, inspect, topology, behavior-obligations, scaffold, and diff commands.
 - [Keiro DSL Integration Contracts](keiro-dsl-integration.md) - Declare Keiro DSL public contracts, Kafka intakes, emits, and outbox publishers.
 - [Keiro DSL Processes and Routers](keiro-dsl-processes-and-routers.md) - Declare Keiro DSL process managers, reactions, timers, and custom or declarative routers.
 - [Keiro DSL Queues and Read Models](keiro-dsl-queues-and-read-models.md) - Declare Keiro DSL work queues, read-model-driven dispatch, read models, projection catalogs, and external reads.
 - [Keiro DSL Reference](keiro-dsl-reference.md) - Introduce the Keiro DSL, its stable Language 5 and candidate Language 6 contracts, and source file structure, and index the topic reference pages.
+- [Keiro DSL Service Topology](keiro-dsl-service-topology.md) - Read and keep fresh the versioned keiro-dsl service topology document, its node kinds, relations, encoding and compatibility policy.
 - [Keiro DSL Types and Mappings](keiro-dsl-types-and-mappings.md) - Declare Keiro DSL IDs, enums, rules, direct types, and consumer-owned nominal, structural, refined, and opaque mappings.
 - [Keiro DSL Validation and Evolution](keiro-dsl-validation-and-evolution.md) - Understand Keiro DSL validation layers and language gates, evolve deployed specifications safely, and review the authoring checklist.
 - [Keiro DSL Workflows and Operations](keiro-dsl-workflows-and-operations.md) - Declare Keiro DSL durable workflows and command, query, signal, and workflow-run operations.
@@ -53,4 +58,3 @@ okf_version: "0.2"
 # Tutorial
 
 - [Getting Started](getting-started.md) - Build a first Keiro integration from database setup through a command path.
-

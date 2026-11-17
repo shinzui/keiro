@@ -22,6 +22,11 @@ provenance:
       at: 2026-11-17T15:26:59Z
       mode: "update"
       note: "Correct schema handoffs, compatibility checks and fixture acceptance after repository review"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-17T16:15:04Z
+      mode: "implement"
+      note: "EP-2 implemented: --topology-out, --check, DOC-35, JSON Schema gate and IR-62 response"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -75,18 +80,38 @@ This plan is child EP-2 of
 
 ## Progress
 
-- [ ] Milestone 1: `keiro-dsl scaffold --topology-out FILE` writes a file byte-equal to the
-      `topology` command's output for the same input, for a single source and a workspace.
-- [ ] Milestone 2: `keiro-dsl topology SOURCE --check FILE` exits zero on unchanged sources
-      and non-zero, naming the stale member, after a member is edited.
-- [ ] Milestone 3: the user documentation page and the JSON Schema for
-      `keiro-dsl/service-topology/1` exist, the golden documents validate against the schema
-      in `just verify`, and the IR-62 record is updated with keiro's answers.
+- [x] Milestone 1 (2026-11-17): `scaffold --topology-out FILE` writes bytes equal to
+      `topology` for hospital-capacity and the two-member workspace; a refused scaffold writes
+      no file; aliasing the input or the ledger is refused with both files' bytes unchanged.
+      Evidence: the `scaffold --topology-out …` and `refuses an export path …` examples in
+      `keiro-dsl/test/Keiro/Dsl/TopologySpec.hs`.
+- [x] Milestone 2 (2026-11-17): `topology --check FILE` is silent with exit 0 on fresh sources;
+      exit 1 names an edited member, a new and a removed workspace member, a version-only
+      difference, and an unreadable file. Evidence: four `topology --check …` examples;
+      `--match "service topology"` reports 32 examples, 0 failures.
+- [x] Milestone 3 (2026-11-17): `docs/user/keiro-dsl-service-topology.md` (DOC-35),
+      `docs/user/schemas/keiro-dsl-service-topology-1.schema.json`, the CLI page sections,
+      `scripts/check-topology-schemas.sh` behind `just topology-schema-validate` (in
+      `_verify`) with `check-jsonschema` 0.38.0 in the shell, and the IR-62 response. Evidence:
+      `just topology-schema-validate` validates 4 goldens and fails on a golden edited to
+      relation `haunts` (then restored); `just user-documentation-validate` reports 35
+      concepts OK; `okf validate docs/improvement-requests` reports 63 concepts OK.
+      Owed by EP-3 and EP-4 when they land: `machine` and the `/2` schema (each plan extends
+      these files itself, as the MasterPlan's Integration Points describe).
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- `.keiro` comments start with `#`. The plan's hand example appended `-- edited`, which is a
+  parse error, so the check then fails with a parse diagnostic instead of the stale-member
+  message. The tests append `# edited`.
+
+- `okf validate docs/user --strict` accepts a `schemas/` subdirectory holding a JSON file;
+  `okf index --write` adds a `schemas/index.md` and a "Subdirectories" section to
+  `docs/user/index.md`. The fallback location under `keiro-dsl/schemas/` was not needed.
+
+- `check-jsonschema` is available in the pinned nixpkgs (0.38.0); adding it changed no lock
+  file.
 
 
 ## Decision Log
@@ -112,6 +137,31 @@ This plan is child EP-2 of
   and an export failure must not leave generated code written with no export.
   Date: 2026-11-17
 
+- Decision: `renderTopology` returns `IO (Either [Text] ByteString)` rather than `[String]`.
+  Rationale: every diagnostic renderer it calls already returns `Text`.
+  Date: 2026-11-17
+
+- Decision: The scaffold alias check refuses an export path equal (after `canonicalizePath`)
+  to the source or manifest, any workspace member, or any planned module under `--out`, and
+  any file directly under `--out` whose name begins `keiro-dsl-` (ledgers, Cabal fragments,
+  build manifests, migration reports).
+  Rationale: Scaffold writes all its records with that prefix directly under `--out`, so one
+  rule covers present and future record files without listing them.
+  Date: 2026-11-17
+
+- Decision: The EP-2 tests live in `keiro-dsl/test/Keiro/Dsl/TopologySpec.hs` beside EP-1's,
+  not in the `describe "scaffold"` area of `keiro-dsl/test/Main.hs`.
+  Rationale: They exercise the topology flags through the executable and share that module's
+  helpers; `--match "service topology"` runs them all.
+  Date: 2026-11-17
+
+- Decision: The schema validator script is `scripts/check-topology-schemas.sh`; it first checks
+  every topology schema against the JSON Schema metaschema, then validates each golden (found
+  recursively) against `docs/user/schemas/keiro-dsl-service-topology-N.schema.json` for its own
+  schema id `keiro-dsl/service-topology/N`, failing on an unknown id or a missing schema file.
+  Rationale: EP-4 adds `/2` without editing the recipe.
+  Date: 2026-11-17
+
 - Decision: JSON Schema validation runs as a `just` recipe using a validator from the Nix
   development shell, not as a Haskell test.
   Rationale: The repository has no JSON Schema library and no validator in its shell. A
@@ -122,7 +172,12 @@ This plan is child EP-2 of
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-11-17. A service can now refresh its committed topology from its scaffold run
+and gate it with `topology --check`. The contract is documented and schema-checked in the
+repository gate, and IR-62 is completed with keiro's answers and the list of differences from
+Mori's draft. Because `topology`, `--topology-out` and `--check` all call `renderTopology`,
+they cannot disagree on the bytes; EP-1's goldens passed unchanged after the refactor. The full
+`just verify` gate runs once on the final tree (MasterPlan decision).
 
 
 ## Context and Orientation

@@ -1,5 +1,8 @@
 # Keiro User Documentation Log
 
+## 2026-11-17
+* **Addition**: DOC-35 and DOC-33: document the keiro-dsl/service-topology/1 export, its JSON Schema, the topology command with --check, and scaffold --topology-out (plans 338, 339).
+
 ## 2026-11-16
 * **Update**: DOC-32 and DOC-15: document the generated Inspection module, its display rule and empty values, and its read-only AppHooks mount (plan 336).
 

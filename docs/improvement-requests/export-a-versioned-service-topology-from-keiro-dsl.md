@@ -6,9 +6,9 @@ description: >-
   aggregates, processes, workflows, routers, contracts, intakes, emits, publishers, work queues,
   dispatches, read models and operations, and the node-to-node edges between them. Mori would
   then ingest a committed export instead of reading .keiro sources.
-timestamp: 2026-11-16T21:41:12Z
+timestamp: 2026-11-17T16:14:02Z
 requestId: IR-62
-status: proposed
+status: completed
 origin: mori://shinzui/mori
 relatedPlans:
   - mori://shinzui/mori/masterplans/45-expose-keiro-service-topology-through-a-mori-extension-and-the-http-api
@@ -53,7 +53,13 @@ reviews:
 
 ## Status
 
-Proposed. Mori is not blocked:
+Completed on 2026-11-17 under
+[the topology MasterPlan](../masterplans/48-export-a-keiki-verified-service-topology-from-keiro-dsl-and-declare-intake-sources.md),
+by [ExecPlan 338](../plans/338-emit-a-versioned-service-topology-document-from-keiro-dsl-topology.md)
+(AC-1, AC-2) and
+[ExecPlan 339](../plans/339-keep-committed-topology-exports-fresh-and-publish-the-service-topology-contract.md)
+(AC-3 to AC-5). See "Keiro's response" below for where the shipped contract differs from
+Mori's draft. When filed, Mori was not blocked:
 `mori://shinzui/mori/masterplans/45-expose-keiro-service-topology-through-a-mori-extension-and-the-http-api`
 builds its loader, registry read models, cross-service queries and HTTP routes against
 hand-derived fixtures in this document's shape. Real services appear in Mori's registry only
@@ -200,3 +206,58 @@ The following are out of scope: projection-catalog nodes (projection targets, re
 projection owners, revisions and external reads); wire, codec and transition-body detail; broker
 and consumer-group settings; runtime configuration; and anything specific to Mori. No change to
 `check`, `diff`, `inspect` or the scaffold ledger is requested.
+
+## Keiro's response
+
+The contract is documented in
+[Keiro DSL Service Topology](../user/keiro-dsl-service-topology.md) (DOC-35), with the JSON
+Schema [`keiro-dsl-service-topology-1.schema.json`](../user/schemas/keiro-dsl-service-topology-1.schema.json).
+The repository gate `just topology-schema-validate` validates every golden document against
+it.
+
+- AC-1: `keiro-dsl topology <source-or-workspace> --format json` prints
+  `keiro-dsl/service-topology/1`. Golden documents cover Language 6 copies of both
+  keiro-runtime-jitsurei services, a two-member workspace and a projection catalog
+  (`keiro-dsl/test/fixtures/topology/`).
+- AC-2: the document is RFC 8785 canonical JSON followed by one newline. Tests prove that
+  repeated runs agree, that relative and absolute paths from different working directories
+  agree, and that reordering top-level declarations changes nothing but member `sha256` and
+  node `line`.
+- AC-3: `keiro-dsl scaffold … --topology-out FILE` writes bytes equal to `topology`'s output,
+  computed before scaffold writes anything and written only after it succeeds. It refuses a
+  path that names an input, a planned module or a `keiro-dsl-*` record under `--out`.
+- AC-4: `keiro-dsl topology SOURCE --check FILE` exits zero on fresh sources. Otherwise it
+  exits 1 naming each changed, new or removed member, or, with unchanged digests, the
+  recorded and current generator versions.
+- AC-5: DOC-35 and the JSON Schema above.
+
+Answers to the questions:
+
+1. A `projections` entry never names a read-model declaration. It names the `table` of an
+   aggregate's `projection` clause, and `check` already rejects an entry that matches none.
+   So every `projects` edge resolves. It ends at the aggregate that owns the table and
+   carries `table`. When two aggregates project into one table, each gets an edge.
+2. Agreed. `/1` has no intake-to-input edge. IR-63's `feeds` relation is added under the
+   separate schema id `keiro-dsl/service-topology/2`, which is emitted only for a service
+   that declares an input source.
+
+Where the shipped contract differs from the draft, so Mori's decoder and fixtures must follow:
+
+- The projection catalog is included in `/1`, as five node kinds (`projection-target`,
+  `rebuild-group`, `projection-owner`, `projection-revision`, `external-read`) and ten
+  relations (`depends-on`, `groups`, `consumes`, `writes`, `member-of`, `revises`,
+  `observes`, `backed-by`, `exposes`, `compatible-with`). The request had listed them as out
+  of scope. Without them the document cannot say which aggregate events feed a read model.
+- `projects` edges end at the owning aggregate, not at a read model (answer 1).
+- `source.path` is the file name of the source or manifest, and member paths are relative to
+  the manifest directory. A path as typed on the command line would make the bytes depend on
+  the working directory.
+- Reorder invariance holds over the document without member `sha256` and node `line`. Both
+  are kept, and both necessarily change when declarations move.
+- Workflows have no `dispatches` edges. A workflow body names labelled steps, not target
+  aggregates or commands.
+- The process detail field is `inputs`, a list of input names (a Language 6 reaction process
+  may declare several).
+- Process policies use the language's spelling `halt`, `deadLetter` and `skip`. A read
+  model's `details` add `observedTargets` and `backingTarget`, and `table` and `schema` are
+  `null` for a catalog-bound read model.

@@ -1,13 +1,13 @@
 ---
 type: Reference
 title: Keiro DSL Command Reference
-description: Run the keiro-dsl new, parse, pretty, check, inspect, behavior-obligations, scaffold, and diff commands.
+description: Run the keiro-dsl new, parse, pretty, check, inspect, topology, behavior-obligations, scaffold, and diff commands.
 docId: DOC-33
 tags: [keiro, dsl, cli, reference]
 generated:
   by: anthropic-claude-code/claude-opus-5
   at: 2026-09-28T00:00:00Z
-timestamp: 2026-10-27T21:15:00Z
+timestamp: 2026-11-17T00:00:00Z
 ---
 
 # Keiro DSL Command Reference
@@ -124,6 +124,39 @@ and `languageSupport`: `"stable"` for Language 5 or `"candidate"` for
 Language 6. Workspace output lists every member
 in canonical path order.
 
+### `topology`
+
+```bash
+cabal run -v0 keiro-dsl -- topology service.keiro --format json > topology.json
+cabal run -v0 keiro-dsl -- topology service.keiro-workspace --check topology.json
+```
+
+Prints the service topology, one canonical JSON document with schema id
+`keiro-dsl/service-topology/1` listing every declaration, every relation
+between them and a sha256 digest of each source member. The document is defined
+in [Keiro DSL Service Topology](keiro-dsl-service-topology.md). A source or
+workspace with an error diagnostic is refused: the diagnostics go to standard
+error, standard output stays empty and the exit status is non-zero.
+
+Options:
+
+- `--format json` is the only format and the default.
+- `--check FILE` prints no document. It regenerates the document and compares
+  it with `FILE`, exiting zero when they are byte-identical and 1 otherwise.
+  Each failure line starts with `topology stale:` and names the changed, new or
+  removed member, or says that the document differs although every member
+  digest matches (for example after upgrading `keiro-dsl`). A `FILE` that is
+  missing or is not a topology document fails with `topology check: cannot
+  read …`.
+
+A service keeps a committed export fresh by writing it from its scaffold run and
+checking it in the gate that already checks generated code:
+
+```bash
+keiro-dsl scaffold service.keiro --out src --topology-out topology.json
+keiro-dsl topology service.keiro --check topology.json
+```
+
 ### `behavior-obligations`
 
 ```bash
@@ -159,6 +192,12 @@ Options:
 - `--codec-comparison MAPPED-NAME --comparison-out FILE` emits a
   non-production historical codec comparison module for one structural mapped
   type.
+- `--topology-out FILE` also writes the service topology, byte-identical to
+  `keiro-dsl topology` for the same input. The document is computed before
+  anything is written and the file is written only after the scaffold succeeds;
+  a refused scaffold writes no topology. The path must not name an input file,
+  a generated or create-once module, or a `keiro-dsl-*` ledger, fragment or
+  report file under `--out`. The file is not recorded in the scaffold ledger.
 
 The scaffold report includes a `no-modules:` line for every declared emit,
 pgmq dispatch, or operation. Those nodes remain validated and diff-classified;

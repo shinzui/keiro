@@ -36,6 +36,8 @@ topologySpec = describe "service topology" $ do
   commandTests
   catalogTests
   stabilityTests
+  scaffoldExportTests
+  freshnessCheckTests
 
 --------------------------------------------------------------------------------
 -- Milestone 1: the library
@@ -289,6 +291,115 @@ stabilityTests = do
       fromReordered `shouldNotBe` fromOriginal
       fmap withoutPositions (decodeDocument fromReordered) `shouldBe` fmap withoutPositions (decodeDocument fromOriginal)
 
+--------------------------------------------------------------------------------
+-- EP-2: scaffold --topology-out and topology --check
+--------------------------------------------------------------------------------
+
+scaffoldExportTests :: Spec
+scaffoldExportTests = do
+  forM_
+    [ "test/fixtures/topology/hospital-capacity.keiro",
+      "test/fixtures/topology/workspace/service.keiro-workspace"
+    ]
+    $ \source ->
+      it ("scaffold --topology-out writes the topology command's bytes for " <> takeFileName source) $
+        withTempDirectory "keiro-dsl-topology-scaffold" $ \directory -> do
+          resolved <- resolveTestPath source >>= makeAbsolute
+          let exportPath = directory </> "exports" </> "topology.json"
+          (scaffoldExit, _, _) <- runCli Nothing ["scaffold", resolved, "--out", directory </> "out", "--topology-out", exportPath]
+          scaffoldExit `shouldBe` ExitSuccess
+          (topologyExit, expected, _) <- runCli Nothing ["topology", resolved]
+          topologyExit `shouldBe` ExitSuccess
+          BS.readFile exportPath >>= (`shouldBe` expected)
+
+  it "a refused scaffold writes no topology file" $
+    withTempDirectory "keiro-dsl-topology-refused" $ \directory -> do
+      resolved <- resolveTestPath "test/fixtures/readmodel-query-unresolved.keiro"
+      let exportPath = directory </> "topology.json"
+      (exitCode, _, _) <- runCli Nothing ["scaffold", resolved, "--out", directory </> "out", "--topology-out", exportPath]
+      exitCode `shouldSatisfy` (/= ExitSuccess)
+      doesFileExist exportPath `shouldReturn` False
+
+  it "refuses an export path that names an input or a scaffold record, changing no byte" $
+    withTempDirectory "keiro-dsl-topology-alias" $ \directory -> do
+      original <- resolveTestPath "test/fixtures/topology/hospital-capacity.keiro"
+      let source = directory </> "hospital-capacity.keiro"
+          out = directory </> "out"
+          ledger = out </> "keiro-dsl-ledger.context.hospital-capacity.txt"
+      BS.readFile original >>= BS.writeFile source
+      (firstExit, _, _) <- runCli Nothing ["scaffold", source, "--out", out]
+      firstExit `shouldBe` ExitSuccess
+      sourceBytes <- BS.readFile source
+      ledgerBytes <- BS.readFile ledger
+      forM_ [source, ledger] $ \alias -> do
+        (exitCode, _, stderrText) <- runCli Nothing ["scaffold", source, "--out", out, "--topology-out", alias]
+        exitCode `shouldSatisfy` (/= ExitSuccess)
+        stderrText `shouldSatisfy` T.isInfixOf "--topology-out"
+      BS.readFile source `shouldReturn` sourceBytes
+      BS.readFile ledger `shouldReturn` ledgerBytes
+
+freshnessCheckTests :: Spec
+freshnessCheckTests = do
+  it "topology --check passes silently on fresh sources and names an edited member" $
+    withTempDirectory "keiro-dsl-topology-check" $ \directory -> do
+      original <- resolveTestPath "test/fixtures/topology/hospital-capacity.keiro"
+      let source = directory </> "hospital-capacity.keiro"
+          committed = directory </> "topology.json"
+      BS.readFile original >>= BS.writeFile source
+      (_, document, _) <- runCli Nothing ["topology", source]
+      BS.writeFile committed document
+      runCli Nothing ["topology", source, "--check", committed] `shouldReturn` (ExitSuccess, "", "")
+      BS.appendFile source "# edited\n"
+      (exitCode, stdoutBytes, stderrText) <- runCli Nothing ["topology", source, "--check", committed]
+      exitCode `shouldBe` ExitFailure 1
+      stdoutBytes `shouldBe` ""
+      stderrText `shouldSatisfy` T.isPrefixOf "topology stale: member 'hospital-capacity.keiro' changed (recorded sha256:"
+
+  it "topology --check names new and removed workspace members" $
+    withTempDirectory "keiro-dsl-topology-check-members" $ \directory -> do
+      manifest <- resolveTestPath "test/fixtures/topology/workspace/service.keiro-workspace"
+      let committed = directory </> "topology.json"
+      (_, document, _) <- runCli Nothing ["topology", manifest]
+      let renamed = replaceBytes "\"path\":\"domain/incident.keiro\"" "\"path\":\"domain/legacy.keiro\"" document
+      BS.writeFile committed renamed
+      (exitCode, _, stderrText) <- runCli Nothing ["topology", manifest, "--check", committed]
+      exitCode `shouldBe` ExitFailure 1
+      T.lines stderrText
+        `shouldBe` [ "topology stale: member 'domain/incident.keiro' is not recorded in " <> T.pack committed,
+                     "topology stale: recorded member 'domain/legacy.keiro' is no longer a source member"
+                   ]
+
+  it "topology --check reports a difference with unchanged sources, such as a tool upgrade" $
+    withTempDirectory "keiro-dsl-topology-check-version" $ \directory -> do
+      source <- resolveTestPath "test/fixtures/topology/hospital-capacity.keiro"
+      let committed = directory </> "topology.json"
+          currentVersion = BS8.pack (showVersion Package.version)
+      (_, document, _) <- runCli Nothing ["topology", source]
+      BS.writeFile committed (replaceBytes ("\"version\":\"" <> currentVersion <> "\"") "\"version\":\"0.0.0.1\"" document)
+      (exitCode, _, stderrText) <- runCli Nothing ["topology", source, "--check", committed]
+      exitCode `shouldBe` ExitFailure 1
+      stderrText
+        `shouldBe` ( "topology stale: document differs with unchanged sources (generated by keiro-dsl 0.0.0.1, current keiro-dsl "
+                       <> T.pack (showVersion Package.version)
+                       <> "); regenerate it\n"
+                   )
+
+  it "topology --check refuses a file that is not a topology document" $
+    withTempDirectory "keiro-dsl-topology-check-invalid" $ \directory -> do
+      source <- resolveTestPath "test/fixtures/topology/hospital-capacity.keiro"
+      let committed = directory </> "topology.json"
+      BS.writeFile committed "{}"
+      (exitCode, _, stderrText) <- runCli Nothing ["topology", source, "--check", committed]
+      exitCode `shouldBe` ExitFailure 1
+      stderrText `shouldBe` ("topology check: cannot read '" <> T.pack committed <> "' as a keiro-dsl service-topology document\n")
+      (missingExit, _, _) <- runCli Nothing ["topology", source, "--check", directory </> "missing.json"]
+      missingExit `shouldBe` ExitFailure 1
+
+replaceBytes :: BS.ByteString -> BS.ByteString -> BS.ByteString -> BS.ByteString
+replaceBytes needle replacement haystack =
+  let (prefix, suffix) = BS.breakSubstring needle haystack
+   in if BS.null suffix then haystack else prefix <> replacement <> BS.drop (BS.length needle) suffix
+
 -- | Reverse the order of top-level node declarations, keeping the preamble
 -- (language, context, layout, ids and enums) in place. Only whole
 -- declarations move; nothing inside one is reordered.
@@ -538,13 +649,18 @@ runTopologyIn workingDirectory arguments = do
   resolved <- case workingDirectory of
     Just _ -> pure arguments
     Nothing -> traverse resolveArgument arguments
-  (exitCode, stdoutText, stderrText) <-
-    readCreateProcessWithExitCode ((proc "keiro-dsl" ("topology" : resolved)) {cwd = workingDirectory}) ""
-  pure (exitCode, TE.encodeUtf8 (T.pack stdoutText), T.pack stderrText)
+  runCli workingDirectory ("topology" : resolved)
   where
     resolveArgument argument
       | "test/fixtures/" `isPrefixOf` argument = resolveTestPath argument
       | otherwise = pure argument
+
+-- | Run the packaged @keiro-dsl@ executable with raw stdout bytes.
+runCli :: Maybe FilePath -> [String] -> IO (ExitCode, BS.ByteString, Text)
+runCli workingDirectory arguments = do
+  (exitCode, stdoutText, stderrText) <-
+    readCreateProcessWithExitCode ((proc "keiro-dsl" arguments) {cwd = workingDirectory}) ""
+  pure (exitCode, TE.encodeUtf8 (T.pack stdoutText), T.pack stderrText)
 
 -- | The generator version changes on every release; goldens store a
 -- placeholder so a version bump does not rewrite every document.

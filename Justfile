@@ -16,7 +16,7 @@ verify:
     python3 scripts/release_workflow.py locked -- just _verify
 
 [private]
-_verify: mapped-structural-enum-equality-proof consumer-enum-literal-proof mapped-register-construction-proof process-compose-check jitsurei-verify haskell-verify adr-validate research-validate capabilities-validate reviews-validate bug-reports-validate user-documentation-validate terminology-validate extension-policy dsl-api-boundaries keiro-reexports record-migration-policy generated-name-policy conformance-corpus-policy process-reaction-proof initial-hole-proof replay-compatibility checked-mapping-adoption
+_verify: mapped-structural-enum-equality-proof consumer-enum-literal-proof mapped-register-construction-proof process-compose-check jitsurei-verify haskell-verify adr-validate research-validate capabilities-validate reviews-validate bug-reports-validate user-documentation-validate terminology-validate extension-policy dsl-api-boundaries topology-schema-validate keiro-reexports record-migration-policy generated-name-policy conformance-corpus-policy process-reaction-proof initial-hole-proof replay-compatibility checked-mapping-adoption
     cabal test keiro-migrations-test
 
 # Run before compilation. Registry reachability and generated inventories must
@@ -62,6 +62,12 @@ extension-policy:
 [group('meta')]
 dsl-api-boundaries:
     python3 scripts/check-keiro-dsl-api-boundaries.py
+
+# Validate every committed service-topology golden document against the JSON
+# Schema its own `schema` field names (docs/user/schemas/).
+[group('meta')]
+topology-schema-validate:
+    scripts/check-topology-schemas.sh
 
 # A consumer of a generated service is expected to need one direct `keiro`
 # dependency, but the scaffolder emits `keiro-core` imports as string literals,
