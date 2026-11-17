@@ -74,6 +74,7 @@ import Data.Version (showVersion)
 import Keiro.Dsl.AggregateGenerationPlan (TransitionLayoutEntry (..), transitionLayout)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion (declaredLanguageVersionMaybe, effectiveLanguageVersion, languageVersionNumber)
+import Keiro.Dsl.Scaffold (aggregateStreamCategory)
 import Keiro.Dsl.SemanticContract (EffectiveLanguageContract)
 import Keiro.Dsl.Validate (nodeIdentity)
 import Keiro.Dsl.Workspace (WorkspaceMember (..), WorkspaceSpec (..), nodeOwner)
@@ -476,7 +477,10 @@ nodeSummary spec = \case
         [ ("states", names (map (.name) aggregate.states)),
           ("commands", names (map (.name) aggregate.commands)),
           ("events", names (map (.name) aggregate.events)),
-          ("machine", machineValue (aggregateMachine aggregate))
+          ("machine", machineValue (aggregateMachine aggregate)),
+          -- The category the generated inspector catalog mounts the aggregate
+          -- under, so a consumer can join the node to live inspection.
+          ("category", String (aggregateStreamCategory aggregate.name))
         ]
     )
   NProcess process ->
@@ -585,6 +589,7 @@ nodeSummary spec = \case
       dispatch.name,
       fields
         [ ("sourceReadModel", String dispatch.sourceReadModel),
+          ("dedupReadModel", String dispatch.dedupReadModel),
           ("enqueueTo", String dispatch.enqueueTo)
         ]
     )

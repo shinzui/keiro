@@ -10,6 +10,12 @@ provenance:
     model: "claude-fable-5-2"
     harness: "claude-code"
     at: 2026-11-17T18:06:42Z
+  revisions:
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-17T18:58:32Z
+      mode: "implement"
+      note: "Implemented milestones of the topology review-findings plan"
 ---
 
 # Close the review findings on the keiro-dsl service topology export
@@ -49,10 +55,13 @@ which prints each aggregate with its category, for example `('Capacity', 'capaci
 
 ## Progress
 
-- [ ] Milestone 1: aggregate nodes export `category` and dispatch nodes export
-      `dedupReadModel`; a test proves each aggregate category equals the generated
+- [x] Milestone 1 (2026-11-17): aggregate nodes export `category` and dispatch nodes
+      export `dedupReadModel`; a test proves each aggregate category equals the generated
       inspector's name; goldens, JSON Schemas, the contract page and the CHANGELOG are
-      updated.
+      updated. Evidence: `--match topology` 40 examples, 0 failures; a JSON comparison of
+      each regenerated golden against the previous commit with the two fields removed is
+      identical for all five; `just topology-schema-validate` passes with the unedited
+      `aggregate-without-machine.valid.json`.
 - [ ] Milestone 2: `scaffold --topology-out` refuses an unwritable target before writing
       anything; `topology --check` reports a changed manifest as such; workspace member
       digests are computed from the bytes that were parsed. Tests cover all three.
@@ -64,7 +73,20 @@ which prints each aggregate with its category, for example `('Capacity', 'capaci
 
 ## Surprises & Discoveries
 
-(None yet.)
+- A saga aggregate's inspector is mounted under the aggregate's own category, not the
+  process's saga category. For `hospital-capacity.keiro` the generated `Inspection` module
+  mounts `Surge` with `Surge.surgeCategory`, which `Surge/Generated/EventStream.hs` defines
+  as `Stream.categoryUnsafe "surge"`, while the process module defines
+  `hospitalSurgeCategory = Stream.categoryUnsafe "hospitalSurge"`. The export therefore
+  reports `surge`, which is what `/aggregate/list?name=` accepts for that inspector. The
+  saga category is still available on the process node (`details.saga.category`) and the
+  `saga` edge. Whether the inspector for a saga aggregate should list the saga streams
+  under `hospitalSurge` is a question about ADR-61's catalog, outside this plan.
+- The category derivation was local to `emitEventStream` in
+  `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`. It is now the exported
+  `aggregateStreamCategory :: Name -> Text`, called by both the EventStream emitter and
+  `Keiro.Dsl.Topology`; `Topology` importing `Scaffold` creates no cycle and passes
+  `just dsl-api-boundaries`.
 
 
 ## Decision Log

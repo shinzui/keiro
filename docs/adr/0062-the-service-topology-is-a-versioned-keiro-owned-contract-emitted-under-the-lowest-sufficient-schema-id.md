@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: The service topology is a versioned keiro-owned contract emitted under the lowest sufficient schema id
 description: keiro-dsl topology publishes a canonical, digest-stamped document of a service's declarations and relations whose compatibility policy keiro owns, and each document carries the lowest schema id able to represent it.
-timestamp: 2026-11-17T17:00:00Z
+timestamp: 2026-11-17T18:58:00Z
 docId: ADR-62
 status: Accepted
 date: 2026-11-17
@@ -58,3 +58,6 @@ documents they could not represent.
   Moving a declaration necessarily changes both.
 - The scaffold ledger does not record the export, and scaffold without `--topology-out` is
   unchanged.
+- Aggregate nodes carry the inspector `category` so consumers join a node to live
+  inspection without deriving it from keiro's code-generation rules; keiro-dsl derives
+  it with the function the scaffold uses for the generated EventStream module.

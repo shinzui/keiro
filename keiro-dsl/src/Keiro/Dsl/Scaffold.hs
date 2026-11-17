@@ -42,6 +42,7 @@ module Keiro.Dsl.Scaffold
     generatedIdSampleHaskell,
     scaffoldReplayAudit,
     scaffoldInspection,
+    aggregateStreamCategory,
     scaffoldStructural,
     scaffoldStructuralForService,
     scaffoldStructuralOwners,
@@ -9852,7 +9853,7 @@ emitEventStream a =
          ]
       ++ outcomeHandlerLines importPlan a silentOutcomes
   where
-    categoryName = staticCategory ("aggregate " <> (.name) a) (lowerFirst ((.name) a))
+    categoryName = aggregateStreamCategory ((.name) a)
     outcomeEnabled = isJust ((.domainOutcomeTypes) a)
     silentOutcomes = resolvedSilentOutcomes a
     outcomeExpressions = map (.reason) silentOutcomes
@@ -10762,6 +10763,14 @@ sectionsOf = T.intercalate "\n\n" . filter (not . T.null) . map (T.intercalate "
 
 lowerFirst :: Text -> Text
 lowerFirst = generatedCase HaskellName.LogicalIdentifier False
+
+-- | The stream category an aggregate's generated EventStream module declares
+-- (@<aggregate>Category@). The generated inspector catalog mounts the
+-- aggregate under this text, and the service topology exports it as the
+-- aggregate node's @category@. A saga aggregate gets its own aggregate
+-- category here, not the process's declared saga category.
+aggregateStreamCategory :: Name -> Text
+aggregateStreamCategory name = staticCategory ("aggregate " <> name) (lowerFirst name)
 
 -- | Assert the shared category proof at emission time as a belt-and-braces
 -- guard for callers that bypass the CLI's normal validate-before-scaffold path.

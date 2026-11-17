@@ -7,7 +7,7 @@ tags: [keiro, dsl, topology, reference]
 generated:
   by: anthropic-claude-code/claude-opus-5-5
   at: 2026-11-17T00:00:00Z
-timestamp: 2026-11-17T00:00:00Z
+timestamp: 2026-11-17T18:58:00Z
 ---
 
 # Keiro DSL Service Topology
@@ -90,7 +90,7 @@ language's own spelling.
 
 | `kind` | Declaration | `details` |
 | --- | --- | --- |
-| `aggregate` | `aggregate` | `states`, `commands`, `events` (names), and `machine` (see Aggregate machines). |
+| `aggregate` | `aggregate` | `states`, `commands`, `events` (names), `machine` (see Aggregate machines), and `category`: the stream category the generated inspector catalog mounts the aggregate under, which the live route `/aggregate/list?name=` takes. A saga aggregate reports its own category, not the process's saga category. |
 | `process` | `process` | `stableName`, `saga` (`aggregate`, `category`), `correlate` (`field`, `via`), `inputs` (input names), `target`, `projections`, `timers`, `rejected` and `poison` (`halt`, `deadLetter` or `skip`). |
 | `workflow` | `workflow` | `stableName`, `input`, `output`, `steps`: objects with `form` (`step`, `await`, `sleep`, `child`, `patch`, `continue-as-new`) and `label` when the form has one. A patch's items follow the patch item. |
 | `router` | `router` | `stableName`, `input`, `target`, `resolvesFrom` (the read model, or `null` for a hand-written resolver), `projections`. |
@@ -99,7 +99,7 @@ language's own spelling.
 | `emit` | `emit` | `contract`, `topicAlias`, `topic` (physical), `source`, `key`, `events` (the distinct mapped events). |
 | `publisher` | `publisher` | `emit`, `ordering`, `maxAttempts`, `backoff` (`kind`, `window`, `max`, `multiplier`), `outboxField`. |
 | `workqueue` | `workqueue` | `logical`, `physical`, `dlq`, `table`, `ordering` (`unordered`, `fifo-throughput`, `fifo-roundrobin`, `fifo-heads`), `maxRetries`, `dlqOn`. |
-| `dispatch` | `dispatch` (pgmq) | `sourceReadModel`, `enqueueTo`. |
+| `dispatch` | `dispatch` (pgmq) | `sourceReadModel`, `dedupReadModel` (the target of its `reads` edge with `role` `dedupe`), `enqueueTo`. |
 | `read-model` | `readmodel` | `table` and `schema` (`null` for a catalog-bound model), `version`, `group`, `observedTargets`, `backingTarget`. |
 | `operation` | `operation` | `form` (`command`, `query`, `signal`, `run`), `subject`, and `label` for a signal. |
 | `projection-target` | `target` | `schema`, `table`, `reset` (`clear` or `preserve`), `dependsOn`. |
@@ -107,6 +107,10 @@ language's own spelling.
 | `projection-owner` | `projection-owner` | `sources` (`{"kind":"aggregate","name"}`, `{"kind":"category","name"}` or `{"kind":"all"}`), `delivery` (`inline` or `subscription`), `group`, `targets`, `order`, `subscription`, `dedup`, `replay` (`mode` `explicit` or `live-only`, and its `reason`). |
 | `projection-revision` | `projection-revision` | `group`, `targets` (`target`, `schemaVersion`). |
 | `external-read` | `external-read` | `contract` (the declared name), `version`, `queryModel`, `resultSchema`, `resultType`, `compatibleRevisions`, `surfaceGeneration`. |
+
+A document emitted by an older keiro-dsl lacks the aggregate `category` and the
+dispatch `dedupReadModel`; both are optional in the JSON Schemas. Regenerate a
+committed document to get them.
 
 The `name` of most nodes is the declared name. A process, router or workflow uses
 its block identifier and reports the quoted `name` as `stableName`. An external

@@ -47,6 +47,7 @@ topologySpec = describe "service topology" $ do
   freshnessCheckTests
   machineTests
   feedsTests
+  liveJoinTests
 
 --------------------------------------------------------------------------------
 -- Milestone 1: the library
@@ -492,6 +493,79 @@ feedsTests = do
           normalize sourced `shouldBe` withoutPositions unsourced
           length (edgeObjects sourced) `shouldBe` length (edgeObjects unsourced) + 1
         _ -> expectationFailure "expected two documents"
+
+--------------------------------------------------------------------------------
+-- Plan 343: fields a consumer joins to live data
+--------------------------------------------------------------------------------
+
+liveJoinTests :: Spec
+liveJoinTests = do
+  it "each aggregate's category is the category its generated inspector is mounted under" $
+    withTempDirectory "keiro-dsl-topology-inspector" $ \directory -> do
+      source <- resolveTestPath "test/fixtures/topology/hospital-capacity.keiro" >>= makeAbsolute
+      let out = directory </> "out"
+      (scaffoldExit, _, _) <- runCli Nothing ["scaffold", source, "--out", out]
+      scaffoldExit `shouldBe` ExitSuccess
+      inspectorCategories <- scaffoldedInspectorCategories out (out </> "HospitalCapacity/Generated/Inspection.hs")
+      length inspectorCategories `shouldBe` 5
+      (topologyExit, bytes, _) <- runCli Nothing ["topology", source]
+      topologyExit `shouldBe` ExitSuccess
+      document <- maybe (fail "topology output is not JSON") pure (decodeDocument bytes)
+      let exported =
+            [ (textField "name" node, category)
+            | node <- listField "nodes" document,
+              textField "kind" node == "aggregate",
+              Just (String category) <- [field "details" node >>= field "category"]
+            ]
+      length exported `shouldBe` length [() | node <- listField "nodes" document, textField "kind" node == "aggregate"]
+      Set.fromList (map snd exported) `shouldBe` Set.fromList inspectorCategories
+      -- The saga aggregate is mounted under its own category, not the
+      -- process's saga category.
+      lookup "Surge" exported `shouldBe` Just "surge"
+
+  it "each dispatch node names its dedupe read model, the target of its dedupe reads edge" $
+    forM_ goldenCases $ \(_, golden) -> do
+      document <- readGolden golden
+      let dedupeTargets name =
+            [ snd (endpoint "to" e)
+            | e <- edgeObjects document,
+              relationOf e == "reads",
+              endpoint "from" e == ("dispatch", name),
+              attribute "role" e == Just (String "dedupe")
+            ]
+      forM_ [node | node <- listField "nodes" document, textField "kind" node == "dispatch"] $ \node -> do
+        let name = textField "name" node
+        [dedupe | Just (String dedupe) <- [field "details" node >>= field "dedupReadModel"]] `shouldBe` dedupeTargets name
+
+-- | The category text of every inspector in a scaffolded @Inspection@ module:
+-- each @categoryText Alias.binding@ is resolved through the module's
+-- @import M qualified as Alias@ to the literal @binding@ is defined as in M.
+scaffoldedInspectorCategories :: FilePath -> FilePath -> IO [Text]
+scaffoldedInspectorCategories out inspectionPath = do
+  inspection <- TE.decodeUtf8 <$> BS.readFile inspectionPath
+  let inspectionLines = T.lines inspection
+      aliases =
+        [ (alias, moduleName)
+        | line <- inspectionLines,
+          ["import", moduleName, "qualified", "as", alias] <- [T.words line]
+        ]
+      references =
+        [ reference
+        | line <- inspectionLines,
+          (_, rest) <- [T.breakOn "(categoryText " line],
+          not (T.null rest),
+          reference <- take 1 (T.words (T.takeWhile (/= ')') (T.drop (T.length "(categoryText ") rest)))
+        ]
+  forM references $ \reference -> do
+    let (alias, binding) = fmap (T.drop 1) (T.breakOn "." reference)
+    moduleName <- maybe (fail ("no import for " <> T.unpack alias)) pure (lookup alias aliases)
+    moduleText <- TE.decodeUtf8 <$> BS.readFile (out </> T.unpack (T.replace "." "/" moduleName <> ".hs"))
+    case [ T.takeWhile (/= '"') (T.drop 1 (T.dropWhile (/= '"') line))
+         | line <- T.lines moduleText,
+           (binding <> " = Stream.categoryUnsafe ") `T.isPrefixOf` line
+         ] of
+      category : _ -> pure category
+      [] -> fail ("no category literal for " <> T.unpack reference)
 
 withoutFeeds :: Value -> Value
 withoutFeeds = \case

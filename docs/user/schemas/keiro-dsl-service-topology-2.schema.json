@@ -565,6 +565,11 @@
         },
         "machine": {
           "$ref": "#/$defs/machine"
+        },
+        "category": {
+          "description": "The stream category the generated inspector catalog mounts this aggregate under (the live route /aggregate/list?name= takes it). Absent from documents emitted before keiro-dsl added it.",
+          "type": "string",
+          "minLength": 1
         }
       }
     },
@@ -929,6 +934,10 @@
       ],
       "properties": {
         "sourceReadModel": {
+          "$ref": "#/$defs/name"
+        },
+        "dedupReadModel": {
+          "description": "The read model the dispatch dedupes against; the target of its reads edge with role dedupe. Absent from documents emitted before keiro-dsl added it.",
           "$ref": "#/$defs/name"
         },
         "enqueueTo": {

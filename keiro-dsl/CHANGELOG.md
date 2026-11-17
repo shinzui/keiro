@@ -54,6 +54,13 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   with a `feeds` edge uses schema id `keiro-dsl/service-topology/2`; every other document
   stays `/1` and is byte-identical. The library exports `InputSource` and the new `source`
   field of `InputDecl`.
+- Every aggregate node of the topology now carries `details.category`, the stream
+  category its generated inspector is mounted under (a saga aggregate's own category, not
+  the process's saga category), and every dispatch node carries `details.dedupReadModel`.
+  Both are optional fields within the existing schema ids. A committed topology document
+  must be regenerated with `scaffold --topology-out` after the upgrade, because
+  `topology --check` reports it stale. The library exports
+  `Keiro.Dsl.Scaffold.aggregateStreamCategory`; generated code is unchanged.
 
 ## 0.25.1.0 — 2026-11-16
 

@@ -2,6 +2,9 @@
 
 ## 2026-11-17
 
+* **Update**: DOC-35: document the aggregate category and dispatch dedupReadModel topology fields (plan 343).
+
+
 * **Update**: DOC-28, DOC-35 and the Keiro DSL Reference: document candidate Language 6 declared input sources, their two diagnostics, the feeds relation and schema id keiro-dsl/service-topology/2 (plan 341).
 
 
