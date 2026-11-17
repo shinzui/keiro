@@ -34,6 +34,15 @@ module Keiro.Dsl.Topology
     relationText,
     topologySchemaId,
 
+    -- * Aggregate machines
+    MachineTopology (..),
+    MachineOwnership (..),
+    MachineState (..),
+    MachineEdge (..),
+    MachineEdgeMode (..),
+    aggregateMachine,
+    machineValue,
+
     -- * Building and encoding
     TopologyError (..),
     renderTopologyError,
@@ -61,6 +70,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Version (showVersion)
+import Keiro.Dsl.AggregateGenerationPlan (TransitionLayoutEntry (..), transitionLayout)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion (declaredLanguageVersionMaybe, effectiveLanguageVersion, languageVersionNumber)
 import Keiro.Dsl.SemanticContract (EffectiveLanguageContract)
@@ -168,6 +178,99 @@ relationText = \case
   BackedBy -> "backed-by"
   Exposes -> "exposes"
   CompatibleWith -> "compatible-with"
+
+-- | Whether keiro generates the aggregate's keiki transducer from the
+-- specification ('MachineGenerated', including per-transition Hole bodies,
+-- whose edges are still generated) or the frozen Language 1 form leaves the
+-- whole transducer hand-written ('MachineLegacyHole').
+data MachineOwnership = MachineGenerated | MachineLegacyHole
+  deriving stock (Eq, Show)
+
+data MachineState = MachineState
+  { name :: !Text,
+    terminal :: !Bool
+  }
+  deriving stock (Eq, Show)
+
+-- | Spelled as keiki's 'Keiki.Core.EdgeMode' constructors.
+data MachineEdgeMode = MachineLive | MachineReplayOnly
+  deriving stock (Eq, Show)
+
+-- | One keiki edge. Its identity is (@source@, @edgeIndex@): the position of
+-- the edge in keiki's @edgesOut source@. The index is local to one source
+-- state and changes when transitions are reordered.
+data MachineEdge = MachineEdge
+  { source :: !Text,
+    edgeIndex :: !Int,
+    target :: !Text,
+    mode :: !MachineEdgeMode,
+    command :: !Text,
+    events :: ![Text]
+  }
+  deriving stock (Eq, Show)
+
+-- | An aggregate's state machine in keiki vocabulary. States are in
+-- declaration order (the generated vertex type's constructor order); edges are
+-- ordered by their source state's position, then by edge index.
+data MachineTopology = MachineTopology
+  { ownership :: !MachineOwnership,
+    initial :: !Text,
+    states :: ![MachineState],
+    edges :: ![MachineEdge]
+  }
+  deriving stock (Eq, Show)
+
+-- | The machine the specification declares. The conformance suite
+-- @keiro-dsl-conformance-topology-machine@ proves it equal to the generated
+-- keiki transducer for generated machines.
+aggregateMachine :: Aggregate -> MachineTopology
+aggregateMachine aggregate =
+  MachineTopology
+    { ownership =
+        if any ((== LegacyHoleImplementation) . (.implementation)) aggregate.transitions
+          then MachineLegacyHole
+          else MachineGenerated,
+      initial = case aggregate.states of
+        first : _ -> first.name
+        [] -> "",
+      states = [MachineState {name = state.name, terminal = state.terminal} | state <- aggregate.states],
+      edges =
+        [ MachineEdge
+            { source = entry.transition.source,
+              edgeIndex = entry.outgoingIndex,
+              target = entry.transition.goto,
+              mode = case entry.transition.mode of
+                TmLive -> MachineLive
+                TmReplayOnly -> MachineReplayOnly,
+              command = entry.transition.command,
+              events = entry.transition.emits
+            }
+        | state <- aggregate.states,
+          entry <- layout,
+          entry.transition.source == state.name
+        ]
+    }
+  where
+    layout = transitionLayout aggregate.transitions
+
+machineValue :: MachineTopology -> Value
+machineValue machine =
+  object
+    [ "ownership" .= (case machine.ownership of MachineGenerated -> "generated" :: Text; MachineLegacyHole -> "legacy-hole"),
+      "initial" .= machine.initial,
+      "states" .= [object ["name" .= state.name, "terminal" .= state.terminal] | state <- machine.states],
+      "edges"
+        .= [ object
+               [ "source" .= machineEdge.source,
+                 "edgeIndex" .= machineEdge.edgeIndex,
+                 "target" .= machineEdge.target,
+                 "mode" .= (case machineEdge.mode of MachineLive -> "Live" :: Text; MachineReplayOnly -> "ReplayOnly"),
+                 "command" .= machineEdge.command,
+                 "events" .= machineEdge.events
+               ]
+           | machineEdge <- machine.edges
+           ]
+    ]
 
 -- | Whether the document came from one source file or a workspace manifest.
 data TopologySourceKind = TopologySingleSource | TopologyWorkspace
@@ -364,7 +467,8 @@ nodeSummary spec = \case
       fields
         [ ("states", names (map (.name) aggregate.states)),
           ("commands", names (map (.name) aggregate.commands)),
-          ("events", names (map (.name) aggregate.events))
+          ("events", names (map (.name) aggregate.events)),
+          ("machine", machineValue (aggregateMachine aggregate))
         ]
     )
   NProcess process ->

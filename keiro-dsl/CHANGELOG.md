@@ -35,6 +35,15 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   `just topology-schema-validate` (part of `just verify`, using `check-jsonschema` from the
   development shell) validates every golden document against the schema its `schema` field
   names.
+- Every aggregate node of the topology now carries `details.machine`, the aggregate's
+  keiki state machine: `ownership` (`generated` or `legacy-hole`), `initial`, `states`
+  with terminal flags, and every edge with its `source`, keiki `edgeIndex`, `target`,
+  `mode` (`Live` or `ReplayOnly`), `command` and `events`. It is an added field within
+  `keiro-dsl/service-topology/1`. The new conformance suite
+  `keiro-dsl-conformance-topology-machine` proves the export equal to the generated keiki
+  transducers walked with keiki's accessors. The keiki edge index now comes from one shared
+  layout function used by the transducer builder, the behavior source map and the export;
+  generated code is unchanged.
 
 ## 0.25.1.0 — 2026-11-16
 

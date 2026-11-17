@@ -37,4 +37,25 @@ if [ "$count" -eq 0 ]; then
   echo "no topology golden documents under $goldens" >&2
   exit 1
 fi
-echo "topology schemas: $count golden document(s) valid"
+
+# Compatibility examples: *.valid.json must validate (for example an older
+# document without optional fields added later) and *.invalid.json must not.
+schema_for() {
+  local id
+  id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["schema"])' "$1")"
+  echo "$schemas/keiro-dsl-service-topology-${id##*/}.schema.json"
+}
+examples=0
+for example in "$goldens"/schema-examples/*.valid.json; do
+  check-jsonschema --schemafile "$(schema_for "$example")" "$example"
+  examples=$((examples + 1))
+done
+for example in "$goldens"/schema-examples/*.invalid.json; do
+  if check-jsonschema --schemafile "$(schema_for "$example")" "$example" > /dev/null 2>&1; then
+    echo "$example: expected a schema violation, but it validated" >&2
+    exit 1
+  fi
+  echo "rejected as expected -- $(basename "$example")"
+  examples=$((examples + 1))
+done
+echo "topology schemas: $count golden document(s) valid, $examples compatibility example(s) as expected"

@@ -17,6 +17,10 @@ data TransitionLayoutEntry = TransitionLayoutEntry
   }
   deriving stock (Eq, Show)
 
+-- | Number each transition within its source state, in declaration order.
+-- @outgoingIndex@ is the keiki edge index: the position of the transition's
+-- edge in @edgesOut@ of its source state. The generated transducer builder,
+-- the behavior source map and the topology export all use this one rule.
 transitionLayout :: [Transition] -> [TransitionLayoutEntry]
 transitionLayout transitions = snd (mapAccumL buildEntry Map.empty (zip [1 ..] transitions))
   where

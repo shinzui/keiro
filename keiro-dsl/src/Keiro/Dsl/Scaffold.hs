@@ -3752,20 +3752,16 @@ behaviorEdgeIndex :: Agg -> Behavior.BehaviorRequirement -> Maybe Int
 behaviorEdgeIndex aggregate requirement = case (.origin) requirement of
   Behavior.RejectionRequirementOrigin {} -> Nothing
   Behavior.TransitionRequirementOrigin originAggregate (SourceIndex.TransitionOrdinal ordinal) -> do
-    transition <- case drop ordinal ((.transitions) aggregate) of
+    -- The keiki edge index is the shared layout rule the transducer builder
+    -- and the topology export both use ('transitionLayout').
+    entry <- case drop ordinal (transitionLayout ((.transitions) aggregate)) of
       candidate : _ -> Just candidate
       [] -> Nothing
+    let transition = (.transition) entry
     if originAggregate == (.name) aggregate
       && (.source) transition == (.source) requirement
       && (.command) transition == (.command) requirement
-      then
-        Just
-          ( length
-              [ ()
-              | candidate <- take ordinal ((.transitions) aggregate),
-                (.source) candidate == (.source) transition
-              ]
-          )
+      then Just ((.outgoingIndex) entry)
       else Nothing
 
 behaviorRequirementsFor :: Agg -> [Behavior.BehaviorRequirement]

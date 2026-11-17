@@ -87,7 +87,7 @@ language's own spelling.
 
 | `kind` | Declaration | `details` |
 | --- | --- | --- |
-| `aggregate` | `aggregate` | `states`, `commands`, `events` (names). |
+| `aggregate` | `aggregate` | `states`, `commands`, `events` (names), and `machine` (see Aggregate machines). |
 | `process` | `process` | `stableName`, `saga` (`aggregate`, `category`), `correlate` (`field`, `via`), `inputs` (input names), `target`, `projections`, `timers`, `rejected` and `poison` (`halt`, `deadLetter` or `skip`). |
 | `workflow` | `workflow` | `stableName`, `input`, `output`, `steps`: objects with `form` (`step`, `await`, `sleep`, `child`, `patch`, `continue-as-new`) and `label` when the form has one. A patch's items follow the patch item. |
 | `router` | `router` | `stableName`, `input`, `target`, `resolvesFrom` (the read model, or `null` for a hand-written resolver), `projections`. |
@@ -109,6 +109,57 @@ The `name` of most nodes is the declared name. A process, router or workflow use
 its block identifier and reports the quoted `name` as `stableName`. An external
 read's `name` is its contract name, `_v` and its version (`order_totals_reader_v1`),
 because several versions of one contract may coexist.
+
+## Aggregate machines
+
+Every Keiro aggregate is a keiki transducer: a finite state machine whose edges
+each leave one state, consume one command, emit zero or more events and enter a
+target state. A process manager keeps its progress in a saga aggregate, so its
+machine is on the aggregate its `saga` edge points at. An aggregate node's
+`details.machine` describes the machine in keiki's vocabulary:
+
+```json
+{
+  "ownership": "generated",
+  "initial": "Draft",
+  "states": [{"name": "Draft", "terminal": false}, {"name": "Done", "terminal": true}],
+  "edges": [
+    {"source": "Draft", "edgeIndex": 0, "target": "Done", "mode": "Live",
+     "command": "PlaceOrder", "events": ["OrderPlaced"]}
+  ]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `ownership` | `generated` when keiro generates the transducer from the specification (including transitions with a hand-written `implementation hole` body, whose edges are still generated), `legacy-hole` for the frozen Language 1 form whose whole transducer is hand-written. |
+| `initial` | The first declared state. |
+| `states` | Every state in declaration order (the generated vertex type's constructor order), with `terminal` for a state declared with `!`. |
+| `edges` | Ordered by the source state's position in `states`, then by `edgeIndex`. |
+
+Each edge has `source`, `edgeIndex`, `target`, `mode`, `command` and `events`.
+`edgeIndex` is keiki's edge identity within one source state: the edge's position
+in keiki's `edgesOut source`, which is the number of earlier transitions with the
+same source in declaration order. It is local to the source state and changes
+when transitions are reordered, so do not store it as a durable identifier.
+`mode` is spelled as keiki's `EdgeMode`: `Live` edges serve new commands, and
+`ReplayOnly` edges exist only so old events still replay. `events` are in
+emission order and may be empty. Guards, register writes and output field terms
+are not exported.
+
+The machine is computed from the specification alone. The conformance suite
+`keiro-dsl-conformance-topology-machine` compiles generated code, walks the real
+keiki transducers with keiki's accessors (`edgesOut`, `target`, `mode`,
+`initial`, `isFinal`, `edgeInputName` and each output's wire-constructor name),
+and fails unless the result equals the exported machine. Its fixture covers
+several edges per state, non-adjacent same-source transitions, a replay-only
+edge, a two-event edge, a terminal state, a hole-owned transition body and a
+process saga. A `legacy-hole` machine lists the declared transitions, but its
+hand-written transducer is not proven to match them.
+
+`machine` is an added field within `keiro-dsl/service-topology/1`. Documents
+emitted before it existed omit it, so a consumer must treat it as optional; when
+it is present, all of its fields are present.
 
 ## Relations
 
@@ -152,7 +203,7 @@ names no target aggregate or command.
 
 ## What is not exported
 
-Wire, codec, guard and register-write detail; a projection revision's
+Wire, codec, guard, register-write and output-field detail; a projection revision's
 provisioner, validator, expected-shape and promotion-object fields; broker,
 consumer-group and other runtime configuration.
 
@@ -168,7 +219,8 @@ identical on every run and platform.
 
 Reordering top-level declarations changes only each moved node's `line` and the
 member's `sha256`. Reordering inside a declaration (states, transitions, steps)
-is a meaningful change and may change the document.
+is a meaningful change and may change the document; reordering an aggregate's
+transitions changes its machine's edge indexes.
 
 ## Compatibility policy
 

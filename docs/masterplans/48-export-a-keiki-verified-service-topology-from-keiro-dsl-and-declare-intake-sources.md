@@ -193,8 +193,8 @@ source is checked documentation with no runtime or identity effect.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Emit a versioned service topology document from keiro-dsl topology | docs/plans/338-emit-a-versioned-service-topology-document-from-keiro-dsl-topology.md | None | None | Complete |
 | 2 | Keep committed topology exports fresh and publish the service-topology contract | docs/plans/339-keep-committed-topology-exports-fresh-and-publish-the-service-topology-contract.md | EP-1 | None | Complete |
-| 3 | Export aggregate machines in keiki vocabulary and verify them against generated transducers | docs/plans/340-export-aggregate-machines-in-keiki-vocabulary-and-verify-them-against-generated-transducers.md | EP-1 | EP-2 M3 | In Progress |
-| 4 | Declare and check the intake that feeds a process or router input and export it as a topology edge | docs/plans/341-declare-and-check-the-intake-that-feeds-a-process-or-router-input-and-export-it-as-a-topology-edge.md | EP-1 (for its M3 only) | EP-2 M3 | Not Started |
+| 3 | Export aggregate machines in keiki vocabulary and verify them against generated transducers | docs/plans/340-export-aggregate-machines-in-keiki-vocabulary-and-verify-them-against-generated-transducers.md | EP-1 | EP-2 M3 | Complete |
+| 4 | Declare and check the intake that feeds a process or router input and export it as a topology edge | docs/plans/341-declare-and-check-the-intake-that-feeds-a-process-or-router-input-and-export-it-as-a-topology-edge.md | EP-1 (for its M3 only) | EP-2 M3 | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -284,10 +284,11 @@ questions in the record; EP-4 marks IR-63. Both follow the status vocabulary alr
 
 ## Progress
 
-EP-1 and EP-2 are Complete (2026-11-17): `keiro-dsl topology` exports `/1` with the
-projection catalog, `scaffold --topology-out` and `topology --check` keep a committed copy
-fresh, and DOC-35 plus a gated JSON Schema publish the contract. IR-62 is completed. EP-3 is In
-Progress; EP-4 follows. EP-2 M3's files exist, so EP-3 and EP-4 extend them directly.
+EP-1, EP-2 and EP-3 are Complete (2026-11-17): `keiro-dsl topology` exports `/1` with the
+projection catalog and keiki-verified aggregate machines; `scaffold --topology-out` and
+`topology --check` keep a committed copy fresh; DOC-35 plus a gated JSON Schema publish the
+contract; IR-62 is completed. EP-4 is In Progress. Because EP-3 landed first, EP-4 creates the
+`/2` schema from the `/1` schema that already has `machine`, and reconciles the two.
 
 Cross-plan gates not owned by a single child:
 
@@ -336,6 +337,10 @@ Cross-plan gates not owned by a single child:
 
 - Process policies are spelled `deadLetter` in the language and the export, not
   `dead-letter`. EP-2's schema and documentation use the source spelling.
+
+- The keiki edge-index rule existed twice in the generator. EP-3 unified it on
+  `transitionLayout` in `keiro-dsl/src/Keiro/Dsl/AggregateGenerationPlan.hs`, which the
+  transducer builder, `behaviorEdgeIndex` and the topology export now share.
 
 
 ## Decision Log

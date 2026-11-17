@@ -4,174 +4,676 @@
   "title": "keiro-dsl service topology, schema id keiro-dsl/service-topology/1",
   "description": "The document printed by `keiro-dsl topology`. Closed sets (schema id, node kinds, relations) are enumerated; every object stays open because keiro may add fields within one schema id and consumers must ignore fields they do not know.",
   "type": "object",
-  "required": ["schema", "service", "source", "effectiveSemanticContract", "generator", "members", "nodes", "edges"],
+  "required": [
+    "schema",
+    "service",
+    "source",
+    "effectiveSemanticContract",
+    "generator",
+    "members",
+    "nodes",
+    "edges"
+  ],
   "properties": {
-    "schema": { "const": "keiro-dsl/service-topology/1" },
-    "service": { "type": "string", "minLength": 1 },
+    "schema": {
+      "const": "keiro-dsl/service-topology/1"
+    },
+    "service": {
+      "type": "string",
+      "minLength": 1
+    },
     "source": {
       "type": "object",
-      "required": ["kind", "path"],
+      "required": [
+        "kind",
+        "path"
+      ],
       "properties": {
-        "kind": { "enum": ["source", "workspace"] },
-        "path": { "type": "string", "minLength": 1, "not": { "pattern": "/" } }
+        "kind": {
+          "enum": [
+            "source",
+            "workspace"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "not": {
+            "pattern": "/"
+          }
+        }
       }
     },
     "effectiveSemanticContract": {
       "type": "object",
-      "required": ["languageVersion", "languageSupport", "runtimeSemantics"],
+      "required": [
+        "languageVersion",
+        "languageSupport",
+        "runtimeSemantics"
+      ],
       "properties": {
-        "languageVersion": { "type": "integer", "minimum": 1 },
-        "languageSupport": { "type": "string" },
-        "runtimeSemantics": { "type": "string" }
+        "languageVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "languageSupport": {
+          "type": "string"
+        },
+        "runtimeSemantics": {
+          "type": "string"
+        }
       }
     },
     "generator": {
       "type": "object",
-      "required": ["tool", "version"],
+      "required": [
+        "tool",
+        "version"
+      ],
       "properties": {
-        "tool": { "const": "keiro-dsl" },
-        "version": { "type": "string" }
+        "tool": {
+          "const": "keiro-dsl"
+        },
+        "version": {
+          "type": "string"
+        }
       }
     },
     "members": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/member" }
+      "items": {
+        "$ref": "#/$defs/member"
+      }
     },
     "nodes": {
       "type": "array",
-      "items": { "$ref": "#/$defs/node" }
+      "items": {
+        "$ref": "#/$defs/node"
+      }
     },
     "edges": {
       "type": "array",
-      "items": { "$ref": "#/$defs/edge" }
+      "items": {
+        "$ref": "#/$defs/edge"
+      }
     }
   },
   "$defs": {
-    "name": { "type": "string", "minLength": 1 },
-    "names": { "type": "array", "items": { "$ref": "#/$defs/name" } },
-    "nullableName": { "type": ["string", "null"] },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "names": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/name"
+      }
+    },
+    "nullableName": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "nodeKind": {
       "enum": [
-        "aggregate", "process", "workflow", "router", "contract", "intake", "emit", "publisher",
-        "workqueue", "dispatch", "read-model", "operation", "projection-target", "rebuild-group",
-        "projection-owner", "projection-revision", "external-read"
+        "aggregate",
+        "process",
+        "workflow",
+        "router",
+        "contract",
+        "intake",
+        "emit",
+        "publisher",
+        "workqueue",
+        "dispatch",
+        "read-model",
+        "operation",
+        "projection-target",
+        "rebuild-group",
+        "projection-owner",
+        "projection-revision",
+        "external-read"
       ]
     },
     "relation": {
       "enum": [
-        "dispatches", "saga", "reads", "projects", "publishes", "subscribes", "delivers", "enqueues",
-        "commands", "queries", "signals", "runs", "depends-on", "groups", "consumes", "writes",
-        "member-of", "revises", "observes", "backed-by", "exposes", "compatible-with"
+        "dispatches",
+        "saga",
+        "reads",
+        "projects",
+        "publishes",
+        "subscribes",
+        "delivers",
+        "enqueues",
+        "commands",
+        "queries",
+        "signals",
+        "runs",
+        "depends-on",
+        "groups",
+        "consumes",
+        "writes",
+        "member-of",
+        "revises",
+        "observes",
+        "backed-by",
+        "exposes",
+        "compatible-with"
       ]
     },
     "member": {
       "type": "object",
-      "required": ["path", "sha256", "declaredLanguageVersion", "effectiveLanguageVersion"],
+      "required": [
+        "path",
+        "sha256",
+        "declaredLanguageVersion",
+        "effectiveLanguageVersion"
+      ],
       "properties": {
-        "path": { "type": "string", "minLength": 1 },
-        "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
-        "declaredLanguageVersion": { "type": ["integer", "null"], "minimum": 1 },
-        "effectiveLanguageVersion": { "type": "integer", "minimum": 1 }
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "declaredLanguageVersion": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "effectiveLanguageVersion": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
     "nodeRef": {
       "type": "object",
-      "required": ["kind", "name"],
+      "required": [
+        "kind",
+        "name"
+      ],
       "properties": {
-        "kind": { "$ref": "#/$defs/nodeKind" },
-        "name": { "$ref": "#/$defs/name" }
+        "kind": {
+          "$ref": "#/$defs/nodeKind"
+        },
+        "name": {
+          "$ref": "#/$defs/name"
+        }
       }
     },
     "edge": {
       "type": "object",
-      "required": ["from", "to", "relation", "attributes"],
+      "required": [
+        "from",
+        "to",
+        "relation",
+        "attributes"
+      ],
       "properties": {
-        "from": { "$ref": "#/$defs/nodeRef" },
-        "to": { "$ref": "#/$defs/nodeRef" },
-        "relation": { "$ref": "#/$defs/relation" },
-        "attributes": { "type": "object" }
+        "from": {
+          "$ref": "#/$defs/nodeRef"
+        },
+        "to": {
+          "$ref": "#/$defs/nodeRef"
+        },
+        "relation": {
+          "$ref": "#/$defs/relation"
+        },
+        "attributes": {
+          "type": "object"
+        }
       }
     },
     "node": {
       "type": "object",
-      "required": ["kind", "name", "context", "member", "line", "details"],
+      "required": [
+        "kind",
+        "name",
+        "context",
+        "member",
+        "line",
+        "details"
+      ],
       "properties": {
-        "kind": { "$ref": "#/$defs/nodeKind" },
-        "name": { "$ref": "#/$defs/name" },
-        "context": { "$ref": "#/$defs/name" },
-        "member": { "type": "string", "minLength": 1 },
-        "line": { "type": "integer", "minimum": 1 },
-        "details": { "type": "object" }
+        "kind": {
+          "$ref": "#/$defs/nodeKind"
+        },
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "context": {
+          "$ref": "#/$defs/name"
+        },
+        "member": {
+          "type": "string",
+          "minLength": 1
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "details": {
+          "type": "object"
+        }
       },
       "allOf": [
-        { "if": { "properties": { "kind": { "const": "aggregate" } } }, "then": { "properties": { "details": { "$ref": "#/$defs/aggregateDetails" } } } },
-        { "if": { "properties": { "kind": { "const": "process" } } }, "then": { "properties": { "details": { "$ref": "#/$defs/processDetails" } } } },
-        { "if": { "properties": { "kind": { "const": "workflow" } } }, "then": { "properties": { "details": { "$ref": "#/$defs/workflowDetails" } } } },
-        { "if": { "properties": { "kind": { "const": "router" } } }, "then": { "properties": { "details": { "$ref": "#/$defs/routerDetails" } } } },
-        { "if": { "properties": { "kind": { "const": "contract" } } }, "then": { "properties": { "details": { "$ref": "#/$defs/contractDetails" } } } },
-        { "if": { "properties": { "kind": { "const": "intake" } } }, "then": { "properties": { "details": { "$ref": "#/$defs/intakeDetails" } } } },
-        { "if": { "properties": { "kind": { "const": "emit" } } }, "then": { "properties": { "details": { "$ref": "#/$defs/emitDetails" } } } },
-        { "if": { "properties": { "kind": { "const": "publisher" } } }, "then": { "properties": { "details": { "$ref": "#/$defs/publisherDetails" } } } },
-        { "if": { "properties": { "kind": { "const": "workqueue" } } }, "then": { "properties": { "details": { "$ref": "#/$defs/workqueueDetails" } } } },
-        { "if": { "properties": { "kind": { "const": "dispatch" } } }, "then": { "properties": { "details": { "$ref": "#/$defs/dispatchDetails" } } } },
-        { "if": { "properties": { "kind": { "const": "read-model" } } }, "then": { "properties": { "details": { "$ref": "#/$defs/readModelDetails" } } } },
-        { "if": { "properties": { "kind": { "const": "operation" } } }, "then": { "properties": { "details": { "$ref": "#/$defs/operationDetails" } } } },
-        { "if": { "properties": { "kind": { "const": "projection-target" } } }, "then": { "properties": { "details": { "$ref": "#/$defs/projectionTargetDetails" } } } },
-        { "if": { "properties": { "kind": { "const": "rebuild-group" } } }, "then": { "properties": { "details": { "$ref": "#/$defs/rebuildGroupDetails" } } } },
-        { "if": { "properties": { "kind": { "const": "projection-owner" } } }, "then": { "properties": { "details": { "$ref": "#/$defs/projectionOwnerDetails" } } } },
-        { "if": { "properties": { "kind": { "const": "projection-revision" } } }, "then": { "properties": { "details": { "$ref": "#/$defs/projectionRevisionDetails" } } } },
-        { "if": { "properties": { "kind": { "const": "external-read" } } }, "then": { "properties": { "details": { "$ref": "#/$defs/externalReadDetails" } } } }
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "aggregate"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/aggregateDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "process"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/processDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "workflow"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/workflowDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "router"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/routerDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "contract"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/contractDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "intake"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/intakeDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "emit"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/emitDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "publisher"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/publisherDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "workqueue"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/workqueueDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "dispatch"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/dispatchDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "read-model"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/readModelDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "operation"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/operationDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "projection-target"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/projectionTargetDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "rebuild-group"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/rebuildGroupDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "projection-owner"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/projectionOwnerDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "projection-revision"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/projectionRevisionDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "external-read"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/externalReadDetails"
+              }
+            }
+          }
+        }
       ]
     },
-    "policy": { "enum": ["halt", "deadLetter", "skip"] },
+    "policy": {
+      "enum": [
+        "halt",
+        "deadLetter",
+        "skip"
+      ]
+    },
     "aggregateDetails": {
       "type": "object",
-      "required": ["states", "commands", "events"],
+      "required": [
+        "states",
+        "commands",
+        "events"
+      ],
       "properties": {
-        "states": { "$ref": "#/$defs/names" },
-        "commands": { "$ref": "#/$defs/names" },
-        "events": { "$ref": "#/$defs/names" }
+        "states": {
+          "$ref": "#/$defs/names"
+        },
+        "commands": {
+          "$ref": "#/$defs/names"
+        },
+        "events": {
+          "$ref": "#/$defs/names"
+        },
+        "machine": {
+          "$ref": "#/$defs/machine"
+        }
       }
     },
     "processDetails": {
       "type": "object",
-      "required": ["stableName", "saga", "correlate", "inputs", "target", "projections", "timers", "rejected", "poison"],
+      "required": [
+        "stableName",
+        "saga",
+        "correlate",
+        "inputs",
+        "target",
+        "projections",
+        "timers",
+        "rejected",
+        "poison"
+      ],
       "properties": {
-        "stableName": { "type": "string" },
+        "stableName": {
+          "type": "string"
+        },
         "saga": {
           "type": "object",
-          "required": ["aggregate", "category"],
-          "properties": { "aggregate": { "$ref": "#/$defs/name" }, "category": { "type": "string" } }
+          "required": [
+            "aggregate",
+            "category"
+          ],
+          "properties": {
+            "aggregate": {
+              "$ref": "#/$defs/name"
+            },
+            "category": {
+              "type": "string"
+            }
+          }
         },
         "correlate": {
           "type": "object",
-          "required": ["field", "via"],
-          "properties": { "field": { "type": "string" }, "via": { "type": "string" } }
+          "required": [
+            "field",
+            "via"
+          ],
+          "properties": {
+            "field": {
+              "type": "string"
+            },
+            "via": {
+              "type": "string"
+            }
+          }
         },
-        "inputs": { "$ref": "#/$defs/names", "minItems": 1 },
-        "target": { "$ref": "#/$defs/name" },
-        "projections": { "$ref": "#/$defs/names" },
-        "timers": { "$ref": "#/$defs/names" },
-        "rejected": { "$ref": "#/$defs/policy" },
-        "poison": { "$ref": "#/$defs/policy" }
+        "inputs": {
+          "$ref": "#/$defs/names",
+          "minItems": 1
+        },
+        "target": {
+          "$ref": "#/$defs/name"
+        },
+        "projections": {
+          "$ref": "#/$defs/names"
+        },
+        "timers": {
+          "$ref": "#/$defs/names"
+        },
+        "rejected": {
+          "$ref": "#/$defs/policy"
+        },
+        "poison": {
+          "$ref": "#/$defs/policy"
+        }
       }
     },
     "workflowDetails": {
       "type": "object",
-      "required": ["stableName", "input", "output", "steps"],
+      "required": [
+        "stableName",
+        "input",
+        "output",
+        "steps"
+      ],
       "properties": {
-        "stableName": { "type": "string" },
-        "input": { "type": "string" },
-        "output": { "type": "string" },
+        "stableName": {
+          "type": "string"
+        },
+        "input": {
+          "type": "string"
+        },
+        "output": {
+          "type": "string"
+        },
         "steps": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["form"],
+            "required": [
+              "form"
+            ],
             "properties": {
-              "form": { "enum": ["step", "await", "sleep", "child", "patch", "continue-as-new"] },
-              "label": { "type": "string" }
+              "form": {
+                "enum": [
+                  "step",
+                  "await",
+                  "sleep",
+                  "child",
+                  "patch",
+                  "continue-as-new"
+                ]
+              },
+              "label": {
+                "type": "string"
+              }
             }
           }
         }
@@ -179,201 +681,613 @@
     },
     "routerDetails": {
       "type": "object",
-      "required": ["stableName", "input", "target", "resolvesFrom", "projections"],
+      "required": [
+        "stableName",
+        "input",
+        "target",
+        "resolvesFrom",
+        "projections"
+      ],
       "properties": {
-        "stableName": { "type": "string" },
-        "input": { "type": "string" },
-        "target": { "$ref": "#/$defs/name" },
-        "resolvesFrom": { "$ref": "#/$defs/nullableName" },
-        "projections": { "$ref": "#/$defs/names" }
+        "stableName": {
+          "type": "string"
+        },
+        "input": {
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/$defs/name"
+        },
+        "resolvesFrom": {
+          "$ref": "#/$defs/nullableName"
+        },
+        "projections": {
+          "$ref": "#/$defs/names"
+        }
       }
     },
     "contractDetails": {
       "type": "object",
-      "required": ["schemaVersion", "discriminator", "topics", "events"],
+      "required": [
+        "schemaVersion",
+        "discriminator",
+        "topics",
+        "events"
+      ],
       "properties": {
-        "schemaVersion": { "type": "integer" },
-        "discriminator": { "type": "string" },
+        "schemaVersion": {
+          "type": "integer"
+        },
+        "discriminator": {
+          "type": "string"
+        },
         "topics": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["alias", "topic"],
-            "properties": { "alias": { "type": "string" }, "topic": { "type": "string" } }
+            "required": [
+              "alias",
+              "topic"
+            ],
+            "properties": {
+              "alias": {
+                "type": "string"
+              },
+              "topic": {
+                "type": "string"
+              }
+            }
           }
         },
-        "events": { "$ref": "#/$defs/names" }
+        "events": {
+          "$ref": "#/$defs/names"
+        }
       }
     },
     "intakeDetails": {
       "type": "object",
-      "required": ["contract", "topicAlias", "topic", "accepts", "dedupe", "idempotence"],
+      "required": [
+        "contract",
+        "topicAlias",
+        "topic",
+        "accepts",
+        "dedupe",
+        "idempotence"
+      ],
       "properties": {
-        "contract": { "$ref": "#/$defs/name" },
-        "topicAlias": { "type": "string" },
-        "topic": { "type": ["string", "null"] },
-        "accepts": { "$ref": "#/$defs/names" },
+        "contract": {
+          "$ref": "#/$defs/name"
+        },
+        "topicAlias": {
+          "type": "string"
+        },
+        "topic": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "accepts": {
+          "$ref": "#/$defs/names"
+        },
         "dedupe": {
           "type": "object",
-          "required": ["key", "policy"],
-          "properties": { "key": { "type": "string" }, "policy": { "type": "string" } }
+          "required": [
+            "key",
+            "policy"
+          ],
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "policy": {
+              "type": "string"
+            }
+          }
         },
-        "idempotence": { "enum": ["inbox-table", "delegated"] }
+        "idempotence": {
+          "enum": [
+            "inbox-table",
+            "delegated"
+          ]
+        }
       }
     },
     "emitDetails": {
       "type": "object",
-      "required": ["contract", "topicAlias", "topic", "source", "key", "events"],
+      "required": [
+        "contract",
+        "topicAlias",
+        "topic",
+        "source",
+        "key",
+        "events"
+      ],
       "properties": {
-        "contract": { "$ref": "#/$defs/name" },
-        "topicAlias": { "type": "string" },
-        "topic": { "type": ["string", "null"] },
-        "source": { "type": "string" },
-        "key": { "type": "string" },
-        "events": { "$ref": "#/$defs/names" }
+        "contract": {
+          "$ref": "#/$defs/name"
+        },
+        "topicAlias": {
+          "type": "string"
+        },
+        "topic": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "events": {
+          "$ref": "#/$defs/names"
+        }
       }
     },
     "publisherDetails": {
       "type": "object",
-      "required": ["emit", "ordering", "maxAttempts", "backoff", "outboxField"],
+      "required": [
+        "emit",
+        "ordering",
+        "maxAttempts",
+        "backoff",
+        "outboxField"
+      ],
       "properties": {
-        "emit": { "$ref": "#/$defs/name" },
-        "ordering": { "type": "string" },
-        "maxAttempts": { "type": "integer" },
+        "emit": {
+          "$ref": "#/$defs/name"
+        },
+        "ordering": {
+          "type": "string"
+        },
+        "maxAttempts": {
+          "type": "integer"
+        },
         "backoff": {
           "type": "object",
-          "required": ["kind", "window", "max", "multiplier"],
+          "required": [
+            "kind",
+            "window",
+            "max",
+            "multiplier"
+          ],
           "properties": {
-            "kind": { "type": "string" },
-            "window": { "type": "string" },
-            "max": { "type": ["string", "null"] },
-            "multiplier": { "type": ["string", "null"] }
+            "kind": {
+              "type": "string"
+            },
+            "window": {
+              "type": "string"
+            },
+            "max": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "multiplier": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
           }
         },
-        "outboxField": { "type": "string" }
+        "outboxField": {
+          "type": "string"
+        }
       }
     },
     "workqueueDetails": {
       "type": "object",
-      "required": ["logical", "physical", "dlq", "table", "ordering", "maxRetries", "dlqOn"],
+      "required": [
+        "logical",
+        "physical",
+        "dlq",
+        "table",
+        "ordering",
+        "maxRetries",
+        "dlqOn"
+      ],
       "properties": {
-        "logical": { "type": "string" },
-        "physical": { "type": "string" },
-        "dlq": { "type": "string" },
-        "table": { "type": "string" },
-        "ordering": { "enum": ["unordered", "fifo-throughput", "fifo-roundrobin", "fifo-heads"] },
-        "maxRetries": { "type": "integer" },
-        "dlqOn": { "type": "boolean" }
+        "logical": {
+          "type": "string"
+        },
+        "physical": {
+          "type": "string"
+        },
+        "dlq": {
+          "type": "string"
+        },
+        "table": {
+          "type": "string"
+        },
+        "ordering": {
+          "enum": [
+            "unordered",
+            "fifo-throughput",
+            "fifo-roundrobin",
+            "fifo-heads"
+          ]
+        },
+        "maxRetries": {
+          "type": "integer"
+        },
+        "dlqOn": {
+          "type": "boolean"
+        }
       }
     },
     "dispatchDetails": {
       "type": "object",
-      "required": ["sourceReadModel", "enqueueTo"],
+      "required": [
+        "sourceReadModel",
+        "enqueueTo"
+      ],
       "properties": {
-        "sourceReadModel": { "$ref": "#/$defs/name" },
-        "enqueueTo": { "$ref": "#/$defs/name" }
+        "sourceReadModel": {
+          "$ref": "#/$defs/name"
+        },
+        "enqueueTo": {
+          "$ref": "#/$defs/name"
+        }
       }
     },
     "readModelDetails": {
       "type": "object",
-      "required": ["table", "schema", "version", "group", "observedTargets", "backingTarget"],
+      "required": [
+        "table",
+        "schema",
+        "version",
+        "group",
+        "observedTargets",
+        "backingTarget"
+      ],
       "properties": {
-        "table": { "type": ["string", "null"] },
-        "schema": { "type": ["string", "null"] },
-        "version": { "type": "integer" },
-        "group": { "$ref": "#/$defs/nullableName" },
-        "observedTargets": { "$ref": "#/$defs/names" },
-        "backingTarget": { "$ref": "#/$defs/nullableName" }
+        "table": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schema": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version": {
+          "type": "integer"
+        },
+        "group": {
+          "$ref": "#/$defs/nullableName"
+        },
+        "observedTargets": {
+          "$ref": "#/$defs/names"
+        },
+        "backingTarget": {
+          "$ref": "#/$defs/nullableName"
+        }
       }
     },
     "operationDetails": {
       "type": "object",
-      "required": ["form", "subject"],
+      "required": [
+        "form",
+        "subject"
+      ],
       "properties": {
-        "form": { "enum": ["command", "query", "signal", "run"] },
-        "subject": { "$ref": "#/$defs/name" },
-        "label": { "type": "string" }
+        "form": {
+          "enum": [
+            "command",
+            "query",
+            "signal",
+            "run"
+          ]
+        },
+        "subject": {
+          "$ref": "#/$defs/name"
+        },
+        "label": {
+          "type": "string"
+        }
       },
-      "if": { "properties": { "form": { "const": "signal" } } },
-      "then": { "required": ["label"] }
+      "if": {
+        "properties": {
+          "form": {
+            "const": "signal"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "label"
+        ]
+      }
     },
     "projectionTargetDetails": {
       "type": "object",
-      "required": ["schema", "table", "reset", "dependsOn"],
+      "required": [
+        "schema",
+        "table",
+        "reset",
+        "dependsOn"
+      ],
       "properties": {
-        "schema": { "type": "string" },
-        "table": { "type": "string" },
-        "reset": { "enum": ["clear", "preserve"] },
-        "dependsOn": { "$ref": "#/$defs/names" }
+        "schema": {
+          "type": "string"
+        },
+        "table": {
+          "type": "string"
+        },
+        "reset": {
+          "enum": [
+            "clear",
+            "preserve"
+          ]
+        },
+        "dependsOn": {
+          "$ref": "#/$defs/names"
+        }
       }
     },
     "rebuildGroupDetails": {
       "type": "object",
-      "required": ["targets", "order"],
+      "required": [
+        "targets",
+        "order"
+      ],
       "properties": {
-        "targets": { "$ref": "#/$defs/names" },
-        "order": { "$ref": "#/$defs/names" }
+        "targets": {
+          "$ref": "#/$defs/names"
+        },
+        "order": {
+          "$ref": "#/$defs/names"
+        }
       }
     },
     "projectionOwnerDetails": {
       "type": "object",
-      "required": ["sources", "delivery", "group", "targets", "order", "subscription", "dedup", "replay"],
+      "required": [
+        "sources",
+        "delivery",
+        "group",
+        "targets",
+        "order",
+        "subscription",
+        "dedup",
+        "replay"
+      ],
       "properties": {
         "sources": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["kind"],
+            "required": [
+              "kind"
+            ],
             "properties": {
-              "kind": { "enum": ["aggregate", "category", "all"] },
-              "name": { "type": "string" }
+              "kind": {
+                "enum": [
+                  "aggregate",
+                  "category",
+                  "all"
+                ]
+              },
+              "name": {
+                "type": "string"
+              }
             },
-            "if": { "properties": { "kind": { "enum": ["aggregate", "category"] } } },
-            "then": { "required": ["name"] }
+            "if": {
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "aggregate",
+                    "category"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "name"
+              ]
+            }
           }
         },
-        "delivery": { "enum": ["inline", "subscription"] },
-        "group": { "$ref": "#/$defs/name" },
-        "targets": { "$ref": "#/$defs/names" },
-        "order": { "type": "integer" },
-        "subscription": { "type": ["string", "null"] },
-        "dedup": { "type": ["string", "null"] },
+        "delivery": {
+          "enum": [
+            "inline",
+            "subscription"
+          ]
+        },
+        "group": {
+          "$ref": "#/$defs/name"
+        },
+        "targets": {
+          "$ref": "#/$defs/names"
+        },
+        "order": {
+          "type": "integer"
+        },
+        "subscription": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dedup": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "replay": {
           "type": "object",
-          "required": ["mode", "reason"],
+          "required": [
+            "mode",
+            "reason"
+          ],
           "properties": {
-            "mode": { "enum": ["explicit", "live-only"] },
-            "reason": { "type": ["string", "null"] }
+            "mode": {
+              "enum": [
+                "explicit",
+                "live-only"
+              ]
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
           }
         }
       }
     },
     "projectionRevisionDetails": {
       "type": "object",
-      "required": ["group", "targets"],
+      "required": [
+        "group",
+        "targets"
+      ],
       "properties": {
-        "group": { "$ref": "#/$defs/name" },
+        "group": {
+          "$ref": "#/$defs/name"
+        },
         "targets": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["target", "schemaVersion"],
-            "properties": { "target": { "$ref": "#/$defs/name" }, "schemaVersion": { "type": "string" } }
+            "required": [
+              "target",
+              "schemaVersion"
+            ],
+            "properties": {
+              "target": {
+                "$ref": "#/$defs/name"
+              },
+              "schemaVersion": {
+                "type": "string"
+              }
+            }
           }
         }
       }
     },
     "externalReadDetails": {
       "type": "object",
-      "required": ["contract", "version", "queryModel", "resultSchema", "resultType", "compatibleRevisions", "surfaceGeneration"],
+      "required": [
+        "contract",
+        "version",
+        "queryModel",
+        "resultSchema",
+        "resultType",
+        "compatibleRevisions",
+        "surfaceGeneration"
+      ],
       "properties": {
-        "contract": { "$ref": "#/$defs/name" },
-        "version": { "type": "integer" },
-        "queryModel": { "$ref": "#/$defs/name" },
-        "resultSchema": { "type": "string" },
-        "resultType": { "type": "string" },
-        "compatibleRevisions": { "$ref": "#/$defs/names" },
-        "surfaceGeneration": { "type": "integer" }
+        "contract": {
+          "$ref": "#/$defs/name"
+        },
+        "version": {
+          "type": "integer"
+        },
+        "queryModel": {
+          "$ref": "#/$defs/name"
+        },
+        "resultSchema": {
+          "type": "string"
+        },
+        "resultType": {
+          "type": "string"
+        },
+        "compatibleRevisions": {
+          "$ref": "#/$defs/names"
+        },
+        "surfaceGeneration": {
+          "type": "integer"
+        }
+      }
+    },
+    "machine": {
+      "description": "The aggregate's keiki state machine. Optional: documents emitted before keiro-dsl added it omit the field. When present, every field is required.",
+      "type": "object",
+      "required": [
+        "ownership",
+        "initial",
+        "states",
+        "edges"
+      ],
+      "properties": {
+        "ownership": {
+          "enum": [
+            "generated",
+            "legacy-hole"
+          ]
+        },
+        "initial": {
+          "$ref": "#/$defs/name"
+        },
+        "states": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "terminal"
+            ],
+            "properties": {
+              "name": {
+                "$ref": "#/$defs/name"
+              },
+              "terminal": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "source",
+              "edgeIndex",
+              "target",
+              "mode",
+              "command",
+              "events"
+            ],
+            "properties": {
+              "source": {
+                "$ref": "#/$defs/name"
+              },
+              "edgeIndex": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "target": {
+                "$ref": "#/$defs/name"
+              },
+              "mode": {
+                "enum": [
+                  "Live",
+                  "ReplayOnly"
+                ]
+              },
+              "command": {
+                "$ref": "#/$defs/name"
+              },
+              "events": {
+                "$ref": "#/$defs/names"
+              }
+            }
+          }
+        }
       }
     }
   }

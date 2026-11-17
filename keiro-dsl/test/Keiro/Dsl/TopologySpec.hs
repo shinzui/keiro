@@ -18,7 +18,13 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Version (showVersion)
+import Keiro.Dsl.Grammar (Aggregate, Node (..))
+
+-- Brings the grammar record fields into scope for record-dot access.
+import Keiro.Dsl.Grammar qualified as Grammar
+import Keiro.Dsl.LanguageVersion (ParsedSource (..))
 import Keiro.Dsl.Parser (parseSourceDocument, renderParseFailure)
+import Keiro.Dsl.SourceIndex (ParsedSourceDocument (..))
 import Keiro.Dsl.Topology
 import Keiro.Dsl.Workspace (WorkspaceSpec, oneMemberParsedDocumentWorkspace)
 import Paths_keiro_dsl qualified as Package
@@ -38,6 +44,7 @@ topologySpec = describe "service topology" $ do
   stabilityTests
   scaffoldExportTests
   freshnessCheckTests
+  machineTests
 
 --------------------------------------------------------------------------------
 -- Milestone 1: the library
@@ -394,6 +401,66 @@ freshnessCheckTests = do
       stderrText `shouldBe` ("topology check: cannot read '" <> T.pack committed <> "' as a keiro-dsl service-topology document\n")
       (missingExit, _, _) <- runCli Nothing ["topology", source, "--check", directory </> "missing.json"]
       missingExit `shouldBe` ExitFailure 1
+
+--------------------------------------------------------------------------------
+-- EP-3: aggregate machines
+--------------------------------------------------------------------------------
+
+machineTests :: Spec
+machineTests = do
+  it "exports an aggregate machine in keiki's edge order, per source state" $ do
+    machine <- fixtureMachine "test/fixtures/topology-machine.keiro" "Order"
+    machine.ownership `shouldBe` MachineGenerated
+    machine.initial `shouldBe` "Draft"
+    [(state.name, state.terminal) | state <- machine.states]
+      `shouldBe` [("Draft", False), ("Open", False), ("InTransit", False), ("Done", True)]
+    [(e.source, e.edgeIndex, e.target, e.mode, e.command, e.events) | e <- machine.edges]
+      `shouldBe` [ ("Draft", 0, "Open", MachineLive, "PlaceOrder", ["OrderPlaced"]),
+                   ("Draft", 1, "Draft", MachineLive, "NoteOrder", ["OrderNoted"]),
+                   ("Open", 0, "Open", MachineLive, "AmendOrder", ["OrderAmended"]),
+                   ("Open", 1, "InTransit", MachineLive, "ShipOrder", ["OrderShipped", "ShipmentLabelled"]),
+                   ("Open", 2, "Done", MachineReplayOnly, "CloseOrder", ["OrderClosed"]),
+                   ("InTransit", 0, "Done", MachineLive, "CloseOrder", ["OrderClosed"])
+                 ]
+
+  it "marks a frozen Language 1 aggregate's hand-written machine as legacy-hole" $ do
+    let legacy =
+          T.unlines
+            [ "context topology-legacy",
+              "",
+              "aggregate Counter",
+              "  regs",
+              "  states Idle Counting",
+              "  command Start { note:Text }",
+              "  event Started = fields(Start)",
+              "  Idle -- Start --> emit Started ; goto Counting"
+            ]
+    case parseSourceDocument "legacy.keiro" legacy of
+      Left failure -> expectationFailure (T.unpack (renderParseFailure failure))
+      Right document -> case [aggregate | NAggregate aggregate <- document.parsedSource.spec.nodes] of
+        [aggregate] -> (aggregateMachine aggregate).ownership `shouldBe` MachineLegacyHole
+        other -> expectationFailure ("expected one aggregate, got " <> show (length other))
+
+  it "carries the machine inside each aggregate node's details" $ do
+    document <- readGolden "test/fixtures/topology/hospital-capacity.topology.golden.json"
+    let aggregates = [node | node <- listField "nodes" document, textField "kind" node == "aggregate"]
+    aggregates `shouldSatisfy` (not . null)
+    forM_ aggregates $ \node ->
+      (field "details" node >>= field "machine" >>= field "ownership") `shouldBe` Just (String "generated")
+
+fixtureMachine :: FilePath -> Text -> IO MachineTopology
+fixtureMachine path aggregateName = do
+  resolved <- resolveTestPath path
+  source <- TE.decodeUtf8 <$> BS.readFile resolved
+  case parseSourceDocument resolved source of
+    Left failure -> fail (T.unpack (renderParseFailure failure))
+    Right document ->
+      case [aggregate | NAggregate aggregate <- document.parsedSource.spec.nodes, aggregateNamed aggregate] of
+        aggregate : _ -> pure (aggregateMachine aggregate)
+        [] -> fail ("no aggregate " <> T.unpack aggregateName)
+  where
+    aggregateNamed :: Aggregate -> Bool
+    aggregateNamed aggregate = aggregate.name == aggregateName
 
 replaceBytes :: BS.ByteString -> BS.ByteString -> BS.ByteString -> BS.ByteString
 replaceBytes needle replacement haystack =

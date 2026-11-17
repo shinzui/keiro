@@ -1,6 +1,9 @@
 # Keiro User Documentation Log
 
 ## 2026-11-17
+
+* **Update**: DOC-35: document the keiki aggregate machine on topology aggregate nodes, its edge-index and ownership rules, and the conformance suite that proves it (plan 340).
+
 * **Addition**: DOC-35 and DOC-33: document the keiro-dsl/service-topology/1 export, its JSON Schema, the topology command with --check, and scaffold --topology-out (plans 338, 339).
 
 ## 2026-11-16

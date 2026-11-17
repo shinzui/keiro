@@ -17,6 +17,11 @@ provenance:
       at: 2026-11-17T15:26:59Z
       mode: "update"
       note: "Correct schema handoffs, compatibility checks and fixture acceptance after repository review"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-17T16:30:22Z
+      mode: "implement"
+      note: "EP-3 implemented: machine export, shared edge-index rule, keiki conformance suite, schema and docs"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -73,22 +78,61 @@ was made by the user on 2026-11-17 and is recorded there.
 
 ## Progress
 
-- [ ] Milestone 1 (prototype): a throwaway check shows that a machine derived from the
-      specification equals the keiki walk of one existing generated corpus, or records
-      exactly how they differ.
-- [ ] Milestone 2: aggregate nodes carry `machine`; the golden documents are regenerated and
-      the only difference is the added `machine` objects.
-- [ ] Milestone 3: the conformance suite `keiro-dsl-conformance-topology-machine` passes for
-      an aggregate with several edges per state, a replay-only edge, a multi-event edge, a
-      hole-owned transition and a process saga, and fails when the export is deliberately
-      broken.
-- [ ] Milestone 4: the documentation page and JSON Schema describe `machine`, or the debt is
-      recorded for the documentation plan.
+- [x] Milestone 1 (2026-11-17): a temporary `Main.hs` in
+      `keiro-dsl/test/conformance-process-full/` walked `surgeTransducer` and
+      `hospitalTransducer` with `edgesOut`, `target`, `mode`, `edgeInputName` and `wcName`;
+      the walk equalled the specification's transitions (Surge: Watching→Noted→Fired!,
+      Hospital: Idle→Surging!), and the file was restored. The non-adjacent case was then
+      read in scaffold: `transitionLayout` in `keiro-dsl/src/Keiro/Dsl/AggregateGenerationPlan.hs`
+      already numbers transitions per source state and the builder emits one `B.from` block
+      per source in first-occurrence order, so the rule needed no adjustment. Milestone 3
+      proves it on a fixture with non-adjacent same-source transitions.
+- [x] Milestone 2 (2026-11-17): every aggregate node carries `machine`; regenerating the four
+      goldens changed them only by added `machine` objects (checked by decoding the old and
+      new documents and removing `machine`). `behaviorEdgeIndex` now reads `outgoingIndex`
+      from `transitionLayout`, the one shared rule. Three unit tests in
+      `keiro-dsl/test/Keiro/Dsl/TopologySpec.hs` cover edge order, `legacy-hole` ownership
+      and presence on every aggregate.
+- [x] Milestone 3 (2026-11-17): `keiro-dsl-conformance-topology-machine` prints
+      `machine Order: 4 states, 6 edges match keiki`, `machine OrderSaga: 2 states, 3 edges
+      match keiki` and the coverage line, and fails with both machines printed when the
+      builder reverses each state's edges (transcript under Surprises). The corpus
+      `keiro-dsl/test/conformance-topology-machine/` regenerates through
+      `keiro-dsl-corpus-regen` with no drift.
+- [x] Milestone 4 (2026-11-17): DOC-35 has an "Aggregate machines" section; the `/1` schema
+      has an optional `machine` whose fields are all required when present;
+      `keiro-dsl/test/fixtures/topology/schema-examples/` holds an older document without
+      `machine` (must validate) and a malformed machine (must be rejected), both checked by
+      `just topology-schema-validate`. The `/2` schema does not exist yet; EP-4 creates it
+      from this `/1` schema, so it inherits `machine`.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- The edge-index rule already existed twice: `transitionLayout`
+  (`keiro-dsl/src/Keiro/Dsl/AggregateGenerationPlan.hs`, used to emit the `B.from` blocks)
+  and a separate count in `behaviorEdgeIndex`. Both now use `transitionLayout`, which the
+  topology export also calls, so the builder layout and the exported index cannot diverge.
+
+- A Language 6 fixture whose state names concatenate with the aggregate name into an event
+  name is rejected (`VertexCtorCollision`: state `Placed` of `Order` generates `OrderPlaced`).
+  The fixture uses states `Draft Open InTransit Done!`.
+
+- Scaffold ledgers match the global `.gitignore` pattern `keiro-dsl-ledger.*.txt`; corpus
+  ledgers must be added with `git add -f`, or `keiro-dsl-corpus-regen` reports
+  "--only path is not in the corpus plan" because it discovers corpora from tracked ledgers.
+
+- Evidence that the proof can fail, with `entry <- reverse layout` in `aggregateMachine`
+  (reverted afterwards):
+
+  ```text
+  machine Order: exported machine differs from keiki
+  exported:
+  {"edges":[{"command":"NoteOrder","edgeIndex":1,…,"source":"Draft","target":"Draft"},{"command":"PlaceOrder","edgeIndex":0,…},…
+  keiki:
+  {"edges":[{"command":"PlaceOrder","edgeIndex":0,…,"source":"Draft","target":"Open"},{"command":"NoteOrder","edgeIndex":1,…},…
+  Test suite keiro-dsl-conformance-topology-machine: FAIL
+  ```
 
 
 ## Decision Log
@@ -119,6 +163,21 @@ was made by the user on 2026-11-17 and is recorded there.
   cannot be proven to match. Saying so is more honest than omitting the machine.
   Date: 2026-11-17
 
+- Decision: `keikiMachine` returns `Either Text MachineTopology` instead of a bare
+  `MachineTopology`, and the suite compares JSON values: `machineValue` of the keiki walk
+  against the `machine` object in the aggregate node's `details` from
+  `buildServiceTopology`.
+  Rationale: An edge whose guard names no command constructor must fail with its source and
+  index rather than be given a made-up name, and comparing the exported object covers the
+  encoder as well as `aggregateMachine`.
+  Date: 2026-11-17
+
+- Decision: The conformance suite compiles every module of the scaffolded corpus (the full
+  Cabal fragment, adding `containers` and `kiroku-store` dependencies for the generated
+  behavior contracts and process holes), so no `uncompiled-generated` exemption is needed.
+  Rationale: It keeps the corpus registration to the ledger alone.
+  Date: 2026-11-17
+
 - Decision: The proof compares against keiki accessors on the real transducer
   (`edgesOut`, `target`, `mode`, `initial`, `isFinal`, the command constructor name and the
   output constructor names), not against keiki's Mermaid or inspector text.
@@ -129,7 +188,12 @@ was made by the user on 2026-11-17 and is recorded there.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-11-17. The topology document shows each aggregate's machine in keiki's own
+terms, and a dedicated conformance suite proves the export against the compiled keiki
+transducers, including a process saga. The proof compares the exported JSON object itself
+(`machineValue` of the keiki walk against `details.machine` from `buildServiceTopology`), so
+it covers the encoding as well as the derivation. The full `just verify` gate runs once on the
+final tree (MasterPlan decision).
 
 
 ## Context and Orientation

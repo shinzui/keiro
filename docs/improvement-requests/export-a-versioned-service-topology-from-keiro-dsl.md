@@ -261,3 +261,9 @@ Where the shipped contract differs from the draft, so Mori's decoder and fixture
 - Process policies use the language's spelling `halt`, `deadLetter` and `skip`. A read
   model's `details` add `observedTargets` and `backingTarget`, and `table` and `schema` are
   `null` for a catalog-bound read model.
+- Aggregate nodes carry a `machine` object in keiki vocabulary: states, the initial and
+  terminal states, and each edge's keiki index, mode, command and events. It is an added
+  field within `/1`, proven equal to the generated keiki transducers by the conformance
+  suite `keiro-dsl-conformance-topology-machine`
+  ([ExecPlan 340](../plans/340-export-aggregate-machines-in-keiki-vocabulary-and-verify-them-against-generated-transducers.md)).
+  Treat it as optional, since documents from before the addition omit it.

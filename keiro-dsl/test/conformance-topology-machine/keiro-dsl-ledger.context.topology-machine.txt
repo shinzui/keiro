@@ -1,0 +1,88 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/topology-machine.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":6,"effectiveLanguageVersion":6,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"candidate","languageVersion":6,"runtimeSemantics":"keiro-dsl/runtime-semantics/5"}
+naming-edition idiomatic-v2
+module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context topology-machine behavior source map","path":"Generated/TopologyMachine/BehaviorSourceMap.hs"}
+module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context topology-machine generated nominal declarations","path":"Generated/TopologyMachine/Nominals.hs"}
+module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context topology-machine generated nominal ID internals","path":"Generated/TopologyMachine/Nominals/Internal.hs"}
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context topology-machine replay-audit assembly","path":"Generated/TopologyMachine/ReplayAudit.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context topology-machine inspection catalog","path":"Generated/TopologyMachine/Inspection.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Order (line 9)","path":"Generated/TopologyMachine/Order/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Order (line 9)","path":"Generated/TopologyMachine/Order/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Order (line 9)","path":"Generated/TopologyMachine/Order/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Order (line 9)","path":"Generated/TopologyMachine/Order/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Order (line 9)","path":"TopologyMachine/Order/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Order (line 9)","path":"Generated/TopologyMachine/Order/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Order (line 9)","path":"Generated/TopologyMachine/Order/Projection.hs"}
+module-role {"family":"Holes","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate Order (line 9)","path":"TopologyMachine/Order/Holes.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Order (line 9)","path":"Generated/TopologyMachine/Order/Harness.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate OrderSaga (line 39)","path":"Generated/TopologyMachine/OrderSaga/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate OrderSaga (line 39)","path":"Generated/TopologyMachine/OrderSaga/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate OrderSaga (line 39)","path":"Generated/TopologyMachine/OrderSaga/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate OrderSaga (line 39)","path":"Generated/TopologyMachine/OrderSaga/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses OrderSaga (line 39)","path":"TopologyMachine/OrderSaga/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate OrderSaga (line 39)","path":"Generated/TopologyMachine/OrderSaga/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate OrderSaga (line 39)","path":"Generated/TopologyMachine/OrderSaga/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate OrderSaga (line 39)","path":"Generated/TopologyMachine/OrderSaga/Harness.hs"}
+module-role {"family":"Input","kind":"generated","ownerKind":"process","ownerName":"process input OrderFlow (line 55)","path":"Generated/TopologyMachine/OrderFlow/Input.hs"}
+module-role {"family":"Process","kind":"generated","ownerKind":"process","ownerName":"process reaction OrderFlow (line 55)","path":"Generated/TopologyMachine/OrderFlow/Process.hs"}
+module-role {"family":"ProcessHoles","kind":"hole","ownerKind":"process","ownerName":"process decoder OrderFlow (line 55)","path":"TopologyMachine/OrderFlow/ProcessHoles.hs"}
+module-role {"family":"ProcessHarness","kind":"generated","ownerKind":"process","ownerName":"process OrderFlow (line 55)","path":"Generated/TopologyMachine/OrderFlow/ProcessHarness.hs"}
+generated Generated/TopologyMachine/BehaviorSourceMap.hs
+generated Generated/TopologyMachine/Nominals.hs
+generated Generated/TopologyMachine/Nominals/Internal.hs
+generated Generated/TopologyMachine/ReplayAudit.hs
+generated Generated/TopologyMachine/Inspection.hs
+generated Generated/TopologyMachine/Order/Domain.hs
+generated Generated/TopologyMachine/Order/Codec.hs
+generated Generated/TopologyMachine/Order/Transducer.hs
+generated Generated/TopologyMachine/Order/BehaviorContract.hs
+hole TopologyMachine/Order/BehaviorHoles.hs
+generated Generated/TopologyMachine/Order/EventStream.hs
+generated Generated/TopologyMachine/Order/Projection.hs
+hole TopologyMachine/Order/Holes.hs
+generated Generated/TopologyMachine/Order/Harness.hs
+generated Generated/TopologyMachine/OrderSaga/Domain.hs
+generated Generated/TopologyMachine/OrderSaga/Codec.hs
+generated Generated/TopologyMachine/OrderSaga/Transducer.hs
+generated Generated/TopologyMachine/OrderSaga/BehaviorContract.hs
+hole TopologyMachine/OrderSaga/BehaviorHoles.hs
+generated Generated/TopologyMachine/OrderSaga/EventStream.hs
+generated Generated/TopologyMachine/OrderSaga/Projection.hs
+generated Generated/TopologyMachine/OrderSaga/Harness.hs
+generated Generated/TopologyMachine/OrderFlow/Input.hs
+generated Generated/TopologyMachine/OrderFlow/Process.hs
+hole TopologyMachine/OrderFlow/ProcessHoles.hs
+generated Generated/TopologyMachine/OrderFlow/ProcessHarness.hs
+id-domain id-domain|name=OrderId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=ord|separator=_|json=canonical-json-text
+nominal-equality nominal-equality|name=OrderId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:ord:keiro-dsl/id-domain/typeid-v7/1|owner=generated
+behavior {"aggregate":"Order","command":"PlaceOrder","evidence":"generated-authoritative","key":"behavior-v1-002dd349c9f95c03","kind":"required-rejection","outputs":[],"source":"Open"}
+behavior {"aggregate":"Order","command":"ShipOrder","evidence":"generated-authoritative","key":"behavior-v1-339bb773d33d1cd9","kind":"live-transition","outputs":[{"command":"ShipOrder","ownership":"generated-command-identity"},{"command":"ShipOrder","ownership":"generated-command-identity"}],"source":"Open"}
+behavior {"aggregate":"Order","command":"CloseOrder","evidence":"generated-authoritative","key":"behavior-v1-364d670a2b00ba7a","kind":"required-rejection","outputs":[],"source":"Done"}
+behavior {"aggregate":"Order","command":"AmendOrder","evidence":"generated-authoritative","key":"behavior-v1-4703c81ac84fd269","kind":"required-rejection","outputs":[],"source":"InTransit"}
+behavior {"aggregate":"Order","command":"CloseOrder","evidence":"generated-authoritative","key":"behavior-v1-4ad1b28167914e12","kind":"required-rejection","outputs":[],"source":"Open"}
+behavior {"aggregate":"Order","command":"AmendOrder","evidence":"generated-authoritative","key":"behavior-v1-4c06e1818180b41a","kind":"required-rejection","outputs":[],"source":"Draft"}
+behavior {"aggregate":"Order","command":"CloseOrder","evidence":"generated-authoritative","key":"behavior-v1-4c3acea05eae1527","kind":"live-transition","outputs":[{"command":"CloseOrder","ownership":"generated-command-identity"}],"source":"InTransit"}
+behavior {"aggregate":"Order","command":"NoteOrder","evidence":"generated-authoritative","key":"behavior-v1-5b1cf802887be9da","kind":"required-rejection","outputs":[],"source":"Done"}
+behavior {"aggregate":"Order","command":"PlaceOrder","evidence":"generated-authoritative","key":"behavior-v1-681e78594be5e34d","kind":"live-transition","outputs":[{"command":"PlaceOrder","ownership":"generated-command-identity"}],"source":"Draft"}
+behavior {"aggregate":"Order","command":"AmendOrder","evidence":"generated-authoritative","key":"behavior-v1-6dc85069e4d4aeaf","kind":"required-rejection","outputs":[],"source":"Done"}
+behavior {"aggregate":"Order","command":"NoteOrder","evidence":"generated-authoritative","key":"behavior-v1-820d02611d3fe202","kind":"required-rejection","outputs":[],"source":"Open"}
+behavior {"aggregate":"OrderSaga","command":"FinishRequest","evidence":"generated-authoritative","key":"behavior-v1-8592eed35edbc505","kind":"required-rejection","outputs":[],"source":"Waiting"}
+behavior {"aggregate":"Order","command":"CloseOrder","evidence":"generated-authoritative","key":"behavior-v1-86aedf6e0162577f","kind":"required-rejection","outputs":[],"source":"Draft"}
+behavior {"aggregate":"Order","command":"ShipOrder","evidence":"generated-authoritative","key":"behavior-v1-acb73cfddfb6ec54","kind":"required-rejection","outputs":[],"source":"Done"}
+behavior {"aggregate":"Order","command":"ShipOrder","evidence":"generated-authoritative","key":"behavior-v1-b3bf157ed703ffaf","kind":"required-rejection","outputs":[],"source":"Draft"}
+behavior {"aggregate":"Order","command":"AmendOrder","evidence":"generated-authoritative","key":"behavior-v1-bba7be6454e48fd5","kind":"live-transition","outputs":[{"command":"AmendOrder","ownership":"generated-command-identity"}],"source":"Open"}
+behavior {"aggregate":"Order","command":"NoteOrder","evidence":"generated-authoritative","key":"behavior-v1-c193804300699444","kind":"required-rejection","outputs":[],"source":"InTransit"}
+behavior {"aggregate":"Order","command":"PlaceOrder","evidence":"generated-authoritative","key":"behavior-v1-cd039e17dcc38865","kind":"required-rejection","outputs":[],"source":"InTransit"}
+behavior {"aggregate":"Order","command":"CloseOrder","evidence":"generated-authoritative","key":"behavior-v1-cf6a23ed42e4970a","kind":"replay-transition","outputs":[{"command":"CloseOrder","ownership":"generated-command-identity"}],"source":"Open"}
+behavior {"aggregate":"OrderSaga","command":"RecordRequest","evidence":"generated-authoritative","key":"behavior-v1-d9f622535671546c","kind":"live-transition","outputs":[{"command":"RecordRequest","ownership":"generated-command-identity"}],"source":"Requested"}
+behavior {"aggregate":"Order","command":"NoteOrder","evidence":"hole-witnessed","key":"behavior-v1-e07448f38133b7e0","kind":"live-transition","outputs":[{"command":"NoteOrder","ownership":"generated-command-identity"}],"source":"Draft"}
+behavior {"aggregate":"Order","command":"ShipOrder","evidence":"generated-authoritative","key":"behavior-v1-ec060a2c3596b1c2","kind":"required-rejection","outputs":[],"source":"InTransit"}
+behavior {"aggregate":"Order","command":"PlaceOrder","evidence":"generated-authoritative","key":"behavior-v1-ed926b1ef15794db","kind":"required-rejection","outputs":[],"source":"Done"}
+behavior {"aggregate":"OrderSaga","command":"RecordRequest","evidence":"generated-authoritative","key":"behavior-v1-edb42bb9533e3443","kind":"live-transition","outputs":[{"command":"RecordRequest","ownership":"generated-command-identity"}],"source":"Waiting"}
+behavior {"aggregate":"OrderSaga","command":"FinishRequest","evidence":"generated-authoritative","key":"behavior-v1-f281427a09b33c8d","kind":"live-transition","outputs":[{"command":"FinishRequest","ownership":"generated-command-identity"}],"source":"Requested"}
+process-reaction {"fingerprint":"cf31810a738a8543f700a1930f8df04a09056449e103c4eb1b3b9039b1bd6f46","holeObligations":["decodeOrderFlowInput :: RecordedEvent -> Maybe OrderFlowInput"],"processName":"order-flow","verification":"generated-declarative","version":1}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

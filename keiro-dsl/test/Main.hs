@@ -2017,6 +2017,7 @@ main = hspec $ do
             "structural-nominal-leaves-text-to-nominal.keiro",
             "structural-nominal-leaves.keiro",
             "structural-text-sets.keiro",
+            "topology-machine.keiro",
             "topology/hospital-capacity.keiro",
             "topology/incident-command.keiro",
             "topology/projection-catalog.keiro",

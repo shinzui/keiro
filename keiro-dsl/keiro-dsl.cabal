@@ -1827,6 +1827,57 @@ test-suite keiro-dsl-conformance-process-reactions
     uuid >=1.3 && <1.4,
     vector >=0.13 && <0.14,
 
+-- The topology machine proof: the `machine` object `keiro-dsl topology`
+-- exports from the specification equals the generated keiki transducer walked
+-- with keiki's own accessors, for every aggregate including a process saga.
+test-suite keiro-dsl-conformance-topology-machine
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-topology-machine
+  main-is: Main.hs
+  other-modules:
+    Generated.TopologyMachine.BehaviorSourceMap
+    Generated.TopologyMachine.Inspection
+    Generated.TopologyMachine.Nominals
+    Generated.TopologyMachine.Nominals.Internal
+    Generated.TopologyMachine.Order.BehaviorContract
+    Generated.TopologyMachine.Order.Codec
+    Generated.TopologyMachine.Order.Domain
+    Generated.TopologyMachine.Order.EventStream
+    Generated.TopologyMachine.Order.Harness
+    Generated.TopologyMachine.Order.Projection
+    Generated.TopologyMachine.Order.Transducer
+    Generated.TopologyMachine.OrderFlow.Input
+    Generated.TopologyMachine.OrderFlow.Process
+    Generated.TopologyMachine.OrderFlow.ProcessHarness
+    Generated.TopologyMachine.OrderSaga.BehaviorContract
+    Generated.TopologyMachine.OrderSaga.Codec
+    Generated.TopologyMachine.OrderSaga.Domain
+    Generated.TopologyMachine.OrderSaga.EventStream
+    Generated.TopologyMachine.OrderSaga.Harness
+    Generated.TopologyMachine.OrderSaga.Projection
+    Generated.TopologyMachine.OrderSaga.Transducer
+    Generated.TopologyMachine.ReplayAudit
+    TopologyMachine.Order.BehaviorHoles
+    TopologyMachine.Order.Holes
+    TopologyMachine.OrderFlow.ProcessHoles
+    TopologyMachine.OrderSaga.BehaviorHoles
+
+  build-depends:
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    bytestring >=0.12 && <0.13,
+    containers >=0.6 && <0.8,
+    directory >=1.3 && <1.4,
+    keiki >=0.9 && <0.10,
+    keiro,
+    keiro-dsl,
+    kiroku-store ^>=0.13.0.1,
+    shibuya-core ^>=0.13.0.1,
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15,
+    uuid >=1.3 && <1.4,
+
 -- Language 6 reaction timers: typed payload codecs, schedule modes,
 -- cancellation accounting and deterministic fire redelivery.
 test-suite keiro-dsl-conformance-process-timers
