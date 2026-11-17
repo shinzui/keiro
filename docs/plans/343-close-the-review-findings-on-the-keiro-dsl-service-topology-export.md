@@ -72,8 +72,15 @@ which prints each aggregate with its category, for example `('Capacity', 'capaci
       `*.invalid.json` example only on a real schema violation, shown by a deliberately
       broken run. Evidence: the committed tree passes and prints each violation it relied
       on; both breakages below exit 1; `git status` was clean afterwards.
-- [ ] Milestone 4: the machine proof runs against at least three more generated corpora
-      and prints how many aggregates it compared; `just verify` passes.
+- [x] Milestone 4 (2026-11-17): the machine proof runs against four more generated corpora
+      and prints how many aggregates it compared; `just verify` passes. Evidence: five
+      suites print `topology machine proof: N …` (topology-machine 2,
+      history-dependent-holes 1, process-full 2, process-reactions 2, structural 1) and
+      exit 0; dropping `Hospital` from process-full's list fails with `generated
+      aggregates neither compared nor excluded: Hospital`, and walking the wrong
+      transducer fails with `machine Hospital: exported machine differs from keiki`;
+      `just conformance-corpus-policy`, `just initial-hole-proof` and
+      `just process-reaction-proof` pass.
 
 
 ## Surprises & Discoveries
@@ -134,6 +141,11 @@ which prints each aggregate with its category, for example `('Capacity', 'capaci
   error: recipe `topology-schema-validate` failed on line 70 with exit code 1
   ```
 
+- No walked machine differed from its exported machine in any of the four new corpora, so
+  the shared `transitionLayout` rule held for hole-bodied edges, a Language 4
+  legacy-process saga, a reaction saga shared by three processes, and structural
+  registers. No aggregate needed an exclusion.
+
 ## Decision Log
 
 - Decision: `topology --check` keeps today's version message whenever the recorded and
@@ -187,6 +199,28 @@ which prints each aggregate with its category, for example `('Capacity', 'capaci
   compile generated transducers supply more shapes at no cost to consumers.
   Date: 2026-11-17
 
+
+- Decision: The widened proof uses conformance-history-dependent-holes,
+  conformance-process-full, conformance-process-reactions and conformance-structural, not
+  conformance-behavior-complete.
+  Rationale: conformance-behavior-complete's `Main.hs` is also the main of the standalone
+  `keiro-dsl-behavior-complete-report` package
+  (`keiro-dsl/test/conformance-behavior-complete/behavior-complete-report.cabal`), whose
+  `--format=json` output the behavior-complete and source-anchor mutation tests parse, and
+  that package does not depend on keiro-dsl. Adding the proof there would break it or its
+  JSON output. The four chosen corpora add hole-bodied edges, a legacy-process saga with a
+  terminal chain, a reaction saga shared by three processes with two edges out of one
+  state, and structural registers with a two-event edge into a terminal state.
+  Date: 2026-11-17
+
+- Decision: `proveTopologyMachines` returns a `MachineProof` (the exported topology and
+  the compared machines) rather than a bare count, prints failures on standard error,
+  and leaves the success line to the caller through `topologyMachineProofLine`, which
+  says `1 aggregate matches keiki` for a single aggregate.
+  Rationale: the dedicated suite's coverage guard needs the topology and machines, the
+  count is the length of `compared`, and standard error keeps a suite with
+  machine-readable standard output parseable.
+  Date: 2026-11-17
 
 ## Outcomes & Retrospective
 

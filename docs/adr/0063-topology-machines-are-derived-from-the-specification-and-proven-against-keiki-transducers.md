@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Topology machines are derived from the specification and proven against keiki transducers
 description: The aggregate state machine in the service topology is computed by keiro-dsl from the checked specification, using the same edge-index rule as the transducer builder, and a conformance suite proves it equal to the compiled keiki transducers.
-timestamp: 2026-11-17T17:00:00Z
+timestamp: 2026-11-17T19:30:00Z
 docId: ADR-63
 status: Accepted
 date: 2026-11-17
@@ -56,3 +56,9 @@ lists the declared transitions, and the export says it is not proven.
 - New generated corpora used as proofs must be registered in
   `keiro-dsl/test/conformance-baseline.json`, and their git-ignored scaffold ledgers must be
   force-added so the corpus driver can discover them.
+- The proof lives in one shared test module, `keiro-dsl/test/topology-machine-proof`, and
+  runs against `topology-machine.keiro` (conformance-topology-machine) and the existing
+  corpora conformance-history-dependent-holes, conformance-process-full,
+  conformance-process-reactions and conformance-structural. Each run must account for
+  every aggregate whose exported ownership is `generated`, either by comparing it or by
+  naming it as excluded with a reason.

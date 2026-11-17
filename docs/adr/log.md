@@ -2,6 +2,9 @@
 
 ## 2026-11-17
 
+* **Update**: ADR-63: record the corpora the topology machine proof now covers and its every-generated-aggregate rule (plan 343).
+
+
 * **Update**: ADR-62: record that aggregate nodes carry the inspector category for live-inspection joins (plan 343).
 
 * **Addition**: ADR-62, ADR-63 and ADR-64: the service topology is a versioned keiro-owned contract under the lowest sufficient schema id; topology machines are derived from the specification and proven against keiki; declared input sources are checked documentation with no runtime or identity effect (MasterPlan 48).
