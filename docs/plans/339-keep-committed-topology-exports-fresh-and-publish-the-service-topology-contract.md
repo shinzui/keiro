@@ -17,6 +17,22 @@ provenance:
       at: 2026-11-17T15:06:01Z
       mode: "update"
       note: "Add the projection catalog to the /1 topology contract"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-17T15:26:59Z
+      mode: "update"
+      note: "Correct schema handoffs, compatibility checks and fixture acceptance after repository review"
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-17T15:26:59Z
+      verdict: "comments"
+      note: "Reviewed and corrected local coordination and acceptance; Mori outage prevents external API and ADR verification"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-17T15:42:49Z
+      verdict: "approved"
+      note: "Follow-up: Mori works with corrected Codex environment; keiki APIs, sibling fixtures and ADR verified; local findings corrected"
 ---
 
 # Keep committed topology exports fresh and publish the service-topology contract
@@ -171,8 +187,10 @@ Relevant ADRs: `docs/adr/0014-service-workspaces-compose-single-owner-members-un
 (what a workspace and its members are) and
 `docs/adr/0022-generated-sidecars-use-role-bearing-names-and-forward-compatible-ledgers.md`
 (why the ledger is a guarded format that this plan leaves alone). The cross-repository
-decision `mori://shinzui/mori/okf/adrs/concepts/ADR-33` explains why the consumer reads a
-committed export.
+decision `mori://shinzui/mori/okf/adrs/concepts/ADR-33` establishes the public-interface
+boundary for sibling invocation. IR-62 in
+`docs/improvement-requests/export-a-versioned-service-topology-from-keiro-dsl.md` supplies
+the specific requirement that this consumer read a committed export.
 
 Two later plans extend the files this plan creates and are not needed to implement it:
 `docs/plans/340-export-aggregate-machines-in-keiki-vocabulary-and-verify-them-against-generated-transducers.md`
@@ -181,7 +199,10 @@ adds a `machine` object to aggregate node details, and
 adds a `feeds` relation under schema id `keiro-dsl/service-topology/2`. If either has already
 been implemented when Milestone 3 of this plan is done, its Progress section will say that
 documentation of its addition is owed; in that case document and schematize what the code
-emits, including those additions.
+emits, including those additions. Validate each golden recursively, including the workspace
+subdirectory, against the schema named by its `schema` field. If EP-3 is already present,
+both `/1` and `/2` must describe `machine` as optional for older documents and validate all
+its fields when present. Keep an example without `machine` as a compatibility test.
 
 
 ## Plan of Work
@@ -195,10 +216,16 @@ Dependencies. The `topology` command, the scaffold flag and the check all call i
 what guarantees AC-3's "same document".
 
 Add an optional `--topology-out FILE` to the `scaffold` parser and a `Maybe FilePath` field
-to the `Scaffold` constructor. In both scaffold paths, call `renderTopology` before the
+to the `Scaffold` constructor. Only when `--topology-out` is present, in both scaffold paths call `renderTopology` before the
 `execute…` call; if it fails, print its diagnostics and exit non-zero without scaffolding.
 After `execute…` returns success, create the file's parent directory and write the bytes.
-Write nothing when scaffold is refused.
+Write nothing when scaffold is refused. Without the flag, preserve the existing scaffold
+path and avoid the extra load/check/export. Before any scaffold write, reject an export path
+that aliases an input file, workspace manifest/member, generated module, create-once hole,
+ledger or Cabal fragment; compare normalized paths and resolve existing symlinks. Test these
+collisions and assert all existing bytes remain unchanged. A writable unrelated export file
+may be replaced as documented. Filesystem write failure must return non-zero; this does not
+promise a transaction across all scaffold output files.
 
 Add tests to the `describe "scaffold"` area of `keiro-dsl/test/Main.hs`: scaffold a topology
 fixture into a temporary directory with `--topology-out`, run `topology` on the same input,
@@ -388,3 +415,15 @@ Files created: `docs/user/keiro-dsl-service-topology.md`,
 Revision note, 2026-11-17: the `/1` contract now includes the projection catalog, so the
 documentation page, JSON Schema and IR-62 response in Milestone 3 cover seventeen node kinds
 and twenty-two relations instead of twelve and twelve.
+
+
+Review update, 2026-11-17: reconciled schema handoffs, optional-field compatibility and
+acceptance comparisons without changing the four work streams. Repository APIs and local
+ADR references were inspected. Follow-up Mori lookup resolved the sibling fixtures,
+keiki source and `mori://shinzui/mori/okf/adrs/concepts/ADR-33`; the earlier failures came
+from Codex inheriting a stale development database address, not a Mori outage. The earlier
+review entry is retained as history and corrected by the follow-up review. Keiki's
+`edgesOut`, `initial`, `isFinal`, `target`, `mode`, `edgeInputName` and `OPack`/`wcName`
+interfaces support the planned comparison; its builder preserves declaration order within
+each source state, including repeated source blocks. The two sibling specifications exist
+and are legacy-unversioned, as the fixture-migration instructions expect.

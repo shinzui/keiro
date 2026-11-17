@@ -11,6 +11,23 @@ provenance:
     model: "claude-fable-5-2"
     harness: "claude-code"
     at: 2026-11-17T14:55:55Z
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-17T15:26:59Z
+      mode: "update"
+      note: "Correct schema handoffs, compatibility checks and fixture acceptance after repository review"
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-17T15:26:59Z
+      verdict: "comments"
+      note: "Reviewed and corrected local coordination and acceptance; Mori outage prevents external API and ADR verification"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-17T15:42:49Z
+      verdict: "approved"
+      note: "Follow-up: Mori works with corrected Codex environment; keiki APIs, sibling fixtures and ADR verified; local findings corrected"
 ---
 
 # Export aggregate machines in keiki vocabulary and verify them against generated transducers
@@ -163,7 +180,9 @@ What keiki offers, in module `Keiki.Core` unless stated. `SymTransducer` has fie
 constructor the edge's guard matches. Each `OutTerm` is `OPack inCtor wireCtor fields`, and a
 wire constructor's name is read with its `wcName` pattern field. Do not use
 `edgeOutputName` for the comparison: it joins several event names into one display string.
-The existing use of these accessors in this repository is
+Treat `edgeInputName == Nothing` as a conformance failure with the source and edge index;
+do not manufacture a command name or silently omit the edge. Convert `wcName` from `String`
+to `Text` without Mermaid escaping. The existing use of these accessors in this repository is
 `keiro/src/Keiro/ProcessManager/Inspect.hs`, which lists `Live` edges with `edgeInputName`.
 To read keiki's source, locate it with `mori registry show shinzui/keiki --full`; never
 search `/nix/store`. This repository builds against `keiki >=0.9 && <0.10`.
@@ -285,7 +304,10 @@ Discoveries or Outcomes section as evidence, and revert.
 ### Milestone 4: documentation and schema
 
 If `docs/user/keiro-dsl-service-topology.md` and
-`docs/user/schemas/keiro-dsl-service-topology-1.schema.json` exist, add `machine` to both:
+`docs/user/schemas/keiro-dsl-service-topology-1.schema.json` exist, add `machine` to the page and every existing topology schema (including `/2` if the input-source
+plan has landed). Keep `machine` optional so previously valid documents remain valid, but
+require its fields when the object is present. Add schema tests for an older document without
+`machine`, a malformed machine, and a sourced `/2` document with a machine when `/2` exists;
 describe each field, state that the vocabulary and the edge index are keiki's, state that an
 edge index is local to one source state and changes when transitions are reordered so it must
 not be stored as a durable identifier, and state which machines the conformance suite proves.
@@ -351,8 +373,8 @@ aggregate including the saga aggregate, and the coverage line. With the edge ord
 deliberately reversed in the builder it fails and prints the two differing machines; that
 transcript is recorded in this plan.
 
-Guarantees that must not weaken, with the check that measures each. The schema id stays
-`/1` and no existing field changes, measured by the golden diff containing only added
+Guarantees that must not weaken, with the check that measures each. The schema id of each fixture stays unchanged (`/1` for unsourced services, `/2` if
+the input-source plan has already added a sourced fixture), and no existing field changes, measured by the golden diff containing only added
 `machine` objects. Generated code is unchanged by sharing the edge-index function, measured
 by `scripts/check-conformance-corpus.sh` reporting no drift in any existing corpus and by the
 existing behavior-contract suites passing. The command path is not affected at all: no
@@ -418,3 +440,15 @@ keikiMachine ::
 ```
 
 It sets `ownership` to `MachineGenerated`, since only generated machines are compared.
+
+
+Review update, 2026-11-17: reconciled schema handoffs, optional-field compatibility and
+acceptance comparisons without changing the four work streams. Repository APIs and local
+ADR references were inspected. Follow-up Mori lookup resolved the sibling fixtures,
+keiki source and `mori://shinzui/mori/okf/adrs/concepts/ADR-33`; the earlier failures came
+from Codex inheriting a stale development database address, not a Mori outage. The earlier
+review entry is retained as history and corrected by the follow-up review. Keiki's
+`edgesOut`, `initial`, `isFinal`, `target`, `mode`, `edgeInputName` and `OPack`/`wcName`
+interfaces support the planned comparison; its builder preserves declaration order within
+each source state, including repeated source blocks. The two sibling specifications exist
+and are legacy-unversioned, as the fixture-migration instructions expect.

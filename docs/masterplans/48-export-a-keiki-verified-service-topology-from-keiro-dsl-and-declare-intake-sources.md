@@ -16,6 +16,22 @@ provenance:
       at: 2026-11-17T15:06:01Z
       mode: "update"
       note: "Add the projection catalog to the /1 topology contract"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-17T15:26:59Z
+      mode: "update"
+      note: "Correct schema handoffs, compatibility checks and fixture acceptance after repository review"
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-17T15:26:59Z
+      verdict: "comments"
+      note: "Reviewed and corrected local coordination and acceptance; Mori outage prevents external API and ADR verification"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-17T15:42:49Z
+      verdict: "approved"
+      note: "Follow-up: Mori works with corrected Codex environment; keiki APIs, sibling fixtures and ADR verified; local findings corrected"
 ---
 
 # Export a keiki-verified service topology from keiro-dsl and declare intake sources
@@ -69,8 +85,8 @@ Read a user-documentation page and a checked-in JSON Schema that define both sch
 the compatibility policy.
 
 Out of scope: wire, codec, guard and register-update detail; a projection revision's
-provisioner, validator and promotion-object detail; broker, consumer-group and runtime configuration; any change to `check`, `diff`,
-`inspect` output or to the scaffold ledger file; moving the hand-written inbox-to-input
+provisioner, validator and promotion-object detail; broker, consumer-group and runtime configuration; changes to existing `check`, `diff`,
+`inspect` output for unsourced specifications or to the scaffold ledger file; moving the hand-written inbox-to-input
 conversion into generated code; input sources other than intakes; and anything specific to
 Mori. Adopting the export in the sibling example repository
 `mori://shinzui/keiro-runtime-jitsurei` is also out of scope. That repository pins an older
@@ -153,9 +169,11 @@ does not change them.
 `docs/adr/0038-keiro-dsl-records-use-concise-labels-without-product-selectors.md` governs
 record style in new `keiro-dsl` modules (`NoFieldSelectors`, record dot).
 
-One cross-repository decision applies: `mori://shinzui/mori/okf/adrs/concepts/ADR-33` binds
-Mori to a sibling's published contract rather than its internals, which is why Mori ingests a
-committed export instead of parsing `.keiro` files.
+The cross-repository decision `mori://shinzui/mori/okf/adrs/concepts/ADR-33` establishes
+Mori's public-interface boundary for outbound sibling invocation. Applying that principle
+here supports a keiro-owned contract; the specific requirement to ingest a committed export
+rather than parse `.keiro` files comes from IR-62 in
+`docs/improvement-requests/export-a-versioned-service-topology-from-keiro-dsl.md`.
 
 Decisions in this initiative that deserve a new ADR at completion: that the service topology
 is a versioned public contract owned by keiro, with its compatibility policy and
@@ -228,8 +246,12 @@ without a source is unchanged.
 
 The user documentation page `docs/user/keiro-dsl-service-topology.md`, the JSON Schema files
 under `docs/user/schemas/`, and the `topology-schema-validate` recipe in `Justfile` are
-defined by EP-2. EP-3 extends the `/1` schema and page with `machine`. EP-4 adds
-`keiro-dsl-service-topology-2.schema.json` and a section for `/2`.
+defined by EP-2. EP-3 extends every existing topology schema and the page with `machine`; the field remains
+optional for documents emitted before EP-3, with its complete shape checked when present. EP-4 adds
+`keiro-dsl-service-topology-2.schema.json` and a section for `/2`. Whichever of EP-3 and
+EP-4 finishes second reconciles both schemas and validates all goldens, including a sourced
+service with a machine. EP-2 owns reconciliation if both additions precede its M3. Deferred
+documentation is not initiative completion: EP-2 must discharge every recorded debt.
 
 The compatibility policy is a shared rule, owned by EP-1 and published by EP-2: within one
 schema id keiro may add object fields and consumers ignore fields they do not know; a new node
@@ -238,7 +260,8 @@ added field and stays in `/1`. EP-4's `feeds` is a new relation and requires `/2
 
 The schema id selection rule is owned by EP-4 and builds on EP-1: a document is emitted under
 the lowest schema id able to represent it. A service that declares no input source produces a
-`/1` document, byte-for-byte what EP-1 produced. A service that declares at least one produces
+`/1` document, byte-for-byte what the same generator emits without EP-4 (including EP-3 machine
+fields if EP-3 has landed). A service that declares at least one produces
 a `/2` document, which is `/1` plus the `feeds` relation.
 
 The representative producer and consumer check for the uncertain interface, the equality of
@@ -256,7 +279,9 @@ questions in the record; EP-4 marks IR-63. Both follow the status vocabulary alr
 
 ## Progress
 
-No child plan has started. All four are drafted and unreviewed.
+No child plan has started. All four were reviewed on 2026-11-17 and corrected in this update. No implementation
+acceptance has run. Dependency source, sibling fixtures and the cross-repository ADR have
+now been verified through Mori; no review blocker remains. EP-1 is ready to start.
 
 Cross-plan gates not owned by a single child:
 
@@ -374,3 +399,24 @@ Cross-plan gates not owned by a single child:
 Revision note, 2026-11-17: at the user's request the projection catalog moved from out of
 scope into the `/1` contract, as a new Milestone 3 of EP-1. EP-2's documentation and schema
 scope grew accordingly. No dependency or child plan was added.
+
+
+Review update, 2026-11-17: reconciled schema handoffs, optional-field compatibility and
+acceptance comparisons without changing the four work streams. Repository APIs and local
+ADR references were inspected. Follow-up Mori lookup resolved the sibling fixtures,
+keiki source and `mori://shinzui/mori/okf/adrs/concepts/ADR-33`; the earlier failures came
+from Codex inheriting a stale development database address, not a Mori outage. The earlier
+review entry is retained as history and corrected by the follow-up review. Keiki's
+`edgesOut`, `initial`, `isFinal`, `target`, `mode`, `edgeInputName` and `OPack`/`wcName`
+interfaces support the planned comparison; its builder preserves declaration order within
+each source state, including repeated source blocks. The two sibling specifications exist
+and are legacy-unversioned, as the fixture-migration instructions expect.
+
+
+Validation evidence, 2026-11-17: both source specifications in
+`mori://shinzui/keiro-runtime-jitsurei` (project-relative paths
+`services/hospital-capacity/spec/hospital-capacity.keiro` and
+`services/incident-command/spec/incident-command.keiro`; artifact-level URIs pending)
+passed the current `keiro-dsl check` through `nix develop -c cabal run -v0 keiro-dsl`,
+returning `OK` and exit zero with legacy-language and existing warning diagnostics. This
+confirms the source baseline; migrating the copied fixtures to Language 6 remains EP-1 work.

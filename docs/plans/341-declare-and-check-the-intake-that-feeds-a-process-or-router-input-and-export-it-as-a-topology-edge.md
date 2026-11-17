@@ -11,6 +11,23 @@ provenance:
     model: "claude-fable-5-2"
     harness: "claude-code"
     at: 2026-11-17T14:55:55Z
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-17T15:26:59Z
+      mode: "update"
+      note: "Correct schema handoffs, compatibility checks and fixture acceptance after repository review"
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-17T15:26:59Z
+      verdict: "comments"
+      note: "Reviewed and corrected local coordination and acceptance; Mori outage prevents external API and ADR verification"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-17T15:42:49Z
+      verdict: "approved"
+      note: "Follow-up: Mori works with corrected Codex environment; keiki APIs, sibling fixtures and ADR verified; local findings corrected"
 ---
 
 # Declare and check the intake that feeds a process or router input and export it as a topology edge
@@ -137,7 +154,8 @@ present for some `keiro-dsl` suites; confirm with `nix develop -c z3 --version`.
 The grammar's data types are in `keiro-dsl/src/Keiro/Dsl/Grammar.hs`. An input is
 
 ```haskell
-data InputDecl = InputDecl { name, fields :: [Field], valueType :: Maybe TypeExpr, loc }
+data InputDecl = InputDecl
+  { name :: Name, fields :: [Field], valueType :: Maybe TypeExpr, loc :: Loc }
 ```
 
 A router (`RouterNode`) has exactly one, in its `input` field. A process (`ProcessNode`) has
@@ -241,7 +259,9 @@ Language 6.
 Add a constructor `InputSourceSyntax` to `data LanguageFeature` and insert it into
 `profileV5`. Write a parser `pInputSource` for `from intake <ident> event <ident>+` and call
 it through `optionalLanguageFeature` in `pInputDecl` and `pRouterInputDecl`, immediately
-after the input's name. The event list ends at the `{` or `:` that starts the body. Under
+after the input's name. Thread `FrontendContext` through `pInputDecl`,
+`pLegacyProcessBody`, their reaction-body callers and `pRouterInputDecl`; the existing input
+parsers do not receive this context. The event list ends at the `{` or `:` that starts the body. Under
 Languages 1 to 5 the token `from` in that position must produce the standard
 "requires language version" failure, not a generic parse error. Because `from` is contextual,
 an input whose name is followed directly by `{` or `:` parses exactly as before.
@@ -252,8 +272,8 @@ else the compiler reports as non-exhaustive or positionally matched on `InputDec
 Tests, in the router and process `describe` blocks of `keiro-dsl/test/Main.hs`: a Language 6
 router with a braces input, a Language 6 router with a typed (`: Type`) input, a legacy
 process and a reaction process with two inputs of which one declares a source, each parsing
-to the expected `InputSource`; the parse-and-pretty round trip for each; a Language 5 source
-using the clause failing with the version-requirement message; and an existing fixture
+to the expected `InputSource`; the parse-and-pretty round trip for each; each predecessor language (1 through 5), using a compatible legacy-process or router
+fixture with the clause, failing with the version-requirement message; and an existing fixture
 without a source producing an identical parsed value before and after, apart from the new
 `Nothing`.
 
@@ -281,11 +301,13 @@ input declares a source, and a reaction process one of whose inputs declares a s
 
 Tests: each diagnostic, by code and line; a workspace in which the intake and the router are
 in different member files checks clean; and the non-interference proof. For that proof,
-scaffold `sourced.keiro` and `unsourced.keiro` into two temporary directories with the same
+copy `sourced.keiro` and `unsourced.keiro` into separate temporary input directories under
+the same basename, and scaffold into separate output directories with the same
 arguments and assert that the sets of written files are equal and that every file, including
-the ledger and the Cabal fragment, is byte-identical. Because the ledger records
-fingerprints, this one comparison covers generated code, fold fingerprints, the
-process-reaction fingerprint and the router-selection fingerprint. If the ledger or a
+the ledger and the Cabal fragment, is byte-identical. Also directly compare fold fingerprints, `processReactionFingerprint` and the checked
+router-selection fingerprint between the two specifications. Do not assume the scaffold
+ledger contains every fingerprint. Include a declarative-selection router so that its
+fingerprint assertion is non-vacuous, and assert that every compared identity is present. If the ledger or a
 generated banner records a digest of the specification file itself, the two will differ
 there for a reason unrelated to semantics; in that case compare everything else exactly,
 assert that those specific lines are the only difference, and record it in Surprises &
@@ -310,9 +332,12 @@ Create `keiro-dsl/test/fixtures/topology/incident-command-sourced.keiro` as a co
 `incident-command.keiro` in which the input of `CapacityChangeRouter` declares
 `from intake hospitalInbox event HospitalCapacitySnapshotPublished`. Do not edit
 `incident-command.keiro`. Add a golden test for the new fixture with golden file
-`incident-command-sourced.topology.golden.json`, and a test asserting that the two documents,
-decoded, differ only in `schema`, the one added edge, and the member digest and line numbers
-that follow from the edited line. Run the existing golden tests without regenerating them:
+`incident-command-sourced.topology.golden.json`. For the semantic comparison, copy the two
+inputs to separate temporary directories under the same basename `incident-command.keiro`,
+then export and decode them. They must differ only in `schema`, the one added edge, and the
+member digest and line numbers that follow from the edited line. Comparing the checked-in
+filenames directly would also change `service`, `source.path`, member paths and node ownership.
+Retain every `machine` field unchanged if the machine-export plan has already landed. Run the existing golden tests without regenerating them:
 they must pass unchanged, which proves that unsourced services still produce `/1` bytes.
 
 Update documentation. In `docs/user/keiro-dsl-processes-and-routers.md` describe the clause,
@@ -403,7 +428,8 @@ regeneration (AC-3).
 Guarantees that must not weaken, with the check that measures each (AC-4). Generated code,
 the scaffold ledger and the Cabal fragment are byte-identical with and without a source,
 measured by the Milestone 2 scaffold comparison. Fold, process-reaction and router-selection
-fingerprints are identical, measured by the same comparison through the ledger. `diff`
+fingerprints are identical, measured by direct identity comparisons as well as the scaffold
+comparison. `diff`
 reports no compatibility change, measured by the Milestone 2 diff test. Languages 1 to 5
 parse exactly what they parsed before, measured by the existing language-version and
 frontend-compatibility tests passing and by
@@ -444,3 +470,15 @@ In `keiro-dsl/src/Keiro/Dsl/Validate.hs`: `InputSourceUnresolvedIntake` and
 
 In `keiro-dsl/src/Keiro/Dsl/Topology.hs`: `Feeds :: Relation`, and `topologySchemaId`
 returning `/2` exactly when a `feeds` edge is present.
+
+
+Review update, 2026-11-17: reconciled schema handoffs, optional-field compatibility and
+acceptance comparisons without changing the four work streams. Repository APIs and local
+ADR references were inspected. Follow-up Mori lookup resolved the sibling fixtures,
+keiki source and `mori://shinzui/mori/okf/adrs/concepts/ADR-33`; the earlier failures came
+from Codex inheriting a stale development database address, not a Mori outage. The earlier
+review entry is retained as history and corrected by the follow-up review. Keiki's
+`edgesOut`, `initial`, `isFinal`, `target`, `mode`, `edgeInputName` and `OPack`/`wcName`
+interfaces support the planned comparison; its builder preserves declaration order within
+each source state, including repeated source blocks. The two sibling specifications exist
+and are legacy-unversioned, as the fixture-migration instructions expect.

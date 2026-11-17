@@ -17,6 +17,22 @@ provenance:
       at: 2026-11-17T15:06:01Z
       mode: "update"
       note: "Add the projection catalog to the /1 topology contract"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-17T15:26:59Z
+      mode: "update"
+      note: "Correct schema handoffs, compatibility checks and fixture acceptance after repository review"
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-17T15:26:59Z
+      verdict: "comments"
+      note: "Reviewed and corrected local coordination and acceptance; Mori outage prevents external API and ADR verification"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-17T15:42:49Z
+      verdict: "approved"
+      note: "Follow-up: Mori works with corrected Codex environment; keiki APIs, sibling fixtures and ADR verified; local findings corrected"
 ---
 
 # Emit a versioned service topology document from keiro-dsl topology
@@ -469,8 +485,10 @@ Add three tests. The first runs the command twice on each fixture and compares t
 second runs it on the same fixture from two different working directories, giving a relative
 path in one and an absolute path in the other, and compares the bytes. The third writes a
 copy of a fixture with its top-level declarations in a different order to a temporary
-directory, exports both, removes `sha256` from every member and `line` from every node, and
-asserts the two documents are equal.
+directory using the same basename, exports both, removes `sha256` from every member and `line` from every node, and
+asserts the two documents are equal. Only top-level declarations move: state order,
+transition order, emitted-event order and other ordered lists retain their meaning. Keep this
+test after machine export lands; reordering transitions is explicitly outside this guarantee.
 
 Add an entry to `keiro-dsl/CHANGELOG.md` under `## [Unreleased]` describing the new command
 and schema id, in the style of the entries below it.
@@ -619,3 +637,24 @@ assertions.
 Revision note, 2026-11-17: the projection catalog (five node kinds, ten relations) was added
 to the `/1` contract as Milestone 3 at the user's request, and byte stability became
 Milestone 4. IR-62 had excluded the catalog; the Decision Log records why it is included.
+
+
+Review update, 2026-11-17: reconciled schema handoffs, optional-field compatibility and
+acceptance comparisons without changing the four work streams. Repository APIs and local
+ADR references were inspected. Follow-up Mori lookup resolved the sibling fixtures,
+keiki source and `mori://shinzui/mori/okf/adrs/concepts/ADR-33`; the earlier failures came
+from Codex inheriting a stale development database address, not a Mori outage. The earlier
+review entry is retained as history and corrected by the follow-up review. Keiki's
+`edgesOut`, `initial`, `isFinal`, `target`, `mode`, `edgeInputName` and `OPack`/`wcName`
+interfaces support the planned comparison; its builder preserves declaration order within
+each source state, including repeated source blocks. The two sibling specifications exist
+and are legacy-unversioned, as the fixture-migration instructions expect.
+
+
+Validation evidence, 2026-11-17: both source specifications in
+`mori://shinzui/keiro-runtime-jitsurei` (project-relative paths
+`services/hospital-capacity/spec/hospital-capacity.keiro` and
+`services/incident-command/spec/incident-command.keiro`; artifact-level URIs pending)
+passed the current `keiro-dsl check` through `nix develop -c cabal run -v0 keiro-dsl`,
+returning `OK` and exit zero with legacy-language and existing warning diagnostics. This
+confirms the source baseline; migrating the copied fixtures to Language 6 remains EP-1 work.
