@@ -26,6 +26,11 @@ provenance:
       at: 2026-11-18T20:48:16Z
       mode: "update"
       note: "Verified all five review findings; widened the fieldless fix to body mode and changed the added-Optional verdict to consumer-build advisory."
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-18T21:48:59Z
+      mode: "implement"
+      note: "M5 items 1-8 implemented: rollout verdicts and remedies, fieldless encoders, optional-added advisory, docs, shape matrix, rollout suite, mutation checks"
   reviews:
     - model: "gpt-6.2-astra"
       harness: "codex-cli"
@@ -92,8 +97,9 @@ envelope whose `keiro-event-type` is not `RegistrationCompleted` is rejected.
 
 ## Progress
 
-**Reopened 2026-11-18 after implementation review.** Milestone 5 is the next
-implementation work. M1–M4 record the original delivery and its verification.
+**Reopened 2026-11-18 after implementation review.** Milestone 5 items 1–8 are
+implemented and verified; item 9, the second review, is the remaining M5 work.
+M1–M4 record the original delivery and its verification.
 
 - [x] M1: Optional contract fields. A Language 6 contract with `Optional <scalar>` fields
   passes `keiro-dsl check`, pretty-prints back to itself, and scaffolds a `Maybe` field with
@@ -130,6 +136,15 @@ implementation work. M1–M4 record the original delivery and its verification.
   (shape-matrix compile, executed rollout proofs, mutation check, second review), and
   record the verification described in
   [Milestone 5](#milestone-5-resolve-the-implementation-review-findings).
+  Items 1–8 done 2026-11-18 (`79098029` code and tests, `bb6bf18a` documentation): the
+  CLI prints the specified vector and remedy in all four directions and a `WARNING` with
+  `consumer-build=advisory` and exit 0 for an added optional field;
+  `keiro-dsl:test:keiro-dsl-test` reports 979 examples, 0 failures; the foreign-event
+  suite prints 32 `PASS` lines and the new `keiro-dsl-conformance-contract-rollout`
+  suite 19; focused regeneration of all three scaffolds reports no changes and
+  `scripts/check-conformance-corpus.sh` reports `conformance corpus: ok` over 62 plan
+  entries; the ADR and user documentation bundles validate. Every mutation in the
+  Milestone 5 evidence below fails a named test. Item 9 is open.
 - [ ] Pre-release gate. The generated decoder reads the producer's own sample payloads
   and agrees with the consumer's hand-written decoder on every existing test input.
 - [ ] Release. The change ships in the next keiro-dsl and keiro-core release under the
@@ -185,6 +200,20 @@ These were found while drafting on 2026-11-18 and shaped the design.
   "revise the independently owned public contract" and deploy `producer-last` although
   its wire bytes are unchanged. Rendering the vector's rollout, as item 1 requires, is
   the natural place to fix them later.
+- (M5) A contract name cannot contain a hyphen, and `body` and `text` are reserved words
+  in a name segment, so the shape-matrix test names its 36 contracts with underscores
+  (`keyed_plain_req`, `enveloped_bare`).
+- (M5) A generated contract module carries no `LANGUAGE` pragmas of its own: it relies on
+  the default extensions in the scaffold's Cabal fragment (`DuplicateRecordFields`,
+  `NoFieldSelectors`, `OverloadedRecordDot`, `OverloadedStrings`). The shape-matrix
+  compile therefore passes those flags, plus `-Wall -Wno-deprecations -Werror` from the
+  `warnings` and `generated-output` stanzas.
+- (M5) The corpus driver keys a scaffold by its ledger's directory, one ledger per
+  directory, and the conformance baseline regenerates a `candidate-primary` suite from a
+  single source. The two-version rollout suite therefore keeps one scaffold each in
+  `before/` and `after/`, under module roots `Before` and `After`, and is registered as a
+  `compatibility-proof` row with `generation: none`; the ledgers still regenerate both
+  scaffolds in the corpus check.
 
 
 ## Decision Log
@@ -310,6 +339,37 @@ These were found while drafting on 2026-11-18 and shaped the design.
   Date: 2026-11-18
 
 
+- Decision: A reader-tightening contract change is classified through a new
+  `ContextPublicContractReaderTightened` change context, chosen in `contractPairDiff` and
+  `contractEventDiff` from the shape of the change, not through new diagnostic codes.
+  Its vector is the public-breaking vector with rollout `producer-first` and
+  `drain-required`. `remediationFor` renders a contract finding's ordering from its
+  vector and keeps the historical `producer-last` remedy when the vector has no ordering.
+  Rationale: The codes `ContractFieldChanged` and `ContractDiscriminatorChanged` stay
+  stable for report consumers; only the vector and the remedy differ by direction, which
+  is what the context already selects for other code families. Keeping the fallback
+  leaves the two out-of-scope remedies recorded in Surprises & Discoveries unchanged.
+  Date: 2026-11-18
+
+- Decision: Optional-to-required takes the `producer-first` vector only when the scalar
+  is unchanged (`Optional s` to `s`). A move from `Optional s` to another scalar or to a
+  list keeps the ordinary public-breaking vector.
+  Rationale: Such a change also alters the value's type, so messages that carry the key
+  fail either way and no deployment order helps; the plan asks for the two forward
+  transitions only.
+  Date: 2026-11-18
+
+- Decision: The executed rollout proof is its own conformance suite,
+  `keiro-dsl-conformance-contract-rollout`, built from the dedicated fixtures
+  `keiro-dsl/test/fixtures/contract-rollout-before.keiro` and `-after.keiro`. Its `Main`
+  also parses both fixtures and runs `diffSources`, then checks the reported rollout
+  against what the two generated versions decode.
+  Rationale: The four directions and the added field fit in three small contracts, and
+  deriving the expected rollout from behaviour means a reversed verdict fails even if the
+  unit-test expectations are edited to match it.
+  Date: 2026-11-18
+
+
 ## Outcomes & Retrospective
 
 Initial implementation (2026-11-18). A candidate Language 6 source can now mirror registration-service-v2's
@@ -346,6 +406,35 @@ change needs no downstream notice. `mori://shinzui/keiro-syntax` already highlig
 and `envelope` as keywords; as for List fields, a follow-up there can copy
 `keiro-dsl/test/fixtures/contract-foreign-event.keiro` into its corpus to pin `Optional` in
 the contract-field position and `discriminator from envelope`.
+
+Milestone 5 (2026-11-18, items 1–8). All five review findings are fixed. The CLI now
+gives each contract direction the order its decoders require, and an added optional
+field reads as a consumer-build warning that passes the gate. Fieldless events compile
+in both discriminator modes. ADR-65 and the integration guide match the producer and the
+decoder. The three gaps that let the defects through are closed by tests that fail
+against each defect:
+
+| Mutation (temporarily applied, then restored) | Failing tests |
+| --- | --- |
+| `contractReaderTightenedVector` reverted to `publicBreakingVector` | unit: "classifies Optional contract field evolution in both directions", "classifies a change of discriminator source as breaking in both directions", "explains the contract rollout order through the diff CLI in every direction"; rollout suite: "optional to required: diff reports the rollout the behaviour requires", "envelope to body key: diff reports the rollout the behaviour requires" |
+| `remediationFor` ignores the vector (hardcoded `producer-last`) | the same three unit tests |
+| fieldless encoder arm binds `payload` again | unit: "lowers an envelope-discriminated contract to an event-type decoder", "compiles every contract shape under the generated-output warning policy" (`-Wunused-matches` in `KeyedBare`, `KeyedBlend`, `EnvelopedBare`, `EnvelopedBlend`) |
+| `(.=)` imported unconditionally | unit: "compiles every contract shape under the generated-output warning policy" (`-Wunused-imports` in `EnvelopedBare`) |
+| added optional field reported as `additive` again | unit: "classifies Optional contract field evolution in both directions", "explains the contract rollout order through the diff CLI in every direction" |
+| discriminator verdict reversed (tightened when the *new* contract is envelope-mode) | rollout suite: "envelope to body key: …" and "body key to envelope: diff reports the rollout the behaviour requires" |
+
+No-regression evidence, per guarantee. Byte-identical output for existing contracts:
+the corpus check regenerated all 62 entries with no drift; the only changed committed
+module, `Audit/Contract.hs` in the foreign-event suite, changed because its fixture
+gained the `NotesCleared` event, and `Registration/Contract.hs` regenerated unchanged.
+The corpus check is vacuous for fieldless events, which no earlier suite declared; the
+foreign-event fixture and the shape matrix now carry them. Topology goldens: the only
+topology test change adds the new `signals` contract to the fixture's expected
+discriminator list. Command, replay, snapshot and projection paths: `git diff --stat
+77480011..bb6bf18a` touches only `keiro-dsl/src/Keiro/Dsl/{Diff,DiffReport,Scaffold}.hs`,
+`keiro-dsl/test/`, `keiro-dsl/keiro-dsl.cabal`, the keiro-dsl changelog, ADR-65 and four
+user pages; within `Diff.hs` and `DiffReport.hs` the changes are confined to contract
+codes and one new change context, and within `Scaffold.hs` to `emitContractGen`.
 
 Handoff to send to the owner of `mori://tan/agent-reputation-service` once the release is
 published:
