@@ -32,6 +32,11 @@ provenance:
       at: 2026-11-18T20:08:32Z
       mode: "update"
       note: "Recheck marker on rejection, export and pin the no-op row key, specify access-control setup, add record-migration refresh and the table-mode bench gate."
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-18T23:45:53Z
+      mode: "implement"
+      note: "Milestones 1-3 implemented: delegatedDomainCommand, DSL no-op conformance proof, docs and ADR-43 amendment"
 ---
 
 # Let delegated intake acknowledge a command that was a typed no-op
@@ -71,9 +76,17 @@ This plan implements improvement request IR-65,
 
 ## Progress
 
-- [ ] Milestone 1: `delegatedDomainCommand` exists in `keiro/src/Keiro/Inbox/Delegated.hs`
+- [x] Milestone 1: `delegatedDomainCommand` exists in `keiro/src/Keiro/Inbox/Delegated.hs`
   and the new "Keiro.Inbox delegated typed no-op" tests pass in `keiro-test`, while every
-  existing delegated test passes unchanged (IR-65 AC-1).
+  existing delegated test passes unchanged (IR-65 AC-1). Completed 2026-11-18. Evidence:
+  the `--match "Keiro.Inbox delegated" --match "Keiro.Inbox.Delegated"` run reports 31
+  examples, 0 failures (13 new typed no-op examples plus the new key-vector example; the
+  pre-existing delegated, pure-adapter and access-control bodies are unedited). Full
+  `cabal test keiro-test`: 841 examples, 0 failures. Mutating both marker rechecks to
+  always miss makes exactly the two competing-marker race tests fail.
+  `just bench-regression inbox`: `PERFORMANCE(inbox)=PASSED cases=38`,
+  `BENCH_REGRESSION=PASSED`. `just record-migration-policy` passed unchanged at this
+  boundary.
 - [ ] Milestone 2: a generated `idempotence delegated` intake drives an aggregate with a
   no-op edge through the new adapter in `keiro-dsl-conformance-intake-delegated-noop`, and
   the DSL diagnostic and corpus are consistent with it (IR-65 AC-3).
@@ -92,6 +105,20 @@ This plan implements improvement request IR-65,
   `keiro-dsl/src/Keiro/Dsl/Grammar.hs` (`IntakeNode` has no command field) and
   `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/IncidentInbox/Inbox.hs`.
   Found while writing the plan, 2026-11-18.
+
+- The record-migration inventories did not change in Milestone 1:
+  `generate-record-migration-manifests.py --check` passed after the new
+  `Keiro.Inbox.Delegated` records and the `Keiro.Inbox.Schema` line shifts, because the
+  inventories cover generated corpus modules and hand-owned conformance modules, not the
+  `keiro` library. They became stale only once the Milestone 2 scaffold was staged
+  (`generated-haskell-edition-idiomatic-v2.md`: 898 to 911 generated modules).
+  `record-field-migration-0.15.md` was unaffected. Found 2026-11-18.
+
+- The new DSL conformance suite needs `-threaded`. `withMigratedSuite` uses
+  `registerDelay` and fails at startup with "registerDelay: requires -threaded" without it,
+  as `keiro-dsl-conformance-workflow-runtime` already does. After adding only `ghc-options`
+  to an already-linked component, Cabal did not relink, and the old binary failed the same
+  way until it was deleted. Found 2026-11-18.
 
 
 ## Decision Log

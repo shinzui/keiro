@@ -140,11 +140,17 @@ import Keiro.Inbox
   )
 import Keiro.Inbox.Delegated
   ( DelegatedCommandError (..),
+    DelegatedDomainCommandError (..),
+    DelegatedDomainResult (..),
+    DelegatedNoOpReceipt (..),
     delegatedCommand,
+    delegatedDomainCommand,
     delegatedEventId,
     delegatedFromPMCommand,
+    delegatedNoOpReceiptKey,
   )
 import Keiro.Inbox.Kafka qualified as InboxKafka
+import Keiro.Inbox.Schema (recordFailedAttemptTx, tryInsertCompletedTx)
 import Keiro.Inspection.Aggregate qualified as Aggregate
 import Keiro.Inspection.Cursor qualified as Cursor
 import Keiro.Integration.Event
@@ -255,6 +261,7 @@ import Keiro.Test.Postgres
     withFreshResourceStore,
     withFreshResourceStorePrepared,
     withFreshResourceStoreWith,
+    withFreshResourceStoresSameDatabase,
     withFreshStore,
     withFreshStoreWith,
     withFreshStores2,
@@ -9358,6 +9365,22 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       base `shouldNotBe` delegatedEventId "consumer" ":source" "message" (StreamName "counter-1") "apply"
       base `shouldNotBe` delegatedEventId "consumer" "source" "message" (StreamName "counter-2") "apply"
 
+    it "pins the typed no-op receipt key vector" $ do
+      let base = delegatedEventId "consumer" "source" "message" (StreamName "counter-1") "apply"
+      delegatedNoOpReceiptKey base
+        `shouldBe` "keiro/inbox-delegated-noop/1:8c9d74d0-1b27-5ef8-aa0c-3b37ed8ce8a8"
+      delegatedNoOpReceiptKey (EventId (uuidLiteral "e63f2f93-c519-5e9b-95e7-a233a1c32ae6"))
+        `shouldBe` "keiro/inbox-delegated-noop/1:e63f2f93-c519-5e9b-95e7-a233a1c32ae6"
+      let keyFor consumer target operation =
+            delegatedNoOpReceiptKey (delegatedEventId consumer "source" "message" (StreamName target) operation)
+          variants =
+            [ keyFor "consumer" "counter-1" "apply",
+              keyFor "consumer-2" "counter-1" "apply",
+              keyFor "consumer" "counter-2" "apply",
+              keyFor "consumer" "counter-1" "apply-2"
+            ]
+      Set.size (Set.fromList variants) `shouldBe` Prelude.length variants
+
     it "maps every process-manager command result without acknowledging failures or no-ops" $ do
       let targetName = StreamName "counter-delegated-pm"
           target = stream "counter-delegated-pm" :: Stream CounterEventStream
@@ -9608,6 +9631,286 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         Vector.length stored `shouldBe` 1
         Right counterRows <- Store.runStoreIO storeHandle (Store.runTransaction (Tx.statement () inboxTestCounterCountStmt))
         counterRows `shouldBe` 1
+
+  describe "Keiro.Inbox delegated typed no-op" $ do
+    let deliver runner target =
+          runner (runDomainCommand defaultRunCommandOptions deliveryNoOpDomainHandler (stream target) (RecordDelivered 1))
+            >>= \case
+              Right (Right DomainCommandOutcome {decision = DomainAccepted _}) -> pure ()
+              other -> expectationFailure ("expected the delivery setup to be accepted, got " <> show other)
+        countCalls ref = modifyIORef' ref (+ 1)
+        streamLength storeHandle target = do
+          Right stored <- Store.runStoreIO storeHandle (Store.readStreamForward (StreamName target) (StreamVersion 0) 10)
+          pure (Vector.length stored)
+
+    around (withFreshResourceStore fixture) $ do
+      it "acknowledges a typed no-op with one completed inbox row and replays it as a duplicate" $ \(storeHandle, StoreRunner runner) -> do
+        calls <- newIORef (0 :: Int)
+        let target = "delivery-noop-1"
+            event = sampleIntegrationEnvelope & #messageId .~ "late-failure-1" & #source .~ "delivery-noop-source"
+            handler = deliveryIntake deliveryNoOpDomainHandler (countCalls calls) "reputation" target (RecordDelivered 2)
+            marker = deliveryMarker "reputation" event target
+        deliver runner target
+        first <- runner (runInboxDelegated Nothing PreferIntegrationMessageId event Nothing handler)
+        first `shouldSatisfy` isNoOpProcessed
+        streamLength storeHandle target `shouldReturn` 1
+        Right rows <- Store.runStoreIO storeHandle (listInbox "delivery-noop-source")
+        fmap (\row -> (row ^. #dedupeKey, row ^. #status)) rows
+          `shouldBe` [(delegatedNoOpReceiptKey marker, InboxCompleted)]
+        fmap (\row -> row ^. #event . #payloadBytes) rows `shouldBe` [event ^. #payloadBytes]
+
+        second <- runner (runInboxDelegated Nothing PreferIntegrationMessageId event Nothing handler)
+        second `shouldBe` Right (Right InboxDuplicate)
+        readIORef calls `shouldReturn` 1
+
+        -- A later legal state change keeps the no-op; the receipt still wins.
+        Right (Right DomainCommandOutcome {decision = DomainAccepted _}) <-
+          runner (runDomainCommand defaultRunCommandOptions deliveryNoOpDomainHandler (stream target) (AnnotateDelivery 5))
+        third <- runner (runInboxDelegated Nothing PreferIntegrationMessageId event Nothing handler)
+        third `shouldBe` Right (Right InboxDuplicate)
+        readIORef calls `shouldReturn` 1
+
+        -- After retention removes the receipt, replay runs the real command,
+        -- classifies the same no-op, commits a new row, and appends nothing.
+        later <- addUTCTime 3600 <$> getCurrentTime
+        Right deleted <- Store.runStoreIO storeHandle (garbageCollectCompleted 0 later)
+        deleted `shouldBe` 1
+        afterGc <- runner (runInboxDelegated Nothing PreferIntegrationMessageId event Nothing handler)
+        afterGc `shouldSatisfy` isNoOpProcessed
+        readIORef calls `shouldReturn` 2
+        streamLength storeHandle target `shouldReturn` 2
+        Right rowsAfterGc <- Store.runStoreIO storeHandle (listInbox "delivery-noop-source")
+        fmap (^. #dedupeKey) rowsAfterGc `shouldBe` [delegatedNoOpReceiptKey marker]
+
+      it "acknowledges an accepted command by its marker event without an inbox row" $ \(storeHandle, StoreRunner runner) -> do
+        calls <- newIORef (0 :: Int)
+        let target = "delivery-accepted-1"
+            event = sampleIntegrationEnvelope & #messageId .~ "delivered-1" & #source .~ "delivery-accepted-source"
+            handler = deliveryIntake deliveryNoOpDomainHandler (countCalls calls) "reputation" target (RecordDelivered 1)
+        first <- runner (runInboxDelegated Nothing PreferIntegrationMessageId event Nothing handler)
+        first `shouldSatisfy` isAcceptedProcessed
+        Right stored <- Store.runStoreIO storeHandle (Store.readStreamForward (StreamName target) (StreamVersion 0) 10)
+        Vector.length stored `shouldBe` 1
+        stored Vector.! 0 ^. #eventId `shouldBe` deliveryMarker "reputation" event target
+        Right rows <- Store.runStoreIO storeHandle (listInbox "delivery-accepted-source")
+        rows `shouldBe` []
+        replay <- runner (runInboxDelegated Nothing PreferIntegrationMessageId event Nothing handler)
+        replay `shouldBe` Right (Right InboxDuplicate)
+        readIORef calls `shouldReturn` 1
+
+      it "returns a typed rejection without a receipt and dispatches it again on retry" $ \(storeHandle, StoreRunner runner) -> do
+        calls <- newIORef (0 :: Int)
+        let target = "delivery-rejected-1"
+            event = sampleIntegrationEnvelope & #messageId .~ "late-failure-rejected" & #source .~ "delivery-rejected-source"
+            attempt =
+              runDeliveryAdapter deliveryRejectingDomainHandler PersistFullEnvelope (countCalls calls) "reputation" (event ^. #messageId) event target (RecordDelivered 2)
+        deliver runner target
+        first <- runner attempt
+        first `shouldBe` Right (Left (DelegatedDomainRejected (StreamName target) "already delivered"))
+        second <- runner attempt
+        second `shouldBe` Right (Left (DelegatedDomainRejected (StreamName target) "already delivered"))
+        readIORef calls `shouldReturn` 2
+        Right rows <- Store.runStoreIO storeHandle (listInbox "delivery-rejected-source")
+        rows `shouldBe` []
+        streamLength storeHandle target `shouldReturn` 1
+
+      it "refuses a delivery whose receipt key holds a failed row without dispatching" $ \(storeHandle, StoreRunner runner) -> do
+        calls <- newIORef (0 :: Int)
+        now <- getCurrentTime
+        let target = "delivery-failed-row-1"
+            event = sampleIntegrationEnvelope & #messageId .~ "late-failure-failed-row" & #source .~ "delivery-failed-row-source"
+            key = delegatedNoOpReceiptKey (deliveryMarker "reputation" event target)
+        deliver runner target
+        Right _ <-
+          Store.runStoreIO storeHandle $
+            Store.runTransaction (recordFailedAttemptTx (event ^. #source) key event Nothing "operator hold" now)
+        outcome <-
+          runner $
+            runDeliveryAdapter deliveryNoOpDomainHandler PersistFullEnvelope (countCalls calls) "reputation" (event ^. #messageId) event target (RecordDelivered 2)
+        outcome `shouldBe` Right (Left (DelegatedNoOpReceiptUnavailable (StreamName target) InboxFailed))
+        readIORef calls `shouldReturn` 0
+
+      it "stores a dedupe-only no-op receipt without the payload" $ \(storeHandle, StoreRunner runner) -> do
+        let target = "delivery-dedupe-only-1"
+            event = sampleIntegrationEnvelope & #messageId .~ "late-failure-dedupe-only" & #source .~ "delivery-dedupe-only-source"
+        deliver runner target
+        outcome <-
+          runner $
+            runDeliveryAdapter deliveryNoOpDomainHandler PersistDedupeOnly (pure ()) "reputation" (event ^. #messageId) event target (RecordDelivered 2)
+        outcome `shouldSatisfy` \case
+          Right (Right (DelegatedFresh (DelegatedDomainNoOp {}))) -> True
+          _ -> False
+        Right rows <- Store.runStoreIO storeHandle (listInbox "delivery-dedupe-only-source")
+        fmap (\row -> (row ^. #status, row ^. #event . #payloadBytes)) rows `shouldBe` [(InboxCompleted, mempty)]
+
+      it "scopes receipts by consumer and operation and ignores the raw table-intake key" $ \(storeHandle, StoreRunner runner) -> do
+        calls <- newIORef (0 :: Int)
+        let target = "delivery-scoped-1"
+            event = sampleIntegrationEnvelope & #messageId .~ "late-failure-shared" & #source .~ "delivery-scoped-source"
+            intakeFor consumer = deliveryIntake deliveryNoOpDomainHandler (countCalls calls) consumer target (RecordDelivered 2)
+        deliver runner target
+        -- An ordinary table-intake receipt for the raw (source, message id).
+        Right (Right (InboxProcessed ())) <-
+          Store.runStoreIO storeHandle (runInboxTransaction Nothing PreferIntegrationMessageId event Nothing (\_ -> pure ()))
+        first <- runner (runInboxDelegated Nothing PreferIntegrationMessageId event Nothing (intakeFor "reputation"))
+        second <- runner (runInboxDelegated Nothing PreferIntegrationMessageId event Nothing (intakeFor "audit"))
+        first `shouldSatisfy` isNoOpProcessed
+        second `shouldSatisfy` isNoOpProcessed
+        readIORef calls `shouldReturn` 2
+        firstReplay <- runner (runInboxDelegated Nothing PreferIntegrationMessageId event Nothing (intakeFor "reputation"))
+        secondReplay <- runner (runInboxDelegated Nothing PreferIntegrationMessageId event Nothing (intakeFor "audit"))
+        (firstReplay, secondReplay) `shouldBe` (Right (Right InboxDuplicate), Right (Right InboxDuplicate))
+        readIORef calls `shouldReturn` 2
+        Right rows <- Store.runStoreIO storeHandle (listInbox "delivery-scoped-source")
+        Set.fromList (fmap (^. #dedupeKey) rows)
+          `shouldBe` Set.fromList
+            [ event ^. #messageId,
+              delegatedNoOpReceiptKey (deliveryMarker "reputation" event target),
+              delegatedNoOpReceiptKey (deliveryMarker "audit" event target)
+            ]
+
+      it "reports a receipt lost to a vanished conflict and keeps the table mapping" $ \(storeHandle, StoreRunner runner) -> do
+        now <- getCurrentTime
+        let target = "delivery-vanished-1"
+            event = sampleIntegrationEnvelope & #messageId .~ "late-failure-vanished" & #source .~ "delivery-vanished-source"
+            key = delegatedNoOpReceiptKey (deliveryMarker "reputation" event target)
+            attempt =
+              runDeliveryAdapter deliveryNoOpDomainHandler PersistFullEnvelope (pure ()) "reputation" (event ^. #messageId) event target (RecordDelivered 2)
+            sql = Store.runStoreIO storeHandle . Store.runTransaction . Tx.sql . TE.encodeUtf8
+        deliver runner target
+        -- A BEFORE INSERT trigger returning NULL makes the insert report no row
+        -- and the following lookup find none: the two observations of a
+        -- conflict whose row a concurrent retention pass deleted.
+        Right () <-
+          sql $
+            Text.unlines
+              [ "CREATE FUNCTION keiro_test_drop_inbox_insert() RETURNS trigger LANGUAGE plpgsql AS $fn$ BEGIN RETURN NULL; END $fn$;",
+                "CREATE TRIGGER keiro_test_drop_inbox_insert BEFORE INSERT ON keiro.keiro_inbox FOR EACH ROW",
+                "  WHEN (NEW.dedupe_key = '" <> key <> "') EXECUTE FUNCTION keiro_test_drop_inbox_insert();"
+              ]
+        lost <- runner attempt
+        lost `shouldBe` Right (Left (DelegatedNoOpReceiptLost (StreamName target)))
+        Right historical <-
+          Store.runStoreIO storeHandle $
+            Store.runTransaction (tryInsertCompletedTx PersistFullEnvelope (event ^. #source) key event Nothing now)
+        historical `shouldBe` Right ()
+        Right noRows <- Store.runStoreIO storeHandle (listInbox "delivery-vanished-source")
+        noRows `shouldBe` []
+        Right () <- sql "DROP TRIGGER keiro_test_drop_inbox_insert ON keiro.keiro_inbox;"
+        replay <- runner attempt
+        replay `shouldSatisfy` \case
+          Right (Right (DelegatedFresh (DelegatedDomainNoOp {}))) -> True
+          _ -> False
+        Right rows <- Store.runStoreIO storeHandle (listInbox "delivery-vanished-source")
+        fmap (^. #dedupeKey) rows `shouldBe` [key]
+
+      it "wraps a zero-event accepted callback and an unconfirmed command error without a receipt" $ \(storeHandle, StoreRunner runner) -> do
+        let targetName = StreamName "delivery-errors-1"
+            target = stream "delivery-errors-1" :: Stream DeliveryEventStream
+            event = sampleIntegrationEnvelope & #messageId .~ "delivery-errors" & #source .~ "delivery-errors-source"
+            receipt = deliveryReceipt PersistFullEnvelope "reputation" (event ^. #messageId) event
+            zeroResult = CommandResult {target, streamVersion = StreamVersion 0, globalPosition = Nothing, eventsAppended = 0}
+            foreignId = EventId sampleUuid2
+        zero <-
+          runner $
+            delegatedDomainCommand receipt defaultRunCommandOptions targetName $ \_ ->
+              pure (Right (DomainCommandOutcome {decision = DomainAccepted (CounterAdded 1 :| []), result = zeroResult} :: DomainCommandOutcome DeliveryEventStream CounterEvent Text Text))
+        zero `shouldBe` Right (Left (DelegatedDomainCommandError (DelegatedCommandWithoutReceipt targetName)))
+        failed <-
+          runner $
+            delegatedDomainCommand receipt defaultRunCommandOptions targetName $ \_ ->
+              pure (Left (StoreFailed (Store.DuplicateEvent (Just foreignId))) :: Either CommandError (DomainCommandOutcome DeliveryEventStream CounterEvent Text Text))
+        failed
+          `shouldBe` Right (Left (DelegatedDomainCommandError (DelegatedCommandFailed targetName (StoreFailed (Store.DuplicateEvent (Just foreignId))))))
+        Right rows <- Store.runStoreIO storeHandle (listInbox "delivery-errors-source")
+        rows `shouldBe` []
+
+    around (withFreshResourceStoresSameDatabase fixture) $ do
+      let raceEvent name = sampleIntegrationEnvelope & #messageId .~ name & #source .~ "delivery-race-source"
+          runIntake runner handler event = runner (runInboxDelegated Nothing PreferIntegrationMessageId event Nothing handler)
+          competingMarker classify = \((storeA, StoreRunner runnerA), (_, StoreRunner runnerB)) -> do
+            inside <- newEmptyMVar
+            go <- newEmptyMVar
+            doneA <- newEmptyMVar
+            let target = "delivery-race-marker"
+                event = raceEvent "race-marker"
+                pauseA = putMVar inside () >> takeMVar go
+            _ <-
+              forkIO $
+                try @SomeException (runIntake runnerA (deliveryIntake classify pauseA "reputation" target (RecordDelivered 1)) event)
+                  >>= putMVar doneA
+            -- A has passed preflight and the receipt lookup and is paused in
+            -- its callback. B handles the same delivery and appends the marker.
+            awaitMVar "A inside its callback" inside
+            b <- runIntake runnerB (deliveryIntake classify (pure ()) "reputation" target (RecordDelivered 1)) event
+            b `shouldSatisfy` isAcceptedProcessed
+            putMVar go ()
+            a <- awaitMVar "A to finish" doneA
+            case a of
+              Right result -> result `shouldBe` Right (Right InboxDuplicate)
+              Left err -> expectationFailure ("A failed: " <> show err)
+            streamLength storeA target `shouldReturn` 1
+            Right rows <- Store.runStoreIO storeA (listInbox "delivery-race-source")
+            rows `shouldBe` []
+
+      it "lets a competing marker win over the no-op its append caused" $
+        competingMarker deliveryNoOpDomainHandler
+
+      it "lets a competing marker win over the rejection its append caused" $
+        competingMarker deliveryRejectingDomainHandler
+
+      it "converges two concurrent no-op deliveries past preflight to one receipt" $ \((storeA, StoreRunner runnerA), (_, StoreRunner runnerB)) -> do
+        arrivals <- newMVar (0 :: Int)
+        release <- newEmptyMVar
+        doneA <- newEmptyMVar
+        doneB <- newEmptyMVar
+        let target = "delivery-race-noop"
+            event = raceEvent "race-noop"
+            awaitPeer = do
+              arrived <- modifyMVar arrivals (\count -> pure (count + 1, count + 1))
+              when (arrived == 2) (putMVar release ())
+              readMVar release
+            runOne runner done =
+              try @SomeException (runIntake runner (deliveryIntake deliveryNoOpDomainHandler awaitPeer "reputation" target (RecordDelivered 2)) event)
+                >>= putMVar done
+        deliver runnerA target
+        _ <- forkIO (runOne runnerA doneA)
+        _ <- forkIO (runOne runnerB doneB)
+        outcomes <- traverse (awaitMVar "a no-op delivery") [doneA, doneB]
+        let fresh = Prelude.length [() | Right result <- outcomes, isNoOpProcessed result]
+            duplicates = Prelude.length [() | Right (Right (Right InboxDuplicate)) <- outcomes]
+        (fresh, duplicates) `shouldBe` (1, 1)
+        streamLength storeA target `shouldReturn` 1
+        Right rows <- Store.runStoreIO storeA (listInbox "delivery-race-source")
+        fmap (\row -> (row ^. #dedupeKey, row ^. #status)) rows
+          `shouldBe` [(delegatedNoOpReceiptKey (deliveryMarker "reputation" event target), InboxCompleted)]
+
+    it "needs SELECT for marker misses and INSERT for no-op receipts" $
+      withFreshDatabase fixture $ \connStr -> do
+        let settings = Store.defaultConnectionSettings connStr
+            restrictedSettings = settings & #connString %~ (<> " user=delegated_inbox_select_only")
+            target = "delivery-access-1"
+            event = sampleIntegrationEnvelope & #messageId .~ "late-failure-access" & #source .~ "delivery-access-source"
+            intake =
+              runInboxDelegated Nothing PreferIntegrationMessageId event Nothing $
+                deliveryIntake deliveryNoOpDomainHandler (pure ()) "reputation" target (RecordDelivered 2)
+        Store.withStore settings $ \admin -> do
+          prepareDelegatedSelectOnlyInboxRole admin
+          Right (Right DomainCommandOutcome {decision = DomainAccepted _}) <-
+            Store.runStoreIO admin (runDomainCommand defaultRunCommandOptions deliveryNoOpDomainHandler (stream target) (RecordDelivered 1))
+          Store.withStore restrictedSettings $ \restricted -> do
+            denied <- Store.runStoreIO restricted intake
+            denied `shouldSatisfy` \case
+              Left _ -> True
+              Right _ -> False
+            Right noRows <- Store.runStoreIO admin (listInbox "delivery-access-source")
+            noRows `shouldBe` []
+            Right () <-
+              Store.runStoreIO admin (Store.runTransaction (Tx.sql "GRANT INSERT ON TABLE keiro.keiro_inbox TO delegated_inbox_select_only;"))
+            granted <- Store.runStoreIO restricted intake
+            granted `shouldSatisfy` isNoOpProcessed
+            Right rows <- Store.runStoreIO admin (listInbox "delivery-access-source")
+            fmap (^. #status) rows `shouldBe` [InboxCompleted]
 
   describe "Keiro.Inbox" $ around (withFreshStore fixture) $ do
     it "runs the handler once and records the row as completed" $ \storeHandle -> do
@@ -17329,6 +17632,195 @@ noOpSilentlyCtor =
     "NoOpSilently"
     (\case NoOpSilently -> Just RNil; _ -> Nothing)
     (\RNil -> NoOpSilently)
+
+-- A delivery-status aggregate for delegated typed no-op intake. Recording an
+-- outcome is accepted once; afterwards the same command is a silent edge that
+-- the two handlers below classify as a replay-stable no-op or as a rejection.
+-- Annotating a delivered stream is a later legal state change that keeps the
+-- no-op.
+data DeliveryCommand
+  = RecordDelivered !Int
+  | AnnotateDelivery !Int
+  deriving stock (Generic, Eq, Show)
+
+type DeliveryEventStream = EventStream (HsPred '[] DeliveryCommand) '[] DelegatedOneShotState DeliveryCommand CounterEvent
+
+type ValidatedDeliveryEventStream = ValidatedEventStream (HsPred '[] DeliveryCommand) '[] DelegatedOneShotState DeliveryCommand CounterEvent
+
+type DeliveryDomainHandler = DomainCommandHandler (HsPred '[] DeliveryCommand) '[] DelegatedOneShotState DeliveryCommand CounterEvent Text Text
+
+type DeliveryOutcome = DelegatedOutcome (DelegatedDomainResult DeliveryEventStream CounterEvent Text)
+
+type DeliveryAdapterResult = Either (DelegatedDomainCommandError Text) DeliveryOutcome
+
+recordDeliveredCtor :: InCtor DeliveryCommand AddFields
+recordDeliveredCtor =
+  Keiki.unavailableInCtor
+    "RecordDelivered"
+    (\case RecordDelivered amount -> Just (RCons Proxy amount RNil); AnnotateDelivery {} -> Nothing)
+    (\case RCons _ amount RNil -> RecordDelivered amount)
+
+annotateDeliveryCtor :: InCtor DeliveryCommand AddFields
+annotateDeliveryCtor =
+  Keiki.unavailableInCtor
+    "AnnotateDelivery"
+    (\case AnnotateDelivery amount -> Just (RCons Proxy amount RNil); RecordDelivered {} -> Nothing)
+    (\case RCons _ amount RNil -> AnnotateDelivery amount)
+
+deliveryEventStream :: ValidatedDeliveryEventStream
+deliveryEventStream =
+  mkEventStreamOrThrow
+    "delegated-delivery-status"
+    EventStream
+      { transducer =
+          SymTransducer
+            { edgesOut = \case
+                DelegatedReady ->
+                  [ Edge
+                      { guard = matchInCtor recordDeliveredCtor,
+                        update = UKeep,
+                        output = [pack recordDeliveredCtor counterAddedCtor (inpCtor recordDeliveredCtor #amount *: oNil)],
+                        target = DelegatedDone,
+                        mode = Keiki.Live
+                      }
+                  ]
+                DelegatedDone ->
+                  [ Edge
+                      { guard = matchInCtor recordDeliveredCtor,
+                        update = UKeep,
+                        output = [],
+                        target = DelegatedDone,
+                        mode = Keiki.Live
+                      },
+                    Edge
+                      { guard = matchInCtor annotateDeliveryCtor,
+                        update = UKeep,
+                        output = [pack annotateDeliveryCtor counterAuditedCtor (inpCtor annotateDeliveryCtor #amount *: oNil)],
+                        target = DelegatedDone,
+                        mode = Keiki.Live
+                      }
+                  ],
+              initial = DelegatedReady,
+              initialRegs = RNil,
+              isFinal = const False
+            },
+        initialState = DelegatedReady,
+        initialRegisters = RNil,
+        eventCodec = counterCodec,
+        resolveStreamName = Stream.streamName,
+        snapshotPolicy = Never,
+        stateCodec = Nothing
+      }
+
+deliveryNoOpDomainHandler :: DeliveryDomainHandler
+deliveryNoOpDomainHandler =
+  DomainCommandHandler
+    { eventStream = deliveryEventStream,
+      classifySilent = \SilentCommandContext {state, selectedEdge} ->
+        case (state, Keiki.edgeIndex selectedEdge) of
+          (DelegatedDone, 0) -> SilentNoOp "already delivered"
+          other -> error ("deliveryNoOpDomainHandler: unexpected selected edge " <> show other)
+    }
+
+deliveryRejectingDomainHandler :: DeliveryDomainHandler
+deliveryRejectingDomainHandler =
+  DomainCommandHandler
+    { eventStream = deliveryEventStream,
+      classifySilent = \SilentCommandContext {state, selectedEdge} ->
+        case (state, Keiki.edgeIndex selectedEdge) of
+          (DelegatedDone, 0) -> SilentRejected "already delivered"
+          other -> error ("deliveryRejectingDomainHandler: unexpected selected edge " <> show other)
+    }
+
+deliveryReceipt :: InboxPersistence -> Text -> Text -> IntegrationEvent -> DelegatedNoOpReceipt
+deliveryReceipt persistence consumer dedupe event =
+  DelegatedNoOpReceipt
+    { consumer,
+      operation = "record-outcome",
+      dedupeKey = dedupe,
+      event,
+      kafka = Nothing,
+      persistence
+    }
+
+deliveryMarker :: Text -> IntegrationEvent -> Text -> EventId
+deliveryMarker consumer event target =
+  delegatedEventId consumer (event ^. #source) (event ^. #messageId) (StreamName target) "record-outcome"
+
+-- | Run the typed no-op adapter for one delivery command. @beforeDispatch@ runs
+-- inside the callback, after the preflight marker probe and receipt lookup.
+runDeliveryAdapter ::
+  (IOE :> es, Store :> es, Error Store.StoreError :> es) =>
+  DeliveryDomainHandler ->
+  InboxPersistence ->
+  IO () ->
+  Text ->
+  Text ->
+  IntegrationEvent ->
+  Text ->
+  DeliveryCommand ->
+  Eff es DeliveryAdapterResult
+runDeliveryAdapter handler persistence beforeDispatch consumer dedupe event target command =
+  delegatedDomainCommand (deliveryReceipt persistence consumer dedupe event) defaultRunCommandOptions (StreamName target) $ \prepared -> do
+    liftIO beforeDispatch
+    runDomainCommand prepared handler (stream target) command
+
+-- | Hand only a successful adapter outcome to the delegated wrapper.
+acknowledgeDelivery :: (IOE :> es) => Eff es DeliveryAdapterResult -> Eff es DeliveryOutcome
+acknowledgeDelivery action =
+  action >>= either (liftIO . throwIO . userError . show) pure
+
+-- | A delegated intake handler for one delivery command on one target.
+deliveryIntake ::
+  (IOE :> es, Store :> es, Error Store.StoreError :> es) =>
+  DeliveryDomainHandler ->
+  IO () ->
+  Text ->
+  Text ->
+  DeliveryCommand ->
+  Text ->
+  IntegrationEvent ->
+  Eff es DeliveryOutcome
+deliveryIntake handler beforeDispatch consumer target command dedupe event =
+  acknowledgeDelivery (runDeliveryAdapter handler PersistFullEnvelope beforeDispatch consumer dedupe event target command)
+
+isNoOpProcessed :: Either Store.StoreError (Either InboxError (InboxResult (DelegatedDomainResult DeliveryEventStream CounterEvent Text))) -> Bool
+isNoOpProcessed = \case
+  Right (Right (InboxProcessed (DelegatedDomainNoOp "already delivered" result))) -> result ^. #eventsAppended == 0
+  _ -> False
+
+isAcceptedProcessed :: Either Store.StoreError (Either InboxError (InboxResult (DelegatedDomainResult DeliveryEventStream CounterEvent Text))) -> Bool
+isAcceptedProcessed = \case
+  Right (Right (InboxProcessed (DelegatedDomainAccepted _ result))) -> result ^. #eventsAppended > 0
+  _ -> False
+
+awaitMVar :: String -> MVar a -> IO a
+awaitMVar label var =
+  timeout 30_000_000 (takeMVar var) >>= \case
+    Just value -> pure value
+    Nothing -> fail ("timed out waiting for " <> label)
+
+prepareDelegatedSelectOnlyInboxRole :: Store.KirokuStore -> IO ()
+prepareDelegatedSelectOnlyInboxRole storeHandle = do
+  prepared <-
+    Store.runStoreIO storeHandle $
+      Store.runTransaction $
+        Tx.sql $
+          ByteString.intercalate
+            "\n"
+            [ "DO $role$ BEGIN",
+              "  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'delegated_inbox_select_only') THEN",
+              "    CREATE ROLE delegated_inbox_select_only LOGIN;",
+              "  END IF;",
+              "END $role$;",
+              "GRANT USAGE ON SCHEMA kiroku, keiro, public TO delegated_inbox_select_only;",
+              "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA kiroku, public TO delegated_inbox_select_only;",
+              "GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA kiroku, public TO delegated_inbox_select_only;",
+              "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA kiroku, public TO delegated_inbox_select_only;",
+              "REVOKE ALL PRIVILEGES ON TABLE keiro.keiro_inbox FROM delegated_inbox_select_only;",
+              "GRANT SELECT ON TABLE keiro.keiro_inbox TO delegated_inbox_select_only;"
+            ]
+  either (fail . show) pure prepared
 
 multiCounterDomainHandler :: DomainCommandHandler (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent Text Text
 multiCounterDomainHandler =

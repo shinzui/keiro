@@ -7,6 +7,8 @@
 -- ('Keiro.Inbox.Kafka') consume.
 module Keiro.Inbox.Schema
   ( tryInsertCompletedTx,
+    CompletedInsert (..),
+    insertCompletedStrictTx,
     markCompletedTx,
     markFailedTx,
     recordFailedAttemptTx,
@@ -67,16 +69,52 @@ tryInsertCompletedTx ::
   Maybe KafkaDeliveryRef ->
   UTCTime ->
   Tx.Transaction (Either InboxRow ())
-tryInsertCompletedTx persistence src dedupe event kafka now = do
+tryInsertCompletedTx persistence src dedupe event kafka now =
+  fmap historical (insertCompletedStrictTx persistence src dedupe event kafka now)
+  where
+    historical = \case
+      CompletedInserted -> Right ()
+      CompletedExisting row -> Left row
+      CompletedConflictVanished -> Right ()
+
+-- | The three distinguishable results of inserting a completed inbox row.
+data CompletedInsert
+  = -- | This transaction inserted the row. It becomes durable only when the
+    -- transaction commits.
+    CompletedInserted
+  | -- | A row for @(source, dedupe_key)@ already existed; it is returned as read.
+    CompletedExisting !InboxRow
+  | -- | The insert conflicted, but the conflicting row was gone by the time it
+    -- was looked up, typically because a concurrent retention pass deleted it.
+    -- This transaction holds no row for the key.
+    CompletedConflictVanished
+  deriving stock (Generic, Eq, Show)
+
+-- | Insert a completed row and report exactly what happened.
+--
+-- Uses the same insert and lookup statements as 'tryInsertCompletedTx', but
+-- keeps a conflict whose row vanished distinct from a fresh insert. A caller
+-- that needs positive evidence that it owns a committed receipt (for example
+-- 'Keiro.Inbox.Delegated.delegatedDomainCommand') must treat only
+-- 'CompletedInserted' followed by a successful commit as that evidence.
+insertCompletedStrictTx ::
+  InboxPersistence ->
+  Text ->
+  Text ->
+  IntegrationEvent ->
+  Maybe KafkaDeliveryRef ->
+  UTCTime ->
+  Tx.Transaction CompletedInsert
+insertCompletedStrictTx persistence src dedupe event kafka now = do
   inserted <-
     Tx.statement (toEncodedInsert persistence src dedupe event kafka now) tryInsertStmt
   if inserted
-    then pure (Right ())
+    then pure CompletedInserted
     else do
       existing <- Tx.statement (src, dedupe) selectByKeyStmt
       case existing of
-        Just row -> pure (Left row)
-        Nothing -> pure (Right ())
+        Just row -> pure (CompletedExisting row)
+        Nothing -> pure CompletedConflictVanished
 
 -- | Mark an inbox row completed inside the same transaction as the handler.
 markCompletedTx :: Text -> Text -> UTCTime -> Tx.Transaction ()

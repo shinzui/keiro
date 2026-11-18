@@ -6,6 +6,26 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+### New Features
+
+- `Keiro.Inbox.Delegated.delegatedDomainCommand` lets delegated intake acknowledge a typed
+  domain command whose outcome is a replay-stable `DomainNoOp`. An accepted decision keeps
+  its first-event marker receipt. A no-op is fresh only after the adapter commits a
+  completed `keiro_inbox` row under the envelope source and the reserved key
+  `delegatedNoOpReceiptKey marker` (`keiro/inbox-delegated-noop/1:<marker>`). A matching
+  marker or completed row is a duplicate without dispatch. The marker is rechecked after
+  a no-op or rejection, so a concurrent delivery's append wins. Typed rejections
+  (`DelegatedDomainRejected`), command failures, non-completed rows
+  (`DelegatedNoOpReceiptUnavailable`), a conflict whose row vanished
+  (`DelegatedNoOpReceiptLost`) and untyped zero-event successes are not acknowledged. New
+  exports: `delegatedNoOpReceiptKey`, `DelegatedNoOpReceipt`, `DelegatedDomainResult`,
+  `DelegatedDomainCommandError`. `delegatedCommand`, `delegatedFromPMCommand` and
+  `delegatedEventId` are unchanged. (ExecPlan 344, IR-65)
+- `Keiro.Inbox.Schema.insertCompletedStrictTx` and `CompletedInsert` distinguish an insert
+  by this transaction, an existing row, and a conflict whose row disappeared before lookup.
+  `tryInsertCompletedTx` keeps its signature and maps both an insert and a vanished
+  conflict to `Right ()` as before.
+
 ## 0.25.1.0 — 2026-11-16
 
 ### Other Changes
