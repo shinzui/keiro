@@ -126,8 +126,12 @@ implementation work. M1–M4 record the original delivery and its verification.
   change, and IR-64 reads `completed`. Done 2026-11-18 (`a50da90e` and `2f300199`).
   All four OKF bundles and `just user-documentation-validate` passed. The release item
   owns the consumer handoff drafted in Outcomes & Retrospective.
-- [ ] M5. Resolve the five implementation review findings and record the verification
-  described in [Milestone 5](#milestone-5-resolve-the-implementation-review-findings).
+- [ ] M5. Resolve the five implementation review findings, complete the hardening steps
+  (shape-matrix compile, executed rollout proofs, mutation check, second review), and
+  record the verification described in
+  [Milestone 5](#milestone-5-resolve-the-implementation-review-findings).
+- [ ] Pre-release gate. The generated decoder reads the producer's own sample payloads
+  and agrees with the consumer's hand-written decoder on every existing test input.
 - [ ] Release. The change ships in the next keiro-dsl and keiro-core release under the
   shared release convention. Record the version here and notify the consumer.
 
@@ -821,10 +825,73 @@ Decision Log. Address each finding before closing M5.
    `text` and a wrong-prefix optional literal TypeID there. Align the guide's evolution
    table with the verified wire, rollout and build verdicts.
 
+#### Hardening: close the gaps that let the findings through
+
+Every gate passed while the five defects existed. Three gaps explain that, and fixing
+the five findings alone leaves all three open. The steps below close them and are part
+of M5's acceptance.
+
+- Generated code was asserted as text and not compiled. The fieldless unit test pinned
+  the broken fragments, and the conformance suite compiles only the shapes its one
+  fixture declares.
+- Diff tests asserted a finding's code and label, never the rollout or the remedy an
+  operator reads.
+- The producer's behavior was written from this repository's understanding of it, which
+  ADR-65 shows was wrong in one place.
+
+6. **Compile the shape matrix.** Add a test that builds small contract sources covering
+   discriminator mode (body key, envelope) × event shape (no fields, required only,
+   optional only, both) × field family (`text`, `int`, literal TypeID, declared id, list),
+   including a contract whose events are all fieldless and one that mixes a fieldless
+   event with others. Scaffold each and compile the contract module with
+   `-Wall -Werror`. The conditional imports in `emitContractGen` (`(.=)`, `(.:)`, `(.:?)`,
+   `withText`, `explicitParseField`, `explicitParseFieldMaybe`) are where one untested
+   combination breaks, so every combination that changes an import must appear. Choose
+   the mechanism that fits the existing harness: either one committed conformance fixture
+   per distinct import set, or a test that scaffolds to a temporary directory and runs
+   `ghc -fno-code`. A compile failure for any shape fails the suite.
+7. **Prove each rollout verdict by running both versions.** For the four directions of
+   item 1, compile the old and the new generated module in one test program (two source
+   directories with distinct module prefixes). A `producer-first` verdict holds when the
+   old decoder accepts the new encoder's output and the new decoder rejects the old
+   encoder's output with the key absent. A `producer-last` verdict holds when the new
+   decoder accepts the old encoder's output. Assert both the accepting and the rejecting
+   side, so a reversed verdict fails. Do the same for the added optional field: old
+   decoder reads the new message, new decoder reads the old one.
+8. **Mutation-check the new tests.** For each of items 1, 2, 3, 6 and 7, temporarily
+   revert the fix or flip the verdict, confirm a named test fails, restore it, and record
+   the test name here. A test that still passes against the defect is not evidence.
+9. **Second review.** After the steps above pass, request an implementation review from
+   a model that did not write the code, giving it the diff and this plan, and record it
+   with `record-provenance.ts review`. M5 closes on an `approved` verdict.
+
+#### Pre-release gate: the real producer and the real consumer
+
+Do this before the Release item, against a local build, not a published version.
+
+- Decode the producer's own sample payloads with the generated decoder. Take them from
+  the contract document and publisher smoke tests in `mori://tan/registration-service-v2`
+  (`docs/contracts/flow-2/registration-completed-event.md` and
+  `test/RegistrationServiceV2/Completion/PublisherSmokeTest.hs`), with and without
+  `ownerEmail` and `mlsMemberId`. Commit them as fixtures in the conformance suite and
+  cite their source.
+- In `mori://tan/agent-reputation-service`, point the build at the local keiro-dsl and
+  keiro-core, declare the contract, and run the generated decoder beside the existing
+  hand-written one over that service's current test inputs
+  (`agent-reputation-service-core/test/AgentReputation/Registration/CompletedSpec.hs`).
+  Both must agree on every input, accepted and rejected, before the hand-written decoder
+  is deleted. Record any disagreement as a finding here. That repository is another
+  owner's; make the trial on a scratch copy and send results, not commits.
+
 Run the DSL unit and foreign-event conformance suites, corpus regeneration check, ADR
 and user documentation validation, and final `nix develop -c just verify` using the
 commands below. Record the results under Progress and Outcomes & Retrospective when M5
-passes.
+passes. State the no-regression evidence per guarantee, naming the gate that measures
+it: byte-identical output for existing contracts (the corpus check; it is vacuous for
+fieldless contract events, which no earlier suite declared, so the new fixtures carry
+that case), unchanged topology goldens (`just topology-schema-validate`), and no file
+touched under the command, replay, snapshot or projection paths (read it from
+`git diff --stat` for M5's commits, do not assume it).
 
 
 ## Concrete Steps
@@ -962,7 +1029,11 @@ the new conformance suite, `scripts/check-conformance-corpus.sh` and
 Reopened review acceptance. M5 closes when the CLI produces the specified rollout
 and build verdicts, fieldless events compile under `-Werror` and round-trip in both
 discriminator modes, and both corrected documentation passages agree with the producer
-and decoder evidence in Milestone 5.
+and decoder evidence in Milestone 5. It also requires that every shape in the matrix
+compiles under `-Wall -Werror`, that each rollout verdict is demonstrated by old and new
+generated modules decoding each other's output in the stated order and failing in the
+opposite one, that each new test is shown to fail against its defect, and that a second
+implementation review is `approved`. Release additionally requires the pre-release gate.
 
 Records. The four OKF bundles validate, and IR-64 reads back as `completed`.
 
@@ -1023,3 +1094,9 @@ working tree. All five observations reproduce. M5 now records the evidence, name
 causes of the wrong rollout remedy, widens the fieldless-event fix to body-discriminated
 contracts, and reports an added optional field as a consumer-build advisory instead of a
 gate-failing break.
+
+Revision note (2026-11-18, third). Added hardening steps to M5 and a pre-release gate,
+because every existing gate passed while the five defects existed. The additions compile
+all generated shapes, execute the rollout verdicts, mutation-check the new tests, require
+a second review, and test against the real producer's payloads and the real consumer's
+decoder before release.
