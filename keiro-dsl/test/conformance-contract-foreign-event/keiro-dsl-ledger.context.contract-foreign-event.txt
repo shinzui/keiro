@@ -1,0 +1,28 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/contract-foreign-event.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":6,"effectiveLanguageVersion":6,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"candidate","languageVersion":6,"runtimeSemantics":"keiro-dsl/runtime-semantics/5"}
+naming-edition idiomatic-v2
+module-role {"family":"StructuralConformance","kind":"generated","ownerKind":"context","ownerName":"context contract-foreign-event structural conformance","path":"Generated/ContractForeignEvent/StructuralConformance.hs"}
+module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context contract-foreign-event generated nominal declarations","path":"Generated/ContractForeignEvent/Nominals.hs"}
+module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context contract-foreign-event generated nominal ID internals","path":"Generated/ContractForeignEvent/Nominals/Internal.hs"}
+module-role {"family":"NominalLeaves","kind":"generated","ownerKind":"context","ownerName":"context contract-foreign-event structural nominal leaves","path":"Generated/ContractForeignEvent/Structural/NominalLeaves.hs"}
+module-role {"family":"Contract","kind":"generated","ownerKind":"contract","ownerName":"contract audit (line 6)","path":"Generated/ContractForeignEvent/Audit/Contract.hs"}
+module-role {"family":"Contract","kind":"generated","ownerKind":"contract","ownerName":"contract registration (line 26)","path":"Generated/ContractForeignEvent/Registration/Contract.hs"}
+generated Generated/ContractForeignEvent/StructuralConformance.hs
+generated Generated/ContractForeignEvent/Nominals.hs
+generated Generated/ContractForeignEvent/Nominals/Internal.hs
+generated Generated/ContractForeignEvent/Structural/NominalLeaves.hs
+generated Generated/ContractForeignEvent/Audit/Contract.hs
+generated Generated/ContractForeignEvent/Registration/Contract.hs
+id-domain id-domain|name=MemberId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=member|separator=_|json=canonical-json-text
+id-domain id-domain|name=contract:audit.MemberNoted.memberId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=member|separator=_|json=canonical-json-text
+id-domain id-domain|name=contract:audit.RegistrationSeen.registrationId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=registration|separator=_|json=canonical-json-text
+id-domain id-domain|name=contract:audit.RegistrationSeen.mlsMemberId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=member|separator=_|json=canonical-json-text
+id-domain id-domain|name=contract:audit.RegistrationSeen.referrerId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=member|separator=_|json=canonical-json-text
+id-domain id-domain|name=contract:registration.RegistrationCompleted.registrationId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=registration|separator=_|json=canonical-json-text
+id-domain id-domain|name=contract:registration.RegistrationCompleted.mlsMemberId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=member|separator=_|json=canonical-json-text
+nominal-equality nominal-equality|name=MemberId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:member:keiro-dsl/id-domain/typeid-v7/1|owner=generated
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

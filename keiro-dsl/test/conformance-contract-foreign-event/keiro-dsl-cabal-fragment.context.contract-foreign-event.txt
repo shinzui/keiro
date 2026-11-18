@@ -1,0 +1,26 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/contract-foreign-event.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+
+other-modules:
+    Generated.ContractForeignEvent.Audit.Contract
+    Generated.ContractForeignEvent.Nominals
+    Generated.ContractForeignEvent.Nominals.Internal
+    Generated.ContractForeignEvent.Registration.Contract
+    Generated.ContractForeignEvent.Structural.NominalLeaves
+    Generated.ContractForeignEvent.StructuralConformance
+
+build-depends:
+    , aeson
+    , base
+    , keiro-core
+    , mmzk-typeid
+    , text
