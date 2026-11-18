@@ -524,7 +524,7 @@ nodeSummary spec = \case
       contract.name,
       fields
         [ ("schemaVersion", Aeson.toJSON contract.schemaVersion),
-          ("discriminator", String contract.discriminator),
+          ("discriminator", maybe Null String (contractBodyDiscriminator contract)),
           ("topics", Aeson.toJSON [object ["alias" .= alias, "topic" .= topic] | (alias, topic) <- contract.topics]),
           ("events", names (map (.name) contract.events))
         ]

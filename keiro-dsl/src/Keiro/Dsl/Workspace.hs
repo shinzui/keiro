@@ -1405,6 +1405,8 @@ instance HasLocs ContractField
 
 instance HasLocs ContractNode
 
+instance HasLocs ContractDiscriminator
+
 instance HasLocs DomainOutcomeTypes
 
 instance HasLocs ContractScalarType

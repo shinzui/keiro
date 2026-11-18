@@ -116,6 +116,9 @@ module Keiro.Dsl.Grammar
     ContractType (..),
     contractScalar,
     contractIsList,
+    contractIsOptional,
+    ContractDiscriminator (..),
+    contractBodyDiscriminator,
     ContractField (..),
     ContractEvent (..),
     ContractNode (..),
@@ -1098,17 +1101,40 @@ data RouterNode = RouterNode
 data ContractScalarType = CTypeId !Text | CDeclaredId !Name | CText | CInt
   deriving stock (Eq, Show, Generic)
 
--- | A scalar or a list of one scalar; nesting is unrepresentable.
-data ContractType = CScalar !ContractScalarType | CList !ContractScalarType
+-- | A required scalar, a list of one scalar, or an optional scalar; nesting is
+-- unrepresentable. An optional value is an omitted key on the wire and decodes
+-- from an omitted key or an explicit @null@ (ExecPlan 345 / IR-64).
+data ContractType
+  = CScalar !ContractScalarType
+  | CList !ContractScalarType
+  | COptional !ContractScalarType
   deriving stock (Eq, Show, Generic)
 
 contractScalar :: ContractType -> ContractScalarType
 contractScalar (CScalar scalar) = scalar
 contractScalar (CList scalar) = scalar
+contractScalar (COptional scalar) = scalar
 
 contractIsList :: ContractType -> Bool
 contractIsList CList {} = True
 contractIsList CScalar {} = False
+contractIsList COptional {} = False
+
+contractIsOptional :: ContractType -> Bool
+contractIsOptional COptional {} = True
+contractIsOptional CScalar {} = False
+contractIsOptional CList {} = False
+
+-- | Where a contract payload's event type comes from: a key in the JSON body
+-- (@discriminator messageType@), or the envelope's event type
+-- (@discriminator from envelope@, ExecPlan 345 / IR-64).
+data ContractDiscriminator = DiscriminatorBodyKey !Name | DiscriminatorEnvelope
+  deriving stock (Eq, Show, Generic)
+
+contractBodyDiscriminator :: ContractNode -> Maybe Name
+contractBodyDiscriminator contract = case (.discriminator) contract of
+  DiscriminatorBodyKey key -> Just key
+  DiscriminatorEnvelope -> Nothing
 
 data ContractField = ContractField
   { name :: !Name,
@@ -1133,7 +1159,7 @@ data ContractEvent = ContractEvent
 data ContractNode = ContractNode
   { name :: !Name,
     schemaVersion :: !Int,
-    discriminator :: !Name,
+    discriminator :: !ContractDiscriminator,
     -- | (topic alias, real Kafka topic string)
     topics :: ![(Name, Text)],
     events :: ![ContractEvent],

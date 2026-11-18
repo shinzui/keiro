@@ -1956,6 +1956,14 @@ main = hspec $ do
             "contract-list-fields-prefix-change.keiro",
             "contract-list-fields-admission-change.keiro",
             "contract-list-fields-language5.keiro",
+            "contract-foreign-event.keiro",
+            "contract-foreign-event-language5.keiro",
+            "contract-foreign-event-envelope-language5.keiro",
+            "contract-foreign-event-optional-to-required.keiro",
+            "contract-foreign-event-optional-added.keiro",
+            "contract-foreign-event-optional-scalar-change.keiro",
+            "contract-foreign-event-optional-literal-to-declared.keiro",
+            "contract-foreign-event-discriminator-body.keiro",
             "declarative-router/unbounded.keiro",
             "declarative-router/valid.keiro",
             "direct-optional-id.keiro",
@@ -7152,7 +7160,7 @@ main = hspec $ do
               ( \contract ->
                   contractNodeWithEvents
                     ( updateFirst
-                        (\event -> contractEventWithFields (updateFirst (contractFieldWithName contract.discriminator) event.fields) event)
+                        (\event -> contractEventWithFields (updateFirst (contractFieldWithName (fromMaybe "messageType" (contractBodyDiscriminator contract))) event.fields) event)
                         contract.events
                     )
                     contract
@@ -8274,7 +8282,7 @@ main = hspec $ do
         Right spec -> case [c | NContract c <- (.nodes) spec] of
           (c : _) -> do
             (.name) c `shouldBe` "emergency"
-            (.discriminator) c `shouldBe` "messageType"
+            (.discriminator) c `shouldBe` DiscriminatorBodyKey "messageType"
             map fst ((.topics) c) `shouldBe` ["incidentEvents", "hospitalEvents"]
             map (.name) ((.events) c) `shouldBe` ["IncidentTransferNeedDeclared", "TransferReservationAccepted"]
           [] -> expectationFailure "no contract node parsed"
@@ -8590,8 +8598,12 @@ main = hspec $ do
 
     it "rejects genuine container applications even when their names are declared IDs" $ do
       forM_ ["Optional", "Map", "Set", "List"] $ \nominal ->
-        forM_ (filter (/= "List text") [nominal <> " text", "List " <> nominal <> " text"]) $ \ty ->
+        forM_ (filter (`notElem` ["List text", "Optional text"]) [nominal <> " text", "List " <> nominal <> " text"]) $ \ty ->
           parseSource "malformed-contract.keiro" (probeSource ("id " <> nominal <> " prefix=probe") ("values: " <> ty)) `shouldSatisfy` isLeft
+
+    it "reads Optional applied to a scalar as an optional field even when Optional is a declared ID" $ do
+      service <- checkProbe (probeSource "id Optional prefix=probe" "value: Optional values: Optional text nested: Optional Optional")
+      [ty | (_, _, _, ty) <- probeFields service] `shouldBe` [CScalar (CDeclaredId "Optional"), COptional CText, COptional (CDeclaredId "Optional")]
 
     it "retains scalar built-in and cross-declaration ambiguity checks" $ do
       forM_
@@ -8669,7 +8681,7 @@ main = hspec $ do
 
     it "refuses nested containers in contract list fields without consuming keyword prefixes" $ do
       source <- readTestText "test/fixtures/contract-list-fields.keiro"
-      forM_ ["List List TemplateId", "List list TemplateId", "List Optional text", "List Set text", "Optional text", "Map text"] $ \fieldType ->
+      forM_ ["List List TemplateId", "List list TemplateId", "List Optional text", "List Set text", "Optional List text", "Map text"] $ \fieldType ->
         case parseSource "nested.keiro" (T.replace "templateIds: List TemplateId" ("templateIds: " <> fieldType) source) of
           Left failure -> renderParseFailure failure `shouldSatisfy` T.isInfixOf "nested containers"
           Right _ -> expectationFailure ("accepted " <> T.unpack fieldType)
@@ -8792,6 +8804,250 @@ main = hspec $ do
       forM_ [(old, new), (new, old)] $ \(before, after) ->
         [finding | Breaking finding <- diffServices before after, (.code) finding == ContractFieldChanged]
           `shouldSatisfy` any (\finding -> verdictFor PublicConsumer (finding.vector) == VBreaking)
+
+    it "lowers Optional contract fields of every scalar family" $ do
+      service <- checkedServiceOf "test/fixtures/contract-foreign-event.keiro"
+      let modules = scaffoldServiceModules (defaultContext (checkedSpec service).context) service
+          audit = generatedTextEndingIn "Audit/Contract.hs" modules
+      validateService service `shouldBe` []
+      forM_
+        [ "note :: !(Maybe Text)",
+          "mlsMemberId :: !(Maybe Nominals.MemberId)",
+          "legacyAccountId :: !(Maybe Int)",
+          "referrerId :: !(Maybe (KindID \"member\"))",
+          "<> [\"note\" .= value | Just value <- [payload.note]]",
+          "<> [\"mlsMemberId\" .= NominalLeaves.encodeMemberIdLeaf value | Just value <- [payload.mlsMemberId]]",
+          "<> [\"legacyAccountId\" .= value | Just value <- [payload.legacyAccountId]]",
+          "<> [\"referrerId\" .= KindID.toText value | Just value <- [payload.referrerId]]",
+          "<*> o .:? \"note\"",
+          "<*> explicitParseFieldMaybe NominalLeaves.parseMemberIdLeaf o \"mlsMemberId\"",
+          "<*> o .:? \"legacyAccountId\"",
+          "<*> explicitParseFieldMaybe (parseKindIdV7Value @\"member\") o \"referrerId\"",
+          "import Data.Aeson (Value, object, withObject, withText, (.:?), (.=))",
+          "import Data.Aeson.Types (Parser, explicitParseField, explicitParseFieldMaybe, parseEither)"
+        ]
+        $ \fragment -> audit `shouldSatisfy` T.isInfixOf fragment
+      [site | obligation <- either (error . show) id (bindingObligationsForService service), site <- (.useSites) obligation] `shouldBe` []
+      forM_ [("mlsMemberId", "member"), ("referrerId", "member")] $ \(field, prefix) ->
+        idDomainIdentitiesForService service
+          `shouldContain` ["id-domain|name=contract:audit.RegistrationSeen." <> field <> "|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=" <> prefix <> "|separator=_|json=canonical-json-text"]
+      forM_ [False, True] $ \withTyped -> do
+        primitive <- checkedServiceFromText "primitive-optional.keiro" (T.unlines ["language keiro-dsl 6", "context primitive", "contract values { schemaVersion 1 discriminator kind topic events \"values.events\"", "event Values on events { label: Optional text " <> (if withTyped then "ref: Optional typeid \"ref\"" else "") <> " } }"])
+        let rendered = generatedTextEndingIn "Values/Contract.hs" (scaffoldServiceModules (defaultContext (checkedSpec primitive).context) primitive)
+        validateService primitive `shouldBe` []
+        rendered `shouldSatisfy` T.isInfixOf "(.:?)"
+        rendered `shouldNotSatisfy` T.isInfixOf "(.:)"
+        ("explicitParseFieldMaybe" `T.isInfixOf` rendered) `shouldBe` withTyped
+
+    it "keeps contracts without Optional fields on the unchanged encoder layout" $ do
+      service <- checkedServiceOf "test/fixtures/contract-list-fields.keiro"
+      let contractModule = generatedTextEndingIn "Templates/Contract.hs" (scaffoldServiceModules (defaultContext (checkedSpec service).context) service)
+      forM_ [".:?", "explicitParseFieldMaybe", "Just value <-", "parseTemplatesPayloadAs"] $ \fragment ->
+        contractModule `shouldNotSatisfy` T.isInfixOf fragment
+
+    it "gates the Optional contract field token on Language 6" $ do
+      (status, _, err) <- runKeiroDsl ["check", "test/fixtures/contract-foreign-event-language5.keiro"]
+      status `shouldBe` ExitFailure 1
+      err `shouldContain` "LanguageFeatureRequiresVersion"
+      err `shouldContain` "contract-foreign-event-language5.keiro:12:1"
+      source <- readTestText "test/fixtures/contract-foreign-event-language5.keiro"
+      case parseSurfaceSource "optional-language5.keiro" source of
+        Left FrontendFailure {code = SourceLanguageError LanguageFeatureRequiresVersion, span = SourceSpan {start = SourcePoint {offset = startOffset, line = startLine, column = startColumn}, end = SourcePoint {offset = endOffset}}} -> do
+          T.take (endOffset - startOffset) (T.drop startOffset source) `shouldBe` "Optional"
+          (startLine, startColumn) `shouldBe` (12, 11)
+        other -> expectationFailure (show other)
+
+    it "refuses Optional List, List Optional, and lower-case optional contract field types" $ do
+      source <- readTestText "test/fixtures/contract-foreign-event.keiro"
+      forM_ ["Optional List text", "List Optional text", "optional text", "Optional Optional text", "Optional Map text"] $ \fieldType ->
+        case parseSource "nested-optional.keiro" (T.replace "note: Optional text" ("note: " <> fieldType) source) of
+          Left failure -> do
+            renderParseFailure failure `shouldSatisfy` T.isInfixOf "or Optional of one of those"
+            renderParseFailure failure `shouldSatisfy` T.isInfixOf "Optional List, List Optional"
+          Right _ -> expectationFailure ("accepted " <> T.unpack fieldType)
+
+    it "keeps Optional usable as a declared id name in contract fields" $ do
+      service <-
+        checkedServiceFromText
+          "optional-name.keiro"
+          ( T.unlines
+              [ "language keiro-dsl 6",
+                "context optional-name",
+                "id Optional prefix=opt",
+                "contract values { schemaVersion 1 discriminator kind topic events \"values.events\"",
+                "event Values on events {",
+                "  value: Optional",
+                "  maybeValue: Optional Optional",
+                "  values: List Optional",
+                "} }"
+              ]
+          )
+      validateService service `shouldBe` []
+      let rendered = generatedTextEndingIn "Values/Contract.hs" (scaffoldServiceModules (defaultContext (checkedSpec service).context) service)
+      forM_ ["value :: !Nominals.Optional", "maybeValue :: !(Maybe Nominals.Optional)", "values :: ![Nominals.Optional]"] $ \fragment ->
+        rendered `shouldSatisfy` T.isInfixOf fragment
+
+    it "keeps Optional contract field aliases" $ do
+      source <- readTestText "test/fixtures/contract-foreign-event.keiro"
+      service <- checkedServiceFromText "aliased-optional.keiro" (T.replace "note: Optional text" "note haskell memberNote as \"member_note\": Optional text" source)
+      validateService service `shouldBe` []
+      let text = generatedTextEndingIn "Audit/Contract.hs" (scaffoldServiceModules (defaultContext (checkedSpec service).context) service)
+      forM_ ["memberNote :: !(Maybe Text)", "[\"member_note\" .= value | Just value <- [payload.memberNote]]", "o .:? \"member_note\""] $ \fragment ->
+        text `shouldSatisfy` T.isInfixOf fragment
+      case parseSource "aliased-optional.keiro" (T.replace "note: Optional text" "note haskell memberNote as \"member_note\": Optional text" source) of
+        Right parsed -> parseSource "aliased-optional.keiro" (renderSource parsed) `shouldBe` Right parsed
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure))
+
+    it "refuses Optional contract fields as identity once per clause with envelope precedence" $ do
+      emitFixture <- readTestText "test/fixtures/emit.keiro"
+      intakeFixture <- readTestText "test/fixtures/intake.keiro"
+      let emitNodes = snd (T.breakOn "emit reservationResponse" emitFixture)
+          intakeNode = snd (T.breakOn "intake incidentInbox" intakeFixture)
+          sourceFor key selectedShape =
+            T.unlines
+              [ "language keiro-dsl 6",
+                "context hospital-capacity",
+                "contract emergency { schemaVersion 1 discriminator messageType",
+                "topic hospitalEvents \"emergency.hospital.events\"",
+                "event TransferReservationAccepted on hospitalEvents { " <> key <> ": text }",
+                "event TransferReservationRejected on hospitalEvents { " <> key <> ": " <> selectedShape <> " }",
+                "event TransferExpired on hospitalEvents { " <> key <> ": text }",
+                "event PatientAdmitted on hospitalEvents { " <> key <> ": text }",
+                "event Unselected on hospitalEvents { " <> key <> ": Optional text } }",
+                T.replace "outboxId stable from messageId" ("outboxId stable from " <> key) emitNodes,
+                T.replace
+                  "dedupe key messageId"
+                  ("bind " <> key <> " from body\n  dedupe key " <> key)
+                  ( T.replace
+                      "  bind "
+                      "  # bind "
+                      ( T.replace
+                          "accept IncidentTransferNeedDeclared"
+                          "accept TransferReservationAccepted TransferReservationRejected"
+                          (T.replace "topic incidentEvents" "topic hospitalEvents" intakeNode)
+                      )
+                  )
+              ]
+      forM_
+        [ ("values", "Optional text", ContractOptionalFieldUsedAsKey, 2),
+          ("messageId", "Optional text", ContractOptionalFieldUsedAsKey, 0),
+          ("idempotencyKey", "Optional text", ContractOptionalFieldUsedAsKey, 0),
+          ("source", "Optional text", ContractOptionalFieldUsedAsKey, 1),
+          ("values", "text", ContractOptionalFieldUsedAsKey, 0),
+          ("values", "List text", ContractListFieldUsedAsKey, 2)
+        ]
+        $ \(key, selectedShape, code, count) -> do
+          service <- checkedServiceFromText "optional-identity.keiro" (sourceFor key selectedShape)
+          let failures = [diagnostic | diagnostic <- validateService service, (.severity) diagnostic == Error]
+          map (.code) failures `shouldBe` replicate count code
+      service <- checkedServiceFromText "optional-identity.keiro" (sourceFor "values" "Optional text")
+      map (.message) (validateService service)
+        `shouldSatisfy` any (T.isInfixOf "outbox identity must be messageId, idempotencyKey, or a required scalar contract field")
+      map (.message) (validateService service)
+        `shouldSatisfy` any (T.isInfixOf "dedupe identity must be a required scalar envelope or event field")
+
+    it "classifies Optional contract field evolution in both directions" $ do
+      let base = "test/fixtures/contract-foreign-event.keiro"
+          mutant suffix = "test/fixtures/contract-foreign-event-" <> suffix <> ".keiro"
+      added <- diffFixtures base (mutant "optional-added")
+      [finding | Breaking finding <- added] `shouldBe` []
+      case [finding | Additive finding <- added, (.code) finding == ContractOptionalFieldAdded] of
+        [finding] -> (.subject) finding `shouldBe` "MemberNoted.reason"
+        findings -> expectationFailure (show findings)
+      removed <- diffFixtures (mutant "optional-added") base
+      [(.detail) finding | Breaking finding <- removed, (.code) finding == ContractFieldChanged]
+        `shouldSatisfy` any (T.isInfixOf "field removed")
+      toRequired <- diffFixtures base (mutant "optional-to-required")
+      toOptional <- diffFixtures (mutant "optional-to-required") base
+      [(.detail) finding | Breaking finding <- toRequired, (.code) finding == ContractFieldChanged]
+        `shouldBe` ["field type changed Optional text -> text; retained messages that omit the key no longer decode"]
+      [(.detail) finding | Breaking finding <- toOptional, (.code) finding == ContractFieldChanged]
+        `shouldBe` ["field type changed text -> Optional text; deployed consumers still require the key"]
+      forM_ [toRequired, toOptional] $ \changes ->
+        forM_ [finding | Breaking finding <- changes, (.code) finding == ContractFieldChanged] $ \finding ->
+          verdictFor PublicConsumer (finding.vector) `shouldBe` VBreaking
+      forM_ [(base, mutant "optional-scalar-change"), (mutant "optional-scalar-change", base)] $ \(old, new) -> do
+        changes <- diffFixtures old new
+        [finding | Breaking finding <- changes, (.code) finding == ContractFieldChanged, (.subject) finding == "MemberNoted.note"]
+          `shouldSatisfy` any (\finding -> verdictFor PublicConsumer (finding.vector) == VBreaking)
+      forM_ [(base, mutant "optional-literal-to-declared"), (mutant "optional-literal-to-declared", base)] $ \(old, new) -> do
+        changes <- diffFixtures old new
+        [finding | Breaking finding <- changes] `shouldBe` []
+        case [finding | Advisory finding <- changes, (.code) finding == ContractFieldChanged] of
+          [finding] -> do
+            (.subject) finding `shouldBe` "RegistrationSeen.referrerId"
+            verdictFor PublicConsumer (finding.vector) `shouldBe` VNotApplicable
+            verdictFor ConsumerBuild (finding.vector) `shouldBe` VAdvisory
+          findings -> expectationFailure (show findings)
+
+    it "lowers an envelope-discriminated contract to an event-type decoder" $ do
+      service <- checkedServiceOf "test/fixtures/contract-foreign-event.keiro"
+      let registration = generatedTextEndingIn "Registration/Contract.hs" (scaffoldServiceModules (defaultContext (checkedSpec service).context) service)
+      forM_
+        [ "  , parseRegistrationPayloadAs\n  ) where",
+          "-- the closed payload set (discriminated by the envelope's event type)",
+          "parseRegistrationPayloadAs :: Text -> Value -> Either Text RegistrationPayload",
+          "parseRegistrationPayloadAs eventType = mapLeftText . parseEither (withObject \"RegistrationPayload\" go)",
+          "      kind <- validateMessageType eventType",
+          "import Data.Aeson (Value, object, withObject, (.:), (.:?), (.=))",
+          "      ( [ \"registrationId\" .= KindID.toText payload.registrationId,"
+        ]
+        $ \fragment -> registration `shouldSatisfy` T.isInfixOf fragment
+      forM_ ["withText", "\"messageType\"", "parseRegistrationPayload ::"] $ \fragment ->
+        registration `shouldNotSatisfy` T.isInfixOf fragment
+      empty <- checkedServiceFromText "empty-envelope.keiro" (T.unlines ["language keiro-dsl 6", "context empty-envelope", "contract signals { schemaVersion 1 discriminator from envelope topic events \"signals.events\"", "event Pinged on events { } event Ponged on events { } }"])
+      validateService empty `shouldBe` []
+      let emptyRendered = generatedTextEndingIn "Signals/Contract.hs" (scaffoldServiceModules (defaultContext (checkedSpec empty).context) empty)
+      forM_ ["  Pinged payload ->\n    object []", "    go _ = do", "import Data.Aeson.Types (Parser, parseEither)", "import Data.Aeson (Value, object, withObject, (.=))"] $ \fragment ->
+        emptyRendered `shouldSatisfy` T.isInfixOf fragment
+
+    it "round-trips discriminator from envelope and gates it on Language 6" $ do
+      source <- readTestText "test/fixtures/contract-foreign-event.keiro"
+      case parseSource "foreign.keiro" source of
+        Right parsed -> do
+          renderSource parsed `shouldSatisfy` T.isInfixOf "  discriminator from envelope\n"
+          renderSource parsed `shouldSatisfy` T.isInfixOf "    note: Optional text\n"
+          parseSource "foreign.keiro" (renderSource parsed) `shouldBe` Right parsed
+          [(.discriminator) contract | NContract contract <- (.nodes) ((.spec) parsed)]
+            `shouldBe` [DiscriminatorBodyKey "messageType", DiscriminatorEnvelope]
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure))
+      (status, _, err) <- runKeiroDsl ["check", "test/fixtures/contract-foreign-event-envelope-language5.keiro"]
+      status `shouldBe` ExitFailure 1
+      err `shouldContain` "LanguageFeatureRequiresVersion"
+      err `shouldContain` "contract-foreign-event-envelope-language5.keiro:6:1"
+      language5 <- readTestText "test/fixtures/contract-foreign-event-envelope-language5.keiro"
+      case parseSurfaceSource "envelope-language5.keiro" language5 of
+        Left FrontendFailure {code = SourceLanguageError LanguageFeatureRequiresVersion, span = SourceSpan {start = SourcePoint {offset = startOffset, line = startLine, column = startColumn}, end = SourcePoint {offset = endOffset}}} -> do
+          T.take (endOffset - startOffset) (T.drop startOffset language5) `shouldBe` "from"
+          (startLine, startColumn) `shouldBe` (6, 17)
+        other -> expectationFailure (show other)
+
+    it "admits a messageType payload field only without a body discriminator" $ do
+      let sourceWith discriminator =
+            T.unlines
+              [ "language keiro-dsl 6",
+                "context shadow",
+                "contract values { schemaVersion 1 discriminator " <> discriminator <> " topic events \"values.events\"",
+                "event Values on events { messageType: text } }"
+              ]
+      envelope <- checkedServiceFromText "envelope-shadow.keiro" (sourceWith "from envelope")
+      validateService envelope `shouldBe` []
+      body <- checkedServiceFromText "body-shadow.keiro" (sourceWith "messageType")
+      map (.code) [diagnostic | diagnostic <- validateService body, (.severity) diagnostic == Error]
+        `shouldContain` [ContractFieldShadowsDiscriminator]
+
+    it "classifies a change of discriminator source as breaking in both directions" $ do
+      let base = "test/fixtures/contract-foreign-event.keiro"
+          bodyKeyed = "test/fixtures/contract-foreign-event-discriminator-body.keiro"
+      forward <- diffFixtures base bodyKeyed
+      backward <- diffFixtures bodyKeyed base
+      [(.detail) finding | Breaking finding <- forward, (.code) finding == ContractDiscriminatorChanged]
+        `shouldBe` ["discriminator changed from envelope -> messageType"]
+      [(.detail) finding | Breaking finding <- backward, (.code) finding == ContractDiscriminatorChanged]
+        `shouldBe` ["discriminator changed messageType -> from envelope"]
+      forM_ [forward, backward] $ \changes ->
+        forM_ [finding | Breaking finding <- changes, (.code) finding == ContractDiscriminatorChanged] $ \finding ->
+          verdictFor PublicConsumer (finding.vector) `shouldBe` VBreaking
 
   describe "pgmq workqueue/dispatch (EP-5)" $ do
     it "round-trips the reservation-work spec through parse . pretty" $ do
@@ -16629,7 +16885,7 @@ escapedSpec value =
         ContractNode
           { name = "Contract",
             schemaVersion = 1,
-            discriminator = "kind",
+            discriminator = DiscriminatorBodyKey "kind",
             topics = [("events", value)],
             events = [],
             loc = noLoc
@@ -16937,7 +17193,7 @@ genContract =
   ContractNode
     <$> genName
     <*> choose (0, 5)
-    <*> genName
+    <*> (DiscriminatorBodyKey <$> genName)
     <*> smallList ((,) <$> genName <*> genAdversarialText)
     <*> smallList genContractEvent
     <*> pure noLoc

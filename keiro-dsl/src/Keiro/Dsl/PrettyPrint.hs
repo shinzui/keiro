@@ -672,12 +672,14 @@ docContract c =
   vsep $
     [ "contract" <+> pretty ((.name) c) <+> "{",
       indent 2 ("schemaVersion" <+> pretty ((.schemaVersion) c)),
-      indent 2 ("discriminator" <+> pretty ((.discriminator) c))
+      indent 2 ("discriminator" <+> docDiscriminator ((.discriminator) c))
     ]
       ++ map (indent 2 . docTopic) ((.topics) c)
       ++ map (indent 2 . docContractEvent) ((.events) c)
       ++ ["}"]
   where
+    docDiscriminator (DiscriminatorBodyKey key) = pretty key
+    docDiscriminator DiscriminatorEnvelope = "from envelope"
     docTopic (alias, t) = "topic" <+> pretty alias <+> dquoted t
     docContractEvent e =
       vsep $
@@ -694,6 +696,7 @@ docContract c =
         <+> docContractType ((.valueType) f)
     docContractType (CScalar scalar) = docContractScalar scalar
     docContractType (CList scalar) = "List" <+> docContractScalar scalar
+    docContractType (COptional scalar) = "Optional" <+> docContractScalar scalar
     docContractScalar (CTypeId p) = "typeid" <+> dquoted p
     docContractScalar (CDeclaredId name) = pretty name
     docContractScalar CText = "text"

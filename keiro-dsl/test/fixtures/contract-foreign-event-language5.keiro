@@ -1,0 +1,14 @@
+language keiro-dsl 5
+context contract-foreign-event-language5
+
+contract audit {
+  schemaVersion 1
+  discriminator messageType
+
+  topic notes "audit.notes"
+
+  event MemberNoted on notes {
+    memberId: typeid "member"
+    note: Optional text
+  }
+}

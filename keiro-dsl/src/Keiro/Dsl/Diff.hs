@@ -503,6 +503,7 @@ classifyCompatibility context code
         CompatibilityStrengthened,
         EventRetirementAbandoned,
         ContractEventAdded,
+        ContractOptionalFieldAdded,
         ContractTopicAdded,
         WorkflowEvolutionGuardAdded
       ]
@@ -2759,7 +2760,7 @@ contractPairDiff env oldContract newContract =
           "discriminator"
           ((.name) newContract)
           ContractDiscriminatorChanged
-          ("discriminator changed " <> (.discriminator) oldContract <> " -> " <> (.discriminator) newContract)
+          ("discriminator changed " <> renderContractDiscriminator ((.discriminator) oldContract) <> " -> " <> renderContractDiscriminator ((.discriminator) newContract))
       | (.discriminator) oldContract /= (.discriminator) newContract
       ]
     topicChanges = contractTopicDiff oldContract newContract
@@ -2847,7 +2848,11 @@ contractEventDiff env oldContract newContract oldEvent newEvent =
       | otherwise = breaking ((.name) newContract) "contract-field" subject ContractFieldChanged (detail <> if oldDomain /= newDomain then renderIdDomainDirection oldDomain newDomain else "")
       where
         subject = (.name) newEvent <> "." <> (.name) newField
-        detail = "field type changed " <> renderContractType ((.valueType) oldField) <> " -> " <> renderContractType ((.valueType) newField)
+        detail = "field type changed " <> renderContractType ((.valueType) oldField) <> " -> " <> renderContractType ((.valueType) newField) <> presenceDirection
+        presenceDirection = case (contractIsOptional ((.valueType) oldField), contractIsOptional ((.valueType) newField)) of
+          (False, True) -> "; deployed consumers still require the key"
+          (True, False) -> "; retained messages that omit the key no longer decode"
+          _ -> ""
         oldDomain = contractFieldIdDomain ((.old) env) (checkedLanguageContract ((.oldService) env)) oldField
         newDomain = contractFieldIdDomain ((.new) env) (checkedLanguageContract ((.newService) env)) newField
         literalDeclaredSamePrefix =
@@ -2859,6 +2864,8 @@ contractEventDiff env oldContract newContract oldEvent newEvent =
     isLiteralDeclaredTransition (CScalar CDeclaredId {}) (CScalar CTypeId {}) = True
     isLiteralDeclaredTransition (CList CTypeId {}) (CList CDeclaredId {}) = True
     isLiteralDeclaredTransition (CList CDeclaredId {}) (CList CTypeId {}) = True
+    isLiteralDeclaredTransition (COptional CTypeId {}) (COptional CDeclaredId {}) = True
+    isLiteralDeclaredTransition (COptional CDeclaredId {}) (COptional CTypeId {}) = True
     isLiteralDeclaredTransition _ _ = False
     selectorFieldChanges =
       [ fieldSelectorChange
@@ -2888,17 +2895,25 @@ contractEventDiff env oldContract newContract oldEvent newEvent =
         (.wireKey) (resolveContractFieldIdentity oldField)
           /= (.wireKey) (resolveContractFieldIdentity newField)
       ]
-    addedFieldChanges =
-      [ if (.schemaVersion) newContract > (.schemaVersion) oldContract
-          then advisory ((.name) newContract) "contract-field" subject ContractSchemaVersionBumped ("field added with schemaVersion bump " <> tInt ((.schemaVersion) oldContract) <> " -> " <> tInt ((.schemaVersion) newContract) <> "; coordinate the cross-service rollout")
-          else breaking ((.name) newContract) "contract-field" subject ContractFieldChanged "field added without a schemaVersion bump; older in-flight messages do not contain it"
-      | field <- (.added) fieldPairs,
-        let subject = (.name) newEvent <> "." <> (.name) field
-      ]
+    addedFieldChanges = map addedFieldChange ((.added) fieldPairs)
+    addedFieldChange field
+      | contractIsOptional ((.valueType) field) =
+          additive ((.name) newContract) "contract-field" subject ContractOptionalFieldAdded "optional field added; older messages omit the key and older consumers ignore it"
+      | (.schemaVersion) newContract > (.schemaVersion) oldContract =
+          advisory ((.name) newContract) "contract-field" subject ContractSchemaVersionBumped ("field added with schemaVersion bump " <> tInt ((.schemaVersion) oldContract) <> " -> " <> tInt ((.schemaVersion) newContract) <> "; coordinate the cross-service rollout")
+      | otherwise =
+          breaking ((.name) newContract) "contract-field" subject ContractFieldChanged "field added without a schemaVersion bump; older in-flight messages do not contain it"
+      where
+        subject = (.name) newEvent <> "." <> (.name) field
 
 renderContractType :: ContractType -> Text
 renderContractType (CScalar scalar) = renderContractScalar scalar
 renderContractType (CList scalar) = "List " <> renderContractScalar scalar
+renderContractType (COptional scalar) = "Optional " <> renderContractScalar scalar
+
+renderContractDiscriminator :: ContractDiscriminator -> Text
+renderContractDiscriminator (DiscriminatorBodyKey key) = key
+renderContractDiscriminator DiscriminatorEnvelope = "from envelope"
 
 renderContractScalar :: ContractScalarType -> Text
 renderContractScalar (CTypeId prefix) = "typeid '" <> prefix <> "'"
@@ -3722,6 +3737,7 @@ contextFor label root facet subject code =
         ContractSchemaVersionDecreased,
         ContractSchemaVersionBumped,
         ContractEventAdded,
+        ContractOptionalFieldAdded,
         ContractTopicAdded
       ]
     queueCodes = [WqPayloadFieldChanged, WqOrderingChanged, WqProvisionChanged, WqGroupKeyChanged, QueueIdentityChanged]

@@ -725,7 +725,11 @@
           "type": "integer"
         },
         "discriminator": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The JSON body key that names the event. null when the contract declares `discriminator from envelope`: the body carries no discriminator and the event type comes from the envelope."
         },
         "topics": {
           "type": "array",

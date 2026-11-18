@@ -355,6 +355,7 @@ data DiagnosticCode
   | EnumCtorAdded
   | EventRetirementAbandoned
   | ContractEventAdded
+  | ContractOptionalFieldAdded -- ExecPlan 345 / IR-64: an added Optional field needs no schemaVersion bump.
   | ContractTopicAdded
   | WorkflowEvolutionGuardAdded
   | -- MasterPlan 25 / EP-149 (consumer-owned mapped types).
@@ -489,6 +490,7 @@ data DiagnosticCode
   | ContractIdUnknown
   | ContractTypeIdDomainChanged
   | ContractListFieldUsedAsKey -- ExecPlan 312 / IR-54: list fields are values, never identities.
+  | ContractOptionalFieldUsedAsKey -- ExecPlan 345 / IR-64: an identity that may be absent identifies nothing.
   | -- ExecPlan 180: accepted-but-unenforced spec surfaces.
     PublisherOrderingUnknown
   | PublisherBackoffInvalid
@@ -670,6 +672,7 @@ diagnosticOrigin diagnosticCode = case diagnosticCode of
   CompatibilityStrengthened -> DiffDiagnostic
   ContractDiscriminatorChanged -> DiffDiagnostic
   ContractEventAdded -> DiffDiagnostic
+  ContractOptionalFieldAdded -> DiffDiagnostic
   ContractEventRemoved -> DiffDiagnostic
   ContractFieldChanged -> DiffDiagnostic
   ContractSchemaVersionBumped -> DiffDiagnostic
@@ -2569,13 +2572,14 @@ validateContract languageContract spec contract =
       | enforcesSpecSurfaceClosures languageContract,
         event <- (.events) contract,
         field <- (.fields) event,
-        (.wireKey) (resolveContractFieldIdentity field) == (.discriminator) contract
+        Just bodyKey <- [contractBodyDiscriminator contract],
+        (.wireKey) (resolveContractFieldIdentity field) == bodyKey
       ]
     fieldWireKeyRules =
       concat
         [ wireKeyRulesForRecord
             ("contract '" <> (.name) contract <> "' event '" <> (.name) event <> "'")
-            (Just ((.discriminator) contract, "payload discriminator"))
+            ((,"payload discriminator") <$> contractBodyDiscriminator contract)
             (map resolveContractFieldIdentity ((.fields) event))
         | event <- (.events) contract
         ]
@@ -3671,10 +3675,17 @@ intakeCoupling languageContract spec i = bindFlagWarnings ++ bindHeaderNames ++ 
             | enforcesSpecSurfaceClosures languageContract,
               not (null (listDedupeEvents c))
             ],
+            [ mkErr (locLine ((.loc) i)) ContractOptionalFieldUsedAsKey $
+                "intake '" <> (.name) i <> "' dedupe key '" <> (.dedupeKey) i <> "' is an Optional field of accepted events " <> T.intercalate ", " (optionalDedupeEvents c) <> "; dedupe identity must be a required scalar envelope or event field"
+            | enforcesSpecSurfaceClosures languageContract,
+              null (listDedupeEvents c),
+              not (null (optionalDedupeEvents c))
+            ],
             [ mkErr (locLine ((.loc) i)) IntakeDedupeKeyUnresolved $
                 "intake '" <> (.name) i <> "' dedupe key '" <> (.dedupeKey) i <> "' is not an envelope or accepted-event field"
             | enforcesSpecSurfaceClosures languageContract,
               null (listDedupeEvents c),
+              null (optionalDedupeEvents c),
               (.dedupeKey) i `Set.notMember` resolvableFields c
             ],
             [ mkErr (locLine ((.loc) i)) IntakeDecodeSchemaVersionMismatch $
@@ -3709,13 +3720,15 @@ intakeCoupling languageContract spec i = bindFlagWarnings ++ bindHeaderNames ++ 
         (.required) binding || (.crossCheck) binding
       ]
     lookupContract n = case [c | c <- specContracts spec, (.name) c == n] of (c : _) -> Just c; [] -> Nothing
-    listDedupeEvents contract
+    listDedupeEvents = dedupeEventsWhere contractIsList
+    optionalDedupeEvents = dedupeEventsWhere contractIsOptional
+    dedupeEventsWhere shape contract
       | (.dedupeKey) i `Set.member` canonicalIntakeEnvelopeFields = []
       | otherwise =
           [ (.name) event
           | event <- (.events) contract,
             (.name) event `elem` (.accept) i,
-            any (\field -> (.name) field == (.dedupeKey) i && contractIsList ((.valueType) field)) ((.fields) event)
+            any (\field -> (.name) field == (.dedupeKey) i && shape ((.valueType) field)) ((.fields) event)
           ]
     resolvableFields contract =
       canonicalIntakeEnvelopeFields
@@ -3804,26 +3817,37 @@ validatePublisher languageContract spec p =
         | enforcesSpecSurfaceClosures languageContract,
           usesListIdentity emitNode
         ]
+          ++ [ mkErr publisherLine ContractOptionalFieldUsedAsKey $
+                 "publisher '" <> (.name) p <> "' outboxId field '" <> (.outboxField) p <> "' is an Optional field of an event mapped by emit '" <> (.emit) p <> "'; outbox identity must be messageId, idempotencyKey, or a required scalar contract field"
+             | enforcesSpecSurfaceClosures languageContract,
+               not (usesListIdentity emitNode),
+               usesOptionalIdentity emitNode
+             ]
           ++ [ mkErr publisherLine PublisherOutboxFieldUnresolved $
                  "publisher '" <> (.name) p <> "' outboxId field '" <> (.outboxField) p <> "' is not messageId, idempotencyKey, or a field of an event mapped by emit '" <> (.emit) p <> "'"
              | enforcesSpecSurfaceClosures languageContract,
                not (usesListIdentity emitNode),
+               not (usesOptionalIdentity emitNode),
                (.outboxField) p `Set.notMember` allowedOutboxFields emitNode
              ]
-    usesListIdentity emitNode =
+    usesListIdentity = usesIdentityWhere contractIsList
+    usesOptionalIdentity = usesIdentityWhere contractIsOptional
+    usesIdentityWhere shape emitNode =
       (.outboxField) p `notElem` ["messageId", "idempotencyKey"]
-        && (.outboxField) p `elem` listContractFields emitNode
-    listContractFields emitNode =
+        && (.outboxField) p `elem` contractFieldsWhere shape emitNode
+    contractFieldsWhere shape emitNode =
       [ (.name) field
       | contract <- specContracts spec,
         (.name) contract == (.contract) emitNode,
         event <- (.events) contract,
         (.name) event `elem` map (.event) ((.map) emitNode),
         field <- (.fields) event,
-        contractIsList ((.valueType) field)
+        shape ((.valueType) field)
       ]
     allowedOutboxFields emitNode =
-      Set.fromList ("messageId" : "idempotencyKey" : filter (`notElem` listContractFields emitNode) (mappedContractFields emitNode))
+      Set.fromList ("messageId" : "idempotencyKey" : filter (`notElem` contractFieldsWhere (not . isRequiredScalar) emitNode) (mappedContractFields emitNode))
+    isRequiredScalar CScalar {} = True
+    isRequiredScalar _ = False
     mappedContractFields emitNode =
       [ (.dslName) (resolveContractFieldIdentity field)
       | contract <- specContracts spec,
@@ -3895,13 +3919,13 @@ validateIntake languageContract i = concat [completeness, duplicateRows, inversi
   where
     il = locLine ((.loc) i)
     -- `decBodyStrict` reaches nothing but the pretty-printer: generated contract
-    -- codecs decode every declared body field as required and admit no lenient
+    -- codecs require every body field not declared Optional and admit no lenient
     -- mode, so `body strict` describes what happens and `body lenient` does not.
     decodePosture =
       [ mkSurfaceRefusal languageContract il DecodeBodyPostureUnsupported $
           "intake '"
             <> (.name) i
-            <> "' declares 'body lenient', but generated contract codecs decode a body strictly: every declared field is required and no lenient fallback is emitted. Write 'body strict' to describe what runs"
+            <> "' declares 'body lenient', but generated contract codecs decode a body strictly: every field not declared Optional is required and no lenient fallback is emitted. Write 'body strict' to describe what runs"
       | not ((.bodyStrict) ((.decode) i))
       ]
     rows = (.disposition) i

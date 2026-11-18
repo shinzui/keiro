@@ -2,6 +2,9 @@
 
 ## 2026-11-18
 
+* **Update**: IR-64 in progress under ExecPlan 345, which adds `Optional <scalar>` contract fields and `discriminator from envelope` to candidate Language 6.
+
+
 * **Addition**: IR-64 filed from mori://tan/agent-reputation-service: optional contract fields and contracts without a body discriminator, so a Keiro service can mirror an event owned by another producer instead of hand-writing its payload decoder.
 
 * **Addition**: IR-65 filed from mori://tan/agent-reputation-service: let delegated intake acknowledge a command that returned a typed no-op, since table mode can't run a Keiro command and delegated mode refuses commands that append no event.

@@ -1,0 +1,14 @@
+language keiro-dsl 5
+context contract-foreign-event-envelope-language5
+
+contract registration {
+  schemaVersion 1
+  discriminator from envelope
+
+  topic completed "registration.completed.v1"
+
+  event RegistrationCompleted on completed {
+    registrationId: typeid "registration"
+    occurredAt: text
+  }
+}

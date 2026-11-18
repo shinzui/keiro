@@ -9,7 +9,7 @@ where
 
 import Keiro.Dsl.Frontend.Internal (FrontendContext)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.LanguageVersion (LanguageFeature (ContractDeclaredIdSyntax, ContractListFieldSyntax, DelegatedInboxSyntax, FieldAliasSyntax))
+import Keiro.Dsl.LanguageVersion (LanguageFeature (ContractDeclaredIdSyntax, ContractEnvelopeDiscriminatorSyntax, ContractListFieldSyntax, ContractOptionalFieldSyntax, DelegatedInboxSyntax, FieldAliasSyntax))
 import Keiro.Dsl.Parser.Core
 import Text.Megaparsec
 
@@ -25,7 +25,16 @@ pContract context = do
   keyword "schemaVersion"
   sv <- boundedDecimal
   keyword "discriminator"
-  disc <- ident
+  disc <-
+    choice
+      [ do
+          -- `from` is reserved, so it can never be a body discriminator key.
+          fromKeyword <- withOwnedSpan (keyword "from")
+          requireLanguageFeatureAt context ContractEnvelopeDiscriminatorSyntax (spanOf fromKeyword)
+          keyword "envelope"
+          pure DiscriminatorEnvelope,
+        DiscriminatorBodyKey <$> ident
+      ]
   topics <- many pTopic
   events <- many pContractEvent
   _ <- symbol "}"
@@ -70,13 +79,19 @@ pContract context = do
               listKeyword <- withOwnedSpan (keyword "List")
               requireLanguageFeatureAt context ContractListFieldSyntax (spanOf listKeyword)
               CList <$> pContractScalarType,
+            do
+              -- `Optional` alone still names a declared ID, as `List` does.
+              _ <- try (lookAhead (keyword "Optional" *> notFollowedBy pContractTypeBoundary))
+              optionalKeyword <- withOwnedSpan (keyword "Optional")
+              requireLanguageFeatureAt context ContractOptionalFieldSyntax (spanOf optionalKeyword)
+              COptional <$> pContractScalarType,
             CScalar <$> pContractScalarType
           ]
       offset <- getOffset
       boundary <- optional (try (lookAhead pContractTypeBoundary))
       case boundary of
         Just () -> pure ty
-        Nothing -> failAt offset "contract field types admit typeid \"prefix\", text, int, a declared id, or List of one of those; nested containers, Optional, Map, and Set applications and records are not supported in public contracts"
+        Nothing -> failAt offset "contract field types admit typeid \"prefix\", text, int, a declared id, List of one of those, or Optional of one of those; nested containers, Optional List, List Optional, Map, and Set applications and records are not supported in public contracts"
     -- Fields may be adjacent on one line. Only a complete field head, including
     -- its aliases, proves the next identifier is not a list operand. This probe
     -- deliberately has no feature gates or dependency on declared ID names.

@@ -322,7 +322,7 @@ profileV5 :: SyntaxProfile
 profileV5 =
   SyntaxProfile
     "keiro-dsl/syntax-profile/5"
-    (Set.insert InputSourceSyntax $ Set.insert MappedRegisterConstructionSyntax $ Set.insert ContractListFieldSyntax (Set.insert ExplicitIdAdmissionDomainSyntax (Set.insert RefinedBase16Syntax (Set.insert TextSetSyntax (Set.insert CalendarDaySyntax (Set.insert BareStructuralMappingSyntax (Set.insert WorkqueueFifoHeadsSyntax (Set.insert KeyedMapSyntax (Set.insert ContractDeclaredIdSyntax (Set.insert ProcessReactionSyntax (Set.insert DelegatedInboxSyntax ((.features) profileV4))))))))))))
+    (Set.insert ContractEnvelopeDiscriminatorSyntax $ Set.insert ContractOptionalFieldSyntax $ Set.insert InputSourceSyntax $ Set.insert MappedRegisterConstructionSyntax $ Set.insert ContractListFieldSyntax (Set.insert ExplicitIdAdmissionDomainSyntax (Set.insert RefinedBase16Syntax (Set.insert TextSetSyntax (Set.insert CalendarDaySyntax (Set.insert BareStructuralMappingSyntax (Set.insert WorkqueueFifoHeadsSyntax (Set.insert KeyedMapSyntax (Set.insert ContractDeclaredIdSyntax (Set.insert ProcessReactionSyntax (Set.insert DelegatedInboxSyntax ((.features) profileV4))))))))))))
 
 runtimeProfileV1 :: RuntimeSemanticsProfile
 runtimeProfileV1 =
@@ -419,6 +419,8 @@ data LanguageFeature
   | MappedRegisterConstructionSyntax
   | ContractListFieldSyntax
   | InputSourceSyntax
+  | ContractOptionalFieldSyntax
+  | ContractEnvelopeDiscriminatorSyntax
   deriving stock (Eq, Ord, Show)
 
 -- | The first released contract that owns each grammar feature.

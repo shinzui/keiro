@@ -127,6 +127,12 @@ libraryTests = do
     [summary | summary@(_, _, "projects", _, _, _) <- edgeSummaries topology]
       `shouldBe` [("process", "IncidentReaction", "projects", "aggregate", "Incident", [("table", String "incident_board")])]
 
+  it "writes a null discriminator for an envelope-discriminated contract" $ do
+    source <- TE.decodeUtf8 <$> BS.readFile "test/fixtures/contract-foreign-event.keiro"
+    topology <- inlineTopology "contract-foreign-event.keiro" source
+    [(node.name, KeyMap.lookup "discriminator" node.details) | node <- topology.nodes, nodeKindText node.kind == "contract"]
+      `shouldBe` [("audit", Just (String "messageType")), ("registration", Just Null)]
+
   it "emits one edge per operation form" $ do
     topology <- inlineTopology "operations.keiro" operationsSource
     [(fromName, relation, toKind, toName, attributes) | ("operation", fromName, relation, toKind, toName, attributes) <- edgeSummaries topology]

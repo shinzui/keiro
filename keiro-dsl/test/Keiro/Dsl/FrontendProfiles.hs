@@ -82,6 +82,8 @@ frontendProfilesSpec = do
               WorkqueueFifoHeadsSyntax -> version 6
               ContractDeclaredIdSyntax -> version 6
               ContractListFieldSyntax -> version 6
+              ContractOptionalFieldSyntax -> version 6
+              ContractEnvelopeDiscriminatorSyntax -> version 6
               KeyedMapSyntax -> version 6
               BareStructuralMappingSyntax -> version 6
               CalendarDaySyntax -> version 6
@@ -210,6 +212,8 @@ featureCases =
     FeatureCase WorkqueueFifoHeadsSyntax "fifo-heads" (featureBody WorkqueueFifoHeadsSyntax),
     FeatureCase ContractDeclaredIdSyntax "ProfileId" (featureBody ContractDeclaredIdSyntax),
     FeatureCase ContractListFieldSyntax "List" (featureBody ContractListFieldSyntax),
+    FeatureCase ContractOptionalFieldSyntax "Optional" (featureBody ContractOptionalFieldSyntax),
+    FeatureCase ContractEnvelopeDiscriminatorSyntax "from" (featureBody ContractEnvelopeDiscriminatorSyntax),
     FeatureCase BareStructuralMappingSyntax "value" (featureBody BareStructuralMappingSyntax),
     FeatureCase CalendarDaySyntax "Day" (featureBody CalendarDaySyntax),
     FeatureCase TextSetSyntax "Set" (featureBody TextSetSyntax),
@@ -299,6 +303,9 @@ featureBody = \case
         "}"
       ]
   ContractListFieldSyntax -> T.replace "profileId: ProfileId" "profileIds: List ProfileId" (featureBody ContractDeclaredIdSyntax)
+  -- Literal scalars only, so the declared-ID gate cannot fire first.
+  ContractOptionalFieldSyntax -> T.replace "id ProfileId prefix=profile\n" "" (T.replace "profileId: ProfileId" "note: Optional text" (featureBody ContractDeclaredIdSyntax))
+  ContractEnvelopeDiscriminatorSyntax -> T.replace "id ProfileId prefix=profile\n" "" (T.replace "profileId: ProfileId" "profileId: typeid \"profile\"" (T.replace "discriminator kind" "discriminator from envelope" (featureBody ContractDeclaredIdSyntax)))
   ContractDeclaredIdSyntax ->
     T.unlines
       [ "context profile",
@@ -376,7 +383,7 @@ featureBody = \case
       ]
 
 allFeatures :: [LanguageFeature]
-allFeatures = [MappedRegisterConstructionSyntax, ContractListFieldSyntax, ExplicitIdAdmissionDomainSyntax, NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax, ProcessReactionSyntax, WorkqueueFifoHeadsSyntax, ContractDeclaredIdSyntax, KeyedMapSyntax, BareStructuralMappingSyntax, CalendarDaySyntax, TextSetSyntax, RefinedBase16Syntax]
+allFeatures = [MappedRegisterConstructionSyntax, ContractListFieldSyntax, ContractOptionalFieldSyntax, ContractEnvelopeDiscriminatorSyntax, ExplicitIdAdmissionDomainSyntax, NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax, ProcessReactionSyntax, WorkqueueFifoHeadsSyntax, ContractDeclaredIdSyntax, KeyedMapSyntax, BareStructuralMappingSyntax, CalendarDaySyntax, TextSetSyntax, RefinedBase16Syntax]
 
 processReactionFeatureBody :: Text
 processReactionFeatureBody =

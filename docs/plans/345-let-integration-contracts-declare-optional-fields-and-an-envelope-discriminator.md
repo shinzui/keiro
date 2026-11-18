@@ -10,6 +10,12 @@ provenance:
     model: "claude-fable-5-2"
     harness: "claude-code"
     at: 2026-11-18T16:27:00Z
+  revisions:
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-18T18:22:01Z
+      mode: "implement"
+      note: "Milestones 1-4 implemented"
 ---
 
 # Let integration contracts declare optional fields and an envelope discriminator
@@ -70,18 +76,25 @@ envelope whose `keiro-event-type` is not `RegistrationCompleted` is rejected.
 
 ## Progress
 
-- [ ] M1: Optional contract fields. A Language 6 contract with `Optional <scalar>` fields
+- [x] M1: Optional contract fields. A Language 6 contract with `Optional <scalar>` fields
   passes `keiro-dsl check`, pretty-prints back to itself, and scaffolds a `Maybe` field with
   an omit-when-absent encoder and an absent-or-null decoder. Language 5 refuses the syntax
   with `LanguageFeatureRequiresVersion`. `Optional List …` and `List Optional …` are refused.
   An optional field used as an identity is refused, and `diff` classifies every optional
   transition as decided in the Decision Log. `keiro-dsl:test:keiro-dsl-test` passes.
-- [ ] M2: Envelope discriminator. A contract with `discriminator from envelope` checks,
+  Done 2026-11-18, committed with M2 because both change `Grammar.hs` records: the base
+  fixture checks `OK`, both Language 5 fixtures fail with `LanguageFeatureRequiresVersion`
+  on the feature's line, `pretty` output re-checks `OK`, and the suite reports 977
+  examples, 0 failures.
+- [x] M2: Envelope discriminator. A contract with `discriminator from envelope` checks,
   pretty-prints and scaffolds a decoder keyed by the envelope's event type, with no
   discriminator key on the wire. `Keiro.Integration.Event.decodeJsonIntegrationEventWith`
   exists in keiro-core. `diff` reports a change of discriminator source as breaking, and
   `keiro-dsl topology` exports such a contract with `discriminator: null`.
   `keiro-dsl:test:keiro-dsl-test` and `nix develop -c just topology-schema-validate` pass.
+  Done 2026-11-18: the schema gate reports 5 goldens valid and 4 examples as expected; the
+  new `contract-envelope-discriminator.valid.json` example fails against the unamended
+  schemas, so it guards the change.
 - [ ] M3: Compiled proof. The suite `keiro-dsl-conformance-contract-foreign-event` compiles
   the generated modules and passes every check listed in Validation and Acceptance, covering
   IR-64's AC-1 and AC-2 in a running program. `scripts/check-conformance-corpus.sh` and
@@ -115,6 +128,21 @@ These were found while drafting on 2026-11-18 and shaped the design.
   when this plan was written, in `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`,
   `keiro-dsl/test/Main.hs` and many committed corpus files. The corpus check refuses a dirty
   corpus, so that work must be committed before Milestone 3.
+- (Implementation, 2026-11-18) Plan 337's work had been committed by the time
+  implementation began; the tree was clean.
+- (Implementation) A Language 6 test asserted that `Optional text` is refused even when an id
+  named `Optional` is declared (`rejects genuine container applications even when their names
+  are declared IDs` in `keiro-dsl/test/Main.hs`). Now that `Optional` is a container, it
+  reads as an optional field whatever ids exist, exactly as `List text` already did. The test
+  now excludes `Optional text` the way it excluded `List text`, and a new test pins the three
+  readings of `value: Optional`, `values: Optional text` and `nested: Optional Optional`.
+- (Implementation) In envelope mode `explicitParseField` is used only by typed required
+  scalars and lists, so its import is conditional there; an envelope contract whose events
+  all lack fields binds `go _` to stay warning-free. Both are covered by unit tests.
+- (Implementation) aeson 2.2's `(.:?)` is `explicitParseFieldMaybe parseJSON`, and
+  `explicitParseFieldMaybe` hands a present value to the `Maybe` instance's `liftParseJSON`,
+  which maps `null` to `Nothing` (`aeson/src/Data/Aeson/Types/FromJSON.hs` in the aeson
+  checkout Mori lists). So both decoders read an omitted key and `null` as absent.
 
 
 ## Decision Log

@@ -4107,7 +4107,7 @@ emitContractGen ctx languageContract genPrefix nominalLeaves c =
              -- contract whose every field is one never uses (.:) and would warn
              -- under -Wunused-imports.
              "import Data.Aeson ("
-               <> T.intercalate ", " (["Value", "object", "withObject", "withText"] <> ["(.:)" | usesPlainFieldDecode] <> ["parseJSON" | hasListFields] <> ["(.=)"])
+               <> T.intercalate ", " (["Value", "object", "withObject"] <> ["withText" | isJust bodyDiscriminator] <> ["(.:)" | usesPlainFieldDecode] <> ["(.:?)" | usesPlainOptionalDecode] <> ["parseJSON" | hasListFields] <> ["(.=)"])
                <> ")",
              aesonTypesImport
            ]
@@ -4123,7 +4123,7 @@ emitContractGen ctx languageContract genPrefix nominalLeaves c =
            ]
         ++ topicConstants
         ++ [ "",
-             "-- the closed payload set (discriminated by " <> tshow ((.discriminator) c) <> ")"
+             "-- the closed payload set (discriminated by " <> maybe "the envelope's event type" tshow bodyDiscriminator <> ")"
            ]
         ++ [emitPayloadAdt languageContract contractValueType payloadTy ((.events) c)]
         ++ [ "",
@@ -4136,14 +4136,24 @@ emitContractGen ctx languageContract genPrefix nominalLeaves c =
              "encode" <> payloadTy <> " = \\case"
            ]
         ++ concatMap encodeArm ((.events) c)
-        ++ [ "",
-             "parse" <> payloadTy <> " :: Value -> Either Text " <> payloadTy,
-             "parse" <> payloadTy <> " = mapLeftText . parseEither (withObject " <> tshow payloadTy <> " go)",
-             "  where",
-             "    go o = do",
-             "      kind <- explicitParseField (withText " <> tshow ((.discriminator) c) <> " validateMessageType) o " <> tshow ((.discriminator) c),
-             "      case kind of"
-           ]
+        ++ [""]
+        ++ ( case bodyDiscriminator of
+               Just key ->
+                 [ parseName <> " :: Value -> Either Text " <> payloadTy,
+                   parseName <> " = mapLeftText . parseEither (withObject " <> tshow payloadTy <> " go)",
+                   "  where",
+                   "    go o = do",
+                   "      kind <- explicitParseField (withText " <> tshow key <> " validateMessageType) o " <> tshow key
+                 ]
+               Nothing ->
+                 [ parseName <> " :: Text -> Value -> Either Text " <> payloadTy,
+                   parseName <> " eventType = mapLeftText . parseEither (withObject " <> tshow payloadTy <> " go)",
+                   "  where",
+                   "    go " <> (if any (not . null . (.fields)) ((.events) c) then "o" else "_") <> " = do",
+                   "      kind <- validateMessageType eventType"
+                 ]
+           )
+        ++ ["      case kind of"]
         ++ concatMap decodeArm ((.events) c)
         ++ [ "        _ -> fail \"validated message type was not handled\"",
              "",
@@ -4166,6 +4176,18 @@ emitContractGen ctx languageContract genPrefix nominalLeaves c =
     usesPlainFieldDecode = any (any (isPlainScalar . (.valueType)) . (.fields)) ((.events) c)
     isPlainScalar (CScalar scalar) = not (isTypedTypeId scalar)
     isPlainScalar CList {} = False
+    isPlainScalar COptional {} = False
+    usesPlainOptionalDecode = anyFieldType (\case COptional scalar -> not (isTypedTypeId scalar); _ -> False)
+    usesTypedOptionalDecode = anyFieldType (\case COptional scalar -> isTypedTypeId scalar; _ -> False)
+    -- The body discriminator is the only use of explicitParseField that does
+    -- not come from a field, so an envelope-discriminated contract imports it
+    -- only for typed required scalars and lists.
+    usesExplicitParseField =
+      isJust bodyDiscriminator
+        || anyFieldType (\case CScalar scalar -> isTypedTypeId scalar; CList {} -> True; COptional {} -> False)
+    anyFieldType predicate = any (any (predicate . (.valueType)) . (.fields)) ((.events) c)
+    bodyDiscriminator = contractBodyDiscriminator c
+    parseName = "parse" <> payloadTy <> maybe "As" (const "") bodyDiscriminator
     moduleName = genPrefix <> ".Contract"
     declaredLeaves =
       Map.fromList
@@ -4201,6 +4223,7 @@ emitContractGen ctx languageContract genPrefix nominalLeaves c =
       renderReferenceOrDie importPlan (declaredLeafHelperReference prefix (declaredLeaf name))
     contractValueType (CScalar scalar) = contractScalarType scalar
     contractValueType (CList scalar) = "[" <> contractScalarType scalar <> "]"
+    contractValueType (COptional scalar) = "(Maybe " <> contractScalarType scalar <> ")"
     contractScalarType CText = "Text"
     contractScalarType CInt = "Int"
     contractScalarType (CTypeId prefix)
@@ -4224,7 +4247,7 @@ emitContractGen ctx languageContract genPrefix nominalLeaves c =
         ++ ["  , " <> lowerFirst alias <> "Topic" | (alias, _) <- (.topics) c]
         ++ [ "  , messageTypeOf",
              "  , encode" <> payloadTy,
-             "  , parse" <> payloadTy,
+             "  , " <> parseName,
              "  ) where"
            ]
     topicConstants
@@ -4240,15 +4263,44 @@ emitContractGen ctx languageContract genPrefix nominalLeaves c =
     isLiteralTypedTypeId (CTypeId prefix) = isJust (contractIdDomainContractFor languageContract prefix)
     isLiteralTypedTypeId _ = False
     aesonTypesImport =
-      "import Data.Aeson.Types (Parser, explicitParseField, parseEither"
-        <> (if hasListFields then ", (<?>)" else "")
+      "import Data.Aeson.Types ("
+        <> T.intercalate
+          ", "
+          ( ["Parser"]
+              <> ["explicitParseField" | usesExplicitParseField]
+              <> ["explicitParseFieldMaybe" | usesTypedOptionalDecode]
+              <> ["parseEither"]
+              <> ["(<?>)" | hasListFields]
+          )
         <> ")"
-    encodeArm e =
-      [ "  " <> (.name) e <> " payload ->",
-        "    object"
-      ]
-        ++ objectEntriesFor ((tshow ((.discriminator) c) <> " .= (" <> tshow ((.name) e) <> " :: Text)") : map encodeField ((.fields) e))
-        ++ ["      ]"]
+    encodeArm e
+      | null entries && null optionalFields = [armHead, "    object []"]
+      | null optionalFields = [armHead, "    object"] ++ objectEntriesFor entries ++ ["      ]"]
+      | otherwise =
+          [armHead, "    object"]
+            ++ ( case objectEntriesFor entries of
+                   [] -> []
+                   firstEntry : rest -> ("      ( " <> T.drop 6 firstEntry) : map ("  " <>) rest ++ ["        ]"]
+               )
+            ++ [ (if index == 0 && null entries then "      ( " else "          <> ") <> optionalEntry field
+               | (index, field) <- zip [(0 :: Int) ..] optionalFields
+               ]
+            ++ ["      )"]
+      where
+        armHead = "  " <> (.name) e <> " payload ->"
+        optionalFields = filter (contractIsOptional . (.valueType)) ((.fields) e)
+        discriminatorEntry = [tshow key <> " .= (" <> tshow ((.name) e) <> " :: Text)" | Just key <- [bodyDiscriminator]]
+        entries = discriminatorEntry <> map encodeField (filter (not . contractIsOptional . (.valueType)) ((.fields) e))
+    optionalEntry field =
+      "["
+        <> tshow ((.wireKey) identity)
+        <> " .= "
+        <> maybe "value" (<> " value") (elementEncoder (contractScalar ((.valueType) field)))
+        <> " | Just value <- [payload."
+        <> (.selector) identity
+        <> "]]"
+      where
+        identity = resolveContractFieldIdentity field
     lead 0 kv = "      [ " <> kv
     lead _ kv = "      , " <> kv
     objectEntriesFor entries
@@ -4285,6 +4337,9 @@ emitContractGen ctx languageContract genPrefix nominalLeaves c =
     elementEncoder _ = Nothing
     decodeField field = case (.valueType) field of
       CList scalar -> "explicitParseField (parseContractList " <> elementParser scalar <> ") o " <> tshow wireKey
+      COptional scalar
+        | isTypedTypeId scalar -> "explicitParseFieldMaybe " <> elementParser scalar <> " o " <> tshow wireKey
+        | otherwise -> "o .:? " <> tshow wireKey
       CScalar scalar -> case scalar of
         CTypeId prefix
           | isJust (contractIdDomainContractFor languageContract prefix) ->

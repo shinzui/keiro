@@ -6,9 +6,10 @@ description: >-
   discriminator, so a Keiro service can't mirror an event published by a service that doesn't
   use Keiro's contract conventions. It must hand-write the payload decoder behind Keiro's
   envelope and inbox runner instead.
-timestamp: 2026-11-18T16:13:37Z
+timestamp: 2026-11-18T18:21:57Z
 requestId: IR-64
-status: proposed
+status: in-progress
+plan: docs/plans/345-let-integration-contracts-declare-optional-fields-and-an-envelope-discriminator.md
 origin: mori://tan/agent-reputation-service
 relatedPlans:
   - mori://tan/agent-reputation-service/plans/8-resolve-invitations-from-registration-service-v2-completion-events

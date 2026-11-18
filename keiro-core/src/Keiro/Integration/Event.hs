@@ -21,6 +21,7 @@ module Keiro.Integration.Event
     -- * JSON convenience helpers
     encodeJsonIntegrationEvent,
     decodeJsonIntegrationEvent,
+    decodeJsonIntegrationEventWith,
 
     -- * Wire mapping
     integrationPayload,
@@ -289,6 +290,33 @@ decodeJsonIntegrationEvent event = do
     Right value -> Right (value :: Value)
   case parseEither parseJSON parsed of
     Left err -> Left (DecodeFailed (Text.pack err))
+    Right value -> Right value
+
+-- | Decode a JSON payload with a parser that also receives the envelope's
+-- 'eventType'.
+--
+-- This joins an envelope to a decoder whose payload carries no body
+-- discriminator, such as the @parse\<Contract\>PayloadAs@ function that
+-- keiro-dsl generates for a contract declared with
+-- @discriminator from envelope@. The parser chooses the event from the
+-- event type and should reject a type it does not declare.
+--
+-- Returns 'UnsupportedContentType' if the envelope's 'contentType' is not
+-- 'ApplicationJson', 'MalformedPayload' if the bytes are not valid JSON, and
+-- 'DecodeFailed' with the parser's message if the parser returns 'Left'.
+decodeJsonIntegrationEventWith ::
+  (Text -> Value -> Either Text a) ->
+  IntegrationEvent ->
+  Either IntegrationEventError a
+decodeJsonIntegrationEventWith parser event = do
+  case event ^. #contentType of
+    ApplicationJson -> pure ()
+    OtherContentType raw -> Left (UnsupportedContentType raw)
+  parsed <- case Aeson.eitherDecodeStrict (event ^. #payloadBytes) of
+    Left err -> Left (MalformedPayload (Text.pack err))
+    Right value -> Right (value :: Value)
+  case parser (event ^. #eventType) parsed of
+    Left err -> Left (DecodeFailed err)
     Right value -> Right value
 
 eventIdToUuid :: EventId -> UUID.UUID
