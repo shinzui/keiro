@@ -6,8 +6,8 @@ docId: DOC-34
 tags: [keiro, dsl, validation, evolution, reference]
 generated:
   by: anthropic-claude-code/claude-opus-5-5
-  at: 2026-11-18T18:28:55Z
-timestamp: 2026-11-18T18:28:55Z
+  at: 2026-11-18T21:30:13Z
+timestamp: 2026-11-18T21:30:13Z
 ---
 
 # Keiro DSL Validation and Evolution
@@ -95,8 +95,9 @@ surfaces include:
   identity (`ContractListFieldUsedAsKey`), nor can `Optional` payload fields
   (`ContractOptionalFieldUsedAsKey`), while canonical envelope identities
   retain precedence over colliding payload names. Across revisions, `diff`
-  reports an added `Optional` contract field as the additive
-  `ContractOptionalFieldAdded`;
+  reports an added `Optional` contract field as `ContractOptionalFieldAdded`,
+  a wire-compatible warning with a `consumer-build` advisory that passes the
+  default gate;
 - queue payload vocabulary, bounded durations, identity fixtures,
   FIFO/group/provisioning rules, complete disposition, and dispatch
   read-model/queue references;

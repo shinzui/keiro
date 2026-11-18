@@ -6,7 +6,7 @@ docId: DOC-29
 tags: [keiro, dsl, integration, kafka, reference]
 generated:
   by: anthropic-claude-code/claude-opus-5-5
-  at: 2026-11-18T18:28:55Z
+  at: 2026-11-18T21:30:13Z
 ---
 
 # Keiro DSL Integration Contracts
@@ -140,9 +140,10 @@ event MemberNoted on notes {
 
 The generated record holds `note :: Maybe Text`. On the wire an absent value is an
 omitted key: the encoder never writes `null`. The decoder reads an omitted key and an
-explicit `null` as `Nothing`. Any other value must satisfy the scalar's parser, so
-`"note": 7` or a wrong-prefix ID rejects the payload at `$.note`; a present declared ID
-keeps its admission domain. A consumer in any language can apply the same rule, which
+explicit `null` as `Nothing`. Any other value must satisfy the scalar's parser, and the
+error names the field's own path: `"note": 7` rejects the payload at `$.note`, and a
+wrong-prefix `referrerId` rejects it at `$.referrerId`. A present declared ID keeps its
+admission domain. A consumer in any language can apply the same rule, which
 JSON Schema states as a property that is not required and admits `null`. Aliases work as
 for any field: `note haskell memberNote as "member_note": Optional text`.
 
@@ -155,16 +156,17 @@ that may be absent identifies nothing, and the checker reports
 applies, and a name that is a list in any selected event reports
 `ContractListFieldUsedAsKey` instead, so one mistake yields one diagnostic.
 
-Evolution follows from the wire rule:
+Evolution follows from the wire rule. The rollout column is the order `keiro-dsl diff
+--explain` prints; see [Deploy Ordering](deploy-ordering.md#7-coordinate-integration-contracts-manually).
 
-| Change | Classification |
-| --- | --- |
-| add an `Optional` field | additive `ContractOptionalFieldAdded`; no `schemaVersion` bump needed |
-| required to `Optional` | breaking `ContractFieldChanged`: deployed consumers still require the key |
-| `Optional` to required | breaking `ContractFieldChanged`: retained messages that omit the key no longer decode |
-| change the scalar under `Optional`, or `Optional` to or from `List` | breaking `ContractFieldChanged` |
-| `Optional typeid "p"` to or from `Optional DeclaredId` | build-only when prefix and admission are unchanged, as for scalars |
-| remove an `Optional` field | breaking `ContractFieldChanged`, like any removed field |
+| Change | Classification | Rollout |
+| --- | --- | --- |
+| add an `Optional` field | warning `ContractOptionalFieldAdded`: `public-consumer=compatible`, `consumer-build=advisory`; no `schemaVersion` bump needed, and the default gate passes | any order; re-scaffold and recompile, because the generated constructor gains a `Maybe` argument |
+| required to `Optional` | breaking `ContractFieldChanged`: deployed consumers still require the key | `producer-last`: every reader tolerates omission before any writer drops the key |
+| `Optional` to required | breaking `ContractFieldChanged`: retained messages that omit the key no longer decode | `producer-first`, `drain-required`: writers that supply the key deploy first, then retained messages without it drain before the stricter reader runs |
+| change the scalar under `Optional`, or `Optional` to or from `List` | breaking `ContractFieldChanged` | `producer-last` |
+| `Optional typeid "p"` to or from `Optional DeclaredId` | build-only when prefix and admission are unchanged, as for scalars | none; recompile consumers |
+| remove an `Optional` field | breaking `ContractFieldChanged`, like any removed field | `producer-last` |
 
 ### Payloads without a body discriminator
 
@@ -217,8 +219,10 @@ It refuses a non-JSON content type with `UnsupportedContentType`, reports unpars
 as `MalformedPayload`, and reports the parser's `Left`, including an undeclared event
 type, as `DecodeFailed`. Because the body has no discriminator key, a field may use the
 wire key `messageType`. Changing between a body key and `from envelope` is breaking
-`ContractDiscriminatorChanged`, and `keiro-dsl topology` exports such a contract with
-`discriminator: null`.
+`ContractDiscriminatorChanged`. A body key to `from envelope` is `producer-last`, because
+old readers still require the key; `from envelope` to a body key is `producer-first` with
+`drain-required`, because the new reader requires a key old producers never wrote.
+`keiro-dsl topology` exports such a contract with `discriminator: null`.
 
 Mapping another producer's own header names onto Keiro's envelope is out of scope: intake
 `bind … from header` rows stay descriptive, so a consumer of such a producer rebuilds the

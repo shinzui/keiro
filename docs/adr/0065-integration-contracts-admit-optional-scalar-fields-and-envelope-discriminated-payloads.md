@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Integration contracts admit optional scalar fields and envelope-discriminated payloads
 description: A public contract field may be Optional of one scalar, absent as an omitted key and read from an omitted key or null, and a contract may take its event type from the envelope instead of a body key.
-timestamp: 2026-11-18T18:27:51Z
+timestamp: 2026-11-18T21:30:13Z
 docId: ADR-65
 status: Accepted
 date: 2026-11-18
@@ -19,8 +19,12 @@ contract scalars and kept `Optional` out until the absent-key versus `null` ques
 [IR-64](../improvement-requests/let-integration-contracts-describe-events-owned-by-other-producers.md)
 supplied the case: `mori://tan/registration-service-v2` publishes `RegistrationCompleted`
 on `registration.completed.v1` as a bare JSON object, omits two fields when they are
-unknown, and names the event only in the Kafka `keiro-event-type` header. A Keiro consumer
-could not declare that event, so it hand-wrote the payload decoder.
+unknown, and names the event only in a Kafka header. That header is the producer's own
+`event-type`, with the value `RegistrationCompleted`, not Keiro's canonical
+`keiro-event-type`; the consumer's adapter maps it onto `IntegrationEvent.eventType`, and
+`mori://tan/registration-service-v2/okf/improvement-requests/concepts/IR-6` asks the
+producer to add `keiro-event-type` beside it. A Keiro consumer could not declare the
+event, so it hand-wrote the payload decoder.
 
 ## Decision
 
@@ -45,11 +49,20 @@ An optional field is never a publisher `outboxId` or an intake `dedupe` key:
 precedence over payload fields, and a name that is a list in one selected event reports
 `ContractListFieldUsedAsKey` instead, so one mistake yields one diagnostic.
 
-Evolution: adding an optional field is the additive `ContractOptionalFieldAdded` and needs
-no `schemaVersion` bump, because generated decoders ignore unknown keys and read a missing
-optional key as absent. Changing a field between required and optional is breaking
-`ContractFieldChanged` in both directions, and the detail names the direction: deployed
-consumers still require the key, or retained messages that omit it no longer decode.
+Evolution: adding an optional field is `ContractOptionalFieldAdded` and needs no
+`schemaVersion` bump, because generated decoders ignore unknown keys and read a missing
+optional key as absent. Its vector is `public-consumer=compatible` with no rollout entry,
+and `consumer-build=advisory`, because the regenerated payload constructor gains a `Maybe`
+argument that every caller must supply; it prints as a warning and passes the default gate.
+A `breaking` build verdict was rejected: it would fail the gate for the one wire-compatible
+field addition, ranking it above a required field added with a `schemaVersion` bump, and the
+constructor change only reaches a service that regenerates its own module. Changing a field
+between required and optional is breaking `ContractFieldChanged` in both directions, and the
+detail names the direction. Required to optional keeps `producer-last`: deployed consumers
+still require the key, so every reader must tolerate omission before any writer drops it.
+Optional to required is `producer-first` with `drain-required`: the new reader requires a
+key old producers omit, so writers that supply it deploy first, and retained messages that
+omit it drain or are migrated before the stricter reader runs.
 Changing the scalar under `Optional`, or between `Optional` and `List`, is breaking. A
 literal-to-declared move under `Optional` is build-only exactly when it is for scalars and
 lists: equal prefix and equal resolved admission domain. Removing a field stays breaking.
@@ -64,7 +77,13 @@ one event, and rejects a type the contract does not declare; an event's declared
 equal the envelope's event type exactly. keiro-core's `decodeJsonIntegrationEventWith`
 passes an envelope's `eventType` and decoded JSON body to such a parser, so the generated
 module stays free of envelope types. A field may then use the wire key `messageType`.
-Changing between a body key and the envelope is breaking `ContractDiscriminatorChanged`.
+Changing between a body key and the envelope is breaking `ContractDiscriminatorChanged`,
+with the same rollout rule: body key to envelope is `producer-last`, because old readers
+still require the key, and envelope to body key is `producer-first` with `drain-required`,
+because the new reader requires a key old producers never wrote. `keiro-dsl diff --explain`
+renders each vector's rollout as its remedy, and the conformance suite
+`keiro-dsl-conformance-contract-rollout` compiles both versions of a contract and checks
+that each reported order is the one their decoders require.
 
 The service topology writes `discriminator: null` for an envelope-discriminated contract.
 Both topology schemas were amended in place to admit `null`, with no new schema id: the

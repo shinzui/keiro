@@ -7,7 +7,7 @@ tags: [keiro, deployment, compatibility, operations]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:06:27Z
-timestamp: 2026-10-27T21:15:00Z
+timestamp: 2026-11-18T21:30:13Z
 ---
 
 # Deploy Ordering
@@ -28,7 +28,8 @@ again because of a crash before checkpoint, a visibility timeout, or a consumer
 rebalance.
 
 `keiro-dsl diff` names these procedures in compatibility vectors as
-`stop-the-world`, `workers-first`, `drain-required`, and `producer-last`.
+`stop-the-world`, `workers-first`, `drain-required`, `producer-last`, and
+`producer-first`.
 Multiple names may appear when one finding crosses more than one durable
 boundary; an absent rollout entry means compatibility is not conditional on a
 deployment order.
@@ -256,6 +257,19 @@ both old and new shapes, then deploy producers of the new shape, and retire the
 old decoder only after the backlog drains. Bump the contract
 `schemaVersion` whenever the DSL requires it. A new topic or explicit
 version-dispatch path is safer for changes that cannot be dual-decoded.
+
+For a contract finding, `producer-last` means every consumer of the new contract
+deploys before any producer of it: the new reader accepts what old producers
+write, but old readers reject the new shape. `producer-first` means the reverse.
+It applies when the new generated reader requires a body key that old producers
+omit, such as an `Optional` field made required or `discriminator from envelope`
+changed to a body key, and when a TypeID domain tightens. Deploy producers that
+write the key first, while old readers still ignore it; with `drain-required`,
+drain or migrate retained messages that lack it before any consumer runs the
+stricter reader. `keiro-dsl diff --explain` prints these steps as remedies. An
+added `Optional` field has no rollout entry; its `consumer-build=advisory`
+verdict asks you to re-scaffold and recompile, because the generated payload
+constructor gains a `Maybe` argument.
 
 Canonical producers now derive deterministic message IDs from the source event
 and emission index instead of minting random TypeIDs. There is no automatic

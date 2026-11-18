@@ -2,6 +2,9 @@
 
 ## 2026-11-18
 
+* **Update**: Amend ADR-65: the registration producer names the event in its own event-type header, and contract evolution records the producer-first and producer-last rollouts and the consumer-build advisory for an added Optional field (plan 345 M5).
+
+
 * **Addition**: ADR-65: integration contracts admit Optional scalar fields (omitted key on write, omitted key or null on read) and envelope-discriminated payloads decoded through decodeJsonIntegrationEventWith (plan 345).
 
 * **Update**: ADR-20: add the opt-in runServiceBehaviorChecks facade action behind the generated runner's --behavior-complete flag; the default run is unchanged (plan 337).
