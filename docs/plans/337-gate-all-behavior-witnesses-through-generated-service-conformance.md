@@ -112,7 +112,7 @@ Tests actually run, all inside `nix develop` at the implementation commit:
   - `keiro-dsl-conformance-behavior-complete` and `keiro-workspace-proof-conformance` (default mode) both passed.
   - `just conformance-corpus-policy` passed (`conformance corpus: ok`).
   - `keiro-dsl/test/behavior-complete-mutation-test.sh` caught all 13 report mutations, then stopped at "reset source-wide predicate edge indices". That mutation's `perl` target `let edgeIndex = layoutOutgoingIndex entry` has been absent from `keiro-dsl/src` since `7b06bc52`, before this plan's baseline `43c9cdcb`, so the mutation is a no-op unrelated to this plan; the script is not part of `just verify`.
-  - `just verify` first failed on a stale `keiro-dsl/generated-haskell-edition-idiomatic-v2.md`. The newsurface facade had been updated after the inventory was regenerated, so the inventory was regenerated again.
+  - `just verify` first failed on a stale `keiro-dsl/generated-haskell-edition-idiomatic-v2.md`. The newsurface facade had been updated after the inventory was regenerated, so the inventory was regenerated again. On `2c3e5333`, `just verify` then passed end to end, with exit 0.
 
 Guarantees, each with the check that shows it:
 
