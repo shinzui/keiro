@@ -325,10 +325,12 @@ class ConsumerControls(unittest.TestCase):
         def fail(command, check=True):
             calls.append(command)
             return 1 if "--dry-run" in command else 0
-        with self.assertRaisesRegex(RuntimeError, "after 5 attempt"):
+        # The bound and delay are the module's constants, so widening the
+        # index-lag window does not silently invalidate this test.
+        with self.assertRaisesRegex(RuntimeError, f"after {consumer.ATTEMPTS} attempt"):
             consumer.solve(["cabal"], Path("proof"), "published", fail, sleeps.append)
-        self.assertEqual(len(calls), 10)
-        self.assertEqual(sleeps, [15] * 4)
+        self.assertEqual(len(calls), 2 * consumer.ATTEMPTS)
+        self.assertEqual(sleeps, [consumer.INDEX_DELAY] * (consumer.ATTEMPTS - 1))
         self.assertTrue(all("--dry-run" in c for c in calls if "build" in c))
 
     def test_staged_solve_is_not_retried(self):
