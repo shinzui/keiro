@@ -16,12 +16,22 @@ provenance:
       at: 2026-11-18T19:16:00Z
       verdict: "changes-requested"
       note: "Original draft weakens AC-2, conflates receipt identities and can acknowledge without winning a durable receipt under concurrent delivery or retention."
+    - model: "claude-fable-5-2"
+      harness: "claude-code"
+      at: 2026-11-18T19:30:24Z
+      verdict: "changes-requested"
+      note: "Revision is sound on replay stability, scoped identity and strict insert; open: rejection path skips marker recheck, row key has no pinned vector, access-control fixture and record-migration inventories are unspecified, table-path perf gate unnamed."
   revisions:
     - model: "gpt-6.2-astra"
       harness: "codex-cli"
       at: 2026-11-18T19:16:28Z
       mode: "update"
       note: "Specify replay-stable no-ops, scoped receipt identity, race-safe classification, strict insert evidence and reproducible DSL conformance."
+    - model: "claude-fable-5-2"
+      harness: "claude-code"
+      at: 2026-11-18T20:08:32Z
+      mode: "update"
+      note: "Recheck marker on rejection, export and pin the no-op row key, specify access-control setup, add record-migration refresh and the table-mode bench gate."
 ---
 
 # Let delegated intake acknowledge a command that was a typed no-op
@@ -97,23 +107,42 @@ This plan implements improvement request IR-65,
   exhaustive match.
   Date: 2026-11-18
 
-- Store a no-op as an ordinary completed inbox row. Derive its key from the same marker
-  used for accepted commands, so consumers, target streams and operations keep their own
-  receipts even when they share a database and receive the same message. Preserve the
-  envelope source for inspection. Adopters reserve the row-key prefix specified in
-  Interfaces and Dependencies for this adapter. The existing inbox table needs no migration.
+- Decision: Store a no-op as an ordinary completed inbox row whose key is derived from the
+  same marker used for accepted commands. Preserve the envelope source for inspection.
+  Adopters reserve the row-key prefix specified in Interfaces and Dependencies for this
+  adapter. The existing inbox table needs no migration.
+  Rationale: Deriving the key from the marker lets consumers, target streams and operations
+  keep their own receipts even when they share a database and receive the same message.
   Date: 2026-11-18
 
-- Require a replay-stable no-op. Once this delivery is a no-op, it must remain one in every
-  later reachable state on replay, including after receipt expiry. The caller knows this
-  property of the domain. A typed decision alone proves only what happened in one state.
+- Decision: Require a replay-stable no-op. Once this delivery is a no-op, it must remain
+  one in every later reachable state on replay, including after receipt expiry.
+  Rationale: The caller knows this property of the domain. A typed decision alone proves
+  only what happened in one state.
   Date: 2026-11-18
 
-- Probe the row after a marker miss and recheck the marker after a silent no-op. The former
-  skips hydration on replay. The latter covers a competitor that appended after preflight
-  and caused this dispatch to see a no-op. A fresh no-op requires positive evidence that
-  this attempt inserted and committed its row. The table runner's historical success on a
-  conflict followed by concurrent garbage collection cannot supply that evidence.
+- Decision: Probe the row after a marker miss and recheck the marker after a silent no-op.
+  A fresh no-op requires positive evidence that this attempt inserted and committed its row.
+  Rationale: The row probe skips hydration on replay. The marker recheck covers a
+  competitor that appended after preflight and caused this dispatch to see a no-op. The
+  table runner's historical success on a conflict followed by concurrent garbage collection
+  cannot supply evidence of a committed row.
+  Date: 2026-11-18
+
+- Decision: Recheck the marker after a typed rejection as well, and return a duplicate on a
+  hit.
+  Rationale: Two deliveries of one message can both miss preflight. If one appends the
+  marker and the other then hydrates a state in which the command is rejected rather than a
+  no-op, returning the rejection would report a handled delivery as unhandled, and a caller
+  with a dead-letter policy would dead-letter it. The recheck costs one point lookup on the
+  rejection path only.
+  Date: 2026-11-18
+
+- Decision: Export the row-key derivation as `delegatedNoOpReceiptKey` and pin it with a
+  vector test.
+  Rationale: The key prefix and marker inputs are persisted replay identity, like
+  `delegatedEventId`, whose recipe is frozen by a pinned-vector test. Tests and operators
+  also need the key to find or pre-create a row for one delivery.
   Date: 2026-11-18
 
 - Decision: A typed rejection (`DomainRejected`) is not acknowledged. The adapter returns it
@@ -272,8 +301,11 @@ replay-stable. The adapter cannot infer that property from a reason value.
    unconfirmed error as `DelegatedDomainCommandError (DelegatedCommandFailed targetStream err)`.
    On `DomainAccepted events` with a positive append count, return
    `DelegatedFresh (DelegatedDomainAccepted events result)`. An accepted result with zero
-   appended events yields the wrapped `DelegatedCommandWithoutReceipt` error. Forward
-   `DomainRejected r` as `Left (DelegatedDomainRejected targetStream r)`.
+   appended events yields the wrapped `DelegatedCommandWithoutReceipt` error. On
+   `DomainRejected r`, call `eventAlreadyIn preparedOptions targetStream marker` again. A
+   hit yields a duplicate, because a competing delivery of the same message appended the
+   marker after preflight and this dispatch hydrated the state it left. On a miss, forward
+   the rejection as `Left (DelegatedDomainRejected targetStream r)` and write no row.
 4. On `DomainNoOp n`, call `eventAlreadyIn preparedOptions targetStream marker` again.
    A hit yields a duplicate. Two deliveries can miss preflight, then one appends before
    the other hydrates the terminal state. Only a second miss allows the no-op receipt
@@ -324,7 +356,12 @@ initial state and a typed no-op afterwards. Required cases:
   id equals the marker, `listInbox source` is `[]`, redelivery is `InboxDuplicate`.
 - Typed rejection: `Left (DelegatedDomainRejected target reason)`, no inbox row, and a second
   call invokes the callback again.
-- A pre-existing `failed` row for the identity (create it with `recordFailedAttemptTx`):
+- In `describe "Keiro.Inbox.Delegated pure adapters"`, add a new example beside the existing
+  marker vectors that pins `delegatedNoOpReceiptKey` for a fixed marker to a literal
+  expected text, including the `keiro/inbox-delegated-noop/1:` prefix. Do not edit the
+  existing example.
+- A pre-existing `failed` row for the identity (create it with `recordFailedAttemptTx` at
+  the key `delegatedNoOpReceiptKey` returns for the delivery's marker):
   `Left (DelegatedNoOpReceiptUnavailable target InboxFailed)`, callback not invoked.
 - `PersistDedupeOnly` in the receipt writes a row whose event has empty `payloadBytes`.
 - Two consumers (also vary target or operation in the key test) sharing the same source
@@ -335,15 +372,32 @@ initial state and a typed no-op afterwards. Required cases:
   same delivery and append the marker, then let A hydrate the terminal no-op state. Expect B
   fresh, A duplicate, one event and zero inbox rows. Repeat with both callbacks returning a
   stable no-op and with both past preflight. Expect one fresh, one duplicate and one row.
+  Repeat the first interleaving with a domain handler whose terminal state rejects the
+  command instead of making it a no-op. Expect B fresh, A duplicate, one event and zero
+  inbox rows; A must not return `DelegatedDomainRejected`.
 - Exercise all three strict insert classifications, including conflict followed by missing
   row. In the fresh PostgreSQL fixture, a test-only BEFORE INSERT trigger returning NULL
   for the test key deterministically gives the two observations produced by the GC race:
   the insert returns no row and the following SELECT finds none. Assert the retryable
-  lost-receipt error and zero rows, remove the trigger, and verify replay succeeds.
-  Use the existing database access-control fixture to allow SELECT but deny
-  INSERT. A real no-op then fails without acknowledgement or row. Restore INSERT and verify
-  redelivery can complete. Also exercise the new adapter's zero-count accepted callback and
-  an unconfirmed command error to verify both return the wrapped error without a receipt.
+  lost-receipt error and zero rows. While the trigger is installed, also run
+  `tryInsertCompletedTx` for that key and assert it still returns `Right ()`; this is the
+  direct evidence that table mode's historical mapping is unchanged. Remove the trigger
+  and verify replay succeeds.
+- Deny INSERT while allowing SELECT. The existing `prepareDelegatedDeniedInboxRole` in
+  `keiro/test/Main.hs` revokes every privilege on `keiro.keiro_inbox`, and
+  `withFreshResourceStorePrepared` gives the test only the restricted store, so neither
+  fits as is. Add a sibling prepare function that creates a second role with the same
+  grants plus `GRANT SELECT ON keiro.keiro_inbox`, and leave the existing function and its
+  test untouched. Open the restricted store and a privileged store on one database: either
+  add a small fixture to `keiro-test-support/src/Keiro/Test/Postgres.hs` modelled on
+  `withFreshResourceStoresSameDatabaseWithConnection`, or use that fixture's connection
+  string to build the restricted settings with `user=<role>` appended, as the existing
+  access-control block does. Through the restricted store a real no-op fails in the store
+  error channel without acknowledgement or row. Through the privileged store run
+  `GRANT INSERT ON keiro.keiro_inbox`, then verify redelivery through the restricted store
+  completes and commits one row.
+- Exercise the new adapter's zero-count accepted callback and an unconfirmed command error
+  to verify both return the wrapped error without a receipt.
 - The untyped path is unchanged: keep the existing test "rejects zero-event commands and
   unconfirmed duplicate errors" untouched and passing. It is the AC-1 proof that a silent
   zero-event success is still `DelegatedCommandWithoutReceipt`.
@@ -351,6 +405,20 @@ initial state and a typed no-op afterwards. Required cases:
 Add an Unreleased "New Features" entry to `keiro/CHANGELOG.md`. The change is additive
 (new exports only), so it is a minor version bump under the Haskell Package Versioning
 Policy; do not edit version numbers in this plan.
+
+This milestone adds record types to `keiro/src/Keiro/Inbox/Delegated.hs` and shifts line
+numbers in `keiro/src/Keiro/Inbox/Schema.hs`. The `record-migration-policy` recipe, part of
+`just verify`, compares the tree with the generated inventories
+`keiro-dsl/record-field-migration-0.15.md` and
+`keiro-dsl/generated-haskell-edition-idiomatic-v2.md`. Refresh them with the command in
+Concrete Steps, review the diff, and commit it with the milestone.
+
+The refactor touches `tryInsertCompletedTx`, which table mode calls on every delivery. The
+gate that measures that path is the inbox guard of `just bench-regression`, which runs the
+table-mode benchmark in `keiro/bench/Main.hs` against `keiro/bench/baseline-inbox.csv`.
+Run it as shown in Concrete Steps on an otherwise idle machine and record the result in
+Progress. The committed baseline reflects the maintainer's primary machine; on other
+hardware, compare a run before the change with a run after it instead.
 
 Acceptance: `nix develop -c cabal test keiro-test --test-show-details=direct` passes, with
 the new describe block listed and the pre-existing "Keiro.Inbox delegated",
@@ -414,6 +482,8 @@ do not change. Update any test in `keiro-dsl/test/Main.hs` that pins the old mes
 
 Add an Unreleased entry to `keiro-dsl/CHANGELOG.md` noting the new conformance proof and the
 reworded diagnostic. Stage the new suite and ledger so tracked-file inventory can see them.
+The record-migration inventories named in Milestone 1 also list every generated corpus
+module, so refresh them again after scaffolding and include them in the checkpoint.
 Run the focused suite and the DSL tests, then commit the reviewed
 fixture, ledger, generated tree, suite and registration together. The corpus gate in
 `keiro-dsl/tools/corpus-regen/src/Main.hs` requires clean corpus paths, including the new
@@ -489,6 +559,15 @@ identity vectors. Expect the example count to increase and the report to include
 N examples, 0 failures
 ```
 
+Refresh the record-migration inventories (rerun after the Milestone 2 scaffold), then run
+the table-mode benchmark guard:
+
+```bash
+nix develop -c python3 scripts/generate-record-migration-manifests.py
+nix develop -c just record-migration-policy
+nix develop -c just bench-regression inbox
+```
+
 Milestone 2:
 
 ```bash
@@ -549,7 +628,7 @@ retention. The callback must use the supplied options and target, run one domain
 and keep protected effects inside its append. A qualifying no-op is fresh only after the
 adapter commits its scoped completed inbox row. A matching marker in the target stream
 or a matching completed row proves a duplicate. A competing marker takes precedence when
-dispatch observes the no-op left by that append.
+dispatch observes the no-op or rejection left by that append.
 
 A crash after the silent decision and before the receipt commit leaves the delivery
 unacknowledged. A retry evaluates the command again. Set retention beyond the required
@@ -566,16 +645,23 @@ A service adopting this handler needs SELECT on marker misses and INSERT for no-
 - Marker identity: `delegatedEventId` is not edited; its pinned-vector test "pins ASCII,
   Unicode, empty-field, and delimiter identity vectors" passes unchanged.
 - Table mode: `keiro/src/Keiro/Inbox.hs` and the SQL statements in `Keiro.Inbox.Schema` keep
-  their current behavior. The table helper retains its existing insert/conflict mapping,
-  and the `describe "Keiro.Inbox"` block passes unchanged.
+  their current behavior. The table helper retains its existing insert/conflict mapping:
+  the `describe "Keiro.Inbox"` block passes unchanged, and the trigger test in Milestone 1
+  asserts `tryInsertCompletedTx` still returns `Right ()` on a vanished conflict.
+- Row-key identity: `delegatedNoOpReceiptKey` is new persisted replay identity. Its
+  pinned-vector example in Milestone 1 freezes the prefix and encoding.
 - Wire bytes, event folds, snapshots, and migrations: no event type, codec, schema, or
   migration changes. The DSL fixture is new, so no existing generated output changes;
   `just conformance-corpus-policy` shows the checked-in corpus is otherwise identical.
-- Performance: the existing delegated and table paths keep their database operations, so
-  the `InboxDelegatedBench` benchmark in `keiro/bench/` measures an unchanged path and no
-  new baseline is needed. The new adapter performs one row lookup per marker miss and a
-  second marker probe per no-op. On a second miss it attempts an insert and looks up the
-  winner on conflict.
+- Performance: the existing delegated adapters are not edited, so the
+  `InboxDelegatedBench` benchmark in `keiro/bench/` measures an unchanged path. Table mode
+  keeps the same statements in the same order, but `tryInsertCompletedTx` is refactored
+  onto the strict helper, so its path is affected. The gate that measures it is
+  `just bench-regression inbox` (table-mode benchmark in `keiro/bench/Main.hs` against
+  `keiro/bench/baseline-inbox.csv`); Milestone 1 runs it and no new baseline is expected.
+  The new adapter is not covered by a benchmark gate. It performs one row lookup per marker
+  miss and a second marker probe per no-op or rejection. On a second miss after a no-op it
+  attempts an insert and looks up the winner on conflict.
 
 Not required for acceptance, and out of scope per IR-65: effectful handlers inside table
 mode's transaction; multi-command reactions; a process-manager variant of the new adapter;
@@ -612,6 +698,10 @@ Export the following adapter surface from
 `Keiro.Inbox.Delegated` in `keiro/src/Keiro/Inbox/Delegated.hs`:
 
 ```haskell
+-- | The reserved inbox row key for one delegated command's no-op receipt:
+-- @"keiro/inbox-delegated-noop/1:" <> UUID.toText marker@. Persisted replay identity.
+delegatedNoOpReceiptKey :: EventId -> Text
+
 -- | What the adapter needs to write the inbox row that acknowledges a typed no-op.
 data DelegatedNoOpReceipt = DelegatedNoOpReceipt
   { consumer :: !Text,
@@ -669,3 +759,9 @@ Revision on 2026-11-18 after review. Tightened the replay precondition to match 
 AC-2, aligned row identity with the event marker, and required evidence of a committed
 receipt under concurrent delivery and retention. Added the corresponding runtime and
 generated-intake checks and corrected how to bootstrap the conformance suite.
+
+Second revision on 2026-11-18 after a follow-up review. Added a marker recheck on the
+rejection path, exported and pinned the row-key derivation, replaced the access-control
+test's reference to a fixture that does not exist with concrete setup, added the
+record-migration inventory refresh, and named the benchmark gate for the refactored
+table-mode insert.
