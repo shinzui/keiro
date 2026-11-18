@@ -44,6 +44,16 @@ restore_file() {
   cp "$BACKUP_DIR/$1" "$2"
 }
 
+# A sed or perl substitution whose pattern no longer matches exits 0 and leaves
+# the file unchanged, which would let a mutation "stay green" vacuously or, for
+# a source mutation, pass for the wrong reason. Every mutation must change bytes.
+assert_changed() {
+  if cmp -s "$1" "$BACKUP_DIR/$2"; then
+    echo "FAIL: mutation at line ${BASH_LINENO[0]} did not change $1; its pattern no longer matches"
+    exit 1
+  fi
+}
+
 run_report() {
   cabal run -v0 keiro-dsl-behavior-complete-report -- --format=json
 }
@@ -96,72 +106,87 @@ SCAFFOLD_OUTPUT="$(cabal run -v0 keiro-dsl -- scaffold "$SPEC" --out "$OUT" 2>&1
 grep -Fq "Journey.Holes.transition1EmptyStartOutput1Started" <<<"$SCAFFOLD_OUTPUT"
 sed -i.sed-bak 's/requestId = d.requestId/requestId = error "obsolete identity hook executed"/' "$LEGACY_HOLES"
 rm -f "$LEGACY_HOLES.sed-bak"
+assert_changed "$LEGACY_HOLES" Holes.hs
 run_report >/dev/null
 restore_file Holes.hs "$LEGACY_HOLES"
 
 sed -i.sed-bak '/behavior-v1-43b8fc7fa48595dd/d' "$WITNESSES"
 rm -f "$WITNESSES.sed-bak"
+assert_changed "$WITNESSES" BehaviorHoles.hs
 expect_red "remove a later-state witness" '"missing":["behavior-v1-43b8fc7fa48595dd"]' no
 restore_file BehaviorHoles.hs "$WITNESSES"
 
 sed -i.sed-bak 's/activeHistory = \[startedEvent 0\]/activeHistory = []/' "$WITNESSES"
 rm -f "$WITNESSES.sed-bak"
+assert_changed "$WITNESSES" BehaviorHoles.hs
 expect_red "use a history reaching the wrong source" 'history-wrong-source'
 restore_file BehaviorHoles.hs "$WITNESSES"
 
 sed -i.sed-bak 's/behavior-v1-2f3ebf37a55781db/behavior-v1-swap-placeholder/; s/behavior-v1-db1a553baa3eda84/behavior-v1-2f3ebf37a55781db/; s/behavior-v1-swap-placeholder/behavior-v1-db1a553baa3eda84/' "$WITNESSES"
 rm -f "$WITNESSES.sed-bak"
+assert_changed "$WITNESSES" BehaviorHoles.hs
 expect_red "swap same-target guarded sibling keys" 'edge-attribution'
 restore_file BehaviorHoles.hs "$WITNESSES"
 
 sed -i.sed-bak '/behavior-v1-83b0a46823e1a788/ s/(Rejects RejectNoMatchingEdge)/NoOp/' "$WITNESSES"
 rm -f "$WITNESSES.sed-bak"
+assert_changed "$WITNESSES" BehaviorHoles.hs
 expect_red "change rejection to no-op" 'expectation-kind'
 restore_file BehaviorHoles.hs "$WITNESSES"
 
 sed -i.sed-bak '/behavior-v1-43b8fc7fa48595dd/ s/(startCommand 0)/(decideCommand 0)/' "$WITNESSES"
 rm -f "$WITNESSES.sed-bak"
+assert_changed "$WITNESSES" BehaviorHoles.hs
 expect_red "use another rejecting command for a required cell" 'command-mismatch'
 restore_file BehaviorHoles.hs "$WITNESSES"
 
 perl -0pi -e 's/(B\.onCmd inCtorPing \$ \\_d -> B\.do\n)/$1        B.slot \@"lastAmount" =: K.lit 1\n/' "$TRANSDUCER"
+assert_changed "$TRANSDUCER" Transducer.hs
 expect_red "change a no-op register" 'noop-register-change'
 restore_file Transducer.hs "$TRANSDUCER"
 
 sed -i.sed-bak '/behavior-v1-db1a553baa3eda84/d' "$WITNESSES"
 rm -f "$WITNESSES.sed-bak"
+assert_changed "$WITNESSES" BehaviorHoles.hs
 expect_red "omit one guard alternative" '"missing":["behavior-v1-db1a553baa3eda84"]' no
 restore_file BehaviorHoles.hs "$WITNESSES"
 
 perl -0pi -e 's/ReplayWitness \(key "behavior-v1-f0fbe3a3ba0b40e8"\) activeHistory \[retiredEvent 0, retirementAuditedEvent 0\]/live "behavior-v1-f0fbe3a3ba0b40e8" activeHistory (retireCommand 0) (Emits (retiredEvent 0 :| [retirementAuditedEvent 0]))/' "$WITNESSES"
+assert_changed "$WITNESSES" BehaviorHoles.hs
 expect_red "expect a replay-only edge to fire forward" 'witness-kind'
 restore_file BehaviorHoles.hs "$WITNESSES"
 
 sed -i.sed-bak '/behavior-v1-f0fbe3a3ba0b40e8/ s/retiredEvent 0, retirementAuditedEvent 0/retiredEvent 1, retirementAuditedEvent 1/' "$WITNESSES"
 rm -f "$WITNESSES.sed-bak"
+assert_changed "$WITNESSES" BehaviorHoles.hs
 expect_red "let the live twin steal a replay witness" 'replay-edge-attribution'
 restore_file BehaviorHoles.hs "$WITNESSES"
 
 sed -i.sed-bak '/behavior-v1-08a2bda57424a16e/ s/startedEvent 1/startedEvent 0/' "$WITNESSES"
 rm -f "$WITNESSES.sed-bak"
+assert_changed "$WITNESSES" BehaviorHoles.hs
 expect_red "let the live initial edge steal the initial replay witness" 'replay-edge-attribution'
 restore_file BehaviorHoles.hs "$WITNESSES"
 
 sed -i.sed-bak '/behavior-v1-f0fbe3a3ba0b40e8/ s/, retirementAuditedEvent 0//' "$WITNESSES"
 rm -f "$WITNESSES.sed-bak"
+assert_changed "$WITNESSES" BehaviorHoles.hs
 expect_red "truncate a multi-event replay chunk" 'replay-chunk-failed'
 restore_file BehaviorHoles.hs "$WITNESSES"
 
 sed -i.sed-bak '/"Retired" ->/,/"RetirementAudited" ->/ s/<\$> o \.: "amount"/<$> ((+ 1) <$> o .: "amount")/' "$CODEC"
 rm -f "$CODEC.sed-bak"
+assert_changed "$CODEC" Codec.hs
 expect_red "make codec replay diverge" 'emitted-replay-failed'
 restore_file Codec.hs "$CODEC"
 
 perl -0pi -e 's/amount = d\.amount/amount = K.lit 999/' "$TRANSDUCER"
+assert_changed "$TRANSDUCER" Transducer.hs
 expect_red "mutate a generated identity selector" 'event-value-mismatch'
 restore_file Transducer.hs "$TRANSDUCER"
 
-perl -0pi -e 's/let edgeIndex = layoutOutgoingIndex entry/let edgeIndex = 0/' "$SCAFFOLD_SOURCE"
+perl -0pi -e 's/let edgeIndex = \(\.outgoingIndex\) entry/let edgeIndex = 0/' "$SCAFFOLD_SOURCE"
+assert_changed "$SCAFFOLD_SOURCE" Scaffold.hs
 expect_focused_test_red "reset source-wide predicate edge indices"
 restore_file Scaffold.hs "$SCAFFOLD_SOURCE"
 
