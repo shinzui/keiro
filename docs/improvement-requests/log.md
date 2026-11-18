@@ -2,6 +2,9 @@
 
 ## 2026-11-18
 
+* **Update**: IR-64 completed by ExecPlan 345: Optional contract fields and `discriminator from envelope` in candidate Language 6, with `decodeJsonIntegrationEventWith` in keiro-core (ADR-65). Ships in the next keiro-dsl and keiro-core release.
+
+
 * **Update**: IR-64 in progress under ExecPlan 345, which adds `Optional <scalar>` contract fields and `discriminator from envelope` to candidate Language 6.
 
 

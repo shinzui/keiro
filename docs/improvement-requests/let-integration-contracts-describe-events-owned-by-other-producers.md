@@ -6,10 +6,17 @@ description: >-
   discriminator, so a Keiro service can't mirror an event published by a service that doesn't
   use Keiro's contract conventions. It must hand-write the payload decoder behind Keiro's
   envelope and inbox runner instead.
-timestamp: 2026-11-18T18:21:57Z
+timestamp: 2026-11-18T19:01:39Z
 requestId: IR-64
-status: in-progress
+status: completed
 plan: docs/plans/345-let-integration-contracts-declare-optional-fields-and-an-envelope-discriminator.md
+completedAt: 2026-11-18T19:01:39Z
+resolution: >-
+  Plan 345 added candidate Language 6 `Optional <scalar>` contract fields (key omitted when
+  absent, omitted key or null read as absent) and `discriminator from envelope`, whose
+  generated `parse<Contract>PayloadAs` takes the envelope's event type and joins an envelope
+  through keiro-core's `decodeJsonIntegrationEventWith`; ADR-65 records the decisions and the
+  conformance suite keiro-dsl-conformance-contract-foreign-event proves AC-1 and AC-2.
 origin: mori://tan/agent-reputation-service
 relatedPlans:
   - mori://tan/agent-reputation-service/plans/8-resolve-invitations-from-registration-service-v2-completion-events
