@@ -1,0 +1,37 @@
+language keiro-dsl 6
+context contract-rollout
+
+contract presence {
+  schemaVersion 1
+  discriminator messageType
+
+  topic notes "rollout.presence"
+
+  event Noted on notes {
+    subject: text
+    note: text
+  }
+}
+
+contract origin {
+  schemaVersion 1
+  discriminator messageType
+
+  topic signals "rollout.origin"
+
+  event Signaled on signals {
+    subject: text
+  }
+}
+
+contract growth {
+  schemaVersion 1
+  discriminator messageType
+
+  topic notes "rollout.growth"
+
+  event Grown on notes {
+    subject: text
+    reason: Optional text
+  }
+}

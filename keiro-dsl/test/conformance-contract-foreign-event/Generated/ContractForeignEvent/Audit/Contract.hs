@@ -3,6 +3,7 @@ module Generated.ContractForeignEvent.Audit.Contract
   ( AuditPayload (..)
   , MemberNotedData (..)
   , RegistrationSeenData (..)
+  , NotesClearedData (..)
   , notesTopic
   , messageTypeOf
   , encodeAuditPayload
@@ -30,15 +31,20 @@ data MemberNotedData = MemberNotedData {memberId :: !Nominals.MemberId, note :: 
 data RegistrationSeenData = RegistrationSeenData {registrationId :: !(KindID "registration"), ownerEmail :: !(Maybe Text), mlsMemberId :: !(Maybe Nominals.MemberId), legacyAccountId :: !(Maybe Int), referrerId :: !(Maybe (KindID "member"))}
   deriving stock (Eq, Show)
 
+data NotesClearedData = NotesClearedData {}
+  deriving stock (Eq, Show)
+
 data AuditPayload
   = MemberNoted !MemberNotedData
   | RegistrationSeen !RegistrationSeenData
+  | NotesCleared !NotesClearedData
   deriving stock (Eq, Show)
 
 messageTypeOf :: AuditPayload -> Text
 messageTypeOf = \case
   MemberNoted {} -> "MemberNoted"
   RegistrationSeen {} -> "RegistrationSeen"
+  NotesCleared {} -> "NotesCleared"
 
 encodeAuditPayload :: AuditPayload -> Value
 encodeAuditPayload = \case
@@ -59,6 +65,10 @@ encodeAuditPayload = \case
           <> ["legacyAccountId" .= value | Just value <- [payload.legacyAccountId]]
           <> ["referrerId" .= KindID.toText value | Just value <- [payload.referrerId]]
       )
+  NotesCleared _ ->
+    object
+      [ "messageType" .= ("NotesCleared" :: Text)
+      ]
 
 parseAuditPayload :: Value -> Either Text AuditPayload
 parseAuditPayload = mapLeftText . parseEither (withObject "AuditPayload" go)
@@ -81,6 +91,8 @@ parseAuditPayload = mapLeftText . parseEither (withObject "AuditPayload" go)
                     <*> o .:? "legacyAccountId"
                     <*> explicitParseFieldMaybe (parseKindIdV7Value @"member") o "referrerId"
                 )
+        "NotesCleared" ->
+          pure (NotesCleared NotesClearedData)
         _ -> fail "validated message type was not handled"
 
 mapLeftText :: Either String b -> Either Text b
@@ -88,5 +100,5 @@ mapLeftText = either (Left . T.pack) Right
 
 validateMessageType :: Text -> Parser Text
 validateMessageType kind
-  | kind `elem` ["MemberNoted", "RegistrationSeen"] = pure kind
-  | otherwise = fail ("unknown message type " <> show kind <> "; expected one of: MemberNoted, RegistrationSeen")
+  | kind `elem` ["MemberNoted", "RegistrationSeen", "NotesCleared"] = pure kind
+  | otherwise = fail ("unknown message type " <> show kind <> "; expected one of: MemberNoted, RegistrationSeen, NotesCleared")

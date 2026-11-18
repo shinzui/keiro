@@ -26,15 +26,23 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   other value must satisfy the scalar's parser. `Optional List`, `List Optional` and other
   nesting are refused. An optional field cannot be a publisher `outboxId` or intake
   `dedupe` key (`ContractOptionalFieldUsedAsKey`). `diff` reports an added optional field
-  as the additive `ContractOptionalFieldAdded` without a `schemaVersion` bump, and a change
-  between required and optional as breaking in both directions. (IR-64)
+  as the warning `ContractOptionalFieldAdded` without a `schemaVersion` bump: the wire is
+  compatible, and `consumer-build=advisory` asks for a re-scaffold because the generated
+  constructor gains a `Maybe` argument; the default gate passes. A change between required
+  and optional is breaking in both directions: required to optional is `producer-last`,
+  optional to required is `producer-first` with `drain-required`. (IR-64)
 - Candidate Language 6 contracts may declare `discriminator from envelope`. The generated
   encoder writes no discriminator key, and the module exports
   `parse<Contract>PayloadAs :: Text -> Value -> Either Text <Contract>Payload`, which takes
   the envelope's event type and rejects one the contract does not declare. A change of
-  discriminator source is breaking `ContractDiscriminatorChanged`. `keiro-dsl topology`
-  writes `discriminator: null` for such a contract; both topology schemas admit `null`.
-  (IR-64)
+  discriminator source is breaking `ContractDiscriminatorChanged`: body key to envelope is
+  `producer-last`, envelope to body key is `producer-first` with `drain-required`.
+  `keiro-dsl topology` writes `discriminator: null` for such a contract; both topology
+  schemas admit `null`. (IR-64)
+- `keiro-dsl diff --explain` renders a public-contract finding's rollout from its vector.
+  A `producer-first` finding now advises deploying the writers of the newly required key
+  first and draining retained messages that omit it before the stricter reader runs;
+  previously every contract finding advised `producer-last`. (ExecPlan 345)
 
 - The generated service conformance runner accepts `--behavior-complete`. After the
   unchanged default output, it evaluates every declared behavior key of every aggregate
@@ -114,6 +122,14 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   difference with matching digests and version says so. Workspace member digests are now
   computed from the bytes the loader parsed, read once and decoded as UTF-8 independent
   of the locale.
+
+### Bug Fixes
+
+- A generated contract encoder no longer binds an unused `payload` for a fieldless event,
+  and imports `(.=)` only when an encoder entry uses it. A fieldless event in a
+  body-discriminated contract, and an envelope-discriminated contract whose events are all
+  fieldless, previously failed to compile under `-Wall -Werror`. Output for events with
+  fields is unchanged. (ExecPlan 345)
 
 ## 0.25.1.0 — 2026-11-16
 

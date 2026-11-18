@@ -68,6 +68,8 @@ data Remedy
   | RemedyRunContractConformance
   | RemedyDrainWorkqueue
   | RemedyTransitionalQueueCodec
+  | RemedyDeployKeyWritersFirst
+  | RemedyDrainBeforeStricterReader
   deriving stock (Eq, Show)
 
 data DiffReport = DiffReport
@@ -306,8 +308,10 @@ remediationFor context code
   | code == MappedDeclAdded = RemedyRunConformance :| []
   | code `elem` eventDecodeCodes =
       RemedyVersionBump :| [RemedyUpcaster, RemedyDeploymentOrder RolloutStopTheWorld]
+  | code == ContractOptionalFieldAdded =
+      RemedyRescaffoldContractConsumers :| [RemedyRunContractConformance]
   | code `elem` contractCodes =
-      RemedyContractRevision :| [RemedyDeploymentOrder RolloutProducerLast]
+      RemedyContractRevision :| contractRolloutRemedies
   | code `elem` queueCodes =
       RemedyDeploymentOrder RolloutWorkersFirst :| [RemedyDrainWorkqueue, RemedyTransitionalQueueCodec, RemedyRunConformance]
   | code `elem` identityCodes =
@@ -325,6 +329,14 @@ remediationFor context code
     firstRollout = case Set.toAscList ((.rollout) vector) of
       rollout : _ -> Just rollout
       [] -> Nothing
+    -- Render the vector's ordering.  A vector without an ordering keeps the
+    -- historical producer-last advice.
+    contractRolloutRemedies
+      | Set.member RolloutProducerFirst ((.rollout) vector) =
+          RemedyDeploymentOrder RolloutProducerFirst
+            : RemedyDeployKeyWritersFirst
+            : [RemedyDrainBeforeStricterReader | Set.member RolloutDrainRequired ((.rollout) vector)]
+      | otherwise = [RemedyDeploymentOrder RolloutProducerLast]
     snapshotRemedy
       | (.snapshotHydration) vector == VAdvisory = RemedyStateCodecBump
       | otherwise = RemedyRunConformance
@@ -432,6 +444,8 @@ renderRemedy remedy = case remedy of
   RemedyRunContractConformance -> "run contract conformance"
   RemedyDrainWorkqueue -> "drain incompatible queued jobs before deployment"
   RemedyTransitionalQueueCodec -> "supply an application-owned transitional queue codec when draining is impossible"
+  RemedyDeployKeyWritersFirst -> "deploy every producer that writes the newly required key before any consumer runs the stricter reader"
+  RemedyDrainBeforeStricterReader -> "drain or migrate retained messages that omit the key before deploying the stricter reader"
 
 renderFinding :: Change -> Text
 renderFinding change =

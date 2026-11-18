@@ -171,6 +171,9 @@ data ContextKind
   | ContextSnapshot
   | ContextQueue
   | ContextPublicContract
+  | -- | A public-contract change whose candidate reader requires a body key
+    -- that producers of the previous contract omit.
+    ContextPublicContractReaderTightened
   | ContextPersistedIdentity
   | ContextConsumerBuild
   deriving stock (Eq, Show)
@@ -219,6 +222,9 @@ queueContext root paths = ChangeContext root paths ContextQueue LabelBreaking
 
 publicContractContext :: Name -> [Text] -> ChangeContext
 publicContractContext root paths = ChangeContext root paths ContextPublicContract LabelBreaking
+
+publicContractReaderTightenedContext :: Name -> [Text] -> ChangeContext
+publicContractReaderTightenedContext root paths = ChangeContext root paths ContextPublicContractReaderTightened LabelBreaking
 
 persistedIdentityContext :: Name -> [Text] -> ChangeContext
 persistedIdentityContext root paths = ChangeContext root paths ContextPersistedIdentity LabelBreaking
@@ -387,6 +393,10 @@ classifyCompatibility context code
   | code == NominalIdDecoderTightened =
       replaceConsumerBuild VAdvisory (advisoryVector PrivateHistoryRead Set.empty)
   | code == ContractTypeIdDomainChanged = contractTypeIdDomainVector
+  | code == ContractOptionalFieldAdded = contractOptionalFieldAddedVector
+  | code `elem` [ContractFieldChanged, ContractDiscriminatorChanged]
+      && (.contextKind) context == ContextPublicContractReaderTightened =
+      contractReaderTightenedVector
   | code == ContractFieldChanged && (.contextKind) context == ContextConsumerBuild = mappedBuildVector
   | code == IdDomainContractChanged =
       if (.contextKind) context == ContextGeneral
@@ -503,7 +513,6 @@ classifyCompatibility context code
         CompatibilityStrengthened,
         EventRetirementAbandoned,
         ContractEventAdded,
-        ContractOptionalFieldAdded,
         ContractTopicAdded,
         WorkflowEvolutionGuardAdded
       ]
@@ -531,6 +540,20 @@ contractTypeIdDomainVector =
       consumerBuild = VBreaking,
       rollout = Set.fromList [RolloutDrainRequired, RolloutProducerFirst]
     }
+
+-- | The candidate reader requires a body key that producers of the previous
+-- contract omit (an optional field made required, or a body discriminator
+-- replacing the envelope).  Producers that write the key must deploy first,
+-- and retained messages without it must drain before the stricter reader runs.
+contractReaderTightenedVector :: CompatibilityVector
+contractReaderTightenedVector =
+  publicBreakingVector {rollout = Set.fromList [RolloutDrainRequired, RolloutProducerFirst]}
+
+-- | An added optional field is wire-compatible in both directions, but the
+-- regenerated payload constructor gains an argument.
+contractOptionalFieldAddedVector :: CompatibilityVector
+contractOptionalFieldAddedVector =
+  publicBreakingVector {publicConsumer = VCompatible, consumerBuild = VAdvisory, rollout = Set.empty}
 
 mappedWireBreakingCodes :: [DiagnosticCode]
 mappedWireBreakingCodes =
@@ -651,6 +674,7 @@ surfaceForContext context = case (.contextKind) context of
   ContextSnapshot -> SnapshotHydration
   ContextQueue -> PrivateHistoryRead
   ContextPublicContract -> PublicConsumer
+  ContextPublicContractReaderTightened -> PublicConsumer
   ContextPersistedIdentity -> PersistedIdentity
   ContextConsumerBuild -> ConsumerBuild
   ContextGeneral -> PrivateHistoryRead
@@ -658,6 +682,7 @@ surfaceForContext context = case (.contextKind) context of
 breakingVectorForContext :: ChangeContext -> CompatibilityVector
 breakingVectorForContext context = case (.contextKind) context of
   ContextPublicContract -> publicBreakingVector
+  ContextPublicContractReaderTightened -> contractReaderTightenedVector
   ContextPersistedIdentity -> persistedIdentityBreakingVector
   ContextQueue -> queueBreakingVector
   ContextConsumerBuild -> (advisoryVector ConsumerBuild Set.empty) {consumerBuild = VBreaking}
@@ -2755,7 +2780,7 @@ contractPairDiff env oldContract newContract =
       | (.schemaVersion) newContract < (.schemaVersion) oldContract
       ]
     discriminatorChanges =
-      [ breaking
+      [ breakingIn
           ((.name) newContract)
           "discriminator"
           ((.name) newContract)
@@ -2763,6 +2788,12 @@ contractPairDiff env oldContract newContract =
           ("discriminator changed " <> renderContractDiscriminator ((.discriminator) oldContract) <> " -> " <> renderContractDiscriminator ((.discriminator) newContract))
       | (.discriminator) oldContract /= (.discriminator) newContract
       ]
+    -- Only a move from the envelope to a body key makes the new reader require
+    -- a key the old producers never wrote.  A changed body key keeps the
+    -- public-contract default.
+    breakingIn
+      | (.discriminator) oldContract == DiscriminatorEnvelope = breakingAt publicContractReaderTightenedContext
+      | otherwise = breaking
     topicChanges = contractTopicDiff oldContract newContract
     eventPairs = pairDeclarations (.name) ((.events) oldContract) ((.events) newContract)
     matchedEvents = (.matched) eventPairs
@@ -2845,8 +2876,10 @@ contractEventDiff env oldContract newContract oldEvent newEvent =
             subject
             ContractFieldChanged
             (detail <> "; canonical JSON bytes and TypeID admission are unchanged, but generated consumers must rebuild for the declared Haskell type")
+      | optionalToRequired = breakingAt publicContractReaderTightenedContext ((.name) newContract) "contract-field" subject ContractFieldChanged detail
       | otherwise = breaking ((.name) newContract) "contract-field" subject ContractFieldChanged (detail <> if oldDomain /= newDomain then renderIdDomainDirection oldDomain newDomain else "")
       where
+        optionalToRequired = contractIsOptional ((.valueType) oldField) && (.valueType) newField == CScalar (contractScalar ((.valueType) oldField))
         subject = (.name) newEvent <> "." <> (.name) newField
         detail = "field type changed " <> renderContractType ((.valueType) oldField) <> " -> " <> renderContractType ((.valueType) newField) <> presenceDirection
         presenceDirection = case (contractIsOptional ((.valueType) oldField), contractIsOptional ((.valueType) newField)) of
@@ -2898,7 +2931,7 @@ contractEventDiff env oldContract newContract oldEvent newEvent =
     addedFieldChanges = map addedFieldChange ((.added) fieldPairs)
     addedFieldChange field
       | contractIsOptional ((.valueType) field) =
-          additive ((.name) newContract) "contract-field" subject ContractOptionalFieldAdded "optional field added; older messages omit the key and older consumers ignore it"
+          advisory ((.name) newContract) "contract-field" subject ContractOptionalFieldAdded "optional field added; older messages omit the key and older consumers ignore it, but the regenerated payload constructor gains a Maybe argument"
       | (.schemaVersion) newContract > (.schemaVersion) oldContract =
           advisory ((.name) newContract) "contract-field" subject ContractSchemaVersionBumped ("field added with schemaVersion bump " <> tInt ((.schemaVersion) oldContract) <> " -> " <> tInt ((.schemaVersion) newContract) <> "; coordinate the cross-service rollout")
       | otherwise =
@@ -3689,6 +3722,12 @@ advisory n facet subj code detail =
 advisoryAt :: ChangeContext -> Name -> Text -> Text -> DiagnosticCode -> Text -> Change
 advisoryAt context n facet subj code detail =
   mkChange LabelAdvisory context n facet subj code detail
+
+-- | A breaking change whose context is chosen by the caller from the shape
+-- of the change rather than from the code alone.
+breakingAt :: (Name -> [Text] -> ChangeContext) -> Name -> Text -> Text -> DiagnosticCode -> Text -> Change
+breakingAt contextAt n facet subj code detail =
+  mkChange LabelBreaking (contextAt n [pathFor n facet subj]) n facet subj code detail
 
 mkChange :: Label -> ChangeContext -> Name -> Text -> Text -> DiagnosticCode -> Text -> Change
 mkChange label context n facet subj code detail =

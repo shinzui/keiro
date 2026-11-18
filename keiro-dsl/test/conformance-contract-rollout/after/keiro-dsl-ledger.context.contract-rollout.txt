@@ -1,0 +1,14 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/contract-rollout-after.keiro
+module-root: After
+layout: prefixed
+source-language {"declaredLanguageVersion":6,"effectiveLanguageVersion":6,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"candidate","languageVersion":6,"runtimeSemantics":"keiro-dsl/runtime-semantics/5"}
+naming-edition idiomatic-v2
+module-role {"family":"Contract","kind":"generated","ownerKind":"contract","ownerName":"contract presence (line 4)","path":"After/Generated/ContractRollout/Presence/Contract.hs"}
+module-role {"family":"Contract","kind":"generated","ownerKind":"contract","ownerName":"contract origin (line 16)","path":"After/Generated/ContractRollout/Origin/Contract.hs"}
+module-role {"family":"Contract","kind":"generated","ownerKind":"contract","ownerName":"contract growth (line 27)","path":"After/Generated/ContractRollout/Growth/Contract.hs"}
+generated After/Generated/ContractRollout/Presence/Contract.hs
+generated After/Generated/ContractRollout/Origin/Contract.hs
+generated After/Generated/ContractRollout/Growth/Contract.hs
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

@@ -1408,6 +1408,7 @@ test-suite keiro-dsl-conformance-contract-foreign-event
     Generated.ContractForeignEvent.Nominals
     Generated.ContractForeignEvent.Nominals.Internal
     Generated.ContractForeignEvent.Registration.Contract
+    Generated.ContractForeignEvent.Signals.Contract
     Generated.ContractForeignEvent.Structural.NominalLeaves
     Generated.ContractForeignEvent.StructuralConformance
 
@@ -1422,6 +1423,33 @@ test-suite keiro-dsl-conformance-contract-foreign-event
     mmzk-typeid >=0.7 && <0.8,
     text >=2.1 && <2.2,
     time >=1.12 && <1.15,
+
+-- ExecPlan 345 M5 rollout proof: the generated modules of two versions of one
+-- contract source, compiled side by side under distinct module roots, decode
+-- each other's output in the order keiro-dsl diff reports.
+test-suite keiro-dsl-conformance-contract-rollout
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
+  hs-source-dirs:
+    test/conformance-contract-rollout
+    test/conformance-contract-rollout/before
+    test/conformance-contract-rollout/after
+
+  main-is: Main.hs
+  other-modules:
+    After.Generated.ContractRollout.Growth.Contract
+    After.Generated.ContractRollout.Origin.Contract
+    After.Generated.ContractRollout.Presence.Contract
+    Before.Generated.ContractRollout.Growth.Contract
+    Before.Generated.ContractRollout.Origin.Contract
+    Before.Generated.ContractRollout.Presence.Contract
+
+  build-depends:
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    containers >=0.6 && <0.8,
+    keiro-dsl,
+    text >=2.1 && <2.2,
 
 -- Language-1 compatibility proof: the historical permissive Text contract DTO
 -- still accepts pre-TypeID-v7 samples and retains its released JSON image.

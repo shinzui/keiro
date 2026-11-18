@@ -131,7 +131,7 @@ libraryTests = do
     source <- TE.decodeUtf8 <$> BS.readFile "test/fixtures/contract-foreign-event.keiro"
     topology <- inlineTopology "contract-foreign-event.keiro" source
     [(node.name, KeyMap.lookup "discriminator" node.details) | node <- topology.nodes, nodeKindText node.kind == "contract"]
-      `shouldBe` [("audit", Just (String "messageType")), ("registration", Just Null)]
+      `shouldBe` [("audit", Just (String "messageType")), ("registration", Just Null), ("signals", Just Null)]
 
   it "emits one edge per operation form" $ do
     topology <- inlineTopology "operations.keiro" operationsSource

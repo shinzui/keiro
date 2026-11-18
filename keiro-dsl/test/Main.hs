@@ -1964,6 +1964,8 @@ main = hspec $ do
             "contract-foreign-event-optional-scalar-change.keiro",
             "contract-foreign-event-optional-literal-to-declared.keiro",
             "contract-foreign-event-discriminator-body.keiro",
+            "contract-rollout-before.keiro",
+            "contract-rollout-after.keiro",
             "declarative-router/unbounded.keiro",
             "declarative-router/valid.keiro",
             "direct-optional-id.keiro",
@@ -8951,8 +8953,18 @@ main = hspec $ do
           mutant suffix = "test/fixtures/contract-foreign-event-" <> suffix <> ".keiro"
       added <- diffFixtures base (mutant "optional-added")
       [finding | Breaking finding <- added] `shouldBe` []
-      case [finding | Additive finding <- added, (.code) finding == ContractOptionalFieldAdded] of
-        [finding] -> (.subject) finding `shouldBe` "MemberNoted.reason"
+      [finding | Additive finding <- added, (.code) finding == ContractOptionalFieldAdded] `shouldBe` []
+      -- Wire-compatible in both directions, but the regenerated constructor
+      -- gains an argument: a consumer-build advisory that passes the default gate.
+      case [change | change@(Advisory finding) <- added, (.code) finding == ContractOptionalFieldAdded] of
+        [change@(Advisory finding)] -> do
+          (.subject) finding `shouldBe` "MemberNoted.reason"
+          verdictFor PublicConsumer (finding.vector) `shouldBe` VCompatible
+          verdictFor ConsumerBuild (finding.vector) `shouldBe` VAdvisory
+          (.rollout) (finding.vector) `shouldBe` Set.empty
+          gatedBreaking defaultGate change `shouldBe` False
+          remediationFor (finding.context) (finding.code)
+            `shouldBe` RemedyRescaffoldContractConsumers :| [RemedyRunContractConformance]
         findings -> expectationFailure (show findings)
       removed <- diffFixtures (mutant "optional-added") base
       [(.detail) finding | Breaking finding <- removed, (.code) finding == ContractFieldChanged]
@@ -8966,6 +8978,16 @@ main = hspec $ do
       forM_ [toRequired, toOptional] $ \changes ->
         forM_ [finding | Breaking finding <- changes, (.code) finding == ContractFieldChanged] $ \finding ->
           verdictFor PublicConsumer (finding.vector) `shouldBe` VBreaking
+      -- Optional to required: the new reader requires a key old producers omit.
+      [(.rollout) (finding.vector) | Breaking finding <- toRequired, (.code) finding == ContractFieldChanged]
+        `shouldBe` [Set.fromList [RolloutDrainRequired, RolloutProducerFirst]]
+      [remediationFor (finding.context) (finding.code) | Breaking finding <- toRequired, (.code) finding == ContractFieldChanged]
+        `shouldBe` [RemedyContractRevision :| [RemedyDeploymentOrder RolloutProducerFirst, RemedyDeployKeyWritersFirst, RemedyDrainBeforeStricterReader]]
+      -- Required to optional: readers must tolerate omission before writers drop the key.
+      [(.rollout) (finding.vector) | Breaking finding <- toOptional, (.code) finding == ContractFieldChanged]
+        `shouldBe` [Set.singleton RolloutProducerLast]
+      [remediationFor (finding.context) (finding.code) | Breaking finding <- toOptional, (.code) finding == ContractFieldChanged]
+        `shouldBe` [RemedyContractRevision :| [RemedyDeploymentOrder RolloutProducerLast]]
       forM_ [(base, mutant "optional-scalar-change"), (mutant "optional-scalar-change", base)] $ \(old, new) -> do
         changes <- diffFixtures old new
         [finding | Breaking finding <- changes, (.code) finding == ContractFieldChanged, (.subject) finding == "MemberNoted.note"]
@@ -8998,8 +9020,15 @@ main = hspec $ do
       empty <- checkedServiceFromText "empty-envelope.keiro" (T.unlines ["language keiro-dsl 6", "context empty-envelope", "contract signals { schemaVersion 1 discriminator from envelope topic events \"signals.events\"", "event Pinged on events { } event Ponged on events { } }"])
       validateService empty `shouldBe` []
       let emptyRendered = generatedTextEndingIn "Signals/Contract.hs" (scaffoldServiceModules (defaultContext (checkedSpec empty).context) empty)
-      forM_ ["  Pinged payload ->\n    object []", "    go _ = do", "import Data.Aeson.Types (Parser, parseEither)", "import Data.Aeson (Value, object, withObject, (.=))"] $ \fragment ->
+      forM_ ["  Pinged _ ->\n    object []", "  Ponged _ ->\n    object []", "    go _ = do", "import Data.Aeson.Types (Parser, parseEither)", "import Data.Aeson (Value, object, withObject)\n"] $ \fragment ->
         emptyRendered `shouldSatisfy` T.isInfixOf fragment
+      forM_ ["payload ->", "(.=)"] $ \fragment -> emptyRendered `shouldNotSatisfy` T.isInfixOf fragment
+      -- A fieldless event in a body-discriminated contract encodes only its key.
+      bodyFieldless <- checkedServiceFromText "fieldless-body.keiro" (T.unlines ["language keiro-dsl 6", "context fieldless-body", "contract signals { schemaVersion 1 discriminator messageType topic events \"signals.events\"", "event Pinged on events { } event Noted on events { note: text } }"])
+      validateService bodyFieldless `shouldBe` []
+      let bodyRendered = generatedTextEndingIn "Signals/Contract.hs" (scaffoldServiceModules (defaultContext (checkedSpec bodyFieldless).context) bodyFieldless)
+      forM_ ["  Pinged _ ->\n    object\n      [ \"messageType\" .= (\"Pinged\" :: Text)\n      ]", "  Noted payload ->"] $ \fragment ->
+        bodyRendered `shouldSatisfy` T.isInfixOf fragment
 
     it "round-trips discriminator from envelope and gates it on Language 6" $ do
       source <- readTestText "test/fixtures/contract-foreign-event.keiro"
@@ -9009,7 +9038,7 @@ main = hspec $ do
           renderSource parsed `shouldSatisfy` T.isInfixOf "    note: Optional text\n"
           parseSource "foreign.keiro" (renderSource parsed) `shouldBe` Right parsed
           [(.discriminator) contract | NContract contract <- (.nodes) ((.spec) parsed)]
-            `shouldBe` [DiscriminatorBodyKey "messageType", DiscriminatorEnvelope]
+            `shouldBe` [DiscriminatorBodyKey "messageType", DiscriminatorEnvelope, DiscriminatorEnvelope]
         Left failure -> expectationFailure (T.unpack (renderParseFailure failure))
       (status, _, err) <- runKeiroDsl ["check", "test/fixtures/contract-foreign-event-envelope-language5.keiro"]
       status `shouldBe` ExitFailure 1
@@ -9048,6 +9077,101 @@ main = hspec $ do
       forM_ [forward, backward] $ \changes ->
         forM_ [finding | Breaking finding <- changes, (.code) finding == ContractDiscriminatorChanged] $ \finding ->
           verdictFor PublicConsumer (finding.vector) `shouldBe` VBreaking
+      -- Envelope to body key: the new reader requires a key old producers never wrote.
+      [(.rollout) (finding.vector) | Breaking finding <- forward, (.code) finding == ContractDiscriminatorChanged]
+        `shouldBe` [Set.fromList [RolloutDrainRequired, RolloutProducerFirst]]
+      [remediationFor (finding.context) (finding.code) | Breaking finding <- forward, (.code) finding == ContractDiscriminatorChanged]
+        `shouldBe` [RemedyContractRevision :| [RemedyDeploymentOrder RolloutProducerFirst, RemedyDeployKeyWritersFirst, RemedyDrainBeforeStricterReader]]
+      -- Body key to envelope: the new reader ignores the key, old readers still require it.
+      [(.rollout) (finding.vector) | Breaking finding <- backward, (.code) finding == ContractDiscriminatorChanged]
+        `shouldBe` [Set.singleton RolloutProducerLast]
+      [remediationFor (finding.context) (finding.code) | Breaking finding <- backward, (.code) finding == ContractDiscriminatorChanged]
+        `shouldBe` [RemedyContractRevision :| [RemedyDeploymentOrder RolloutProducerLast]]
+
+    -- Generated contract modules import each aeson helper only when a field
+    -- or the body discriminator uses it, so one untested combination can fail
+    -- under -Werror.  Compile one contract per discriminator mode, event shape
+    -- and field family, plus all-fieldless and mixed contracts.
+    it "compiles every contract shape under the generated-output warning policy" $
+      withTempDirectory "keiro-dsl-contract-shape-matrix" $ \out -> do
+        let families =
+              [ ("plain", "text", True),
+                ("count", "int", True),
+                ("literal", "typeid \"item\"", True),
+                ("declared", "ItemId", True),
+                ("plainlist", "List text", False),
+                ("declaredlist", "List ItemId", False)
+              ]
+            -- Contract names avoid reserved words such as body and text.
+            modes = [("keyed", "messageType"), ("enveloped", "from envelope")]
+            fieldsFor shape required optionalAllowed = case shape of
+              "req" -> Just ["value: " <> required]
+              "opt"
+                | optionalAllowed -> Just ["maybeValue: Optional " <> required]
+                | otherwise -> Nothing
+              _
+                | optionalAllowed -> Just ["value: " <> required, "maybeValue: Optional " <> required]
+                | otherwise -> Just ["values: " <> required, "maybeValue: Optional text"]
+            contractFor (modeName, discriminator) name events =
+              T.unlines
+                ( ["contract " <> modeName <> "_" <> name <> " {", "  schemaVersion 1", "  discriminator " <> discriminator, "  topic events \"" <> modeName <> "." <> name <> "\""]
+                    <> [ "  event " <> pascalName (modeName <> "_" <> name) <> eventSuffix <> " on events { " <> T.intercalate " " fields <> " }"
+                       | (eventSuffix, fields) <- events
+                       ]
+                    <> ["}"]
+                )
+            pascalName = T.concat . map (\part -> T.toUpper (T.take 1 part) <> T.drop 1 part) . T.splitOn "_"
+            contracts =
+              [ contractFor mode (familyName <> "_" <> shape) [("Happened", fields)]
+              | mode <- modes,
+                (familyName, required, optionalAllowed) <- families,
+                shape <- ["req", "opt", "both"],
+                Just fields <- [fieldsFor shape required optionalAllowed]
+              ]
+                <> [contractFor mode "bare" [("Pinged", []), ("Ponged", [])] | mode <- modes]
+                <> [ contractFor mode "blend" [("Cleared", []), ("Noted", ["note: text", "owner: Optional ItemId"])]
+                   | mode <- modes
+                   ]
+            source = T.unlines ["language keiro-dsl 6", "context contract-shapes", "id ItemId prefix=item"] <> T.intercalate "\n" contracts
+        service <- checkedServiceFromText "contract-shapes.keiro" source
+        [diagnostic | diagnostic <- validateService service, (.severity) diagnostic == Error] `shouldBe` []
+        let modules = scaffoldServiceModules (defaultContext (checkedSpec service).context) service
+            contractPaths = [(.path) moduleValue | moduleValue <- modules, "/Contract.hs" `T.isSuffixOf` T.pack ((.path) moduleValue)]
+        length contractPaths `shouldBe` length contracts
+        forM_ modules $ \moduleValue -> writeFileWithParents (out </> (.path) moduleValue) ((.text) moduleValue)
+        compileGeneratedModules out contractPaths
+
+    it "explains the contract rollout order through the diff CLI in every direction" $ do
+      let base = "test/fixtures/contract-foreign-event.keiro"
+          mutant suffix = "test/fixtures/contract-foreign-event-" <> suffix <> ".keiro"
+          producerFirst =
+            [ "rollout=drain-required,producer-first",
+              "remedy: deploy in producer-first order",
+              "remedy: deploy every producer that writes the newly required key before any consumer runs the stricter reader",
+              "remedy: drain or migrate retained messages that omit the key before deploying the stricter reader"
+            ]
+          producerLast = ["rollout=producer-last", "remedy: deploy in producer-last order"]
+      forM_
+        [ (base, mutant "optional-to-required", "ContractFieldChanged", producerFirst, producerLast),
+          (mutant "optional-to-required", base, "ContractFieldChanged", producerLast, producerFirst),
+          (mutant "discriminator-body", base, "ContractDiscriminatorChanged", producerLast, producerFirst),
+          (base, mutant "discriminator-body", "ContractDiscriminatorChanged", producerFirst, producerLast)
+        ]
+        $ \(old, new, code, expected, absent) -> do
+          (status, out) <- diffExplainSince old new
+          status `shouldBe` ExitFailure 1
+          out `shouldContain` ("explain [" <> code <> "]")
+          forM_ expected $ \fragment -> out `shouldContain` fragment
+          forM_ absent $ \fragment -> out `shouldNotContain` fragment
+      (status, out) <- diffExplainSince base (mutant "optional-added")
+      status `shouldBe` ExitSuccess
+      forM_
+        [ "WARNING: audit contract-field MemberNoted.reason: optional field added",
+          "vector: public-consumer=compatible consumer-build=advisory",
+          "remedy: re-scaffold and recompile every affected consumer against the generated interface"
+        ]
+        $ \fragment -> out `shouldContain` fragment
+      out `shouldNotContain` "rollout="
 
   describe "pgmq workqueue/dispatch (EP-5)" $ do
     it "round-trips the reservation-work spec through parse . pretty" $ do
@@ -15830,6 +15954,59 @@ shouldRefuseWorkspace path = do
 -- | Invoke the built @keiro-dsl@ executable. Fixture paths are resolved first,
 -- so the test works whether it runs from the package directory or the repository
 -- root.
+-- | Type-check generated modules the way the generated-output Cabal stanza
+-- compiles them: its default extensions, -Wall, and every warning an error.
+compileGeneratedModules :: FilePath -> [FilePath] -> IO ()
+compileGeneratedModules root modulePaths = do
+  let ghcOutput = root </> ".ghc"
+  createDirectoryIfMissing True ghcOutput
+  packageIds <- traverse activeCabalPackageId ["aeson", "keiki", "keiro-core", "mmzk-typeid"]
+  (exitCode, standardOutput, standardError) <-
+    readProcessWithExitCode
+      "cabal"
+      ( [ "exec",
+          "--enable-tests",
+          "--",
+          "ghc",
+          "-XGHC2024",
+          "-XDuplicateRecordFields",
+          "-XNoFieldSelectors",
+          "-XOverloadedRecordDot",
+          "-XOverloadedStrings",
+          "-Wall",
+          "-Wno-deprecations",
+          "-Werror",
+          "-fno-code",
+          "-fforce-recomp",
+          "-outputdir",
+          ghcOutput,
+          "-i" <> root
+        ]
+          <> concat [["-package-id", packageId] | packageId <- packageIds]
+          <> map (root </>) modulePaths
+      )
+      ""
+  unless (exitCode == ExitSuccess) $
+    expectationFailure (standardOutput <> standardError)
+
+-- | Run @keiro-dsl diff --since HEAD --explain@ the way an operator does: the
+-- old fixture is committed as @spec.keiro@ in a scratch repository and then
+-- overwritten by the new one.  Returns the exit status and standard output.
+diffExplainSince :: FilePath -> FilePath -> IO (ExitCode, String)
+diffExplainSince oldFixture newFixture =
+  withTempDirectory "keiro-dsl-diff-explain" $ \repository -> do
+    let source = repository </> "spec.keiro"
+        gitOk arguments = do
+          (code, out, err) <- readProcessWithExitCode "git" ("-C" : repository : arguments) ""
+          unless (code == ExitSuccess) (expectationFailure (out <> err))
+    readTestText oldFixture >>= TIO.writeFile source
+    gitOk ["init", "--quiet"]
+    gitOk ["add", "."]
+    gitOk ["-c", "user.name=Diff Test", "-c", "user.email=diff@example.invalid", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "test: capture the old contract"]
+    readTestText newFixture >>= TIO.writeFile source
+    (code, out, _) <- withCurrentDirectory repository (runKeiroDsl ["diff", "spec.keiro", "--since", "HEAD", "--explain"])
+    pure (code, out)
+
 runKeiroDsl :: [String] -> IO (ExitCode, String, String)
 runKeiroDsl arguments = do
   resolved <- traverse resolveArgument arguments

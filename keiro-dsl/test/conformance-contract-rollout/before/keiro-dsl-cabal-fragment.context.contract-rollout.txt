@@ -1,0 +1,21 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/contract-rollout-before.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+
+other-modules:
+    Before.Generated.ContractRollout.Growth.Contract
+    Before.Generated.ContractRollout.Origin.Contract
+    Before.Generated.ContractRollout.Presence.Contract
+
+build-depends:
+    , aeson
+    , base
+    , text

@@ -15,6 +15,7 @@ other-modules:
     Generated.ContractForeignEvent.Nominals
     Generated.ContractForeignEvent.Nominals.Internal
     Generated.ContractForeignEvent.Registration.Contract
+    Generated.ContractForeignEvent.Signals.Contract
     Generated.ContractForeignEvent.Structural.NominalLeaves
     Generated.ContractForeignEvent.StructuralConformance
 

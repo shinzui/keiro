@@ -21,6 +21,8 @@ contract audit {
     legacyAccountId: Optional int
     referrerId: Optional typeid "member"
   }
+
+  event NotesCleared on notes { }
 }
 
 contract registration {
@@ -36,4 +38,15 @@ contract registration {
     mlsMemberId: Optional MemberId
     legacyAccountId: Optional int
   }
+}
+
+contract signals {
+  schemaVersion 1
+  discriminator from envelope
+
+  topic beats "signals.beats"
+
+  event Pinged on beats { }
+
+  event Ponged on beats { }
 }

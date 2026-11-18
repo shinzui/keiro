@@ -4107,7 +4107,7 @@ emitContractGen ctx languageContract genPrefix nominalLeaves c =
              -- contract whose every field is one never uses (.:) and would warn
              -- under -Wunused-imports.
              "import Data.Aeson ("
-               <> T.intercalate ", " (["Value", "object", "withObject"] <> ["withText" | isJust bodyDiscriminator] <> ["(.:)" | usesPlainFieldDecode] <> ["(.:?)" | usesPlainOptionalDecode] <> ["parseJSON" | hasListFields] <> ["(.=)"])
+               <> T.intercalate ", " (["Value", "object", "withObject"] <> ["withText" | isJust bodyDiscriminator] <> ["(.:)" | usesPlainFieldDecode] <> ["(.:?)" | usesPlainOptionalDecode] <> ["parseJSON" | hasListFields] <> ["(.=)" | usesEncodePair])
                <> ")",
              aesonTypesImport
            ]
@@ -4174,6 +4174,10 @@ emitContractGen ctx languageContract genPrefix nominalLeaves c =
     hasLiteralTypedTypeIds = any (any (isLiteralTypedTypeId . contractScalar . (.valueType)) . (.fields)) ((.events) c)
     hasListFields = any (any (contractIsList . (.valueType)) . (.fields)) ((.events) c)
     usesPlainFieldDecode = any (any (isPlainScalar . (.valueType)) . (.fields)) ((.events) c)
+    -- An encoder entry is either the body discriminator or a field, so an
+    -- envelope-discriminated contract whose events are all fieldless encodes
+    -- every event as `object []` and never uses (.=).
+    usesEncodePair = isJust bodyDiscriminator || any (not . null . (.fields)) ((.events) c)
     isPlainScalar (CScalar scalar) = not (isTypedTypeId scalar)
     isPlainScalar CList {} = False
     isPlainScalar COptional {} = False
@@ -4287,7 +4291,8 @@ emitContractGen ctx languageContract genPrefix nominalLeaves c =
                ]
             ++ ["      )"]
       where
-        armHead = "  " <> (.name) e <> " payload ->"
+        -- A fieldless event's encoder never reads its payload record.
+        armHead = "  " <> (.name) e <> (if null ((.fields) e) then " _ ->" else " payload ->")
         optionalFields = filter (contractIsOptional . (.valueType)) ((.fields) e)
         discriminatorEntry = [tshow key <> " .= (" <> tshow ((.name) e) <> " :: Text)" | Just key <- [bodyDiscriminator]]
         entries = discriminatorEntry <> map encodeField (filter (not . contractIsOptional . (.valueType)) ((.fields) e))

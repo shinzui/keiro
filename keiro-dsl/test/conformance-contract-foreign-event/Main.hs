@@ -17,6 +17,7 @@ import Data.Time (UTCTime (..), fromGregorian)
 import Generated.ContractForeignEvent.Audit.Contract qualified as Audit
 import Generated.ContractForeignEvent.Nominals (MemberId, parseMemberId)
 import Generated.ContractForeignEvent.Registration.Contract qualified as Registration
+import Generated.ContractForeignEvent.Signals.Contract qualified as Signals
 import Generated.ContractForeignEvent.StructuralConformance (structuralConformanceAssertions)
 import Keiro.Integration.Event
   ( IntegrationContentType (..),
@@ -151,6 +152,9 @@ main = do
   let parseAudit = Audit.parseAuditPayload
       parseCompleted = Registration.parseRegistrationPayloadAs "RegistrationCompleted"
       noted note = Audit.MemberNoted (Audit.MemberNotedData memberId note)
+      cleared = Audit.NotesCleared Audit.NotesClearedData
+      pinged = Signals.Pinged Signals.PingedData
+      ponged = Signals.Ponged Signals.PongedData
       notedJson extra = object (["messageType" .= ("MemberNoted" :: Text), "memberId" .= memberIdText] <> extra)
       checks =
         [ -- AC-1 on the body-discriminated contract.
@@ -192,6 +196,13 @@ main = do
               Left (MalformedPayload _) -> True
               _ -> False
           ),
+          -- Fieldless events in both discriminator modes (review finding 2).
+          ("a fieldless body-discriminated event encodes exactly its discriminator key", Audit.encodeAuditPayload cleared == object ["messageType" .= ("NotesCleared" :: Text)]),
+          ("a fieldless body-discriminated event round-trips", parseAudit (Audit.encodeAuditPayload cleared) == Right cleared),
+          ("fieldless envelope-discriminated events encode as an empty object", Signals.encodeSignalsPayload pinged == object [] && Signals.encodeSignalsPayload ponged == object []),
+          ("each envelope event type selects its fieldless constructor", Signals.parseSignalsPayloadAs "Pinged" (object []) == Right pinged && Signals.parseSignalsPayloadAs "Ponged" (object []) == Right ponged),
+          ("the fieldless envelope contract encodes each event's own type in messageTypeOf", map Signals.messageTypeOf [pinged, ponged] == ["Pinged", "Ponged"]),
+          ("the fieldless envelope contract rejects an undeclared event type", failsWith "unknown message type \"Pang\"" (Signals.parseSignalsPayloadAs "Pang" (object []))),
           ("contract nominal helpers pass conformance", all snd structuralConformanceAssertions)
         ]
   mapM_ (\(label, ok) -> putStrLn ((if ok then "PASS  " else "FAIL  ") <> label)) checks
