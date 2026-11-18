@@ -6,6 +6,8 @@
 
 * **Addition**: IR-65 filed from mori://tan/agent-reputation-service: let delegated intake acknowledge a command that returned a typed no-op, since table mode can't run a Keiro command and delegated mode refuses commands that append no event.
 
+* **Update**: IR-65 accepted and linked to ExecPlan 344, which adds a `delegatedDomainCommand` adapter that records a completed inbox row as the receipt for a typed no-op.
+
 ## 2026-11-17
 
 * **Completion**: IR-63 completed under ExecPlan 341: candidate Language 6 input sources (from intake … event …), InputSourceUnresolvedIntake and InputSourceEventNotAccepted, the feeds relation under keiro-dsl/service-topology/2, and an in-repository byte-identity proof replacing the jitsurei criterion.

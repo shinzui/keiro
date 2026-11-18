@@ -6,10 +6,11 @@ description: >-
   run a Keiro command at all. So an intake whose command is legitimately a no-op on some
   deliveries can use neither runner. It has to run the command and then record the inbox receipt
   in a separate step.
-timestamp: 2026-11-18T16:13:37Z
+timestamp: 2026-11-18T16:40:00Z
 requestId: IR-65
-status: proposed
+status: accepted
 origin: mori://tan/agent-reputation-service
+plan: docs/plans/344-let-delegated-intake-acknowledge-a-command-that-was-a-typed-no-op.md
 relatedPlans:
   - mori://tan/agent-reputation-service/plans/10-record-invitation-delivery-outcomes-from-notification-hub
   - mori://tan/agent-reputation-service/plans/8-resolve-invitations-from-registration-service-v2-completion-events
@@ -57,6 +58,11 @@ reviews:
 ---
 
 # Let delegated intake acknowledge a command that was a typed no-op
+
+## Status
+
+Accepted. [ExecPlan 344](../plans/344-let-delegated-intake-acknowledge-a-command-that-was-a-typed-no-op.md)
+implements this request; no milestone has been implemented yet.
 
 ## Problem
 
