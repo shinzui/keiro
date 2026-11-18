@@ -2,6 +2,9 @@
 
 ## 2026-11-18
 
+* **Update**: DOC-29: the rollout column names the vector's rollout entry, and the Optional-to-required row covers equal-prefix literal/declared moves (plan 345 M5 review).
+
+
 * **Update**: DOC-29, DOC-7, and the validation guide: give each Optional and discriminator-source change its rollout order, add producer-first to the deploy-ordering vocabulary, report an added Optional field as a consumer-build advisory, and name each Optional decode error's own path (plan 345 M5).
 
 * **Update**: Document Optional contract fields, discriminator from envelope, parse<Contract>PayloadAs and decodeJsonIntegrationEventWith, the two new diagnostic codes, and the nullable topology discriminator (plan 345).

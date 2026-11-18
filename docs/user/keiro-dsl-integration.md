@@ -6,7 +6,7 @@ docId: DOC-29
 tags: [keiro, dsl, integration, kafka, reference]
 generated:
   by: anthropic-claude-code/claude-opus-5-5
-  at: 2026-11-18T21:30:13Z
+  at: 2026-11-18T22:27:00Z
 ---
 
 # Keiro DSL Integration Contracts
@@ -156,16 +156,17 @@ that may be absent identifies nothing, and the checker reports
 applies, and a name that is a list in any selected event reports
 `ContractListFieldUsedAsKey` instead, so one mistake yields one diagnostic.
 
-Evolution follows from the wire rule. The rollout column is the order `keiro-dsl diff
---explain` prints; see [Deploy Ordering](deploy-ordering.md#7-coordinate-integration-contracts-manually).
+Evolution follows from the wire rule. The rollout column is the `rollout` entry of the
+finding's compatibility vector, which `keiro-dsl diff` prints on its `vector:` line; see
+[Deploy Ordering](deploy-ordering.md#7-coordinate-integration-contracts-manually).
 
 | Change | Classification | Rollout |
 | --- | --- | --- |
 | add an `Optional` field | warning `ContractOptionalFieldAdded`: `public-consumer=compatible`, `consumer-build=advisory`; no `schemaVersion` bump needed, and the default gate passes | any order; re-scaffold and recompile, because the generated constructor gains a `Maybe` argument |
 | required to `Optional` | breaking `ContractFieldChanged`: deployed consumers still require the key | `producer-last`: every reader tolerates omission before any writer drops the key |
-| `Optional` to required | breaking `ContractFieldChanged`: retained messages that omit the key no longer decode | `producer-first`, `drain-required`: writers that supply the key deploy first, then retained messages without it drain before the stricter reader runs |
+| `Optional` to required, keeping the scalar or moving between `typeid "p"` and a declared ID of equal prefix and admission | breaking `ContractFieldChanged`: retained messages that omit the key no longer decode | `producer-first`, `drain-required`: writers that supply the key deploy first, then retained messages without it drain before the stricter reader runs |
 | change the scalar under `Optional`, or `Optional` to or from `List` | breaking `ContractFieldChanged` | `producer-last` |
-| `Optional typeid "p"` to or from `Optional DeclaredId` | build-only when prefix and admission are unchanged, as for scalars | none; recompile consumers |
+| `Optional typeid "p"` to or from `Optional DeclaredId` | build-only when prefix and admission are unchanged, as for scalars | no rollout entry; recompile consumers |
 | remove an `Optional` field | breaking `ContractFieldChanged`, like any removed field | `producer-last` |
 
 ### Payloads without a body discriminator

@@ -2,6 +2,9 @@
 
 ## 2026-11-18
 
+* **Update**: ADR-65: Optional to required with an equal-prefix literal/declared move is also producer-first (plan 345 M5 review).
+
+
 * **Update**: Amend ADR-65: the registration producer names the event in its own event-type header, and contract evolution records the producer-first and producer-last rollouts and the consumer-build advisory for an added Optional field (plan 345 M5).
 
 

@@ -1963,6 +1963,7 @@ main = hspec $ do
             "contract-foreign-event-optional-added.keiro",
             "contract-foreign-event-optional-scalar-change.keiro",
             "contract-foreign-event-optional-literal-to-declared.keiro",
+            "contract-foreign-event-optional-literal-to-required-declared.keiro",
             "contract-foreign-event-discriminator-body.keiro",
             "contract-rollout-before.keiro",
             "contract-rollout-after.keiro",
@@ -8988,6 +8989,17 @@ main = hspec $ do
         `shouldBe` [Set.singleton RolloutProducerLast]
       [remediationFor (finding.context) (finding.code) | Breaking finding <- toOptional, (.code) finding == ContractFieldChanged]
         `shouldBe` [RemedyContractRevision :| [RemedyDeploymentOrder RolloutProducerLast]]
+      -- Optional literal TypeID made a required declared ID of the same prefix
+      -- and admission: present bytes are identical, so only the omitted key is
+      -- newly rejected and the order is the same as for an unchanged scalar.
+      toRequiredDeclared <- diffFixtures base (mutant "optional-literal-to-required-declared")
+      toOptionalLiteral <- diffFixtures (mutant "optional-literal-to-required-declared") base
+      [((.subject) finding, (.rollout) (finding.vector)) | Breaking finding <- toRequiredDeclared, (.code) finding == ContractFieldChanged]
+        `shouldBe` [("RegistrationSeen.referrerId", Set.fromList [RolloutDrainRequired, RolloutProducerFirst])]
+      [(.detail) finding | Breaking finding <- toRequiredDeclared, (.code) finding == ContractFieldChanged]
+        `shouldSatisfy` all (T.isInfixOf "generated consumers must rebuild for the declared Haskell type")
+      [((.subject) finding, (.rollout) (finding.vector)) | Breaking finding <- toOptionalLiteral, (.code) finding == ContractFieldChanged]
+        `shouldBe` [("RegistrationSeen.referrerId", Set.singleton RolloutProducerLast)]
       forM_ [(base, mutant "optional-scalar-change"), (mutant "optional-scalar-change", base)] $ \(old, new) -> do
         changes <- diffFixtures old new
         [finding | Breaking finding <- changes, (.code) finding == ContractFieldChanged, (.subject) finding == "MemberNoted.note"]
@@ -9155,7 +9167,9 @@ main = hspec $ do
         [ (base, mutant "optional-to-required", "ContractFieldChanged", producerFirst, producerLast),
           (mutant "optional-to-required", base, "ContractFieldChanged", producerLast, producerFirst),
           (mutant "discriminator-body", base, "ContractDiscriminatorChanged", producerLast, producerFirst),
-          (base, mutant "discriminator-body", "ContractDiscriminatorChanged", producerFirst, producerLast)
+          (base, mutant "discriminator-body", "ContractDiscriminatorChanged", producerFirst, producerLast),
+          (base, mutant "optional-literal-to-required-declared", "ContractFieldChanged", producerFirst, producerLast),
+          (mutant "optional-literal-to-required-declared", base, "ContractFieldChanged", producerLast, producerFirst)
         ]
         $ \(old, new, code, expected, absent) -> do
           (status, out) <- diffExplainSince old new

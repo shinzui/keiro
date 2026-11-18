@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Integration contracts admit optional scalar fields and envelope-discriminated payloads
 description: A public contract field may be Optional of one scalar, absent as an omitted key and read from an omitted key or null, and a contract may take its event type from the envelope instead of a body key.
-timestamp: 2026-11-18T21:30:13Z
+timestamp: 2026-11-18T22:27:00Z
 docId: ADR-65
 status: Accepted
 date: 2026-11-18
@@ -60,8 +60,9 @@ constructor change only reaches a service that regenerates its own module. Chang
 between required and optional is breaking `ContractFieldChanged` in both directions, and the
 detail names the direction. Required to optional keeps `producer-last`: deployed consumers
 still require the key, so every reader must tolerate omission before any writer drops it.
-Optional to required is `producer-first` with `drain-required`: the new reader requires a
-key old producers omit, so writers that supply it deploy first, and retained messages that
+Optional to required is `producer-first` with `drain-required`, also when the scalar moves
+between a literal `typeid "p"` and a declared ID of equal prefix and admission, because a
+present value keeps its bytes: the new reader requires a key old producers omit, so writers that supply it deploy first, and retained messages that
 omit it drain or are migrated before the stricter reader runs.
 Changing the scalar under `Optional`, or between `Optional` and `List`, is breaking. A
 literal-to-declared move under `Optional` is build-only exactly when it is for scalars and

@@ -30,7 +30,9 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   compatible, and `consumer-build=advisory` asks for a re-scaffold because the generated
   constructor gains a `Maybe` argument; the default gate passes. A change between required
   and optional is breaking in both directions: required to optional is `producer-last`,
-  optional to required is `producer-first` with `drain-required`. (IR-64)
+  optional to required (keeping the scalar, or moving between a literal TypeID and a
+  declared ID of equal prefix and admission) is `producer-first` with `drain-required`.
+  (IR-64)
 - Candidate Language 6 contracts may declare `discriminator from envelope`. The generated
   encoder writes no discriminator key, and the module exports
   `parse<Contract>PayloadAs :: Text -> Value -> Either Text <Contract>Payload`, which takes

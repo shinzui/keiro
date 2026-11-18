@@ -2876,10 +2876,27 @@ contractEventDiff env oldContract newContract oldEvent newEvent =
             subject
             ContractFieldChanged
             (detail <> "; canonical JSON bytes and TypeID admission are unchanged, but generated consumers must rebuild for the declared Haskell type")
-      | optionalToRequired = breakingAt publicContractReaderTightenedContext ((.name) newContract) "contract-field" subject ContractFieldChanged detail
+      | optionalToRequired = breakingAt publicContractReaderTightenedContext ((.name) newContract) "contract-field" subject ContractFieldChanged (detail <> rebuildDetail)
       | otherwise = breaking ((.name) newContract) "contract-field" subject ContractFieldChanged (detail <> if oldDomain /= newDomain then renderIdDomainDirection oldDomain newDomain else "")
       where
-        optionalToRequired = contractIsOptional ((.valueType) oldField) && (.valueType) newField == CScalar (contractScalar ((.valueType) oldField))
+        -- An Optional field made required whose present value keeps its exact
+        -- bytes and admission: the same scalar, or a literal/declared ID pair
+        -- with an equal prefix and admission domain.  Only the omitted key is
+        -- newly rejected, so producers that write it can deploy first.
+        optionalToRequired = case ((.valueType) oldField, (.valueType) newField) of
+          (COptional oldScalar, CScalar newScalar) ->
+            oldDomain == newDomain
+              && ( oldScalar == newScalar
+                     || ( isLiteralDeclaredTransition (CScalar oldScalar) (CScalar newScalar)
+                            && isJust oldDomain
+                            && contractTypePrefix ((.old) env) ((.valueType) oldField) == contractTypePrefix ((.new) env) ((.valueType) newField)
+                        )
+                 )
+          _ -> False
+        rebuildDetail = case ((.valueType) oldField, (.valueType) newField) of
+          (COptional oldScalar, CScalar newScalar)
+            | oldScalar /= newScalar -> "; present values keep their canonical JSON bytes and TypeID admission, and generated consumers must rebuild for the declared Haskell type"
+          _ -> ""
         subject = (.name) newEvent <> "." <> (.name) newField
         detail = "field type changed " <> renderContractType ((.valueType) oldField) <> " -> " <> renderContractType ((.valueType) newField) <> presenceDirection
         presenceDirection = case (contractIsOptional ((.valueType) oldField), contractIsOptional ((.valueType) newField)) of

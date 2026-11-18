@@ -37,6 +37,11 @@ provenance:
       at: 2026-11-18T20:09:35Z
       verdict: "changes-requested"
       note: "Implementation review found rollout, fieldless code generation, constructor compatibility, and two documentation defects."
+    - model: "claude-fable-5-2"
+      harness: "claude-code"
+      at: 2026-11-18T22:17:26Z
+      verdict: "changes-requested"
+      note: "M5 findings 1-5 and hardening verified by reading; one residual: Optional literal TypeID to required declared id of the same prefix (wire-identical) still reports producer-last against its own detail line, and the Decision Log rationale for excluding it is false for that case; plus minor doc and mutation-table notes."
 ---
 
 # Let integration contracts declare optional fields and an envelope discriminator
@@ -144,7 +149,9 @@ M1–M4 record the original delivery and its verification.
   suite 19; focused regeneration of all three scaffolds reports no changes and
   `scripts/check-conformance-corpus.sh` reports `conformance corpus: ok` over 62 plan
   entries; the ADR and user documentation bundles validate. Every mutation in the
-  Milestone 5 evidence below fails a named test. Item 9 is open.
+  Milestone 5 evidence below fails a named test. The second review
+  (`claude-fable-5-2`, 2026-11-18) requested changes; its three findings are fixed in
+  the commit that follows `ed296842`, and item 9 awaits a re-review.
 - [ ] Pre-release gate. The generated decoder reads the producer's own sample payloads
   and agrees with the consumer's hand-written decoder on every existing test input.
 - [ ] Release. The change ships in the next keiro-dsl and keiro-core release under the
@@ -208,6 +215,21 @@ These were found while drafting on 2026-11-18 and shaped the design.
   `NoFieldSelectors`, `OverloadedRecordDot`, `OverloadedStrings`). The shape-matrix
   compile therefore passes those flags, plus `-Wall -Wno-deprecations -Werror` from the
   `warnings` and `generated-output` stanzas.
+- (M5) The first full `just verify` failed at `record-migration-policy`: the
+  idiomatic-v2 edition inventory and the 0.15 record-field manifest are generated from
+  the source and the corpus, so the new modules and shifted `Diff.hs` lines made them
+  stale. `python3 scripts/generate-record-migration-manifests.py` refreshes them
+  (`ed296842`). The second run then failed once in `keiro-test`, a package this plan does
+  not touch: `VersionedRebuildSpec` "rolls every cutover boundary back to one v1
+  authority…" got Postgres `57014 canceling statement due to statement timeout` before
+  its own cutover deadline. The example passed 3 of 3 isolated reruns; it is a
+  load-sensitive timing race, recorded here rather than fixed.
+- (M5) The second review found that an Optional literal TypeID made a required
+  declared ID of equal prefix and admission still reported `producer-last`; see the
+  revised Decision Log entry. It also found that the integration guide claimed its
+  rollout column matched `--explain`, while the build-only literal/declared row prints
+  the historical `producer-last` remedy. The guide now names the vector's `rollout`
+  entry instead.
 - (M5) The corpus driver keys a scaffold by its ledger's directory, one ledger per
   directory, and the conformance baseline regenerates a `candidate-primary` suite from a
   single source. The two-version rollout suite therefore keeps one scaffold each in
@@ -351,12 +373,17 @@ These were found while drafting on 2026-11-18 and shaped the design.
   leaves the two out-of-scope remedies recorded in Surprises & Discoveries unchanged.
   Date: 2026-11-18
 
-- Decision: Optional-to-required takes the `producer-first` vector only when the scalar
-  is unchanged (`Optional s` to `s`). A move from `Optional s` to another scalar or to a
-  list keeps the ordinary public-breaking vector.
-  Rationale: Such a change also alters the value's type, so messages that carry the key
-  fail either way and no deployment order helps; the plan asks for the two forward
-  transitions only.
+- Decision: Optional-to-required takes the `producer-first` vector when a present value
+  keeps its exact bytes and admission: `Optional s` to `s` with an unchanged admission
+  domain, or `Optional typeid "p"` to and from a declared ID of equal prefix and equal
+  resolved domain (the same rule `literalDeclaredSamePrefix` applies to build-only
+  moves). Any other move from `Optional s` to a scalar or a list keeps the ordinary
+  public-breaking vector.
+  Rationale: When present bytes are unchanged, only the omitted key is newly rejected,
+  so producers that write it can deploy first. When the value's type or admission also
+  changes, old messages that carry the key fail as well and no deployment order helps.
+  The first M5 implementation covered only an unchanged scalar; the second review found
+  the literal/declared case still reported `producer-last`, the defect item 1 targets.
   Date: 2026-11-18
 
 - Decision: The executed rollout proof is its own conformance suite,
@@ -419,9 +446,10 @@ against each defect:
 | `contractReaderTightenedVector` reverted to `publicBreakingVector` | unit: "classifies Optional contract field evolution in both directions", "classifies a change of discriminator source as breaking in both directions", "explains the contract rollout order through the diff CLI in every direction"; rollout suite: "optional to required: diff reports the rollout the behaviour requires", "envelope to body key: diff reports the rollout the behaviour requires" |
 | `remediationFor` ignores the vector (hardcoded `producer-last`) | the same three unit tests |
 | fieldless encoder arm binds `payload` again | unit: "lowers an envelope-discriminated contract to an event-type decoder", "compiles every contract shape under the generated-output warning policy" (`-Wunused-matches` in `KeyedBare`, `KeyedBlend`, `EnvelopedBare`, `EnvelopedBlend`) |
-| `(.=)` imported unconditionally | unit: "compiles every contract shape under the generated-output warning policy" (`-Wunused-imports` in `EnvelopedBare`) |
+| `(.=)` imported unconditionally | unit: "compiles every contract shape under the generated-output warning policy" (`-Wunused-imports` in `EnvelopedBare`), which is the run recorded; "lowers an envelope-discriminated contract to an event-type decoder" asserts the import line too and also fails, per the second review |
 | added optional field reported as `additive` again | unit: "classifies Optional contract field evolution in both directions", "explains the contract rollout order through the diff CLI in every direction" |
-| discriminator verdict reversed (tightened when the *new* contract is envelope-mode) | rollout suite: "envelope to body key: …" and "body key to envelope: diff reports the rollout the behaviour requires" |
+| discriminator verdict reversed (tightened when the *new* contract is envelope-mode) | rollout suite: "envelope to body key: …" and "body key to envelope: diff reports the rollout the behaviour requires" (the run recorded); the unit tests "classifies a change of discriminator source as breaking in both directions" and "explains the contract rollout order through the diff CLI in every direction" assert the same vectors and also fail, per the second review |
+| literal/declared Optional-to-required case removed from the tightening rule (review fix) | unit: "classifies Optional contract field evolution in both directions", "explains the contract rollout order through the diff CLI in every direction" |
 
 No-regression evidence, per guarantee. Byte-identical output for existing contracts:
 the corpus check regenerated all 62 entries with no drift; the only changed committed
