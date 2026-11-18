@@ -107,7 +107,12 @@ Tests actually run, all inside `nix develop` at the implementation commit:
 - Baseline before any change: `cabal test keiro-dsl:keiro-dsl-conformance-behavior-complete` passed (19 required, 17 verified, 2 unverified), and `cabal test keiro-workspace-proof-conformance` passed with 43 check lines.
 - After regeneration, the default run of `keiro-workspace-proof-conformance` printed exactly those 43 lines (`diff` empty) and exited 0. `--test-options=--behavior-complete` exited 1 with the rows listed in Progress. The compiled binary's `--help` exited 0, and `--bogus` exited 2.
 - `keiro-dsl:test:keiro-dsl-test` `--match "plan 337"`: three examples, all passing. The compiled matrix took 278 s. In both modes on one temporary copy, it covers the committed witnesses and correct witnesses for all nine keys, and each of these breaks full mode with the aggregate and key while the default stays green: missing, duplicate, stale, incorrect live (`event-value-mismatch`), incorrect rejection (`rejection-class`), incorrect replay, and a history-dependent Assignment replay. A changed Expectations fact and a false ordinary check both fail full mode while every behavior row passes. Re-scaffolding leaves all three `BehaviorHoles.hs`, `Expectations.hs`, and the Cabal fragment byte-identical, and the generated `Main.hs` imports only the facade. The no-aggregate package passes `[]`, `--behavior-complete`, and `--help`, and rejects `--behavior-completed`.
-- The full gate results are recorded below.
+- Full gate on committed `c60e8a96`:
+  - `cabal test keiro-dsl:tests`: 61 suites passed, none failed; `keiro-dsl-test` ran 963 examples with 0 failures.
+  - `keiro-dsl-conformance-behavior-complete` and `keiro-workspace-proof-conformance` (default mode) both passed.
+  - `just conformance-corpus-policy` passed (`conformance corpus: ok`).
+  - `keiro-dsl/test/behavior-complete-mutation-test.sh` caught all 13 report mutations, then stopped at "reset source-wide predicate edge indices". That mutation's `perl` target `let edgeIndex = layoutOutgoingIndex entry` has been absent from `keiro-dsl/src` since `7b06bc52`, before this plan's baseline `43c9cdcb`, so the mutation is a no-op unrelated to this plan; the script is not part of `just verify`.
+  - `just verify` first failed on a stale `keiro-dsl/generated-haskell-edition-idiomatic-v2.md`. The newsurface facade had been updated after the inventory was regenerated, so the inventory was regenerated again.
 
 Guarantees, each with the check that shows it:
 

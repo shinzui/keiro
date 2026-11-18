@@ -8,7 +8,7 @@ spelling while deriving their target and structural facts from current v2 output
 rows intentionally
 over-approximate selector use so no consumer occurrence is silently omitted during review.
 
-Inventory: 885 generated modules, 592 record declarations, 2555 fields, 25231 field-label occurrences, 19 local default-pragmas, and 203 hand-owned conformance modules.
+Inventory: 885 generated modules, 592 record declarations, 2555 fields, 25237 field-label occurrences, 19 local default-pragmas, and 203 hand-owned conformance modules.
 
 The `idiomatic-v2` manifest defaults are `DuplicateRecordFields`, `NoFieldSelectors`,
 `OverloadedRecordDot`, and `OverloadedStrings`. Constructor names, arity, field order, wire
@@ -10773,13 +10773,19 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/BehaviorSourceMap.hs:26` | `missing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/BehaviorSourceMap.hs:26` | `source` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/BehaviorSourceMap.hs:26` | `key` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Conformance.hs:7` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Conformance.hs:7` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Conformance.hs:8` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Conformance.hs:8` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Conformance.hs:9` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Conformance.hs:9` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Conformance.hs:20` | `value` | record-dot `(.value)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Conformance.hs:10` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Conformance.hs:10` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Conformance.hs:11` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Conformance.hs:11` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Conformance.hs:12` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Conformance.hs:12` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Conformance.hs:13` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Conformance.hs:13` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Conformance.hs:24` | `value` | record-dot `(.value)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:4` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:26` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:26` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
