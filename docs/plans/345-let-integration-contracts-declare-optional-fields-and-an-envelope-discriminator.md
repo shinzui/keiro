@@ -42,6 +42,11 @@ provenance:
       at: 2026-11-18T22:17:26Z
       verdict: "changes-requested"
       note: "M5 findings 1-5 and hardening verified by reading; one residual: Optional literal TypeID to required declared id of the same prefix (wire-identical) still reports producer-last against its own detail line, and the Decision Log rationale for excluding it is false for that case; plus minor doc and mutation-table notes."
+    - model: "claude-fable-5-2"
+      harness: "claude-code"
+      at: 2026-11-18T22:29:38Z
+      verdict: "approved"
+      note: "Re-review of c27a51a8: the equal-prefix literal/declared Optional-to-required move is now producer-first with drain, the reverse and domain-change cases keep producer-last, docs and plan records agree; verified by reading, no builds run."
 ---
 
 # Let integration contracts declare optional fields and an envelope discriminator
@@ -102,9 +107,9 @@ envelope whose `keiro-event-type` is not `RegistrationCompleted` is rejected.
 
 ## Progress
 
-**Reopened 2026-11-18 after implementation review.** Milestone 5 items 1–8 are
-implemented and verified; item 9, the second review, is the remaining M5 work.
-M1–M4 record the original delivery and its verification.
+**Reopened 2026-11-18 after implementation review; Milestone 5 closed the same day.**
+The pre-release gate is the next work. M1–M4 record the original delivery and its
+verification.
 
 - [x] M1: Optional contract fields. A Language 6 contract with `Optional <scalar>` fields
   passes `keiro-dsl check`, pretty-prints back to itself, and scaffolds a `Maybe` field with
@@ -137,7 +142,7 @@ M1–M4 record the original delivery and its verification.
   change, and IR-64 reads `completed`. Done 2026-11-18 (`a50da90e` and `2f300199`).
   All four OKF bundles and `just user-documentation-validate` passed. The release item
   owns the consumer handoff drafted in Outcomes & Retrospective.
-- [ ] M5. Resolve the five implementation review findings, complete the hardening steps
+- [x] M5. Resolve the five implementation review findings, complete the hardening steps
   (shape-matrix compile, executed rollout proofs, mutation check, second review), and
   record the verification described in
   [Milestone 5](#milestone-5-resolve-the-implementation-review-findings).
@@ -149,9 +154,13 @@ M1–M4 record the original delivery and its verification.
   suite 19; focused regeneration of all three scaffolds reports no changes and
   `scripts/check-conformance-corpus.sh` reports `conformance corpus: ok` over 62 plan
   entries; the ADR and user documentation bundles validate. Every mutation in the
-  Milestone 5 evidence below fails a named test. The second review
-  (`claude-fable-5-2`, 2026-11-18) requested changes; its three findings are fixed in
-  the commit that follows `ed296842`, and item 9 awaits a re-review.
+  Milestone 5 evidence below fails a named test. Item 9: the second review
+  (`claude-fable-5-2`) requested changes; its three findings are fixed in `c27a51a8`,
+  and its re-review of that commit is `approved` (both recorded in the frontmatter).
+  Done 2026-11-18: on `c27a51a8`, `nix develop -c just verify` exits 0 with 72 test
+  suites passing, `keiro-dsl-test` at 979 examples and 0 failures, `conformance corpus:
+  ok`, and the topology schema gate reporting 5 goldens valid and 4 examples as
+  expected.
 - [ ] Pre-release gate. The generated decoder reads the producer's own sample payloads
   and agrees with the consumer's hand-written decoder on every existing test input.
 - [ ] Release. The change ships in the next keiro-dsl and keiro-core release under the
@@ -434,7 +443,8 @@ and `envelope` as keywords; as for List fields, a follow-up there can copy
 `keiro-dsl/test/fixtures/contract-foreign-event.keiro` into its corpus to pin `Optional` in
 the contract-field position and `discriminator from envelope`.
 
-Milestone 5 (2026-11-18, items 1–8). All five review findings are fixed. The CLI now
+Milestone 5 (2026-11-18). All five review findings are fixed, and the second review's
+three findings with them. The CLI now
 gives each contract direction the order its decoders require, and an added optional
 field reads as a consumer-build warning that passes the gate. Fieldless events compile
 in both discriminator modes. ADR-65 and the integration guide match the producer and the
@@ -1217,3 +1227,9 @@ because every existing gate passed while the five defects existed. The additions
 all generated shapes, execute the rollout verdicts, mutation-check the new tests, require
 a second review, and test against the real producer's payloads and the real consumer's
 decoder before release.
+
+Revision note (2026-11-18, fourth). Closed Milestone 5. Recorded the second review, its
+three findings and their fix in `c27a51a8` (an equal-prefix literal/declared
+Optional-to-required move is now `producer-first`, the integration guide names the
+vector's rollout entry, and the mutation table is complete), the approved re-review,
+the two `just verify` discoveries, and the passing full gate.
