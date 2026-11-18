@@ -15,8 +15,11 @@ default:
 verify:
     python3 scripts/release_workflow.py locked -- just _verify
 
+# release-static runs first: its checks take under a minute and need no build,
+# so a stale inventory or an invalid document fails before the long Haskell
+# build and test run instead of after it.
 [private]
-_verify: mapped-structural-enum-equality-proof consumer-enum-literal-proof mapped-register-construction-proof process-compose-check jitsurei-verify haskell-verify adr-validate research-validate capabilities-validate reviews-validate bug-reports-validate user-documentation-validate terminology-validate extension-policy dsl-api-boundaries topology-schema-validate keiro-reexports record-migration-policy generated-name-policy conformance-corpus-policy process-reaction-proof initial-hole-proof replay-compatibility checked-mapping-adoption
+_verify: release-static mapped-structural-enum-equality-proof consumer-enum-literal-proof mapped-register-construction-proof process-compose-check jitsurei-verify haskell-verify adr-validate research-validate capabilities-validate reviews-validate bug-reports-validate user-documentation-validate terminology-validate extension-policy dsl-api-boundaries topology-schema-validate keiro-reexports record-migration-policy generated-name-policy conformance-corpus-policy process-reaction-proof initial-hole-proof replay-compatibility checked-mapping-adoption
     cabal test keiro-migrations-test
 
 # Run before compilation. Registry reachability and generated inventories must
