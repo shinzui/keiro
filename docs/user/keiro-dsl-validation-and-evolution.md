@@ -5,9 +5,9 @@ description: Understand Keiro DSL validation layers and language gates, evolve d
 docId: DOC-34
 tags: [keiro, dsl, validation, evolution, reference]
 generated:
-  by: process:codex-cli
-  at: 2026-10-14T15:11:47Z
-timestamp: 2026-10-27T21:15:00Z
+  by: anthropic-claude-code/claude-opus-5-5
+  at: 2026-11-18T18:28:55Z
+timestamp: 2026-11-18T18:28:55Z
 ---
 
 # Keiro DSL Validation and Evolution
@@ -92,8 +92,11 @@ surfaces include:
 - contract topic syntax and topology; intake binding, schema, dedupe, decode,
   persistence, and complete disposition policy; emit topic affinity; publisher
   ordering/backoff/attempt policy; list payloads cannot supply outbox or dedupe
-  identity (`ContractListFieldUsedAsKey`), while canonical envelope identities
-  retain precedence over colliding payload names;
+  identity (`ContractListFieldUsedAsKey`), nor can `Optional` payload fields
+  (`ContractOptionalFieldUsedAsKey`), while canonical envelope identities
+  retain precedence over colliding payload names. Across revisions, `diff`
+  reports an added `Optional` contract field as the additive
+  `ContractOptionalFieldAdded`;
 - queue payload vocabulary, bounded durations, identity fixtures,
   FIFO/group/provisioning rules, complete disposition, and dispatch
   read-model/queue references;

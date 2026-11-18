@@ -6,6 +6,13 @@ All notable changes to `keiro-core` are recorded here. The format follows
 
 ## [Unreleased]
 
+### New Features
+
+- `Keiro.Integration.Event.decodeJsonIntegrationEventWith` decodes an envelope's JSON
+  payload with a parser that also receives the envelope's `eventType`, reporting the
+  parser's `Left` as `DecodeFailed`. It joins an envelope to the `parse<Contract>PayloadAs`
+  decoder keiro-dsl generates for a `discriminator from envelope` contract. (IR-64)
+
 ## 0.25.1.0 — 2026-11-16
 
 ### Other Changes

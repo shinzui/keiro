@@ -5,9 +5,9 @@ description: Introduce the Keiro DSL, its stable Language 5 and candidate Langua
 docId: DOC-23
 tags: [keiro, dsl, language-5, language-6, reference]
 generated:
-  by: process:codex-cli
-  at: 2026-10-14T04:19:11Z
-timestamp: 2026-11-17T00:00:00Z
+  by: anthropic-claude-code/claude-opus-5-5
+  at: 2026-11-18T18:28:55Z
+timestamp: 2026-11-18T18:28:55Z
 ---
 
 # Keiro DSL Reference
@@ -48,6 +48,8 @@ is published. It extends Language 5 with the following additions:
 | `Map[DeclaredId] T` identifier-keyed maps | [Mapped type expressions](keiro-dsl-types-and-mappings.md#mapped-type-expressions) |
 | List fields in public contracts | [Integration contracts](keiro-dsl-integration.md#integration-contracts) |
 | Declared ID fields in public contracts | [Integration contracts](keiro-dsl-integration.md#integration-contracts) |
+| `Optional <scalar>` fields in public contracts | [Optional fields](keiro-dsl-integration.md#optional-fields) |
+| `discriminator from envelope` contracts | [Payloads without a body discriminator](keiro-dsl-integration.md#payloads-without-a-body-discriminator) |
 | Named bare container values (`wire Optional Text`, `wire List T`, `wire Map T`) | [Structural bare values](keiro-dsl-types-and-mappings.md#structural-bare-values) |
 | `Day` calendar days and `Set Text` text sets | [Checked value wire policies](keiro-dsl-types-and-mappings.md#checked-value-wire-policies) |
 | `mapped refined` base16 byte values | [Refined values](keiro-dsl-types-and-mappings.md#refined-values) |

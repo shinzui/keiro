@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-11-18
+
+* **Addition**: ADR-65: integration contracts admit Optional scalar fields (omitted key on write, omitted key or null on read) and envelope-discriminated payloads decoded through decodeJsonIntegrationEventWith (plan 345).
+
 * **Update**: ADR-20: add the opt-in runServiceBehaviorChecks facade action behind the generated runner's --behavior-complete flag; the default run is unchanged (plan 337).
 
 ## 2026-11-17

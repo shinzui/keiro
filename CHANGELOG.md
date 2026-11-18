@@ -6,6 +6,13 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+### New Features
+
+- **keiro-dsl**, **keiro-core**: Integration contracts can mirror events owned by other
+  producers: candidate Language 6 adds `Optional <scalar>` contract fields and
+  `discriminator from envelope`, and keiro-core adds `decodeJsonIntegrationEventWith`.
+  The keiro-dsl library types change; see the package changelogs. (IR-64)
+
 ## 0.25.1.0 — 2026-11-16
 
 ### New Features

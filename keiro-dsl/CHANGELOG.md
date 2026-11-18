@@ -6,7 +6,35 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- `Keiro.Dsl.Grammar.ContractType` gains the constructor `COptional`, and
+  `ContractNode.discriminator` changes from `Name` to the new `ContractDiscriminator`
+  (`DiscriminatorBodyKey` or `DiscriminatorEnvelope`). `contractIsOptional` and
+  `contractBodyDiscriminator` are new. `DiagnosticCode` inserts
+  `ContractOptionalFieldAdded` and `ContractOptionalFieldUsedAsKey`, and
+  `LanguageFeature` adds `ContractOptionalFieldSyntax` and
+  `ContractEnvelopeDiscriminatorSyntax`. There is no compatibility shim: exhaustive
+  matches and record construction must handle the new constructors. Generated modules for
+  existing sources are byte-identical. (ExecPlan 345, IR-64)
+
 ### New Features
+
+- Candidate Language 6 contract fields may be `Optional <scalar>` for `typeid "prefix"`,
+  a declared `id`, `text` or `int`. The generated field is `Maybe`; the encoder omits the
+  key when absent and the decoder reads an omitted key or `null` as absent, while any
+  other value must satisfy the scalar's parser. `Optional List`, `List Optional` and other
+  nesting are refused. An optional field cannot be a publisher `outboxId` or intake
+  `dedupe` key (`ContractOptionalFieldUsedAsKey`). `diff` reports an added optional field
+  as the additive `ContractOptionalFieldAdded` without a `schemaVersion` bump, and a change
+  between required and optional as breaking in both directions. (IR-64)
+- Candidate Language 6 contracts may declare `discriminator from envelope`. The generated
+  encoder writes no discriminator key, and the module exports
+  `parse<Contract>PayloadAs :: Text -> Value -> Either Text <Contract>Payload`, which takes
+  the envelope's event type and rejects one the contract does not declare. A change of
+  discriminator source is breaking `ContractDiscriminatorChanged`. `keiro-dsl topology`
+  writes `discriminator: null` for such a contract; both topology schemas admit `null`.
+  (IR-64)
 
 - The generated service conformance runner accepts `--behavior-complete`. After the
   unchanged default output, it evaluates every declared behavior key of every aggregate

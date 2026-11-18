@@ -5,8 +5,8 @@ description: Declare Keiro DSL public contracts, Kafka intakes, emits, and outbo
 docId: DOC-29
 tags: [keiro, dsl, integration, kafka, reference]
 generated:
-  by: process:codex-cli
-  at: 2026-10-14T14:13:49Z
+  by: anthropic-claude-code/claude-opus-5-5
+  at: 2026-11-18T18:28:55Z
 ---
 
 # Keiro DSL Integration Contracts
@@ -52,8 +52,9 @@ Contract field types are:
 | `text` | `Text` |
 | `int` | `Int` |
 | `List <scalar>` (Language 6 candidate) | a Haskell list of the element type; JSON array in list order |
+| `Optional <scalar>` (Language 6 candidate) | `Maybe` of the scalar's type; the key is omitted when absent and read as absent when omitted or `null` |
 
-Field names are unique within an event and cannot equal the contract
+Field names are unique within an event and cannot equal the contract's body
 discriminator. TypeID prefixes follow the same validity rules as shared IDs.
 The generated decoder rejects malformed, non-canonical, wrong-prefix, and
 unadmitted values at the field path; `typeid "prefix"` and default declared IDs
@@ -100,15 +101,18 @@ Encoding writes an ordered JSON array and retains duplicates. Decoding requires 
 list field, rejects non-arrays and explicit null at `$.field`, and rejects any invalid
 or null element at `$.field[index]`. One bad element rejects the whole payload;
 `[]` is valid. Each ID element uses the same prefix and admission checks as a scalar.
-Nested containers, `Optional`, `Map`, and `Set` applications, records, unions, enums,
-and structural references are refused in contracts. Those application spellings do
-not reserve ID names: an `id Optional prefix=probe` declaration can supply both
-`value: Optional` and `values: List Optional`. Likewise, a declared ID named `List`
-can supply `value: List` and `values: List List`. A bare type ends at `;`, `}`, or
+Nested containers (including `Optional List` and `List Optional`), `Map` and `Set`
+applications, records, unions, enums, and structural references are refused in
+contracts. Those application spellings do not reserve ID names: an
+`id Optional prefix=probe` declaration can supply `value: Optional`,
+`values: List Optional`, and `maybeValue: Optional Optional`. Likewise, a declared ID
+named `List` can supply `value: List` and `values: List List`. Followed by an operand,
+`List` and `Optional` are always containers, so `values: Optional text` is an optional
+`text` field even when an ID named `Optional` exists. A bare type ends at `;`, `}`, or
 the next field head (including its aliases and `:`); newlines are whitespace.
-Keywords are case-sensitive: only `List` introduces a list, so `list text`,
-`LIST text`, and `LiSt text` are invalid applications. Mixed-case words used alone
-remain ordinary declared ID names.
+Keywords are case-sensitive: only `List` introduces a list and only `Optional` an
+optional value, so `list text`, `LIST text`, `optional text`, and `OPTIONAL text` are
+invalid applications. Mixed-case words used alone remain ordinary declared ID names.
 
 A list field cannot be a publisher `outboxId` or an intake `dedupe` key; the checker
 reports `ContractListFieldUsedAsKey`. Canonical envelope identity names take precedence
@@ -121,11 +125,110 @@ Changing between a scalar and a list, changing the element type, or changing an 
 prefix or admission is breaking public evolution. Moving a literal ID element to a
 declared ID is build-only only when list shape, prefix, and admission are all unchanged.
 
+### Optional fields
+
+Candidate Language 6 admits `Optional` of any of the four scalar types, for a field a
+producer leaves out when it has no value:
+
+```keiro
+event MemberNoted on notes {
+  memberId: MemberId
+  note: Optional text
+  referrerId: Optional typeid "member"
+}
+```
+
+The generated record holds `note :: Maybe Text`. On the wire an absent value is an
+omitted key: the encoder never writes `null`. The decoder reads an omitted key and an
+explicit `null` as `Nothing`. Any other value must satisfy the scalar's parser, so
+`"note": 7` or a wrong-prefix ID rejects the payload at `$.note`; a present declared ID
+keeps its admission domain. A consumer in any language can apply the same rule, which
+JSON Schema states as a property that is not required and admits `null`. Aliases work as
+for any field: `note haskell memberNote as "member_note": Optional text`.
+
+`Optional` takes exactly one scalar. `Optional List text`, `List Optional text`, and any
+other nesting are refused, because an empty array is already the way to say "no values".
+
+An optional field cannot be a publisher `outboxId` or an intake `dedupe` key: an identity
+that may be absent identifies nothing, and the checker reports
+`ContractOptionalFieldUsedAsKey`. The canonical envelope precedence described for lists
+applies, and a name that is a list in any selected event reports
+`ContractListFieldUsedAsKey` instead, so one mistake yields one diagnostic.
+
+Evolution follows from the wire rule:
+
+| Change | Classification |
+| --- | --- |
+| add an `Optional` field | additive `ContractOptionalFieldAdded`; no `schemaVersion` bump needed |
+| required to `Optional` | breaking `ContractFieldChanged`: deployed consumers still require the key |
+| `Optional` to required | breaking `ContractFieldChanged`: retained messages that omit the key no longer decode |
+| change the scalar under `Optional`, or `Optional` to or from `List` | breaking `ContractFieldChanged` |
+| `Optional typeid "p"` to or from `Optional DeclaredId` | build-only when prefix and admission are unchanged, as for scalars |
+| remove an `Optional` field | breaking `ContractFieldChanged`, like any removed field |
+
+### Payloads without a body discriminator
+
+A contract normally names the JSON key that carries the event name, as in
+`discriminator messageType`. An event published by a service that does not follow that
+convention may carry its name only in the envelope, which arrives over Kafka as the
+`keiro-event-type` header. Candidate Language 6 declares such a contract with
+`discriminator from envelope`:
+
+```keiro
+language keiro-dsl 6
+context registration-intake
+
+id MemberId prefix=member
+
+contract registration {
+  schemaVersion 1
+  discriminator from envelope
+
+  topic completed "registration.completed.v1"
+
+  event RegistrationCompleted on completed {
+    registrationId: typeid "registration"
+    occurredAt: text
+    ownerEmail: Optional text
+    mlsMemberId: Optional MemberId
+  }
+}
+```
+
+The generated encoder writes only the fields; an event without fields encodes as `{}`.
+`messageTypeOf` still names the event, and a producer puts it in the envelope's
+`eventType`. In place of `parseRegistrationPayload`, the module exports
+
+```haskell
+parseRegistrationPayloadAs :: Text -> Value -> Either Text RegistrationPayload
+```
+
+which takes the event type as its first argument and rejects a type the contract does not
+declare, even when the contract has one event. A declared event name must equal the
+envelope's event type exactly. Join it to an envelope with keiro-core's
+`decodeJsonIntegrationEventWith` from `Keiro.Integration.Event`:
+
+```haskell
+decodeJsonIntegrationEventWith parseRegistrationPayloadAs envelope
+  :: Either IntegrationEventError RegistrationPayload
+```
+
+It refuses a non-JSON content type with `UnsupportedContentType`, reports unparsable bytes
+as `MalformedPayload`, and reports the parser's `Left`, including an undeclared event
+type, as `DecodeFailed`. Because the body has no discriminator key, a field may use the
+wire key `messageType`. Changing between a body key and `from envelope` is breaking
+`ContractDiscriminatorChanged`, and `keiro-dsl topology` exports such a contract with
+`discriminator: null`.
+
+Mapping another producer's own header names onto Keiro's envelope is out of scope: intake
+`bind … from header` rows stay descriptive, so a consumer of such a producer rebuilds the
+envelope in a small adapter before calling `decodeJsonIntegrationEventWith`.
+
 Contract fields use the same optional `haskell` selector and `as "wire-key"`
 aliases as aggregate fields. The generated record uses `payloadType` and
 `serviceRegion` in the example, while JSON retains `"type"` and
 `"region_code"`. Resolved selectors must be valid and unique within the event
-record; wire keys must be non-empty, unique, and distinct from the declared
+record; wire keys must be non-empty, unique, and distinct from a declared body
 discriminator. A selector-only diff requires re-scaffolding and recompilation;
 changing a public wire key is a breaking contract change and consumers deploy
 before producers.
@@ -211,7 +314,7 @@ failed rows keep the full envelope for operators regardless of this choice.
 
 The envelope policy is exactly `strict-required lenient-optional`, and the body
 schema version must equal the contract version. Body mode must be `strict`:
-generated contract codecs decode every declared body field as required and emit
+generated contract codecs require every body field not declared `Optional` and emit
 no lenient fallback, so `lenient` is refused as a description of something that
 does not run. The word is still parsed and a posture change is still
 diff-classified. The

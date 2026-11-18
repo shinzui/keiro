@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-18
+* **Update**: RES-18: record the IR-64 revisit; ExecPlan 345 admits Optional of one scalar under the omitted-key-or-null policy, recorded in ADR-65.
+
 ## 2026-11-15
 
 * **Update**: Reconcile implemented timer-fire and workflow resume spans, attributes and bounded correlation.

@@ -2,7 +2,7 @@
 type: Research Document
 title: "Containers in Public Contract Fields: A Postponed Decision"
 description: Record why integration-contract fields stay flat scalars for now, what supporting Optional, List, or Map fields on public events would cost, and what must be decided before that changes.
-timestamp: 2026-10-14T04:08:20Z
+timestamp: 2026-11-18T18:28:01Z
 researchId: RES-18
 status: active
 scope: Whether keiro-dsl integration contract event fields should admit Optional, List, or Map shapes, and under which rules; the decision is deliberately postponed.
@@ -153,6 +153,23 @@ the element schema under JSON Schema or Avro. The outcome is recorded in
 [ADR-52](../adr/0052-integration-contracts-admit-lists-of-scalar-fields.md). Identity keys
 remain scalar and public evolution compares both shape and element admission. This note
 remains the record of the options for the day `Optional` or `Map` is requested.
+
+## Revisit (2026-11-18)
+
+IR-64
+([Let integration contracts describe events owned by other producers](../improvement-requests/let-integration-contracts-describe-events-owned-by-other-producers.md)),
+raised from `mori://tan/agent-reputation-service`, supplied the `Optional` case: a producer
+outside Keiro omits two fields of a public event when they are unknown. ExecPlan 345
+(`docs/plans/345-let-integration-contracts-declare-optional-fields-and-an-envelope-discriminator.md`)
+extends Option B to `Optional` of one admitted scalar, still with no `Map`, no nesting, and no
+structural references. It answers the five questions for that scope: the public surface stays
+expressible without Keiro; an absent value is an omitted key on write, and an omitted key or
+`null` reads as absent; a present value keeps its scalar's admission and is rejected at
+`$.<wireKey>`; adding an optional field is additive with no `schemaVersion` bump, while a
+change between required and optional is breaking in both directions; and the field renders as
+a property that is not required and admits `null`. The outcome is recorded in
+[ADR-65](../adr/0065-integration-contracts-admit-optional-scalar-fields-and-envelope-discriminated-payloads.md).
+`Map` remains open.
 
 ## Related
 

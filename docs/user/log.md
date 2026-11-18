@@ -1,5 +1,8 @@
 # Keiro User Documentation Log
 
+## 2026-11-18
+* **Update**: Document Optional contract fields, discriminator from envelope, parse<Contract>PayloadAs and decodeJsonIntegrationEventWith, the two new diagnostic codes, and the nullable topology discriminator (plan 345).
+
 ## 2026-11-17
 
 * **Update**: DOC-15, DOC-2, DOC-35: document the mounted service topology, the topology show and summary reads, and the keiro-ui serving handoff with its verified join table (plan 342).

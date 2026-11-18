@@ -6,8 +6,8 @@ docId: DOC-35
 tags: [keiro, dsl, topology, reference]
 generated:
   by: anthropic-claude-code/claude-opus-5-5
-  at: 2026-11-17T00:00:00Z
-timestamp: 2026-11-17T21:10:00Z
+  at: 2026-11-18T18:28:55Z
+timestamp: 2026-11-18T18:28:55Z
 ---
 
 # Keiro DSL Service Topology
@@ -99,7 +99,7 @@ language's own spelling.
 | `process` | `process` | `stableName`, `saga` (`aggregate`, `category`), `correlate` (`field`, `via`), `inputs` (input names), `target`, `projections`, `timers`, `rejected` and `poison` (`halt`, `deadLetter` or `skip`). |
 | `workflow` | `workflow` | `stableName`, `input`, `output`, `steps`: objects with `form` (`step`, `await`, `sleep`, `child`, `patch`, `continue-as-new`) and `label` when the form has one. A patch's items follow the patch item. |
 | `router` | `router` | `stableName`, `input`, `target`, `resolvesFrom` (the read model, or `null` for a hand-written resolver), `projections`. |
-| `contract` | `contract` | `schemaVersion`, `discriminator`, `topics` (`alias`, physical `topic`), `events`. |
+| `contract` | `contract` | `schemaVersion`, `discriminator` (the body key, or `null` for a contract declared `discriminator from envelope`), `topics` (`alias`, physical `topic`), `events`. |
 | `intake` | `intake` | `contract`, `topicAlias`, `topic` (physical), `accepts`, `dedupe` (`key`, `policy`), `idempotence` (`inbox-table` or `delegated`). |
 | `emit` | `emit` | `contract`, `topicAlias`, `topic` (physical), `source`, `key`, `events` (the distinct mapped events). |
 | `publisher` | `publisher` | `emit`, `ordering`, `maxAttempts`, `backoff` (`kind`, `window`, `max`, `multiplier`), `outboxField`. |

@@ -5,9 +5,9 @@ description: Explain domain and integration events and the public cross-context 
 docId: DOC-11
 tags: [keiro, integration-events, messaging]
 generated:
-  by: human:nadeem
-  at: 2026-09-18T04:05:10Z
-timestamp: 2026-11-15T02:05:00Z
+  by: anthropic-claude-code/claude-opus-5-5
+  at: 2026-11-18T18:28:55Z
+timestamp: 2026-11-18T18:28:55Z
 ---
 
 # Integration Events
@@ -141,6 +141,16 @@ business type. It returns:
   instance,
 - `UnsupportedContentType` if the envelope's `contentType` is not
   `ApplicationJson`.
+
+`decodeJsonIntegrationEventWith parser event` decodes the same JSON payload
+with a parser of type `Text -> Value -> Either Text a` that also receives the
+envelope's `eventType`. Use it for a payload that carries no body
+discriminator, such as the `parse<Contract>PayloadAs` function that keiro-dsl
+generates for a contract declared `discriminator from envelope` (see
+[Payloads without a body discriminator](keiro-dsl-integration.md#payloads-without-a-body-discriminator)).
+It returns the same `UnsupportedContentType` and `MalformedPayload` errors, and
+reports the parser's `Left`, such as an event type the contract does not
+declare, as `DecodeFailed`.
 
 ## Future schema registry
 
