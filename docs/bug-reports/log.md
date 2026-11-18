@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-18
+* **Update**: BUG-13 reported: a 100 ms versioned cutover deadline surfaced as UnexpectedServerError 57014 under full-gate load; suspected transaction-local statement_timeout left by the 0029 lock helpers.
+
 ## 2026-10-14
 * **Update**: BUG-12 fixed on master under plan 311: registry-aware comparison passes runtime, migration, operator, CLI, and full just verify gates; fixedVersion is unreleased.
 * **Update**: BUG-12 confirmed: compiled all-rows contract fixture reproduces unexpected binding-view drift on master; evidence retained and regression pending plan 311.
