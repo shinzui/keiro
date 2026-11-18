@@ -88,6 +88,10 @@ changes:
 cabal test keiro-demo-project-conformance
 ```
 
+That default run is not a complete behavior-witness gate; see
+[Gating every behavior witness](#gating-every-behavior-witness) for the opt-in
+`--behavior-complete` mode.
+
 The runner executes the service structural checks once under the `structural/`
 prefix, followed by every aggregate and read-model self-check. Process, router,
 and workflow facts are compared by qualified key with the create-once
@@ -322,6 +326,56 @@ forward/replay rows. Supply the history that makes the command valid; an
 initial control vertex may already hold registers rebuilt from earlier events.
 `behaviorObligationReport` executes one required key with the witnesses carrying
 that key; `behaviorCoverageReport` still checks the full inventory.
+
+#### Gating every behavior witness
+
+The default run deliberately evaluates only that initial-edge subset. Witnesses
+for other live transitions, rejection cells, and replay-only transitions can
+stay `Pending`, missing, duplicate, stale, or false while the default target is
+green. An application that requires the whole inventory opts in with one
+runner flag:
+
+```bash
+# default: generated checks, initial-edge witnesses, and Expectations facts
+cabal test keiro-demo-project-conformance --test-show-details=direct
+
+# full: the same output, then one row per aggregate behavior problem
+cabal test keiro-demo-project-conformance \
+  --test-options=--behavior-complete --test-show-details=direct
+```
+
+`--behavior-complete` first runs and prints exactly what the default run
+prints, then evaluates `behaviorCoverageReport behaviorWitnesses` once for every
+aggregate that has a `BehaviorContract`. Each pending, missing, duplicate, or
+stale key and each failed witness becomes its own `FAIL` row, and each
+aggregate ends with one summary row:
+
+```text
+FAIL  aggregate/Beta/behavior/pending/behavior-v1-6ab7fee2c8aa4e1d
+FAIL  aggregate/Alpha/behavior/stale/behavior-v1-e2c1eef1cb7848f5
+FAIL  aggregate/Alpha/behavior/failed/behavior-v1-c062ccf5e9b6f5c4 AlphaActive x LegacyPingAlpha: required rejection (domain/alpha.keiro:6:10) [rejection-class] expected NoOutgoingEdges but runtime returned NoMatchingEdge
+PASS  aggregate/Assignment/behavior/summary required=4 filled=4 pending=0 missing=0 duplicate=0 stale=0 failed=0 verified=1 unverified=3
+```
+
+Any `FAIL` row, any failed ordinary check, or any Expectations mismatch exits
+nonzero. The summary row passes exactly when `behaviorConformancePassed` does:
+correct evidence for an opaque predicate or one-way projection stays
+`unverified` and does not fail the gate. A stricter `behaviorConformancePassedWith
+True` policy is not a runner flag; it still needs a hand-written runner. In the
+default mode the runner never calls the full-report action, so turning the
+flag off changes no persisted data and adds no witness evaluation. `--help`
+prints this policy, and any other argument exits with status 2.
+
+The facade export behind the flag is `runServiceBehaviorChecks :: IO [(String,
+Bool)]`, next to `runServiceConformanceChecks`; each contract exports the
+row renderer `behaviorConformanceRows`. `BehaviorHoles` and `BehaviorContract`
+stay under `other-modules`. A service without aggregates passes both modes.
+
+To migrate from a hand-written full-report runner that required exposing
+per-aggregate modules, regenerate, switch the CI gate to
+`--behavior-complete`, and compare it with the old runner once. Remove the
+manual `exposed-modules` entries only after the new gate agrees and nothing
+else in the application imports those modules directly.
 
 New pending rows identify the semantic source cell beside the stable key, but
 do not copy a position that would become stale after the file becomes

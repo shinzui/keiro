@@ -4,6 +4,7 @@ slug: gate-all-behavior-witnesses-through-generated-service-conformance
 title: "Gate all behavior witnesses through generated service conformance"
 kind: exec-plan
 created_at: 2026-11-17T04:40:56Z
+intention: intention_01m7qnn0j2e1ctggvgypjgd4fe
 provenance:
   created_by:
     model: "gpt-6-astra"
@@ -15,6 +16,11 @@ provenance:
       at: 2026-11-18T15:47:09Z
       mode: "update"
       note: "Review against 43c9cdcb: per-key rows via contract export, reuse service-package fixture, add gates and guarantee evidence; no open IR absorbed"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-18T16:09:06Z
+      mode: "implement"
+      note: "Milestones 1-3 implemented: contract rows, facade action, runner flag, compiled matrix, docs, ADR-20 amendment"
 ---
 
 # Gate all behavior witnesses through generated service conformance
@@ -33,11 +39,9 @@ The terms used below mean the following in this repository. A hole is a module t
 ## Progress
 
 
-- [ ] Expose full behavior checks through the existing generated service facade, with execution tests for all report failure classes.
-- [ ] Add and exercise the generated runner's explicit full-witness mode across the runtime-package boundary.
-- [ ] Regenerate affected corpus fixtures and document the policy, with existing default behavior preserved.
-
-Planning and source validation are complete; implementation and runtime reproduction have not been performed.
+- [x] Expose full behavior checks through the existing generated service facade, with execution tests for all report failure classes. (2026-11-18) The contract exports `behaviorConformanceRows` and the facade exports `runServiceBehaviorChecks`. On the committed fixture the full rows are exactly: Alpha `missing/` for its four required keys, Alpha `stale/behavior-v1-e2c1eef1cb7848f5`, Beta `pending/behavior-v1-6ab7fee2c8aa4e1d`, and one summary row per aggregate, Assignment's passing with `verified=1 unverified=3`.
+- [x] Add and exercise the generated runner's explicit full-witness mode across the runtime-package boundary. (2026-11-18) The runner takes `--behavior-complete` and `--help`, and any other argument exits with status 2. The test "keeps the default run free of witness evaluation and gates every witness only under --behavior-complete (plan 337)" in `keiro-dsl/test/Main.hs` compiles the generated package against the private runtime library. It also proves default-green/full-red on the committed witnesses and full-green once the witnesses are filled.
+- [x] Regenerate affected corpus fixtures and document the policy, with existing default behavior preserved. (2026-11-18) The corpus regen touched only `BehaviorContract.hs` (50 files), the service-package facade, and its runner `Main.hs`. The default run's 43 check lines are byte-identical to the pre-change baseline. The user guide, changelog, and ADR-20 are updated.
 
 ## Surprises & Discoveries
 
@@ -57,6 +61,16 @@ A `Pending` witness therefore renders as `pending: 1` with no key. The facade ne
 
 2026-11-18: the motivating case is already committed and already a project package. `keiro-dsl/test/conformance-service-package/` is a three-aggregate workspace (`Alpha`, `Beta`, `Assignment`) whose runtime library and generated package `keiro-workspace-proof-conformance` are both listed in `cabal.project`. `Alpha` and `Beta` have no hole-owned initial edge and each has exactly one `Pending` witness; `Assignment` has four filled witnesses including a replay witness. Its default run is green today. No new fixture is needed to prove the package boundary.
 
+2026-11-18 (implementation): Alpha's committed witness is stale, not Pending. `domain/alpha.keiro` was extended after `BehaviorHoles.hs` was created, so the one committed row names a retired key while all four current keys are missing. Full mode reports `stale/behavior-v1-e2c1eef1cb7848f5` and four `missing/` rows instead of a `pending/` row. This is a better demonstration of create-once drift, so the committed file is kept as it is. Beta's row is a genuine `Pending`.
+
+2026-11-18 (implementation): the field renaming lives in `keiro-dsl/internal/Keiro/Dsl/GeneratedHaskellLanguage.hs` (`idiomaticV2LabelMigrations`). It rewrites identifiers, but not strings or comments, in every generated module after emission. Emitter code therefore keeps writing `report.reportPending`, and the new `behaviorConformanceRows` does the same.
+
+2026-11-18 (implementation): `Alpha`'s `LegacyPingAlpha` rejection cell (`behavior-v1-c062ccf5e9b6f5c4`) supplies the rejection case. The runtime returns `NoMatchingEdge` there, because `Active` has outgoing live edges but none for that command. No new rejection cell or fixture was needed.
+
+2026-11-18 (implementation): `just corpus-regen` does not rewrite `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Conformance.hs`. It is a `legacy-generated` row in `keiro-dsl/test/conformance-corpus-manifest.txt`: a hand-maintained golden with the pre-version banner, compared by the test "normalizes aggregate and read-model checks behind one base-only API". Its body was updated from current `keiro-dsl scaffold --runtime-package` output, keeping its banner. That facade is compiled by `keiro-dsl-conformance-newsurface`, so the suite now also lists `Generated.TransferRouting.Hospital.BehaviorContract` and `TransferRouting.Hospital.BehaviorHoles` and depends on `containers`. The contract's `uncompiled-generated` exemption was removed, because the corpus policy rejects an exemption for a module that is now compiled.
+
+2026-11-18 (implementation): `cabal test keiro-dsl:tests --test-options=...` passes the options to every keiro-dsl test suite, and the non-hspec suites reject hspec `--match`. Focused runs must target `keiro-dsl:test:keiro-dsl-test`.
+
 2026-11-18: Mori resolution works again. `mori path mori://tan/agent-reputation-service/okf/friction-log/concepts/FRIC-2` and `mori path mori://shinzui/keiro/okf/adrs/concepts/ADR-20` both resolve. Since the plan's baseline `fd869833`, the only change to the files named in Context and Orientation is a 25-line topology-related edit to `Scaffold.hs`; every function this plan names still exists.
 
 ## Decision Log
@@ -74,12 +88,38 @@ A `Pending` witness therefore renders as `pending: 1` with no key. The facade ne
 
 2026-11-18: Do not expand this plan to absorb an open improvement request. Every request in `docs/improvement-requests/` with status `proposed`, `accepted`, or `in-progress` was checked (IR-5, IR-7, IR-8, IR-10, IR-25, IR-33, IR-34, IR-37, IR-38, IR-40, IR-47, IR-48, IR-49, IR-51, IR-52, IR-61). None concerns `ServiceHarness.hs`, `ConformancePackage.hs`, the behavior contract, or witness gating; they are runtime, language-surface, diff, or tooling requests with their own plans or none. The only contact point is that FRIC-3 is consumer evidence for IR-10, recorded in the triage section below.
 
+2026-11-18 (implementation): Row labels are path-shaped, `aggregate/<Name>/behavior/<category>/<key>`, so they match the existing `aggregate/<Name>/<fact>` check keys. A failure row carries the same text `renderBehaviorConformanceText` prints after `FAIL`, and the summary is `summary required=N filled=N …`. The runner prints the unchanged default output first and the behavior rows after it. A duplicate-fact failure now records failure and continues instead of exiting immediately, so full mode still reports behavior rows. Default-mode output and exit status are unchanged.
+
+2026-11-18 (implementation): The facade selects aggregates with a new `Keiro.Dsl.Scaffold.aggregateHasBehaviorContract :: Aggregate -> Bool`, which shares its body with `hasVersion2Ownership`. That is one additive export from an exposed library module, so the Interfaces claim that the public API does not change is slightly wrong. The changelog records it, and `just dsl-api-boundaries` checks only constructor boundaries.
+
+2026-11-18 (implementation): Two acceptance cases have no witness-only lever, so the test simulates them in its temporary copy. The no-aggregate case compiles the scaffolded `contract-v4.keiro` facade, which has no imports, as a base-only runtime library next to its generated package. A false ordinary check while every behavior row passes is produced by inverting `validateTransducer is empty` in the copy's generated `Beta/Generated/Harness.hs`. All read-model checks are generated, and every hole-owned initial edge shares its evidence with a behavior witness.
+
 2026-11-18: The stricter policy named in the 2026-11-17 entry is not new. `behaviorConformancePassedWith True` and the hand-written runner's `--fail-on-unverified` already exist, and the user guide says a consuming CI may choose it. This plan still does not surface it through the generated runner, so a consumer who wants it keeps a hand-written runner and the manual module exposure of FRIC-6 and FRIC-11. Adding a second generated flag is a scope decision for the user, not an implementation detail.
 
 ## Outcomes & Retrospective
 
 
-Not implemented. Record executable acceptance evidence and any remaining limitations here when implementation completes.
+Implemented 2026-11-18. The generated runner now offers `--behavior-complete`. An application can require every declared witness without a hand-written runner or exposing private modules, and the default gate is unchanged.
+
+Tests actually run, all inside `nix develop` at the implementation commit:
+
+- `z3 --version`: 4.16.0.
+- Baseline before any change: `cabal test keiro-dsl:keiro-dsl-conformance-behavior-complete` passed (19 required, 17 verified, 2 unverified), and `cabal test keiro-workspace-proof-conformance` passed with 43 check lines.
+- After regeneration, the default run of `keiro-workspace-proof-conformance` printed exactly those 43 lines (`diff` empty) and exited 0. `--test-options=--behavior-complete` exited 1 with the rows listed in Progress. The compiled binary's `--help` exited 0, and `--bogus` exited 2.
+- `keiro-dsl:test:keiro-dsl-test` `--match "plan 337"`: three examples, all passing. The compiled matrix took 278 s. In both modes on one temporary copy, it covers the committed witnesses and correct witnesses for all nine keys, and each of these breaks full mode with the aggregate and key while the default stays green: missing, duplicate, stale, incorrect live (`event-value-mismatch`), incorrect rejection (`rejection-class`), incorrect replay, and a history-dependent Assignment replay. A changed Expectations fact and a false ordinary check both fail full mode while every behavior row passes. Re-scaffolding leaves all three `BehaviorHoles.hs`, `Expectations.hs`, and the Cabal fragment byte-identical, and the generated `Main.hs` imports only the facade. The no-aggregate package passes `[]`, `--behavior-complete`, and `--help`, and rejects `--behavior-completed`.
+- The full gate results are recorded below.
+
+Guarantees, each with the check that shows it:
+
+- Default semantics: the 43-line baseline diff, and `expectDefaultGreen` after every mutation in the matrix.
+- Opt-in compatibility: the corpus regen diff touches no fixture without a runtime package except its `BehaviorContract.hs`.
+- Module privacy: the fragment is byte-identical after re-scaffold, enforced by the corpus drift gate and asserted in the matrix test.
+- Ownership: hole and Expectations bytes are asserted unchanged.
+- Report schema: no change to `ToJSON` or `renderBehaviorConformanceText`, covered by `keiro-dsl-conformance-behavior-complete` and the mutation script.
+- Witness strength: rows come from the same `behaviorCoverageReport`, and the summary boolean is `behaviorConformancePassed`.
+- Performance: no runtime, codec, wire, snapshot, or solver path is touched, and the default mode never calls the new action.
+
+Remaining limitations: the stricter `behaviorConformancePassedWith True` policy is still not a runner flag; see the 2026-11-18 decision. The consumer command in Concrete Steps has not been run, because the consumer has not regenerated.
 
 ## Context and Orientation
 

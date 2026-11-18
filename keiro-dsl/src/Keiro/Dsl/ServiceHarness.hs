@@ -16,7 +16,7 @@ import Data.Text qualified as T
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (processHarnessFactValuesForService, routerHarnessFactValuesForService, workflowHarnessFactValues)
 import Keiro.Dsl.LanguageVersion (LanguageFeature (MappedConsumerSurfaceSyntax), languageSupportsFeature)
-import Keiro.Dsl.Scaffold (Context, ModuleKind (Generated), ScaffoldModule (..), contextGeneratedPrefix, genPrefixFor, generatedBanner, pascal)
+import Keiro.Dsl.Scaffold (Context, ModuleKind (Generated), ScaffoldModule (..), aggregateHasBehaviorContract, contextGeneratedPrefix, genPrefixFor, generatedBanner, holePrefixFor, pascal)
 import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract (..), checkedLanguageContract, checkedSpec, checkedTypeGraph)
 import Keiro.Dsl.SemanticImpact (mappedSurfaceFactValues, semanticImpactForService)
 import Keiro.Dsl.StructuralConformance (hasStructuralConformance, structuralConformanceModuleName)
@@ -72,6 +72,7 @@ renderServiceHarness ctx service =
       "module " <> serviceConformanceModuleName ctx,
       "  ( runServiceConformanceChecks",
       "  , serviceConformanceFacts",
+      "  , runServiceBehaviorChecks",
       "  ) where"
     ]
       <> importLines
@@ -79,6 +80,8 @@ renderServiceHarness ctx service =
       <> renderChecks hasStructural checkSources
       <> [""]
       <> renderFacts (surfaceFactValues service) factSources
+      <> [""]
+      <> renderBehaviorChecks behaviorSources
   where
     hasStructural = hasStructuralConformance service
     aliased = aliasNodes hasStructural (serviceHarnessNodes service)
@@ -88,8 +91,11 @@ renderServiceHarness ctx service =
     imports =
       ["import " <> structuralConformanceModuleName ctx <> " qualified as StructuralConformance" | hasStructural]
         <> map (renderImport ctx) aliased
+        <> concatMap (renderBehaviorImports ctx) behaviorSources
+        <> ["import Data.Text qualified as Text" | not (null behaviorSources)]
     checkSources = [(node, alias) | (node, alias) <- aliased, producesChecks node]
     factSources = [(node, alias) | (node, alias) <- aliased, producesFacts node]
+    behaviorSources = [(aggregate, alias) | (NAggregate aggregate, alias) <- aliased, aggregateHasBehaviorContract aggregate]
 
 renderImport :: Context -> (Node, Text) -> Text
 renderImport ctx (node, alias) =
@@ -118,6 +124,43 @@ harnessModuleName ctx = \case
   NReadModel readModel -> genPrefixFor ctx (pascal ((.name) readModel)) <> ".ReadModelHarness"
   NWorkflow workflow -> genPrefixFor ctx ((.id) workflow) <> ".WorkflowFacts"
   node -> error ("service harness requested a module for unsupported node " <> show (nodeIdentity node))
+
+-- | A behavior-bearing aggregate's generated contract and its create-once
+-- witness list, aliased from the aggregate's harness alias so collision
+-- numbering carries over.
+renderBehaviorImports :: Context -> (Aggregate, Text) -> [Text]
+renderBehaviorImports ctx (aggregate, alias) =
+  [ "import " <> genPrefixFor ctx ((.name) aggregate) <> ".BehaviorContract qualified as " <> alias <> "BehaviorContract",
+    "import " <> holePrefixFor ctx ((.name) aggregate) <> ".BehaviorHoles qualified as " <> alias <> "BehaviorHoles"
+  ]
+
+-- | The opt-in full witness gate. It evaluates every declared behavior key of
+-- every behavior-bearing aggregate through the generated contract, which is
+-- why it is a separate action from 'runServiceConformanceChecks'.
+renderBehaviorChecks :: [(Aggregate, Text)] -> [Text]
+renderBehaviorChecks [] =
+  [ "runServiceBehaviorChecks :: IO [(String, Bool)]",
+    "runServiceBehaviorChecks = pure []"
+  ]
+renderBehaviorChecks sources =
+  [ "runServiceBehaviorChecks :: IO [(String, Bool)]",
+    "runServiceBehaviorChecks =",
+    "  pure ("
+  ]
+    <> renderConcatenation (map behaviorExpression sources)
+    <> ["  )"]
+
+behaviorExpression :: (Aggregate, Text) -> Text
+behaviorExpression (aggregate, alias) =
+  "[(\"aggregate/"
+    <> (.name) aggregate
+    <> "/behavior/\" <> Text.unpack row, passed) | (row, passed) <- "
+    <> alias
+    <> "BehaviorContract.behaviorConformanceRows ("
+    <> alias
+    <> "BehaviorContract.behaviorCoverageReport "
+    <> alias
+    <> "BehaviorHoles.behaviorWitnesses)]"
 
 renderChecks :: Bool -> [(Node, Text)] -> [Text]
 renderChecks False [] =

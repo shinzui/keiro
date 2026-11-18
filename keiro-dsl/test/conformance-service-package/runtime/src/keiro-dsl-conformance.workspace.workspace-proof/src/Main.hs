@@ -3,9 +3,13 @@ module Main (main) where
 
 import Control.Monad (when)
 import Data.List (group, groupBy, sort, sortOn)
-import Proof.WorkspaceProof.Generated.Conformance (runServiceConformanceChecks, serviceConformanceFacts)
+import Proof.WorkspaceProof.Generated.Conformance (runServiceBehaviorChecks, runServiceConformanceChecks, serviceConformanceFacts)
 import KeiroConformance.Expectations (expectedServiceConformanceFacts)
-import System.Exit (exitFailure)
+import System.Environment (getArgs, getProgName)
+import System.Exit (ExitCode (ExitFailure), exitFailure, exitSuccess, exitWith)
+import System.IO (hPutStr, hPutStrLn, stderr)
+
+data RunMode = DefaultChecks | BehaviorComplete
 
 data FactResult
   = FactMatch String String
@@ -17,15 +21,55 @@ newtype UniqueFactMap = UniqueFactMap [(String, String)]
 
 main :: IO ()
 main = do
+  mode <- getArgs >>= parseArguments
   checks <- runServiceConformanceChecks
   mapM_ renderCheck checks
-  case compareFacts expectedServiceConformanceFacts serviceConformanceFacts of
+  factsPassed <- case compareFacts expectedServiceConformanceFacts serviceConformanceFacts of
     Left duplicates -> do
       mapM_ (putStrLn . ("FAIL  duplicate conformance fact key: " <>)) duplicates
-      exitFailure
+      pure False
     Right facts -> do
       mapM_ renderFact facts
-      when (any (not . snd) checks || any factFailed facts) exitFailure
+      pure (not (any factFailed facts))
+  behaviorPassed <- case mode of
+    DefaultChecks -> pure True
+    BehaviorComplete -> do
+      rows <- runServiceBehaviorChecks
+      mapM_ renderCheck rows
+      pure (all snd rows)
+  when (any (not . snd) checks || not factsPassed || not behaviorPassed) exitFailure
+
+parseArguments :: [String] -> IO RunMode
+parseArguments arguments = case arguments of
+  [] -> pure DefaultChecks
+  ["--behavior-complete"] -> pure BehaviorComplete
+  ["--help"] -> do
+    usage >>= putStr
+    exitSuccess
+  _ -> do
+    hPutStrLn stderr ("unrecognized arguments: " <> unwords arguments)
+    usage >>= hPutStr stderr
+    exitWith (ExitFailure 2)
+
+usage :: IO String
+usage = do
+  program <- getProgName
+  pure (unlines
+    [ "usage: " <> program <> " [--behavior-complete | --help]"
+    , ""
+    , "Default: run the generated service checks (structural, read-model, and"
+    , "aggregate harness assertions, including hole-owned initial live edges) and"
+    , "compare service facts with KeiroConformance.Expectations. The default is not"
+    , "a complete witness gate: Pending, missing, duplicate, stale, or failing"
+    , "BehaviorHoles witnesses outside that initial-edge subset do not fail it."
+    , ""
+    , "--behavior-complete  also evaluate every declared behavior key of every"
+    , "                     aggregate against its BehaviorHoles witnesses and fail"
+    , "                     on any pending, missing, duplicate, stale, or failed"
+    , "                     witness. Passing witnesses whose evidence is unverified"
+    , "                     still pass; this is finite evidence, not a proof."
+    , "--help               print this message and exit."
+    ])
 
 renderCheck :: (String, Bool) -> IO ()
 renderCheck (key, passed) = putStrLn ((if passed then "PASS  " else "FAIL  ") <> key)

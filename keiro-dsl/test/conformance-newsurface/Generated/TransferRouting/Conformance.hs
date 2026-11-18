@@ -2,11 +2,15 @@
 module Generated.TransferRouting.Conformance
   ( runServiceConformanceChecks
   , serviceConformanceFacts
+  , runServiceBehaviorChecks
   ) where
 
 import Generated.TransferRouting.Hospital.Harness qualified as Hospital
 import Generated.TransferRouting.HospitalLoad.ReadModelHarness qualified as HospitalLoad
 import Generated.TransferRouting.HospitalTransferRouter.RouterHarness qualified as HospitalTransferRouter
+import Generated.TransferRouting.Hospital.BehaviorContract qualified as HospitalBehaviorContract
+import TransferRouting.Hospital.BehaviorHoles qualified as HospitalBehaviorHoles
+import Data.Text qualified as Text
 
 runServiceConformanceChecks :: IO [(String, Bool)]
 runServiceConformanceChecks =
@@ -18,3 +22,9 @@ runServiceConformanceChecks =
 serviceConformanceFacts :: [(String, String)]
 serviceConformanceFacts =
     [("router/HospitalTransferRouter/" <> fact, value) | (fact, value) <- HospitalTransferRouter.routerHarnessValues]
+
+runServiceBehaviorChecks :: IO [(String, Bool)]
+runServiceBehaviorChecks =
+  pure (
+    [("aggregate/Hospital/behavior/" <> Text.unpack row, passed) | (row, passed) <- HospitalBehaviorContract.behaviorConformanceRows (HospitalBehaviorContract.behaviorCoverageReport HospitalBehaviorHoles.behaviorWitnesses)]
+  )

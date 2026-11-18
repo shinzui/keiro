@@ -2132,6 +2132,7 @@ test-suite keiro-dsl-conformance-newsurface
   other-modules:
     Generated.TransferRouting.BehaviorSourceMap
     Generated.TransferRouting.Conformance
+    Generated.TransferRouting.Hospital.BehaviorContract
     Generated.TransferRouting.Hospital.Codec
     Generated.TransferRouting.Hospital.Domain
     Generated.TransferRouting.Hospital.EventStream
@@ -2145,6 +2146,7 @@ test-suite keiro-dsl-conformance-newsurface
     Generated.TransferRouting.HospitalTransferRouter.RouterHarness
     Generated.TransferRouting.Inspection
     Generated.TransferRouting.ReplayAudit
+    TransferRouting.Hospital.BehaviorHoles
     TransferRouting.Hospital.Holes
     TransferRouting.HospitalLoad.ReadModelHoles
     TransferRouting.HospitalTransferRouter.RouterHoles
@@ -2153,6 +2155,7 @@ test-suite keiro-dsl-conformance-newsurface
   build-depends:
     aeson >=2.2 && <2.3,
     base >=4.21 && <5,
+    containers >=0.6 && <0.8,
     effectful-core,
     hasql-transaction,
     keiki >=0.9 && <0.10,

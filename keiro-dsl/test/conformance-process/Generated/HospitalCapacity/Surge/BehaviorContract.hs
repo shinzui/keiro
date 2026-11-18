@@ -17,6 +17,7 @@ module Generated.HospitalCapacity.Surge.BehaviorContract
   , behaviorConformancePassed
   , behaviorConformancePassedWith
   , renderBehaviorConformanceText
+  , behaviorConformanceRows
   ) where
 
 import Generated.HospitalCapacity.Surge.Codec (encodeSurgeEvent, parseSurgeEvent, surgeCodec)
@@ -217,6 +218,32 @@ renderBehaviorConformanceText report = T.unlines
   , countLine "verified" report.verified
   , countLine "unverified" report.unverified
   ] <> T.unlines ["FAIL " <> unBehaviorKey behaviorFailure.key <> " " <> behaviorFailure.subject <> " [" <> behaviorFailure.code <> "] " <> behaviorFailure.detail | behaviorFailure <- report.failed]
+
+-- | One single-line check row per pending, missing, duplicate, and stale key
+-- and per failed witness, then one summary row carrying the report policy.
+-- Unverified keys are not failures under 'behaviorConformancePassed'.
+behaviorConformanceRows :: BehaviorConformanceReport -> [(Text, Bool)]
+behaviorConformanceRows report =
+  keyRows "pending" report.pending
+    <> keyRows "missing" report.missing
+    <> keyRows "duplicate" report.duplicate
+    <> keyRows "stale" report.stale
+    <> [("failed/" <> unBehaviorKey behaviorFailure.key <> " " <> behaviorFailure.subject <> " [" <> behaviorFailure.code <> "] " <> behaviorFailure.detail, False) | behaviorFailure <- report.failed]
+    <> [(summary, behaviorConformancePassed report)]
+ where
+  keyRows category keys = [(category <> "/" <> unBehaviorKey key, False) | key <- keys]
+  summary =
+    "summary"
+      <> countField "required" report.required
+      <> countField "filled" report.filled
+      <> countField "pending" report.pending
+      <> countField "missing" report.missing
+      <> countField "duplicate" report.duplicate
+      <> countField "stale" report.stale
+      <> " failed=" <> tshow (length report.failed)
+      <> countField "verified" report.verified
+      <> countField "unverified" report.unverified
+  countField label values = " " <> label <> "=" <> tshow (length values)
 
 runWitness :: BehaviorRequirement -> BehaviorWitness -> Either BehaviorFailure ()
 runWitness requirement witness = case witness of

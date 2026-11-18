@@ -8,6 +8,19 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### New Features
 
+- The generated service conformance runner accepts `--behavior-complete`. After the
+  unchanged default output, it evaluates every declared behavior key of every aggregate
+  against its `BehaviorHoles` witnesses. It prints one `FAIL` row per pending, missing,
+  duplicate, or stale key and per failed witness, plus one summary row per aggregate, and
+  any failing row exits nonzero. Unverified but correct evidence still passes, as under
+  `behaviorConformancePassed`. Without the flag the runner behaves exactly as before and
+  evaluates no extra witnesses. `--help` describes both modes; any other argument exits
+  with status 2. The service facade adds `runServiceBehaviorChecks :: IO [(String, Bool)]`
+  and every generated `BehaviorContract` adds `behaviorConformanceRows`. `BehaviorHoles`
+  and `BehaviorContract` stay private in the Cabal fragment. Regenerating rewrites each
+  `BehaviorContract.hs`, the facade and the runner `Main.hs`; hand-owned files are
+  unchanged. The library adds `Keiro.Dsl.Scaffold.aggregateHasBehaviorContract`, the
+  predicate that decides which aggregates get a `BehaviorContract`.
 - `keiro-dsl topology <source-or-workspace> --format json` exports the service
   topology as one canonical JSON document with schema id
   `keiro-dsl/service-topology/1`. It has a node for every aggregate, process,

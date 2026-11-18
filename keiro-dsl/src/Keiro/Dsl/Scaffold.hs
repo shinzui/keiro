@@ -53,6 +53,7 @@ module Keiro.Dsl.Scaffold
     bindingSkeletonOwners,
     scaffoldAggregateForService,
     scaffoldAggregate,
+    aggregateHasBehaviorContract,
     obsoleteGeneratedOutputHooks,
     obsoleteGeneratedOutputHooksForService,
     scaffoldProcess,
@@ -3274,6 +3275,7 @@ emitBehaviorContract aggregate =
            "  , behaviorConformancePassed",
            "  , behaviorConformancePassedWith",
            "  , renderBehaviorConformanceText",
+           "  , behaviorConformanceRows",
            "  ) where",
            "",
            "import " <> (.genPrefix) aggregate <> ".Codec (encode" <> name <> "Event, parse" <> name <> "Event, " <> valueStem <> "Codec)",
@@ -3455,6 +3457,32 @@ emitBehaviorContract aggregate =
            "  , countLine \"verified\" report.reportVerified",
            "  , countLine \"unverified\" report.reportUnverified",
            "  ] <> T.unlines [\"FAIL \" <> unBehaviorKey behaviorFailure.failureKey <> \" \" <> behaviorFailure.failureSubject <> \" [\" <> behaviorFailure.failureCode <> \"] \" <> behaviorFailure.failureDetail | behaviorFailure <- report.reportFailed]",
+           "",
+           "-- | One single-line check row per pending, missing, duplicate, and stale key",
+           "-- and per failed witness, then one summary row carrying the report policy.",
+           "-- Unverified keys are not failures under 'behaviorConformancePassed'.",
+           "behaviorConformanceRows :: BehaviorConformanceReport -> [(Text, Bool)]",
+           "behaviorConformanceRows report =",
+           "  keyRows \"pending\" report.reportPending",
+           "    <> keyRows \"missing\" report.reportMissing",
+           "    <> keyRows \"duplicate\" report.reportDuplicate",
+           "    <> keyRows \"stale\" report.reportStale",
+           "    <> [(\"failed/\" <> unBehaviorKey behaviorFailure.failureKey <> \" \" <> behaviorFailure.failureSubject <> \" [\" <> behaviorFailure.failureCode <> \"] \" <> behaviorFailure.failureDetail, False) | behaviorFailure <- report.reportFailed]",
+           "    <> [(summary, behaviorConformancePassed report)]",
+           " where",
+           "  keyRows category keys = [(category <> \"/\" <> unBehaviorKey key, False) | key <- keys]",
+           "  summary =",
+           "    \"summary\"",
+           "      <> countField \"required\" report.reportRequired",
+           "      <> countField \"filled\" report.reportFilled",
+           "      <> countField \"pending\" report.reportPending",
+           "      <> countField \"missing\" report.reportMissing",
+           "      <> countField \"duplicate\" report.reportDuplicate",
+           "      <> countField \"stale\" report.reportStale",
+           "      <> \" failed=\" <> tshow (length report.reportFailed)",
+           "      <> countField \"verified\" report.reportVerified",
+           "      <> countField \"unverified\" report.reportUnverified",
+           "  countField label values = \" \" <> label <> \"=\" <> tshow (length values)",
            "",
            "runWitness :: BehaviorRequirement -> BehaviorWitness -> Either BehaviorFailure ()",
            "runWitness requirement witness = case witness of",
@@ -8651,7 +8679,16 @@ renderUnknownEventTypeFailure aggregate variable =
 --------------------------------------------------------------------------------
 
 hasVersion2Ownership :: Agg -> Bool
-hasVersion2Ownership = any ((/= LegacyHoleImplementation) . (.implementation)) . (.transitions)
+hasVersion2Ownership = transitionsHaveVersion2Ownership . (.transitions)
+
+-- | Whether 'scaffoldAggregateForService' emits @Generated.BehaviorContract@
+-- and the create-once @BehaviorHoles@ module for this aggregate. The service
+-- facade uses the same predicate so it never imports an ungenerated module.
+aggregateHasBehaviorContract :: Aggregate -> Bool
+aggregateHasBehaviorContract = transitionsHaveVersion2Ownership . (.transitions)
+
+transitionsHaveVersion2Ownership :: [Transition] -> Bool
+transitionsHaveVersion2Ownership = any ((/= LegacyHoleImplementation) . (.implementation))
 
 transitionEntries :: Agg -> [(Int, Transition)]
 transitionEntries aggregate =

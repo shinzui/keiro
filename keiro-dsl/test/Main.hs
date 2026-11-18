@@ -11675,6 +11675,22 @@ main = hspec $ do
         Right facade -> do
           (.text) facade `shouldSatisfy` T.isInfixOf "runServiceConformanceChecks = pure []"
           (.text) facade `shouldSatisfy` T.isInfixOf "serviceConformanceFacts = []"
+          (.text) facade `shouldSatisfy` T.isInfixOf "runServiceBehaviorChecks = pure []"
+          (.text) facade `shouldNotSatisfy` T.isInfixOf "BehaviorContract"
+    it "imports every behavior-bearing aggregate's contract and witnesses only for the opt-in behavior action (plan 337)" $ do
+      service <- checkedServiceOf "test/fixtures/transfer-routing.keiro"
+      let ctx = defaultContext ((checkedSpec service).context)
+      case serviceHarnessModule ctx service of
+        Left duplicates -> expectationFailure ("unexpected duplicate fact keys: " <> show duplicates)
+        Right facade -> do
+          let text = (.text) facade
+              checksBlock = T.takeWhile (/= '\n') (snd (T.breakOn "runServiceConformanceChecks =" text))
+          text `shouldSatisfy` T.isInfixOf "  , runServiceBehaviorChecks\n"
+          text `shouldSatisfy` T.isInfixOf "TransferRouting.Hospital.BehaviorContract qualified as HospitalBehaviorContract"
+          text `shouldSatisfy` T.isInfixOf "TransferRouting.Hospital.BehaviorHoles qualified as HospitalBehaviorHoles"
+          text `shouldSatisfy` T.isInfixOf "(\"aggregate/Hospital/behavior/\" <> Text.unpack row, passed) | (row, passed) <- HospitalBehaviorContract.behaviorConformanceRows (HospitalBehaviorContract.behaviorCoverageReport HospitalBehaviorHoles.behaviorWitnesses)"
+          checksBlock `shouldNotSatisfy` T.isInfixOf "behavior"
+          T.count "behaviorCoverageReport" text `shouldBe` 1
     it "adds one facade only to configured single-file plans and exposes only it" $ do
       service <- checkedServiceOf "test/fixtures/reservation.keiro"
       let ctx = defaultContext ((checkedSpec service).context)
@@ -12083,6 +12099,243 @@ main = hspec $ do
           testCode `shouldNotBe` ExitSuccess
           (testOut <> testErr)
             `shouldSatisfy` isInfixOfString "FAIL  workflow/WorkspaceProofWorkflow/name expected=\"workspace-proof-workflow\" actual=\"workspace-proof-workflow-v2\""
+    it "keeps the default run free of witness evaluation and gates every witness only under --behavior-complete (plan 337)" $ do
+      withTempDirectory "keiro-dsl-conformance-behavior-complete" $ \base -> do
+        fixtureManifest <- resolveTestPath "test/conformance-service-package/service.keiro-workspace" >>= canonicalizePath
+        let fixtureRoot = takeDirectory fixtureManifest
+            copied = base </> "fixture"
+            out = copied </> "runtime/src"
+            packageRoot = out </> "keiro-dsl-conformance.workspace.workspace-proof"
+            holesPath owner = out </> "Proof/WorkspaceProof" </> owner </> "BehaviorHoles.hs"
+            expectationsPath = packageRoot </> "src/KeiroConformance/Expectations.hs"
+            fragmentPath = out </> "keiro-dsl-cabal-fragment.workspace.workspace-proof.txt"
+            betaHarnessPath = out </> "Proof/WorkspaceProof/Beta/Generated/Harness.hs"
+            owners = ["Alpha", "Assignment", "Beta"]
+        copyTextTree fixtureRoot copied
+        committedHoles <- mapM (TIO.readFile . holesPath) owners
+        committedExpectations <- TIO.readFile expectationsPath
+        committedFragment <- TIO.readFile fragmentPath
+        -- Re-scaffold with the current generator: hand-owned witnesses and
+        -- expectations stay byte-identical, and the fragment keeps every
+        -- BehaviorHoles and BehaviorContract module private.
+        (scaffoldCode, scaffoldOut, scaffoldErr) <- runKeiroDsl ["scaffold", copied </> "service.keiro-workspace", "--out", out]
+        unless (scaffoldCode == ExitSuccess) (expectationFailure (scaffoldOut <> scaffoldErr))
+        mapM (TIO.readFile . holesPath) owners `shouldReturn` committedHoles
+        TIO.readFile expectationsPath `shouldReturn` committedExpectations
+        TIO.readFile fragmentPath `shouldReturn` committedFragment
+        let (exposedSection, privateSection) = T.breakOn "other-modules:" committedFragment
+        forM_ owners $ \owner -> do
+          privateSection `shouldSatisfy` T.isInfixOf ("Proof.WorkspaceProof." <> T.pack owner <> ".BehaviorHoles\n")
+          privateSection `shouldSatisfy` T.isInfixOf ("Proof.WorkspaceProof." <> T.pack owner <> ".Generated.BehaviorContract\n")
+        exposedSection `shouldNotSatisfy` T.isInfixOf "Behavior"
+        generatedMain <- TIO.readFile (packageRoot </> "src/Main.hs")
+        [line | line <- T.lines generatedMain, "import Proof." `T.isPrefixOf` line]
+          `shouldBe` ["import Proof.WorkspaceProof.Generated.Conformance (runServiceBehaviorChecks, runServiceConformanceChecks, serviceConformanceFacts)"]
+        let repositoryRoot = takeDirectory (takeDirectory (takeDirectory fixtureRoot))
+            projectPath = base </> "behavior.project"
+            buildDirectory = base </> "dist-newstyle"
+        localSourcePackages <- filterM doesDirectoryExist [repositoryRoot </> "keiro", repositoryRoot </> "keiro-core"]
+        -- Like the workflow-fact mutation above, compiling the generated
+        -- package is a repository integration proof against sibling sources.
+        unless (null localSourcePackages) $ do
+          TIO.writeFile projectPath . T.unlines $
+            ["packages:"]
+              <> map (("  " <>) . T.pack) (localSourcePackages <> [copied </> "runtime", packageRoot])
+              <> ["", "allow-newer:", "  haxl:time"]
+          let conformance options = do
+                (code, stdoutText, stderrText) <-
+                  readProcessWithExitCode
+                    "cabal"
+                    ( [ "test",
+                        "--project-file=" <> projectPath,
+                        "--builddir=" <> buildDirectory,
+                        "--test-show-details=direct"
+                      ]
+                        <> ["--test-options=" <> unwords options | not (null options)]
+                        <> ["keiro-workspace-proof-conformance"]
+                    )
+                    ""
+                pure (code, stdoutText <> stderrText)
+              checkLines output = [line | line <- lines output, take 6 line `elem` ["PASS  ", "FAIL  "]]
+              behaviorLines output = [line | line <- checkLines output, "/behavior/" `isInfixOfString` line]
+              expectDefaultGreen label = do
+                (code, output) <- conformance []
+                unless (code == ExitSuccess) (expectationFailure (label <> ": default run failed\n" <> output))
+                behaviorLines output `shouldBe` []
+                pure output
+              expectFullRed label needles = do
+                (code, output) <- conformance ["--behavior-complete"]
+                when (code == ExitSuccess) (expectationFailure (label <> ": --behavior-complete passed\n" <> output))
+                forM_ needles $ \needle ->
+                  unless (needle `isInfixOfString` output) (expectationFailure (label <> ": missing " <> show needle <> "\n" <> output))
+                pure output
+              writeHoles owner header witnesses =
+                TIO.writeFile (holesPath (T.unpack owner)) . T.unlines $
+                  [ "module Proof.WorkspaceProof." <> owner <> ".BehaviorHoles (behaviorWitnesses) where",
+                    "",
+                    "import Data.List.NonEmpty (NonEmpty (..))",
+                    "import Proof.WorkspaceProof." <> owner <> ".Generated.BehaviorContract",
+                    "import Proof.WorkspaceProof." <> owner <> ".Generated.Domain"
+                  ]
+                    <> header
+                    <> ["", "behaviorWitnesses :: [BehaviorWitness]", "behaviorWitnesses ="]
+                    <> case witnesses of
+                      [] -> ["  []"]
+                      first : rest -> ("  [ " <> first) : map ("  , " <>) rest <> ["  ]"]
+              proofHeader =
+                [ "import Proof.WorkspaceProof.Generated.Nominals (ProofId, parseProofId)",
+                  "",
+                  "proof :: ProofId",
+                  "proof = either (error . show) id (parseProofId \"proof_01h455vb4pex5vsknk084sn02q\")"
+                ]
+              alphaReplayLegacy = "ReplayWitness (BehaviorKey \"behavior-v1-579df4e5e81f7729\") [] [LegacyAlphaPinged (LegacyAlphaPingedData proof)]"
+              alphaReplayCurrent = "ReplayWitness (BehaviorKey \"behavior-v1-72a96c964b44a2b6\") [] [AlphaPinged (AlphaPingedData proof True)]"
+              alphaLive current = "LiveWitness (BehaviorKey \"behavior-v1-baf43b4c31db955a\") [] (PingAlpha (PingAlphaData proof False)) (Emits (AlphaPinged (AlphaPingedData proof " <> current <> ") :| []))"
+              alphaRejection rejection = "LiveWitness (BehaviorKey \"behavior-v1-c062ccf5e9b6f5c4\") [] (LegacyPingAlpha (LegacyPingAlphaData proof)) (Rejects " <> rejection <> ")"
+              writeAlpha = writeHoles "Alpha" proofHeader
+              correctAlpha = [alphaReplayLegacy, alphaReplayCurrent, alphaLive "False", alphaRejection "RejectNoMatchingEdge"]
+              betaWitness = "LiveWitness (BehaviorKey \"behavior-v1-6ab7fee2c8aa4e1d\") [] (PingBeta (PingBetaData proof)) (Emits (BetaPinged (BetaPingedData proof) :| []))"
+              writeBeta = writeHoles "Beta" proofHeader
+              committedAssignment = committedHoles !! 1
+              replayWitness = "ReplayWitness (BehaviorKey \"behavior-v1-9200cd4f93c83098\") [] [PropertyCleared (PropertyClearedData \"colour\")]"
+              writeAssignment = TIO.writeFile (holesPath "Assignment")
+              restoreWitnesses = do
+                writeAlpha correctAlpha
+                writeBeta [betaWitness]
+                writeAssignment committedAssignment
+
+          -- The committed fixture: Beta keeps one Pending row, and Alpha's one
+          -- row names a retired key, so the four declared Alpha keys are missing.
+          committedDefault <- expectDefaultGreen "committed witnesses"
+          committedFull <-
+            expectFullRed
+              "committed witnesses"
+              [ "FAIL  aggregate/Alpha/behavior/stale/behavior-v1-e2c1eef1cb7848f5",
+                "FAIL  aggregate/Alpha/behavior/missing/behavior-v1-579df4e5e81f7729",
+                "FAIL  aggregate/Alpha/behavior/missing/behavior-v1-72a96c964b44a2b6",
+                "FAIL  aggregate/Alpha/behavior/missing/behavior-v1-baf43b4c31db955a",
+                "FAIL  aggregate/Alpha/behavior/missing/behavior-v1-c062ccf5e9b6f5c4",
+                "FAIL  aggregate/Beta/behavior/pending/behavior-v1-6ab7fee2c8aa4e1d",
+                "PASS  aggregate/Assignment/behavior/summary required=4 filled=4 pending=0 missing=0 duplicate=0 stale=0 failed=0 verified=1 unverified=3"
+              ]
+          -- Full mode prints the unchanged default lines first, then its rows.
+          take (length (checkLines committedDefault)) (checkLines committedFull) `shouldBe` checkLines committedDefault
+
+          -- Correct history-backed witnesses for every key make full mode pass;
+          -- unverified-but-correct evidence passes under the established policy.
+          restoreWitnesses
+          (filledCode, filledOutput) <- conformance ["--behavior-complete"]
+          unless (filledCode == ExitSuccess) (expectationFailure ("filled witnesses failed --behavior-complete\n" <> filledOutput))
+          [line | line <- behaviorLines filledOutput, "/behavior/summary " `isInfixOfString` line]
+            `shouldBe` [ "PASS  aggregate/Alpha/behavior/summary required=4 filled=4 pending=0 missing=0 duplicate=0 stale=0 failed=0 verified=3 unverified=1",
+                         "PASS  aggregate/Assignment/behavior/summary required=4 filled=4 pending=0 missing=0 duplicate=0 stale=0 failed=0 verified=1 unverified=3",
+                         "PASS  aggregate/Beta/behavior/summary required=1 filled=1 pending=0 missing=0 duplicate=0 stale=0 failed=0 verified=1 unverified=0"
+                       ]
+          filter (T.isPrefixOf "FAIL" . T.pack) (behaviorLines filledOutput) `shouldBe` []
+          _ <- expectDefaultGreen "filled witnesses"
+
+          let cases =
+                [ ("missing", writeBeta [], ["FAIL  aggregate/Beta/behavior/missing/behavior-v1-6ab7fee2c8aa4e1d"]),
+                  ("duplicate", writeBeta [betaWitness, betaWitness], ["FAIL  aggregate/Beta/behavior/duplicate/behavior-v1-6ab7fee2c8aa4e1d"]),
+                  ( "stale",
+                    writeBeta [betaWitness, "Pending (BehaviorKey \"behavior-v1-0000000000000000\")"],
+                    ["FAIL  aggregate/Beta/behavior/stale/behavior-v1-0000000000000000"]
+                  ),
+                  ( "incorrect live evidence",
+                    writeAlpha [alphaReplayLegacy, alphaReplayCurrent, alphaLive "True", alphaRejection "RejectNoMatchingEdge"],
+                    ["FAIL  aggregate/Alpha/behavior/failed/behavior-v1-baf43b4c31db955a AlphaActive x PingAlpha: live transition", "[event-value-mismatch]"]
+                  ),
+                  ( "incorrect rejection evidence",
+                    writeAlpha [alphaReplayLegacy, alphaReplayCurrent, alphaLive "False", alphaRejection "RejectNoOutgoingEdges"],
+                    ["FAIL  aggregate/Alpha/behavior/failed/behavior-v1-c062ccf5e9b6f5c4 AlphaActive x LegacyPingAlpha: required rejection", "[rejection-class]"]
+                  ),
+                  ( "incorrect replay evidence",
+                    writeAlpha [alphaReplayLegacy, "ReplayWitness (BehaviorKey \"behavior-v1-72a96c964b44a2b6\") [] [AlphaPinged (AlphaPingedData proof False)]", alphaLive "False", alphaRejection "RejectNoMatchingEdge"],
+                    ["FAIL  aggregate/Alpha/behavior/failed/behavior-v1-72a96c964b44a2b6 AlphaActive x PingAlpha: replay-only transition"]
+                  ),
+                  ( "history-dependent replay evidence",
+                    -- With the key already present, the live clear edge matches
+                    -- first, so the chunk no longer witnesses the replay-only edge.
+                    writeAssignment
+                      ( T.replace
+                          replayWitness
+                          "ReplayWitness (BehaviorKey \"behavior-v1-9200cd4f93c83098\") [PropertySet (PropertySetData \"colour\" \"blue\")] [PropertyCleared (PropertyClearedData \"colour\")]"
+                          committedAssignment
+                      ),
+                    ["FAIL  aggregate/Assignment/behavior/failed/behavior-v1-9200cd4f93c83098 AssignmentActive x ClearProperty: replay-only transition"]
+                  )
+                ]
+          committedAssignment `shouldSatisfy` T.isInfixOf replayWitness
+          forM_ cases $ \(label, mutate, needles) -> do
+            restoreWitnesses
+            mutate
+            _ <- expectFullRed label needles
+            expectDefaultGreen label
+
+          -- Ordinary checks and expectation facts still fail a full run whose
+          -- behavior rows all pass.
+          restoreWitnesses
+          TIO.writeFile expectationsPath (T.replace "\"workspace-proof-workflow\"" "\"accepted-elsewhere\"" committedExpectations)
+          factOutput <- expectFullRed "changed expectation fact" ["FAIL  workflow/WorkspaceProofWorkflow/name"]
+          filter (T.isPrefixOf "FAIL" . T.pack) (behaviorLines factOutput) `shouldBe` []
+          TIO.writeFile expectationsPath committedExpectations
+          betaHarness <- TIO.readFile betaHarnessPath
+          TIO.writeFile betaHarnessPath (T.replace "null (validateTransducer" "not . null $ (validateTransducer" betaHarness)
+          checkOutput <- expectFullRed "false ordinary check" ["FAIL  aggregate/Beta/validateTransducer is empty"]
+          filter (T.isPrefixOf "FAIL" . T.pack) (behaviorLines checkOutput) `shouldBe` []
+    it "passes both runner modes for a service with no aggregates and rejects unknown options (plan 337)" $ do
+      withTempDirectory "keiro-dsl-conformance-no-aggregates" $ \out -> do
+        parsed <- parsedSourceOf "test/fixtures/contract-v4.keiro"
+        let service = checkedSource parsed
+            spec = checkedSpec service
+            ctx = defaultContext (spec.context)
+            runtimeName = "contract-runtime"
+            runtimePackage = RuntimePackageName runtimeName
+        [() | NAggregate {} <- (.nodes) spec] `shouldBe` []
+        modules <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure (planTestServiceScaffoldWithRuntimePackage (Just runtimePackage) ctx service)
+        executeServiceScaffoldWithRuntimePackage (Just runtimePackage) out False "contract-v4.keiro" ((.sourceLanguage) parsed) ctx service modules
+          >>= either (\failure -> expectationFailure (show failure)) (const (pure ()))
+        let facadeName = serviceConformanceModuleName ctx
+            facadePath = out </> T.unpack (T.replace "." "/" facadeName) <> ".hs"
+            packageRoot = out </> conformancePackageDirectory (StandaloneConformanceService ((.name) ctx))
+            runtimeRoot = out </> "runtime-library"
+            projectPath = out </> "no-aggregates.project"
+        facadeText <- TIO.readFile facadePath
+        -- The facade of a service without aggregates imports nothing, so a
+        -- base-only runtime library is the real package boundary here.
+        [line | line <- T.lines facadeText, "import " `T.isPrefixOf` line] `shouldBe` []
+        writeFileWithParents (runtimeRoot </> T.unpack (T.replace "." "/" facadeName) <> ".hs") facadeText
+        TIO.writeFile (runtimeRoot </> T.unpack runtimeName <> ".cabal") . T.unlines $
+          [ "cabal-version: 3.0",
+            "name: " <> runtimeName,
+            "version: 0.0.0.0",
+            "build-type: Simple",
+            "",
+            "library",
+            "  hs-source-dirs: .",
+            "  exposed-modules: " <> facadeName,
+            "  build-depends: base",
+            "  default-language: GHC2024"
+          ]
+        TIO.writeFile projectPath (T.unlines ["packages:", "  " <> T.pack runtimeRoot, "  " <> T.pack packageRoot])
+        let conformance options =
+              readProcessWithExitCode
+                "cabal"
+                ( ["test", "--project-file=" <> projectPath, "--builddir=" <> (out </> "dist-newstyle"), "--test-show-details=direct"]
+                    <> ["--test-options=" <> unwords options | not (null options)]
+                    <> ["keiro-" <> T.unpack (cabaliseConformanceService ((.name) ctx)) <> "-conformance"]
+                )
+                ""
+        forM_ [[], ["--behavior-complete"], ["--help"]] $ \options -> do
+          (code, stdoutText, stderrText) <- conformance options
+          unless (code == ExitSuccess) (expectationFailure (show options <> " failed\n" <> stdoutText <> stderrText))
+          when (options == ["--help"]) $ do
+            stdoutText `shouldSatisfy` isInfixOfString "The default is not"
+            stdoutText `shouldSatisfy` isInfixOfString "a complete witness gate"
+            stdoutText `shouldSatisfy` isInfixOfString "--behavior-complete  also evaluate every declared behavior key"
+        (unknownCode, unknownOut, unknownErr) <- conformance ["--behavior-completed"]
+        unknownCode `shouldNotBe` ExitSuccess
+        (unknownOut <> unknownErr) `shouldSatisfy` isInfixOfString "unrecognized arguments: --behavior-completed"
 
   describe "new <kind> skeletons (M5)" $ do
     forM_ skeletonKinds $ \skeletonKind ->

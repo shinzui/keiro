@@ -39,7 +39,6 @@ uncompiled-generated keiro-dsl/test/conformance-id-domain-migration/Generated/Id
 uncompiled-generated keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/ReplayAudit.hs
 uncompiled-generated keiro-dsl/test/conformance-intake-full/Generated/HospitalCapacity/Emergency/Contract.hs
 uncompiled-generated keiro-dsl/test/conformance-intake-runtime/Generated/HospitalCapacity/Emergency/Contract.hs
-uncompiled-generated keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs
 uncompiled-generated keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs
 uncompiled-generated keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/Harness.hs
 uncompiled-generated keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs

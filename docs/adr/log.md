@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-18
+* **Update**: ADR-20: add the opt-in runServiceBehaviorChecks facade action behind the generated runner's --behavior-complete flag; the default run is unchanged (plan 337).
+
 ## 2026-11-17
 
 * **Update**: ADR-62: record that keiro-ops serves the topology opaquely and checks each schema id's vocabulary at mount (plan 342).

@@ -2,6 +2,7 @@
 module Proof.WorkspaceProof.Generated.Conformance
   ( runServiceConformanceChecks
   , serviceConformanceFacts
+  , runServiceBehaviorChecks
   ) where
 
 import Proof.WorkspaceProof.Generated.StructuralConformance qualified as StructuralConformance
@@ -11,6 +12,13 @@ import Proof.WorkspaceProof.Beta.Generated.Harness qualified as Beta
 import Proof.WorkspaceProof.AlphaView.Generated.ReadModelHarness qualified as AlphaView
 import Proof.WorkspaceProof.BetaView.Generated.ReadModelHarness qualified as BetaView
 import Proof.WorkspaceProof.WorkspaceProofWorkflow.Generated.WorkflowFacts qualified as WorkspaceProofWorkflow
+import Proof.WorkspaceProof.Alpha.Generated.BehaviorContract qualified as AlphaBehaviorContract
+import Proof.WorkspaceProof.Alpha.BehaviorHoles qualified as AlphaBehaviorHoles
+import Proof.WorkspaceProof.Assignment.Generated.BehaviorContract qualified as AssignmentBehaviorContract
+import Proof.WorkspaceProof.Assignment.BehaviorHoles qualified as AssignmentBehaviorHoles
+import Proof.WorkspaceProof.Beta.Generated.BehaviorContract qualified as BetaBehaviorContract
+import Proof.WorkspaceProof.Beta.BehaviorHoles qualified as BetaBehaviorHoles
+import Data.Text qualified as Text
 
 runServiceConformanceChecks :: IO [(String, Bool)]
 runServiceConformanceChecks =
@@ -26,3 +34,11 @@ runServiceConformanceChecks =
 serviceConformanceFacts :: [(String, String)]
 serviceConformanceFacts =
     [("workflow/WorkspaceProofWorkflow/" <> fact, value) | (fact, value) <- WorkspaceProofWorkflow.workflowFactValues]
+
+runServiceBehaviorChecks :: IO [(String, Bool)]
+runServiceBehaviorChecks =
+  pure (
+    [("aggregate/Alpha/behavior/" <> Text.unpack row, passed) | (row, passed) <- AlphaBehaviorContract.behaviorConformanceRows (AlphaBehaviorContract.behaviorCoverageReport AlphaBehaviorHoles.behaviorWitnesses)]
+    <> [("aggregate/Assignment/behavior/" <> Text.unpack row, passed) | (row, passed) <- AssignmentBehaviorContract.behaviorConformanceRows (AssignmentBehaviorContract.behaviorCoverageReport AssignmentBehaviorHoles.behaviorWitnesses)]
+    <> [("aggregate/Beta/behavior/" <> Text.unpack row, passed) | (row, passed) <- BetaBehaviorContract.behaviorConformanceRows (BetaBehaviorContract.behaviorCoverageReport BetaBehaviorHoles.behaviorWitnesses)]
+  )

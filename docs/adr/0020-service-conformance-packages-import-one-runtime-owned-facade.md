@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Service conformance packages import one runtime-owned facade
 description: A configured Keiro service generates at most one local conformance package whose runner imports one generated facade from an explicitly named runtime package while create-once expectations remain application-owned.
-timestamp: 2026-08-10T03:36:12Z
+timestamp: 2026-11-18T16:09:00Z
 docId: ADR-20
 status: Accepted
 date: 2026-08-03
@@ -107,6 +107,23 @@ dependencies.
 > unchanged: exactly one generated artifact is the authoritative build
 > inventory, and the conformance package consumes rather than restates it.
 
+> **Amendment (2026-11-18).** The facade has a second, opt-in action,
+> `runServiceBehaviorChecks :: IO [(String, Bool)]`. It evaluates the full
+> `behaviorCoverageReport` of every aggregate that has a generated
+> `BehaviorContract`, using the aggregate's create-once `BehaviorHoles` witnesses,
+> and returns one row per offending key, one per failed witness, and one summary
+> row per aggregate from the contract's `behaviorConformanceRows`. The generated
+> runner calls it only under `--behavior-complete`. The default run neither calls
+> it nor changes any line it prints, so a green default still means what it meant
+> before: the generated checks, the hole-owned initial-edge witnesses, and the
+> accepted facts. The action stays on this one facade. Per-aggregate contract and
+> witness modules remain under `other-modules`, and the runner still imports only
+> the facade. A full report therefore never requires a consumer to widen its
+> public API. The full mode uses the established `behaviorConformancePassed`
+> policy, so correct but unverified evidence passes; a stricter policy remains a
+> hand-written runner choice. See
+> [ExecPlan 337](../plans/337-gate-all-behavior-witnesses-through-generated-service-conformance.md).
+
 All package planning participates in the existing detection-before-write
 scaffold boundary. Runtime and package preflights must both succeed before
 either writer changes bytes. Generated package files require recognized Keiro
@@ -133,6 +150,9 @@ distinct history slots.
   conformance is a release-blocking omission.
 - The text build manifest remains necessary when generated runtime modules or
   their dependencies change.
+- An application that requires every declared behavior witness opts in with
+  one runner flag instead of exposing private aggregate modules to a
+  hand-written runner. The default gate is deliberately not that policy.
 
 
 ## Alternatives considered
@@ -178,3 +198,5 @@ inventory of generated modules, dependencies, and Haskell compilation defaults.
   generated package.
 - [ExecPlan 188](../plans/188-generate-one-runnable-conformance-package-per-keiro-dsl-service.md)
   implements this decision.
+- [ExecPlan 337](../plans/337-gate-all-behavior-witnesses-through-generated-service-conformance.md)
+  adds the opt-in full behavior-witness action and runner flag.
