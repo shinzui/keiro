@@ -1,5 +1,11 @@
 # Bundle Update Log
 
+## 2026-11-18
+
+* **Addition**: IR-64 filed from mori://tan/agent-reputation-service: optional contract fields and contracts without a body discriminator, so a Keiro service can mirror an event owned by another producer instead of hand-writing its payload decoder.
+
+* **Addition**: IR-65 filed from mori://tan/agent-reputation-service: let delegated intake acknowledge a command that returned a typed no-op, since table mode can't run a Keiro command and delegated mode refuses commands that append no event.
+
 ## 2026-11-17
 
 * **Completion**: IR-63 completed under ExecPlan 341: candidate Language 6 input sources (from intake … event …), InputSourceUnresolvedIntake and InputSourceEventNotAccepted, the feeds relation under keiro-dsl/service-topology/2, and an in-repository byte-identity proof replacing the jitsurei criterion.
