@@ -10,6 +10,18 @@ provenance:
     model: "claude-fable-5-2"
     harness: "claude-code"
     at: 2026-11-18T16:22:53Z
+  reviews:
+    - model: "gpt-6.2-astra"
+      harness: "codex-cli"
+      at: 2026-11-18T19:16:00Z
+      verdict: "changes-requested"
+      note: "Original draft weakens AC-2, conflates receipt identities and can acknowledge without winning a durable receipt under concurrent delivery or retention."
+  revisions:
+    - model: "gpt-6.2-astra"
+      harness: "codex-cli"
+      at: 2026-11-18T19:16:28Z
+      mode: "update"
+      note: "Specify replay-stable no-ops, scoped receipt identity, race-safe classification, strict insert evidence and reproducible DSL conformance."
 ---
 
 # Let delegated intake acknowledge a command that was a typed no-op
@@ -32,7 +44,7 @@ in a separate hand-written step that Keiro cannot check.
 
 After this change a delegated intake handler can call a new adapter,
 `Keiro.Inbox.Delegated.delegatedDomainCommand`. When the command appends events, nothing
-changes: the event is the receipt. When the command returns an explicit, typed no-op, the
+changes: the event is the receipt. When the command returns an explicit, replay-stable typed no-op, the
 adapter records a completed row in `keiro.keiro_inbox` as the receipt and acknowledges the
 delivery; a redelivery finds that row and is a duplicate without re-running the command. A
 command that appends nothing without saying so is still refused with
@@ -85,23 +97,23 @@ This plan implements improvement request IR-65,
   exhaustive match.
   Date: 2026-11-18
 
-- Decision: The no-op receipt is an ordinary `completed` row in `keiro.keiro_inbox`, written
-  by the adapter with the existing `tryInsertCompletedTx`. No migration, no new column, no
-  new status.
-  Rationale: IR-65 asks for "the inbox row as processed with no event receipt". Reusing the
-  existing row shape gives the no-op the inbox's existing retention
-  (`garbageCollectCompleted`) and inspection (`lookupInbox`, `listInbox`) for free. A
-  distinguishing column would be a schema change no acceptance criterion needs.
+- Store a no-op as an ordinary completed inbox row. Derive its key from the same marker
+  used for accepted commands, so consumers, target streams and operations keep their own
+  receipts even when they share a database and receive the same message. Preserve the
+  envelope source for inspection. Adopters reserve the row-key prefix specified in
+  Interfaces and Dependencies for this adapter. The existing inbox table needs no migration.
   Date: 2026-11-18
 
-- Decision: The adapter looks up the inbox row before dispatching the command, after the
-  event-marker probe misses.
-  Rationale: Without the lookup, a redelivery of a delivery already acknowledged as a no-op
-  would re-run the command, and if aggregate state had changed in between it could append an
-  event for a delivery Keiro already reported as handled. With the lookup, the row really is
-  sufficient proof and the redelivery costs one primary-key read instead of a hydration. The
-  cost is one extra indexed read on each fresh delivery, paid only by callers of the new
-  adapter.
+- Require a replay-stable no-op. Once this delivery is a no-op, it must remain one in every
+  later reachable state on replay, including after receipt expiry. The caller knows this
+  property of the domain. A typed decision alone proves only what happened in one state.
+  Date: 2026-11-18
+
+- Probe the row after a marker miss and recheck the marker after a silent no-op. The former
+  skips hydration on replay. The latter covers a competitor that appended after preflight
+  and caused this dispatch to see a no-op. A fresh no-op requires positive evidence that
+  this attempt inserted and committed its row. The table runner's historical success on a
+  conflict followed by concurrent garbage collection cannot supply that evidence.
   Date: 2026-11-18
 
 - Decision: A typed rejection (`DomainRejected`) is not acknowledged. The adapter returns it
@@ -140,15 +152,15 @@ project; the packages that matter here are `keiro/` (the runtime library and its
 `keiro-test`), `keiro-dsl/` (a specification language, `.keiro` files, that generates
 Haskell modules), and `keiro-test-support/` (helpers that start an ephemeral PostgreSQL for
 tests). All builds and tests must run inside the Nix development shell from the repository
-root, for example `nix develop -c cabal test keiro-test`. Do not enter the shell from a
-package subdirectory: doing so creates a stray database cluster there.
+root, for example `nix develop -c cabal test keiro-test`. The PostgreSQL fixture allocates
+its cluster under a per-user temporary directory.
 
 Terms used in this plan:
 
 An **integration event** is a message one service publishes for others, represented by
 `Keiro.Integration.Event.IntegrationEvent`. **Intake** is the consuming side: receive the
-message and apply it locally exactly once even though the broker may deliver it several
-times. The **dedupe key** is the stable identity of a delivery, computed by
+message and suppress repeated work while its receipt is available. The **dedupe key** is
+the stable identity of a delivery, computed by
 `Keiro.Inbox.Types.dedupeKeyFor` from an `InboxDedupePolicy`; together with the event's
 `source` it identifies the delivery.
 
@@ -240,46 +252,51 @@ This milestone adds the adapter and proves IR-65 AC-1 against PostgreSQL. At the
 `Keiro.Inbox.Delegated` exports `delegatedDomainCommand` and its supporting types, and
 `keiro-test` contains passing tests for every outcome.
 
-In `keiro/src/Keiro/Inbox/Delegated.hs`, add the types and function specified in
-Interfaces and Dependencies. The behaviour, in order:
+In `keiro/src/Keiro/Inbox/Delegated.hs`, derive the marker and row key as described in
+Interfaces and Dependencies. Require callers to dispatch exactly one domain command on the
+resolved target with the supplied options, return its actual outcome and perform all
+protected side effects inside its event append. A silent decision performs no side effects.
+The caller chooses this adapter only if every no-op it can return for that dispatch is
+replay-stable. The adapter cannot infer that property from a reason value.
 
-1. Replace the options' `eventIds` with the singleton marker, exactly as `delegatedCommand`
-   does.
-2. Probe the marker in the target stream. A hit returns `Right DelegatedDuplicate` and does
-   nothing else. Reuse `dispatchDeduplicatedCommand` for steps 2, 4, and the concurrent
-   duplicate-append confirmation, by making steps 3 to 6 its dispatch action and success
-   classifier (the dispatch action may return its own small internal sum to carry "row
-   already present" out through the `Right` side).
-3. On a marker miss, read the inbox row for `(source, dedupeKey)` with `lookupInbox` from
-   `Keiro.Inbox.Schema`. A `completed` row returns `Right DelegatedDuplicate` without
-   invoking the callback. A row in any other status returns
-   `Left (DelegatedNoOpReceiptUnavailable targetStream status)` without invoking the
-   callback: delegated intake never writes `processing` or `failed` rows, so such a row
-   means the service mixed modes on one identity, and guessing would weaken either mode's
-   guarantee.
-4. Otherwise invoke the callback with the prepared options. A `Left CommandError` follows
-   the existing path: confirmed concurrent duplicate becomes `Right DelegatedDuplicate`,
-   anything else becomes `Left (DelegatedDomainCommandError (DelegatedCommandFailed ...))`.
-5. `DomainAccepted events` with `eventsAppended > 0` returns
-   `Right (DelegatedFresh (DelegatedDomainAccepted events result))` and writes no inbox
-   row. `DomainAccepted` with zero appended events cannot be produced by Keiro's runners,
-   but the callback is caller code, so map it to
-   `Left (DelegatedDomainCommandError (DelegatedCommandWithoutReceipt targetStream))`.
-   `DomainRejected r` returns `Left (DelegatedDomainRejected targetStream r)` and writes no
-   row.
-6. `DomainNoOp n` runs one transaction calling
-   `tryInsertCompletedTx persistence source dedupeKey event kafka now`. `Right ()` (row
-   inserted) returns `Right (DelegatedFresh (DelegatedDomainNoOp n result))`. `Left row`
-   with status `completed` (a concurrent delivery won) returns `Right DelegatedDuplicate`;
-   any other status returns the `DelegatedNoOpReceiptUnavailable` error.
+1. Set the options' `eventIds` to the singleton marker. Use
+   `dispatchDeduplicatedCommand` for the preflight marker probe and the existing
+   target-stream confirmation of concurrent duplicate-append errors. Return
+   `Right DelegatedDuplicate` on a confirmed marker.
+2. On a miss, run `lookupInbox` on the scoped row key. A completed row yields a duplicate.
+   An existing processing or failed row yields
+   `Left (DelegatedNoOpReceiptUnavailable targetStream status)`. In both cases skip the
+   command callback.
+3. If both receipts are absent, invoke the callback with the prepared options. Pass
+   `Left CommandError` back to the dispatch helper for duplicate confirmation. Wrap an
+   unconfirmed error as `DelegatedDomainCommandError (DelegatedCommandFailed targetStream err)`.
+   On `DomainAccepted events` with a positive append count, return
+   `DelegatedFresh (DelegatedDomainAccepted events result)`. An accepted result with zero
+   appended events yields the wrapped `DelegatedCommandWithoutReceipt` error. Forward
+   `DomainRejected r` as `Left (DelegatedDomainRejected targetStream r)`.
+4. On `DomainNoOp n`, call `eventAlreadyIn preparedOptions targetStream marker` again.
+   A hit yields a duplicate. Two deliveries can miss preflight, then one appends before
+   the other hydrates the terminal state. Only a second miss allows the no-op receipt
+   transaction to proceed. Run the lookup, callback and effectful no-op handling in the
+   helper's dispatch action. Its success classifier is pure and can pass through the
+   already classified adapter result.
+5. In `keiro/src/Keiro/Inbox/Schema.hs` factor the existing insert and conflict lookup into
+   a transaction helper with three distinguishable results: inserted by this transaction,
+   existing row, or conflict with a row that disappeared before lookup. Reuse
+   `tryInsertStmt`, its encoder, and `selectByKeyStmt`. Export the new helper for the
+   adapter. Keep the public signature and behavior of `tryInsertCompletedTx` by mapping
+   both inserted and disappeared to its historical `Right ()`.
+6. Run the strict helper with `runTransaction`, the supplied persistence and Kafka
+   reference, envelope source, scoped key, event and current time. Only a successful
+   transaction commit reporting an insert yields
+   `DelegatedFresh (DelegatedDomainNoOp n result)`. Classify an existing row by status as
+   in step 2. A vanished conflict yields `Left (DelegatedNoOpReceiptLost targetStream)`,
+   allowing the caller to retry. Propagate store/commit failures through the store's
+   ordinary error channel. A caller may acknowledge only a successful delegated outcome.
 
-`Keiro.Inbox.Delegated` will need `IOE :> es` for the clock and imports from
-`Keiro.Inbox.Schema`, `Keiro.Command` (`DomainCommandOutcome`, `DomainDecision`), and
-`Kiroku.Store.Transaction (runTransaction)`. Check for an import cycle: `Keiro.Inbox`
-imports `Keiro.Inbox.Schema` but nothing imports `Keiro.Inbox.Delegated` except tests, so
-none is expected. Do not modify `delegatedCommand`, `delegatedFromPMCommand`,
-`delegatedEventId`, `DelegatedCommandError`, `DelegatedOutcome`, or anything in
-`keiro/src/Keiro/Inbox.hs`.
+Keep the existing adapters, marker recipe, delegated wrappers and table runner behavior.
+Use `IOE :> es` for the clock. The existing schema module already imports
+`Kiroku.Store.Transaction.runTransaction`.
 
 Rewrite the module header and write the function's Haddock to state the contract from
 Validation and Acceptance ("The documented guarantee"). The Haddock is part of AC-2.
@@ -287,7 +304,7 @@ Validation and Acceptance ("The documented guarantee"). The Haddock is part of A
 In `keiro/test/Main.hs`, add `describe "Keiro.Inbox delegated typed no-op"` beside the
 existing delegated block, using `withFreshResourceStore fixture`. Each test drives
 `runInboxDelegated Nothing PreferIntegrationMessageId event Nothing handler`, where the
-handler calls `delegatedDomainCommand` and throws on `Left` (as the existing tests do), or
+handler calls `delegatedDomainCommand` and propagates failure on `Left`, or
 calls the adapter directly when asserting on a `Left`. Use `silentChoiceDomainHandler` /
 `multiCounterDomainHandler` if their command sets allow one stream to be both accepted and
 no-op'd; otherwise add a small domain handler next to them whose command is accepted in the
@@ -298,9 +315,11 @@ initial state and a typed no-op afterwards. Required cases:
   the target stream has no new event.
 - Redelivery of that delivery: `InboxDuplicate`, and an `IORef` counter shows the callback
   ran once in total.
-- Redelivery after aggregate state changed so the command would now be accepted: still
-  `InboxDuplicate`, and the target stream gained no event. This is the case the pre-dispatch
-  row lookup exists for.
+- Redelivery after a later legal state change that preserves the no-op: still
+  `InboxDuplicate` and no callback. After removing the receipt with
+  `garbageCollectCompleted`, replay now invokes the real command, returns the same no-op
+  classification, commits a new row, and appends no event.
+
 - Accepted command: `InboxProcessed` carrying `DelegatedDomainAccepted`, first stored event
   id equals the marker, `listInbox source` is `[]`, redelivery is `InboxDuplicate`.
 - Typed rejection: `Left (DelegatedDomainRejected target reason)`, no inbox row, and a second
@@ -308,6 +327,23 @@ initial state and a typed no-op afterwards. Required cases:
 - A pre-existing `failed` row for the identity (create it with `recordFailedAttemptTx`):
   `Left (DelegatedNoOpReceiptUnavailable target InboxFailed)`, callback not invoked.
 - `PersistDedupeOnly` in the receipt writes a row whose event has empty `payloadBytes`.
+- Two consumers (also vary target or operation in the key test) sharing the same source
+  and dedupe key each process their first delivery. An ordinary completed table row for the
+  raw key cannot short-circuit either caller. A repeat of each operation finds its own receipt.
+- Use `withFreshResourceStoresSameDatabase` from `Keiro.Test.Postgres` and explicit thread
+  barriers, without sleeps. Pause A inside its callback after preflight. Let B process the
+  same delivery and append the marker, then let A hydrate the terminal no-op state. Expect B
+  fresh, A duplicate, one event and zero inbox rows. Repeat with both callbacks returning a
+  stable no-op and with both past preflight. Expect one fresh, one duplicate and one row.
+- Exercise all three strict insert classifications, including conflict followed by missing
+  row. In the fresh PostgreSQL fixture, a test-only BEFORE INSERT trigger returning NULL
+  for the test key deterministically gives the two observations produced by the GC race:
+  the insert returns no row and the following SELECT finds none. Assert the retryable
+  lost-receipt error and zero rows, remove the trigger, and verify replay succeeds.
+  Use the existing database access-control fixture to allow SELECT but deny
+  INSERT. A real no-op then fails without acknowledgement or row. Restore INSERT and verify
+  redelivery can complete. Also exercise the new adapter's zero-count accepted callback and
+  an unconfirmed command error to verify both return the wrapped error without a receipt.
 - The untyped path is unchanged: keep the existing test "rejects zero-event commands and
   unconfirmed duplicate errors" untouched and passing. It is the AC-1 proof that a silent
   zero-event success is still `DelegatedCommandWithoutReceipt`.
@@ -336,25 +372,32 @@ motivating case reads well (a `RecordOutcome` command that is accepted from `Pen
 no-op from `Delivered`). Use a context name not used by another fixture so generated module
 paths do not collide.
 
-Create `keiro-dsl/test/conformance-intake-delegated-noop/` the same way the sibling
-`conformance-intake-delegated/` was produced: find where that directory is registered for
-regeneration (search the repository for the string `conformance-intake-delegated`, including
-the `keiro-dsl-corpus-regen` executable's sources and
-`keiro-dsl/test/conformance-baseline.json`), register the new directory beside it, and run
-`just corpus-regen` to write the `Generated/` tree, cabal fragment, and ledger. Then add by
-hand:
+Bootstrap `keiro-dsl/test/conformance-intake-delegated-noop/` with the explicit
+`scaffold` invocation in Concrete Steps. This writes the generated modules, ledger, Cabal
+fragment and any hand-fillable starters. The corpus driver discovers existing ledgers
+through `git ls-files` in `keiro-dsl/tools/corpus-regen/src/CorpusPlan.hs`. Add a
+`candidate-primary` source entry for the new suite to
+`keiro-dsl/test/conformance-baseline.json` beside the existing delegated entry. Use the
+generated fragment to populate the test component's module and dependency inventory.
+Supply these hand-written pieces:
 
 - A hand-written integration module (for example
-  `<Context>/<Intake>/DelegatedIntegration.hs`) that builds the handler: derive the marker
-  with `delegatedEventId`, build a `DelegatedNoOpReceipt` from the delivery, call
+  `<Context>/<Intake>/DelegatedIntegration.hs`) that builds the handler. Pass the wrapper
+  dedupe key, delivered envelope, consumer, operation and Kafka context in a
+  `DelegatedNoOpReceipt`. Call
   `delegatedDomainCommand` with a callback that runs
   `runDomainCommand prepared <generated>DomainCommandHandler target command`, and pass the
-  handler to the generated `runInboxIntake`. If the generated aggregate needs a
+  handler to the generated `runInboxIntake`. Propagate a typed adapter failure outside
+  `DelegatedOutcome`, for example with an outer error effect interpreted by the test. If the generated aggregate needs a
   `BehaviorHoles` module, follow `conformance-domain-outcomes/`.
 - `Main.hs`, using `Keiro.Test.Postgres.withMigratedSuite` and `withFreshResourceStore` as
   `keiro-dsl/test/conformance-workflow-runtime/Main.hs` does. It runs, in order: a first
   delivery that is accepted; a second, different delivery to the same stream that is a typed
-  no-op; a redelivery of that second delivery. It prints one line per check and exits
+  no-op; a redelivery of that second delivery. Also feed a distinct delivery to the generated
+  runner using the historical `delegatedCommand` with the same generated command on its
+  silent edge (erase the typed outcome with `forgetDomainDecision`). Observe
+  `DelegatedCommandWithoutReceipt` in the outer error channel, and assert
+  that delivery acquired neither receipt. It prints one line per check and exits
   non-zero if any is `False`. Expected output is shown in Concrete Steps.
 
 Register test-suite `keiro-dsl-conformance-intake-delegated-noop` in
@@ -370,11 +413,12 @@ through `DelegatedNoOpReceipt`. The rule itself (reject the clause) and its diag
 do not change. Update any test in `keiro-dsl/test/Main.hs` that pins the old message text.
 
 Add an Unreleased entry to `keiro-dsl/CHANGELOG.md` noting the new conformance proof and the
-reworded diagnostic. Note that the working tree may hold unrelated uncommitted keiro-dsl
-edits from plan 337 (`docs/plans/337-gate-all-behavior-witnesses-through-generated-service-conformance.md`);
-do not revert or fold them into this plan's commits, and if `just corpus-regen` rewrites
-files outside the new directory, leave those to plan 337 and record the fact in Surprises &
-Discoveries.
+reworded diagnostic. Stage the new suite and ledger so tracked-file inventory can see them.
+Run the focused suite and the DSL tests, then commit the reviewed
+fixture, ledger, generated tree, suite and registration together. The corpus gate in
+`keiro-dsl/tools/corpus-regen/src/Main.hs` requires clean corpus paths, including the new
+tracked directory. Run the gate on that checkpoint before marking Milestone 2 complete.
+If unrelated corpus edits are present, validate the checkpoint in a separate clean checkout.
 
 Acceptance: `nix develop -c cabal test keiro-dsl-conformance-intake-delegated-noop
 --test-show-details=direct` prints the expected transcript; `nix develop -c just
@@ -390,8 +434,8 @@ Validation and Acceptance in each place it is relevant:
   and commands that append no event" must stay true for the two existing adapters.
 - `docs/user/integration-events.md`, section "Choosing inbox idempotence ownership": the
   sentences "Delegated intake creates no inbox row" and "Keep table intake for silent
-  commands" need the typed-no-op exception, including that a service using it needs
-  privileges on `keiro.keiro_inbox` and must schedule `garbageCollectCompleted`.
+  commands" need the typed-no-op exception. Cover SELECT and INSERT privileges, the
+  reserved key prefix, and the replay horizon when operators use `garbageCollectCompleted`.
 - `docs/guides/integration-events-with-kafka.md`, section "Delegating the receipt to a
   downstream command": add a short typed-no-op example.
 - `docs/user/api-reference.md`: add the new exports to the `Keiro.Inbox.Delegated` list.
@@ -400,16 +444,17 @@ Validation and Acceptance in each place it is relevant:
   receipt.
 - [ADR-43](../adr/0043-delegated-inbox-intake-uses-a-downstream-event-receipt.md): append a
   dated section recording the typed no-op receipt, the pre-dispatch lookup, the
-  non-acknowledgement of typed rejections, and the retention consequence. Advance its
+  marker recheck, scoped row key, replay stability, typed rejection, and retention behavior. Advance its
   `timestamp`, add the `docs/adr/log.md` entry with `okf log add`, and validate as shown in
   Concrete Steps. Preserve `docId: ADR-43`.
-- If `docs/user/` documents carry a `timestamp` frontmatter field, advance it and add the
-  `docs/user/log.md` entry, following the existing entries; `just user-documentation-validate`
-  checks this.
+- Advance the changed user and guide documents' timestamps and update their respective
+  `docs/user/log.md` and `docs/guides/log.md` entries. The
+  `user-documentation-validate` recipe enforces both logs.
 
-Then set IR-65's `status` to `completed`, advance its `timestamp`, and add a
-`**Completion**` entry to `docs/improvement-requests/log.md` in the style of the IR-63
-entry. Fill in Outcomes & Retrospective.
+Once acceptance is verified, set IR-65's frontmatter status to `completed`, advance its
+timestamp and replace its stale “no milestone has been implemented yet” Status paragraph
+with the completion evidence. Add a completion entry to `docs/improvement-requests/log.md`
+in the style of IR-63 and fill in Outcomes & Retrospective.
 
 Acceptance: `nix develop -c just verify` passes, and a reader of `docs/user/inbox.md` and
 the `Keiro.Inbox.Delegated` Haddock can state when a no-op is acknowledged and what the
@@ -418,8 +463,7 @@ caller must guarantee.
 
 ## Concrete Steps
 
-All commands run from the repository root, `/Users/shinzui/Keikaku/bokuno/keiro` in the
-authoring checkout.
+Run all commands from the repository root.
 
 Confirm the environment once:
 
@@ -437,8 +481,9 @@ nix develop -c cabal test keiro-test --test-show-details=direct \
 nix develop -c cabal test keiro-test
 ```
 
-The `--match` filter covers the existing and the new describe blocks. Expect every listed
-example to pass and a final line of the form:
+The filter matched 16 existing examples with zero failures during review. It also matches
+the planned typed no-op block. The full suite covers the separately named pure-adapter
+identity vectors. Expect the example count to increase and the report to include:
 
 ```text
 N examples, 0 failures
@@ -447,10 +492,14 @@ N examples, 0 failures
 Milestone 2:
 
 ```bash
-nix develop -c just corpus-regen
+nix develop -c cabal run -v0 exe:keiro-dsl -- scaffold \
+  keiro-dsl/test/fixtures/intake-delegated-noop.keiro \
+  --out keiro-dsl/test/conformance-intake-delegated-noop
+# After wiring the hand-written runner and Cabal component
 nix develop -c cabal test keiro-dsl-conformance-intake-delegated-noop --test-show-details=direct
-nix develop -c just conformance-corpus-policy
 nix develop -c cabal test keiro-dsl:tests
+# After committing the corpus checkpoint
+nix develop -c just conformance-corpus-policy
 ```
 
 Expected output of the new suite (exact wording is the implementer's; one line per check,
@@ -460,12 +509,13 @@ all `True`):
 accepted delivery appends the marker event and writes no inbox row: True
 typed no-op delivery is processed and records one completed inbox row: True
 redelivered no-op is a duplicate without dispatching the command: True
+untyped silent success returns DelegatedCommandWithoutReceipt and leaves no receipt: True
 ```
 
 Milestone 3:
 
 ```bash
-okf validate docs/adr \
+nix develop -c okf validate docs/adr \
   --strict \
   --profile docs/adr/profile.dhall \
   --profile-enforce \
@@ -492,17 +542,21 @@ AC-2 by the documentation in Milestone 3.
 **The documented guarantee** (the text AC-2 requires, to be stated in the Haddock and
 `docs/user/inbox.md`):
 
-`delegatedDomainCommand` acknowledges a delivery in exactly three cases: the command
-appended events and the first carries the marker; the marker or a completed inbox row
-already exists; or the command returned `DomainNoOp` and the adapter then committed a
-completed inbox row for `(source, dedupe key)`. The no-op decision and the row do not commit
-atomically. If the process stops between them, nothing was acknowledged and the redelivery
-evaluates the command again. A typed no-op must therefore be used only for an edge where
-repeating the command is also a no-op or is still the correct effect for that delivery; the
-inbox row alone then proves the delivery was handled. The row is subject to
-`garbageCollectCompleted`: after retention removes it, a redelivery evaluates the command
-again, which the same obligation makes safe. Typed rejections, command errors, and untyped
-zero-event successes are never acknowledged.
+An accepted command commits its deterministic marker in its first event. A typed no-op
+qualifies only when the caller guarantees that replaying that delivery remains a no-op
+across later reachable states. This includes retries after a crash and replays after
+retention. The callback must use the supplied options and target, run one domain command,
+and keep protected effects inside its append. A qualifying no-op is fresh only after the
+adapter commits its scoped completed inbox row. A matching marker in the target stream
+or a matching completed row proves a duplicate. A competing marker takes precedence when
+dispatch observes the no-op left by that append.
+
+A crash after the silent decision and before the receipt commit leaves the delivery
+unacknowledged. A retry evaluates the command again. Set retention beyond the required
+redelivery horizon. Once GC removes a row, a later replay may report fresh again and must
+still append nothing. A typed rejection, unconfirmed command failure, missing receipt after
+an insert conflict, or untyped silent success provides no basis for acknowledgement.
+A service adopting this handler needs SELECT on marker misses and INSERT for no-ops.
 
 **Guarantees that must not weaken**, and the evidence for each:
 
@@ -511,17 +565,17 @@ zero-event successes are never acknowledged.
   function body, and their existing tests pass with unedited bodies.
 - Marker identity: `delegatedEventId` is not edited; its pinned-vector test "pins ASCII,
   Unicode, empty-field, and delimiter identity vectors" passes unchanged.
-- Table mode: `keiro/src/Keiro/Inbox.hs` and the inbox SQL in `Keiro.Inbox.Schema` are not
-  edited (the adapter only calls existing functions); the `describe "Keiro.Inbox"` block
-  passes unchanged.
+- Table mode: `keiro/src/Keiro/Inbox.hs` and the SQL statements in `Keiro.Inbox.Schema` keep
+  their current behavior. The table helper retains its existing insert/conflict mapping,
+  and the `describe "Keiro.Inbox"` block passes unchanged.
 - Wire bytes, event folds, snapshots, and migrations: no event type, codec, schema, or
   migration changes. The DSL fixture is new, so no existing generated output changes;
   `just conformance-corpus-policy` shows the checked-in corpus is otherwise identical.
-- Performance: the existing delegated and table paths execute the same code as before, so
+- Performance: the existing delegated and table paths keep their database operations, so
   the `InboxDelegatedBench` benchmark in `keiro/bench/` measures an unchanged path and no
-  new baseline is needed. The new adapter's cost is one extra primary-key read per fresh
-  delivery and one insert per no-op, both opt-in; it is not covered by a benchmark gate, and
-  this plan does not add one. Adding a benchmark leg for it would be new scope.
+  new baseline is needed. The new adapter performs one row lookup per marker miss and a
+  second marker probe per no-op. On a second miss it attempts an insert and looks up the
+  winner on conflict.
 
 Not required for acceptance, and out of scope per IR-65: effectful handlers inside table
 mode's transaction; multi-command reactions; a process-manager variant of the new adapter;
@@ -532,27 +586,36 @@ acknowledging typed rejections; batch-level no-op handling beyond what
 ## Idempotence and Recovery
 
 Every step is additive and repeatable. Builds and tests create and discard their own
-ephemeral PostgreSQL databases through `keiro-test-support`. `just corpus-regen` is
-deterministic and can be re-run; if it reports differences in directories this plan does not
-own, do not commit them (see Milestone 2). There is no migration, so nothing to roll back in
-a database. If Milestone 1 is committed and later milestones are abandoned, the runtime is
-still coherent: the new exports are simply undocumented in the user docs.
+ephemeral PostgreSQL databases through `keiro-test-support`. The DSL scaffold can be
+rerun on this fixture. Review its generated diff and validate with the corpus gate from a
+clean checkpoint. There is no database migration.
 
-For a service adopting the adapter, no cutover is needed when it already uses delegated
-intake with `delegatedCommand`: marker identity is unchanged, so previously accepted
-deliveries are still duplicates. Moving from table mode is still the persisted-identity
-change ADR-43 describes.
-
+An adopter keeping its consumer, source, dedupe policy, target and operation retains its
+existing event markers. Before enabling the new adapter, verify that ordinary inbox writers
+for the source cannot use the reserved row keys described below and that no historical rows
+already occupy them. Isolate the intake in a separate database if that namespace cannot
+be reserved. Keep each delegated batch scoped to one intake with stable routing per
+delivery, as its in-memory duplicate cache still uses the ordinary delivery identity.
+A change of ownership or routing needs the explicit replay boundary described in ADR-43.
 
 ## Interfaces and Dependencies
 
-No new package dependencies. The new public surface, all exported from
+Keep the existing package dependencies. Compute the marker once with
+`delegatedEventId consumer event.source dedupeKey targetStream operation`, using the
+dedupe key that the delegated wrapper passes to the handler. Use the envelope source and
+`"keiro/inbox-delegated-noop/1:" <> UUID.toText (unEventId marker)` as the row's primary
+key pair. Reserve that key prefix among all writers for each participating source. The
+prefix and marker inputs are persisted replay identity. This lets table-mode receipts for
+ordinary message IDs coexist with independently scoped delegated commands.
+
+Export the following adapter surface from
 `Keiro.Inbox.Delegated` in `keiro/src/Keiro/Inbox/Delegated.hs`:
 
 ```haskell
 -- | What the adapter needs to write the inbox row that acknowledges a typed no-op.
 data DelegatedNoOpReceipt = DelegatedNoOpReceipt
-  { source :: !Text,
+  { consumer :: !Text,
+    operation :: !Text,
     dedupeKey :: !Text,
     event :: !IntegrationEvent,
     kafka :: !(Maybe KafkaDeliveryRef),
@@ -575,6 +638,7 @@ data DelegatedDomainCommandError rejection
     DelegatedDomainRejected !StreamName !rejection
   | -- | An inbox row for this identity exists in a non-completed status.
     DelegatedNoOpReceiptUnavailable !StreamName !InboxStatus
+  | DelegatedNoOpReceiptLost !StreamName
   deriving stock (Generic, Eq, Show)
 
 delegatedDomainCommand ::
@@ -583,7 +647,6 @@ delegatedDomainCommand ::
   DelegatedNoOpReceipt ->
   RunCommandOptions ->
   StreamName ->
-  EventId ->
   (RunCommandOptions -> Eff es (Either CommandError (DomainCommandOutcome target co rejection noOp))) ->
   Eff es (Either (DelegatedDomainCommandError rejection) (DelegatedOutcome (DelegatedDomainResult target co noOp)))
 ```
@@ -591,12 +654,18 @@ delegatedDomainCommand ::
 Constructor and field names may be adjusted for consistency with the module during
 implementation, but the shape (a separate function, a no-op-carrying fresh result, a
 rejection-carrying error, the receipt record) is the contract Milestones 2 and 3 depend on;
-record any rename in the Decision Log. The rejection payload appears only in this returned
-value, never in `CommandError`, telemetry, or logs, consistent with ADR-29.
+record any rename in the Decision Log. Keep the rejection payload in the typed return value. The adapter and hand-written
+DSL example must keep it out of generic errors, telemetry, and logs, consistent with ADR-29.
 
-Existing interfaces this work relies on and must not change: `Keiro.Inbox.Schema`
+Existing interfaces retain their current signatures and behavior: `Keiro.Inbox.Schema`
 (`tryInsertCompletedTx`, `lookupInbox`), `Keiro.ProcessManager.dispatchDeduplicatedCommand`,
 `Keiro.Command` (`DomainCommandOutcome`, `DomainDecision`, `runDomainCommand`),
 `Keiro.Inbox.Types` (`DelegatedOutcome`, `InboxPersistence`, `InboxStatus`,
 `KafkaDeliveryRef`), and the generated `runInboxIntake` emitted by `scaffoldIntake` logic in
 `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`.
+
+
+Revision on 2026-11-18 after review. Tightened the replay precondition to match IR-65
+AC-2, aligned row identity with the event marker, and required evidence of a committed
+receipt under concurrent delivery and retention. Added the corresponding runtime and
+generated-intake checks and corrected how to bootstrap the conformance suite.
