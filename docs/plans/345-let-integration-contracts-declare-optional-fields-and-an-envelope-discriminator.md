@@ -21,6 +21,11 @@ provenance:
       at: 2026-11-18T20:09:35Z
       mode: "update"
       note: "Reopen implementation work in M5 with regression checks for all five review findings."
+    - model: "claude-fable-5-2"
+      harness: "claude-code"
+      at: 2026-11-18T20:48:16Z
+      mode: "update"
+      note: "Verified all five review findings; widened the fieldless fix to body mode and changed the added-Optional verdict to consumer-build advisory."
   reviews:
     - model: "gpt-6.2-astra"
       harness: "codex-cli"
@@ -164,6 +169,18 @@ These were found while drafting on 2026-11-18 and shaped the design.
   `explicitParseFieldMaybe` hands a present value to the `Maybe` instance's `liftParseJSON`,
   which maps `null` to `Nothing` (`aeson/src/Data/Aeson/Types/FromJSON.hs` in the aeson
   checkout Mori lists). So both decoders read an omitted key and `null` as absent.
+- (Review verification, 2026-11-18) The unused `payload` binding for a fieldless contract
+  event predates this plan. A body-discriminated fieldless event has failed `-Werror`
+  since the original contract scaffold (`f77b281b`); no conformance suite declares one, so
+  the corpus never compiled it. M5 item 2 fixes both modes.
+- (Review verification) `remediationFor` in `keiro-dsl/src/Keiro/Dsl/DiffReport.hs` gives
+  every contract code a fixed `producer-last` remedy and ignores the vector. Two
+  consequences are outside M5 and are left as they are: a required field added without a
+  `schemaVersion` bump is also told `producer-last` although the new reader requires a
+  key old producers omit, and the build-only literal-to-declared advisory is told to
+  "revise the independently owned public contract" and deploy `producer-last` although
+  its wire bytes are unchanged. Rendering the vector's rollout, as item 1 requires, is
+  the natural place to fix them later.
 
 
 ## Decision Log
@@ -192,7 +209,8 @@ These were found while drafting on 2026-11-18 and shaped the design.
 
 - Decision: Adding an `Optional` field to an existing event is additive on the wire and
   needs no `schemaVersion` bump. Regeneration adds a strict `Maybe` argument to the
-  exported constructor. M5 records this separately as a breaking consumer-build change. Changing a field between required and optional is breaking in
+  exported constructor. M5 reports this separately as a consumer-build advisory (see the
+  decision below). Changing a field between required and optional is breaking in
   both directions. Changing between `Optional` and `List`, or changing the scalar under
   `Optional`, is breaking. Moving the scalar under `Optional` between a literal
   `typeid "p"` and a declared id is build-only when prefix and admission domain are equal,
@@ -268,6 +286,23 @@ These were found while drafting on 2026-11-18 and shaped the design.
   out of scope, as IR-64 says. Intake `bind … from header` rows stay descriptive.
   Rationale: The consumer keeps a small adapter until
   `mori://tan/registration-service-v2/okf/improvement-requests/concepts/IR-6` is done.
+  Date: 2026-11-18
+
+- Decision: An added `Optional` field is reported as `consumer-build=advisory`, not
+  `consumer-build=breaking`. This replaces the verdict the implementation review proposed
+  for its third finding.
+  Rationale: `consumer-build` is in `defaultGate` (`keiro-dsl/src/Keiro/Dsl/Diff.hs`), so
+  a `breaking` verdict would make `keiro-dsl diff` exit non-zero for every added optional
+  field. That contradicts the decision above and ADR-65, which make this the one field
+  addition that passes without a `schemaVersion` bump, and it would rank a wire-compatible
+  addition as more severe than adding a required field with a bump, which today prints an
+  advisory, exits 0 and reports no consumer-build verdict even though it changes the same
+  constructor. The existing contract precedent for a source-level change with unchanged
+  wire bytes is advisory: moving a field between `typeid "p"` and a declared id changes
+  the generated Haskell type, breaks callers the same way, and reports
+  `consumer-build=advisory`. The constructor change also cannot reach a deployed service:
+  it appears only when a service regenerates its own committed module, where the compiler
+  names every call site.
   Date: 2026-11-18
 
 
@@ -690,48 +725,101 @@ Finish with Outcomes & Retrospective and the ADR distillation pass.
 ### Milestone 5: resolve the implementation review findings
 
 The review used the committed fixtures in `keiro-dsl/test/fixtures/` and compiled
-scaffold output in the project Nix shell. Address each finding before closing M5.
+scaffold output in the project Nix shell. Each finding was re-verified independently on
+2026-11-18 against the working tree (HEAD `c8bf96e8`); the evidence is recorded with each
+item. Findings 1, 2, 4 and 5 are confirmed as stated. Finding 3's observation is
+confirmed, but its proposed `breaking` verdict was replaced with `advisory`; see the
+Decision Log. Address each finding before closing M5.
 
-1. **P1 — Deployment order.** Comparing `contract-foreign-event.keiro` with either
-   `contract-foreign-event-optional-to-required.keiro` or
-   `contract-foreign-event-discriminator-body.keiro` makes `diff --explain` recommend
-   `producer-last`. In both cases the new reader requires a body key that old producers
-   omit. In `keiro-dsl/src/Keiro/Dsl/Diff.hs` classify each direction, and check the
-   rendered remedies in `keiro-dsl/src/Keiro/Dsl/DiffReport.hs`. For these forward
-   fixtures require `producer-first` and `drain-required`: deploy writers that supply
-   the key, then drain or migrate retained messages before deploying the stricter reader.
-   For the reverse fixtures require `producer-last`: readers must tolerate omission
-   before writers drop the key. Test both the report vector and the CLI explanation.
-2. **P2 — Fieldless envelope events.** The unit test with `Pinged` and `Ponged`
-   accepts encoder arms that bind an unused `payload` and an import of an unused
-   `(.=)`. GHC rejects both under `-Wall -Werror`. In
-   `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`, generate a wildcard for a fieldless
-   envelope encoder arm and import `(.=)` only when an encoder uses it. Update the
-   rendered-text assertions in `keiro-dsl/test/Main.hs`. Compile an envelope contract
-   whose events are all fieldless in the conformance suite under its generated-code
-   warning policy. Check that both events encode to `{}` and that supplying each
-   event type to the decoder selects the corresponding constructor.
-3. **P2 — Generated constructor compatibility.** Compare the base fixture with
-   `contract-foreign-event-optional-added.keiro`. An existing expression
-   `MemberNoted (MemberNotedData memberId note)` compiles against the base. After
-   regeneration it needs a third argument for `reason`. In `Diff.hs` retain
-   `ContractOptionalFieldAdded` and classify the public wire surface as compatible
-   without a schema version bump. Report `consumer-build=breaking` for the constructor
-   change. Verify both verdicts and the default gate's failing exit status, then
-   compile the updated caller with `Nothing` and decode an older message omitting
-   `reason`.
-4. **P3 — Producer header in ADR-65.** Correct the context in
-   [ADR-65](../adr/0065-integration-contracts-admit-optional-scalar-fields-and-envelope-discriminated-payloads.md).
-   The registration producer sends `event-type` with the value `RegistrationCompleted`.
-   The consumer's adapter supplies `IntegrationEvent.eventType`. Verify the distinction
-   against the producer's request to publish canonical Keiro headers,
-   `mori://tan/registration-service-v2/okf/improvement-requests/concepts/IR-6`.
-   Update ADR-65's evolution guidance with the verified rollout and build findings above.
-5. **P3 — Error paths in the integration guide.** Correct the Optional fields example
-   in [the integration guide](../user/keiro-dsl-integration.md). Run the example with
-   `"note": 7` and assert the decoder reports `$.note`. In a separate input, supply
-   a wrong-prefix `referrerId` and assert it reports `$.referrerId`. Align the
-   guide's evolution table with the verified wire and build verdicts.
+1. **P1 — Deployment order (confirmed).** Comparing `contract-foreign-event.keiro` with
+   either `contract-foreign-event-optional-to-required.keiro` or
+   `contract-foreign-event-discriminator-body.keiro` makes `diff --explain` print
+   `vector: public-consumer=breaking rollout=producer-last` and
+   `remedy: deploy in producer-last order`. In both cases the new reader requires a body
+   key that old producers omit, so deploying readers first rejects every message. For
+   the optional-to-required pair the remedy also contradicts the finding's own detail
+   line, `retained messages that omit the key no longer decode`. The diff already exits
+   non-zero for all four directions, so the defect is wrong operator guidance, not a
+   missed gate.
+
+   There are two causes, and both must change. `classifyCompatibility` in
+   `keiro-dsl/src/Keiro/Dsl/Diff.hs` sends every `ContractFieldChanged` and
+   `ContractDiscriminatorChanged` through `publicBreakingVector`, whose rollout is always
+   `producer-last`. Separately, `remediationFor` in
+   `keiro-dsl/src/Keiro/Dsl/DiffReport.hs` maps every code in `contractCodes` to a
+   hardcoded `RemedyDeploymentOrder RolloutProducerLast` and never reads the vector, so
+   correcting the vector alone leaves the explanation unchanged. Give the two forward
+   transitions the rollout `producer-first` plus `drain-required`, as
+   `contractTypeIdDomainVector` already does for a tightened TypeID domain, and make the
+   remedy render the vector's rollout: deploy writers that supply the key, then drain or
+   migrate retained messages before deploying the stricter reader. The reverse fixtures
+   (required to optional, body key to envelope) must keep `producer-last`: readers must
+   tolerate omission before writers drop the key. Test the report vector and the CLI
+   explanation in all four directions. `docs/user/deploy-ordering.md` lists the rollout
+   names without `producer-first`; add it there.
+
+   `keiro-dsl diff` takes one file and `--since GIT-REF`, so reproduce a fixture pair by
+   committing the old fixture as `spec.keiro` in a scratch Git repository, overwriting it
+   with the new one, and running `diff spec.keiro --since HEAD --explain` there.
+2. **P2 — Fieldless events (confirmed, and wider than reported).** Scaffolding the unit
+   test's `Pinged`/`Ponged` envelope contract and compiling the module with
+   `ghc -fno-code -Wall -Werror` fails with `-Wunused-imports` on `(.=)` and
+   `-Wunused-matches` on `payload` in both encoder arms. The unit test in
+   `keiro-dsl/test/Main.hs` (near line 9001) asserts those exact fragments, so it pins
+   the defect. The repository's `generated-output` stanza treats any warning in
+   generated code as a generator defect.
+
+   The unused `payload` is not limited to envelope mode. A body-discriminated contract
+   with one fieldless event (`event Pinged on events { }` beside an event that has
+   fields) emits `Pinged payload -> object [ "messageType" .= ("Pinged" :: Text) ]` and
+   fails the same way. That arm head dates from the original contract scaffold
+   (`f77b281b`), and no committed conformance suite has a fieldless contract event, which
+   is why the corpus never caught it.
+
+   In `emitContractGen` (`keiro-dsl/src/Keiro/Dsl/Scaffold.hs`), bind `payload` in an
+   encoder arm only when the event has at least one field, in both discriminator modes,
+   and import `(.=)` only when some encoder entry uses it (a body discriminator or any
+   field). Output for every event that has a field must not change by a byte. Update the
+   rendered-text assertions. Add to the conformance fixture an envelope contract whose
+   events are all fieldless and a fieldless event in the body-discriminated `audit`
+   contract, so both shapes compile under the generated-code warning policy. Check that
+   the fieldless envelope events encode to `{}`, that the fieldless body event encodes to
+   exactly its discriminator key, and that each event type selects its constructor on
+   decode.
+3. **P2 — Generated constructor compatibility (observation confirmed, verdict changed).**
+   Comparing the base fixture with `contract-foreign-event-optional-added.keiro` prints
+   only `ADDITIVE: audit contract-field MemberNoted.reason` with no vector and exits 0.
+   Regeneration does add a strict third field to `MemberNotedData`, so an existing
+   `MemberNoted (MemberNotedData memberId note)` stops compiling until the caller adds
+   `Nothing`. The report is silent about that, which is the defect.
+
+   Report it as `consumer-build=advisory`, not `breaking`. In `Diff.hs` keep
+   `ContractOptionalFieldAdded`, keep `public-consumer` compatible with no
+   `schemaVersion` bump, and set `consumerBuild = VAdvisory` (remove the code from
+   `additiveCodes` and give it its own row). The finding then prints as a `WARNING` whose
+   explanation tells the reader to re-scaffold and recompile, and the default gate still
+   exits 0. Verify the vector, the explanation and the zero exit status, then compile the
+   updated caller with `Nothing` and decode an older message omitting `reason`. The
+   Decision Log records why `breaking` was rejected.
+4. **P3 — Producer header in ADR-65 (confirmed).** The Context of
+   [ADR-65](../adr/0065-integration-contracts-admit-optional-scalar-fields-and-envelope-discriminated-payloads.md)
+   says the producer "names the event only in the Kafka `keiro-event-type` header". The
+   registration producer sends `event-type` with the value `RegistrationCompleted`
+   (asserted by `Completion/PublisherSmokeTest.hs` in
+   `mori://tan/registration-service-v2`), and
+   `mori://tan/registration-service-v2/okf/improvement-requests/concepts/IR-6`, still
+   `proposed`, asks it to add `keiro-event-type` beside it. The consumer's adapter maps
+   `event-type` onto `IntegrationEvent.eventType`. Correct the sentence, and update
+   ADR-65's evolution guidance with the rollout and build verdicts from items 1 and 3.
+5. **P3 — Error paths in the integration guide (confirmed).** The Optional fields
+   section of [the integration guide](../user/keiro-dsl-integration.md) says
+   "`"note": 7` or a wrong-prefix ID rejects the payload at `$.note`". A wrong-prefix
+   `referrerId` is rejected at `$.referrerId`. Reword the sentence so each input names
+   its own path. The conformance suite already asserts both path shapes on the
+   `registration` contract (`$.ownerEmail` and `$.mlsMemberId`); add the equivalent
+   checks for `audit` only if the suite does not already decode a wrong-type optional
+   `text` and a wrong-prefix optional literal TypeID there. Align the guide's evolution
+   table with the verified wire, rollout and build verdicts.
 
 Run the DSL unit and foreign-event conformance suites, corpus regeneration check, ADR
 and user documentation validation, and final `nix develop -c just verify` using the
@@ -854,11 +942,14 @@ both syntaxes are refused under Language 5. `docs/user/keiro-dsl-integration.md`
 allowed and refused forms.
 
 Evolution. Unit tests over the mutant fixtures show that an added optional field is
-wire-compatible without a `schemaVersion` bump and breaks the generated constructor's
-consumer-build surface; required to optional and optional to required are breaking
-`ContractFieldChanged`; a changed scalar under `Optional` is breaking; a literal-to-declared
+wire-compatible without a `schemaVersion` bump, carries a `consumer-build` advisory for
+the generated constructor, and passes the default gate; required to optional is breaking
+`ContractFieldChanged` with rollout `producer-last`, and optional to required is breaking
+with `producer-first` and `drain-required`; a changed scalar under `Optional` is breaking; a literal-to-declared
 move under `Optional` with equal prefix and admission is a build-only advisory; and a
-change of discriminator source is breaking `ContractDiscriminatorChanged`.
+change of discriminator source is breaking `ContractDiscriminatorChanged`, with
+`producer-first` and `drain-required` from envelope to body key and `producer-last` from
+body key to envelope.
 
 No regression. The corpus check proves every existing generated module is byte-identical,
 and the existing topology goldens are unchanged. Nothing in the command, replay, snapshot
@@ -869,8 +960,9 @@ the new conformance suite, `scripts/check-conformance-corpus.sh` and
 `just topology-schema-validate`; `nix develop -c just verify` runs all of them.
 
 Reopened review acceptance. M5 closes when the CLI produces the specified rollout
-and build verdicts, the fieldless module compiles and round-trips, and both corrected
-documentation examples agree with the producer and decoder evidence in Milestone 5.
+and build verdicts, fieldless events compile under `-Werror` and round-trip in both
+discriminator modes, and both corrected documentation passages agree with the producer
+and decoder evidence in Milestone 5.
 
 Records. The four OKF bundles validate, and IR-64 reads back as `completed`.
 
@@ -925,3 +1017,9 @@ new test suite depends on what the list-fields suite depends on.
 Revision note (2026-11-18). Reopened the plan with M5 after implementation review and
 updated acceptance to cover rollout direction, generated-code compilation and the two
 documentation corrections.
+
+Revision note (2026-11-18, second). Re-verified the five review findings against the
+working tree. All five observations reproduce. M5 now records the evidence, names both
+causes of the wrong rollout remedy, widens the fieldless-event fix to body-discriminated
+contracts, and reports an added optional field as a consumer-build advisory instead of a
+gate-failing break.
