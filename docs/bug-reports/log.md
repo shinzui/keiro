@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-19
+* **Addition**: BUG-14 records that scheduleTimerTx re-arms a scheduled timer with traceparent/tracestate taken unconditionally from the new request, so an untraced reschedule clears the stored creation context and the fire span is unlinked; SQL reproduced on PostgreSQL 17.11, evidence retained.
+
 ## 2026-11-18
 * **Update**: BUG-13 reported: a 100 ms versioned cutover deadline surfaced as UnexpectedServerError 57014 under full-gate load; suspected transaction-local statement_timeout left by the 0029 lock helpers.
 

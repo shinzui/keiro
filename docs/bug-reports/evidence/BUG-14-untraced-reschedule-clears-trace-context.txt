@@ -1,0 +1,54 @@
+BUG-14 reproduction: keiro scheduleTimerStmt (keiro/src/Keiro/Timer/Schema.hs:689-718 at 1ef8273f), prepared verbatim against a scratch keiro.keiro_timers table with the 0033 trace columns, on PostgreSQL 17.11 (aarch64-darwin), 2026-11-19.
+Step 1 schedules timer 0190a3b4-0000-7000-8000-000000000001 with a traceparent; step 2 re-arms the same scheduled timer with traceContext = Nothing (both trace parameters NULL).
+
+CREATE SCHEMA
+CREATE TABLE
+PREPARE
+INSERT 0 1
+┌───────────────────────┬─────────────────────────────────────────────────────────┬────────────┐
+│         step          │                       traceparent                       │ tracestate │
+├───────────────────────┼─────────────────────────────────────────────────────────┼────────────┤
+│ after traced schedule │ 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01 │ vendor=a   │
+└───────────────────────┴─────────────────────────────────────────────────────────┴────────────┘
+(1 row)
+
+INSERT 0 1
+┌───────────────────────────┬─────────────┬────────────┐
+│           step            │ traceparent │ tracestate │
+├───────────────────────────┼─────────────┼────────────┤
+│ after untraced reschedule │ ∅           │ ∅          │
+└───────────────────────────┴─────────────┴────────────┘
+(1 row)
+
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│                                         version                                          │
+├──────────────────────────────────────────────────────────────────────────────────────────┤
+│ PostgreSQL 17.11 on aarch64-apple-darwin25.6.0, compiled by clang version 21.1.8, 64-bit │
+└──────────────────────────────────────────────────────────────────────────────────────────┘
+(1 row)
+
+
+Script (psql -v ON_ERROR_STOP=1):
+
+CREATE SCHEMA keiro;
+CREATE TABLE keiro.keiro_timers (timer_id uuid PRIMARY KEY, process_manager_name text NOT NULL, correlation_id text NOT NULL, fire_at timestamptz NOT NULL, payload jsonb NOT NULL, status text NOT NULL, traceparent text, tracestate text, updated_at timestamptz DEFAULT now());
+PREPARE sched(uuid,text,text,timestamptz,jsonb,text,text,text) AS
+    INSERT INTO keiro.keiro_timers
+      (timer_id, process_manager_name, correlation_id, fire_at, payload, status, traceparent, tracestate)
+    VALUES
+      ($1, $2, $3, $4, $5, $6, $7, $8)
+    ON CONFLICT (timer_id) DO UPDATE
+      SET process_manager_name = EXCLUDED.process_manager_name,
+          correlation_id = EXCLUDED.correlation_id,
+          fire_at = EXCLUDED.fire_at,
+          payload = EXCLUDED.payload,
+          traceparent = EXCLUDED.traceparent,
+          tracestate = EXCLUDED.tracestate,
+          status = EXCLUDED.status,
+          updated_at = now()
+      WHERE keiro_timers.status = 'scheduled';
+EXECUTE sched('0190a3b4-0000-7000-8000-000000000001','order-pm','order-1',now()+interval '1 hour','{}','scheduled','00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01','vendor=a');
+SELECT 'after traced schedule' AS step, traceparent, tracestate FROM keiro.keiro_timers;
+EXECUTE sched('0190a3b4-0000-7000-8000-000000000001','order-pm','order-1',now()+interval '2 hour','{}','scheduled',NULL,NULL);
+SELECT 'after untraced reschedule' AS step, traceparent, tracestate FROM keiro.keiro_timers;
+SELECT version();
