@@ -1,0 +1,334 @@
+{
+  "candidate_sha256": "f5a0ae16e3ee10df14e923c9fff0d3dc6f2b48b4b184a40bd8e7b9e2da4e30f7",
+  "cases": {
+    "All.inbox.batch-100": {
+      "historical_ratio": 1.2928138845084831,
+      "lower": 0.49110071097879976,
+      "ratio": 0.6636959056628613,
+      "status": "passed",
+      "upper": 0.9437525952103908
+    },
+    "All.inbox.downstream.delegated-batch-100.all-duplicate.metrics-off": {
+      "historical_ratio": 1.6613077857147627,
+      "lower": 0.8354547903417782,
+      "ratio": 0.9658745394725566,
+      "status": "passed",
+      "upper": 1.1193438761295198
+    },
+    "All.inbox.downstream.delegated-batch-100.all-duplicate.metrics-on": {
+      "historical_ratio": 1.3446948551991482,
+      "lower": 0.9158118130560202,
+      "ratio": 1.0960136981185709,
+      "status": "passed",
+      "upper": 1.3093412387424714
+    },
+    "All.inbox.downstream.delegated-batch-100.fresh.metrics-off": {
+      "historical_ratio": 1.275295587125593,
+      "lower": 0.9152123736729219,
+      "ratio": 1.0293824538541647,
+      "status": "passed",
+      "upper": 1.166436580383453
+    },
+    "All.inbox.downstream.delegated-batch-100.repeated-key.metrics-off": {
+      "historical_ratio": 1.7996296128616616,
+      "lower": 1.0732440460575747,
+      "ratio": 1.2098953056371358,
+      "status": "passed",
+      "upper": 1.355552717145396
+    },
+    "All.inbox.downstream.delegated-batch-100.repeated-key.metrics-on": {
+      "historical_ratio": 1.5309565296535586,
+      "lower": 0.7669193980169466,
+      "ratio": 1.0158920647458534,
+      "status": "passed",
+      "upper": 1.4034690901722102
+    },
+    "All.inbox.downstream.delegated-batch-1000.all-duplicate.metrics-off": {
+      "historical_ratio": 1.2636623290282383,
+      "lower": 0.9647365355263964,
+      "ratio": 1.09184583224187,
+      "status": "passed",
+      "upper": 1.2307215903477402
+    },
+    "All.inbox.downstream.delegated-batch-1000.all-duplicate.metrics-on": {
+      "historical_ratio": 1.2125783347866015,
+      "lower": 0.927176385230969,
+      "ratio": 1.0699334000314744,
+      "status": "passed",
+      "upper": 1.2403289761048717
+    },
+    "All.inbox.downstream.delegated-batch-1000.fresh.metrics-off": {
+      "historical_ratio": 1.3412062085420713,
+      "lower": 0.4405592816498975,
+      "ratio": 0.720466475570097,
+      "status": "passed",
+      "upper": 1.623248483201294
+    },
+    "All.inbox.downstream.delegated-batch-1000.repeated-key.metrics-off": {
+      "historical_ratio": 1.3685075309788894,
+      "lower": 0.9269015241242139,
+      "ratio": 0.9938482666209858,
+      "status": "passed",
+      "upper": 1.0680531583286421
+    },
+    "All.inbox.downstream.delegated-batch-1000.repeated-key.metrics-on": {
+      "historical_ratio": 1.265524544749819,
+      "lower": 0.8380459877909318,
+      "ratio": 1.0073539944275145,
+      "status": "passed",
+      "upper": 1.2118000435392633
+    },
+    "All.inbox.downstream.delegated-direct-single.fresh.metrics-off": {
+      "historical_ratio": 1.261020056907099,
+      "lower": 0.9346467538844688,
+      "ratio": 1.021377073703318,
+      "status": "passed",
+      "upper": 1.1224839128283473
+    },
+    "All.inbox.downstream.delegated-history-duplicate.events-10": {
+      "historical_ratio": 1.3301773259766223,
+      "lower": 0.8628771743425578,
+      "ratio": 1.0253787538276267,
+      "status": "passed",
+      "upper": 1.2174563551261752
+    },
+    "All.inbox.downstream.delegated-history-duplicate.events-1000": {
+      "historical_ratio": 1.3522204941291431,
+      "lower": 0.905213994707799,
+      "ratio": 1.036001724283497,
+      "status": "passed",
+      "upper": 1.191899734755118
+    },
+    "All.inbox.downstream.delegated-history-duplicate.events-100000": {
+      "confirmation": [
+        {
+          "lower": 0.6680694088147495,
+          "ratio": 1.1211560059925407,
+          "status": "passed",
+          "upper": 1.642127823896277
+        },
+        {
+          "lower": 0.8695284322314252,
+          "ratio": 0.9784114747363033,
+          "status": "passed",
+          "upper": 1.1008407014609791
+        }
+      ],
+      "historical_ratio": 1.89239413761924,
+      "lower": 1.2689175563281991,
+      "ratio": 1.4294162426844426,
+      "status": "passed",
+      "upper": 1.6186722287885136
+    },
+    "All.inbox.downstream.delegated-single.all-duplicate.metrics-off": {
+      "historical_ratio": 1.4832545855916306,
+      "lower": 1.014301104613419,
+      "ratio": 1.1533917105455234,
+      "status": "passed",
+      "upper": 1.319503959095443
+    },
+    "All.inbox.downstream.delegated-single.fresh.metrics-off": {
+      "historical_ratio": 1.1921468378307036,
+      "lower": 0.8007282246945221,
+      "ratio": 0.9278695698655905,
+      "status": "passed",
+      "upper": 1.0796158282529684
+    },
+    "All.inbox.downstream.delegated-single.fresh.metrics-on": {
+      "confirmation": [
+        {
+          "lower": 0.7881383421277516,
+          "ratio": 1.3365600021133535,
+          "status": "inconclusive",
+          "upper": 3.254923784862447
+        },
+        {
+          "lower": 1.1490882676671643,
+          "ratio": 1.3298245691706605,
+          "status": "inconclusive",
+          "upper": 1.5288085472412651
+        }
+      ],
+      "historical_ratio": 1.485508410370374,
+      "lower": 1.0301641665154062,
+      "ratio": 1.2532474900042236,
+      "status": "inconclusive",
+      "upper": 1.4938876409206592
+    },
+    "All.inbox.downstream.delegated-single.repeated-key.metrics-off": {
+      "historical_ratio": 1.4306882606969609,
+      "lower": 0.9260019284575892,
+      "ratio": 1.0456231388279313,
+      "status": "passed",
+      "upper": 1.1832931220950687
+    },
+    "All.inbox.downstream.delegated-single.repeated-key.metrics-on": {
+      "historical_ratio": 1.3858762378669212,
+      "lower": 0.8290967328453616,
+      "ratio": 1.0431477247097782,
+      "status": "passed",
+      "upper": 1.3316170291635185
+    },
+    "All.inbox.downstream.table-downstream-batch-100.all-duplicate.metrics-off": {
+      "historical_ratio": 1.2166273363499716,
+      "lower": 0.8761359233731174,
+      "ratio": 1.0077748077893665,
+      "status": "passed",
+      "upper": 1.1561553571572047
+    },
+    "All.inbox.downstream.table-downstream-batch-100.all-duplicate.metrics-on": {
+      "historical_ratio": 1.2023459450759797,
+      "lower": 0.8618625298983441,
+      "ratio": 1.002991432615206,
+      "status": "passed",
+      "upper": 1.172350585008226
+    },
+    "All.inbox.downstream.table-downstream-batch-100.fresh.metrics-off": {
+      "historical_ratio": 1.2909041165180095,
+      "lower": 0.8961497243919623,
+      "ratio": 0.9920978593073055,
+      "status": "passed",
+      "upper": 1.1002511635052343
+    },
+    "All.inbox.downstream.table-downstream-batch-100.repeated-key.metrics-off": {
+      "historical_ratio": 1.362831146888255,
+      "lower": 0.8122547403529274,
+      "ratio": 0.990714431674571,
+      "status": "passed",
+      "upper": 1.2007774652366836
+    },
+    "All.inbox.downstream.table-downstream-batch-100.repeated-key.metrics-on": {
+      "historical_ratio": 1.230035606646138,
+      "lower": 0.885832639594407,
+      "ratio": 0.9701043467843464,
+      "status": "passed",
+      "upper": 1.0584000918627177
+    },
+    "All.inbox.downstream.table-downstream-batch-1000.all-duplicate.metrics-off": {
+      "historical_ratio": 1.291084837515913,
+      "lower": 0.8592013655246515,
+      "ratio": 1.005659886238839,
+      "status": "passed",
+      "upper": 1.1828332765568772
+    },
+    "All.inbox.downstream.table-downstream-batch-1000.all-duplicate.metrics-on": {
+      "historical_ratio": 1.2481496060439108,
+      "lower": 0.8398062969578033,
+      "ratio": 1.0059753695077145,
+      "status": "passed",
+      "upper": 1.2017692782497698
+    },
+    "All.inbox.downstream.table-downstream-batch-1000.fresh.metrics-off": {
+      "historical_ratio": 1.4891415237778518,
+      "lower": 0.8697976795495282,
+      "ratio": 0.9823640636642296,
+      "status": "passed",
+      "upper": 1.1063735522478297
+    },
+    "All.inbox.downstream.table-downstream-batch-1000.repeated-key.metrics-off": {
+      "historical_ratio": 1.6060238144164225,
+      "lower": 1.0412437671278736,
+      "ratio": 1.2409748932585885,
+      "status": "passed",
+      "upper": 1.4798208379051117
+    },
+    "All.inbox.downstream.table-downstream-batch-1000.repeated-key.metrics-on": {
+      "historical_ratio": 1.4105040610198776,
+      "lower": 1.0296190812354375,
+      "ratio": 1.1583524913037437,
+      "status": "passed",
+      "upper": 1.297806556223673
+    },
+    "All.inbox.downstream.table-downstream-single.all-duplicate.metrics-off": {
+      "historical_ratio": 1.180601511025945,
+      "lower": 0.43279941487128565,
+      "ratio": 0.6837566153760637,
+      "status": "passed",
+      "upper": 1.3668959525780282
+    },
+    "All.inbox.downstream.table-downstream-single.fresh.metrics-off": {
+      "historical_ratio": 1.2062825580181389,
+      "lower": 0.7107734488598948,
+      "ratio": 0.7932511224899532,
+      "status": "passed",
+      "upper": 0.8902852695412001
+    },
+    "All.inbox.downstream.table-downstream-single.fresh.metrics-on": {
+      "historical_ratio": 1.2258282712274051,
+      "lower": 0.6460222471231765,
+      "ratio": 0.736572432482469,
+      "status": "passed",
+      "upper": 0.8441831589155007
+    },
+    "All.inbox.downstream.table-downstream-single.repeated-key.metrics-off": {
+      "historical_ratio": 1.1863793428896778,
+      "lower": 0.7748467081929462,
+      "ratio": 0.8344536432210801,
+      "status": "passed",
+      "upper": 0.8984452958417388
+    },
+    "All.inbox.downstream.table-downstream-single.repeated-key.metrics-on": {
+      "historical_ratio": 1.1792122230701882,
+      "lower": 0.4775191589517713,
+      "ratio": 0.6006402983408973,
+      "status": "passed",
+      "upper": 0.7821080604628415
+    },
+    "All.inbox.single-full": {
+      "historical_ratio": 1.373876339573351,
+      "lower": 0.47938087341366303,
+      "ratio": 0.7262156336425575,
+      "status": "passed",
+      "upper": 1.2177832888084954
+    },
+    "All.inbox.single-nometrics": {
+      "historical_ratio": 1.3250961767181229,
+      "lower": 0.43502045635977904,
+      "ratio": 0.5454690479002514,
+      "status": "passed",
+      "upper": 0.7197853025727521
+    },
+    "All.inbox.single-slim": {
+      "historical_ratio": 1.3118024862496616,
+      "lower": 0.6068635163710091,
+      "ratio": 0.7519318941552141,
+      "status": "passed",
+      "upper": 0.9623906187806515
+    }
+  },
+  "ceiling": 1.25,
+  "finished": 1795052052.391805,
+  "group": "inbox",
+  "load_average": [
+    7.35205078125,
+    7.576171875,
+    7.0634765625
+  ],
+  "measurement_environment": {
+    "cabal": "3.16.1.0",
+    "compiler": "[(\"Project name\",\"The Glorious Glasgow Haskell Compilation System\")\n ,(\"C compiler command\",\"/nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc\")\n ,(\"C compiler flags\",\"--target=arm64-apple-darwin  -Qunused-arguments\")\n ,(\"C compiler link flags\",\"--target=arm64-apple-darwin   -Wl,-no_fixup_chains -Wl,-no_warn_duplicate_libraries\")\n ,(\"C compiler supports -no-pie\",\"NO\")\n ,(\"C++ compiler command\",\"/nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/c++\")\n ,(\"C++ compiler flags\",\"--target=arm64-apple-darwin \")\n ,(\"C-- CPP command\",\"/nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc\")\n ,(\"C-- CPP flags\",\"-E\")\n ,(\"C-- CPP supports -g0\",\"YES\")\n ,(\"CPP command\",\"/nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc\")\n ,(\"CPP flags\",\"-E\")\n ,(\"Haskell CPP command\",\"/nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc\")\n ,(\"Haskell CPP flags\",\"-E -undef -traditional -Wno-invalid-pp-token -Wno-unicode -Wno-trigraphs\")\n ,(\"JavaScript CPP command\",\"/nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc\")\n ,(\"JavaScript CPP flags\",\"-E -CC -Wno-unicode -nostdinc\")\n ,(\"LLVM llc command\",\"llc\")\n ,(\"LLVM llvm-as command\",\"clang\")\n ,(\"LLVM opt command\",\"opt\")\n ,(\"LLVM target\",\"arm64-apple-darwin\")\n ,(\"Leading underscore\",\"YES\")\n ,(\"Merge objects command\",\"/nix/store/g06apskfgai9pcp84cn1ig4b7l1rasjx-cctools-binutils-darwin-wrapper-1010.6/bin/ld\")\n ,(\"Merge objects flags\",\"-r\")\n ,(\"Merge objects supports response files\",\"YES\")\n ,(\"RTS expects libdw\",\"NO\")\n ,(\"RTS ways\",\"v thr thr_debug thr_debug_p thr_debug_p_dyn thr_debug_dyn thr_p thr_p_dyn thr_dyn debug debug_p debug_p_dyn debug_dyn p p_dyn dyn\")\n ,(\"Relative Global Package DB\",\"package.conf.d\")\n ,(\"Support SMP\",\"YES\")\n ,(\"Tables next to code\",\"YES\")\n ,(\"Unregisterised\",\"NO\")\n ,(\"Use LibFFI\",\"YES\")\n ,(\"Use inplace MinGW toolchain\",\"NO\")\n ,(\"Use interpreter\",\"YES\")\n ,(\"ar command\",\"/nix/store/g06apskfgai9pcp84cn1ig4b7l1rasjx-cctools-binutils-darwin-wrapper-1010.6/bin/ar\")\n ,(\"ar flags\",\"qcls\")\n ,(\"ar supports -L\",\"NO\")\n ,(\"ar supports at file\",\"YES\")\n ,(\"cross compiling\",\"NO\")\n ,(\"install_name_tool command\",\"/nix/store/4czi5s6rqvdk060p98mzp6cihxq13chs-cctools-binutils-darwin-1010.6/bin/install_name_tool\")\n ,(\"ld is GNU ld\",\"NO\")\n ,(\"ld supports compact unwind\",\"YES\")\n ,(\"ld supports filelist\",\"YES\")\n ,(\"ld supports single module\",\"YES\")\n ,(\"otool command\",\"/nix/store/4czi5s6rqvdk060p98mzp6cihxq13chs-cctools-binutils-darwin-1010.6/bin/otool\")\n ,(\"ranlib command\",\"/nix/store/g06apskfgai9pcp84cn1ig4b7l1rasjx-cctools-binutils-darwin-wrapper-1010.6/bin/ranlib\")\n ,(\"target RTS linker only supports shared libraries\",\"NO\")\n ,(\"target arch\",\"ArchAArch64\")\n ,(\"target has .ident directive\",\"YES\")\n ,(\"target has GNU nonexec stack\",\"NO\")\n ,(\"target has libm\",\"YES\")\n ,(\"target has subsections via symbols\",\"NO\")\n ,(\"target os\",\"OSDarwin\")\n ,(\"target platform string\",\"aarch64-apple-darwin\")\n ,(\"target word big endian\",\"NO\")\n ,(\"target word size\",\"8\")\n ,(\"unlit command\",\"/nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/lib/../bin/unlit\")\n ,(\"windres command\",\"/bin/false\")\n ,(\"Project version\",\"9.12.4\")\n ,(\"Project Git commit id\",\"44c6796f535d60861fa2510025ec79f27696a15e\")\n ,(\"Project Version Int\",\"912\")\n ,(\"Project Patch Level\",\"4\")\n ,(\"Project Patch Level1\",\"4\")\n ,(\"Project Patch Level2\",\"0\")\n ,(\"Project Unit Id\",\"ghc-9.12.4-8bff\")\n ,(\"Booter version\",\"9.10.3\")\n ,(\"Stage\",\"2\")\n ,(\"Build platform\",\"aarch64-apple-darwin\")\n ,(\"Host platform\",\"aarch64-apple-darwin\")\n ,(\"Target platform\",\"aarch64-apple-darwin\")\n ,(\"Have interpreter\",\"YES\")\n ,(\"Object splitting supported\",\"NO\")\n ,(\"Have native code generator\",\"YES\")\n ,(\"target has RTS linker\",\"YES\")\n ,(\"Target default backend\",\"native code generator\")\n ,(\"Support dynamic-too\",\"YES\")\n ,(\"Support parallel --make\",\"YES\")\n ,(\"Support reexported-modules\",\"YES\")\n ,(\"Support thinning and renaming package flags\",\"YES\")\n ,(\"Support Backpack\",\"YES\")\n ,(\"Requires unified installed package IDs\",\"YES\")\n ,(\"Uses package keys\",\"YES\")\n ,(\"Uses unit IDs\",\"YES\")\n ,(\"GHC Dynamic\",\"YES\")\n ,(\"GHC Profiled\",\"NO\")\n ,(\"Debug on\",\"NO\")\n ,(\"LibDir\",\"/nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/lib\")\n ,(\"Global Package DB\",\"/nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/lib/package.conf.d\")\n ]",
+    "config": "9bd8135e7f9c035ed8fd8290f8fedcf2fddd9ee2c62abacb53e96432af66e4ae",
+    "environment": {
+      "IN_NIX_SHELL": "5a8c729370cf99d111bae012ee5600ac52974d80c3c39c5cf2a1abf6bb3dc341",
+      "LANG": "7f3b359fe6d3eed101e3ea689e7da3976b6b85aa617be90c66cb8d8aa39e07a0",
+      "LD_DYLD_PATH": "d865cdb1c3d8dfb625287461eb543af821116467d15bb191aa65762d3a58e7d7",
+      "PATH": "bcc0940a666445ba81224bd667243599ad2216e436cc644b4c9e9cc361b7e834",
+      "PGDATA": "754f69cf7b8676429201f1b64706d2a2337756b9e9fc10a5ee508b8f68b6b732",
+      "PGDATABASE": "005a0b8c90b314f94c804390969060195bb857db4c07faae810523f0912671eb",
+      "PGHOST": "c4825cfaaa4b992e8035b2eebc5977c1326b1dd9d4e9cad18e628e4dd16e5759",
+      "PGLOG": "62647c483b12a0b5bf81a4a037ccd0a0473451e24e5aafecfe9325611595d148",
+      "PG_CONNECTION_STRING": "9fad79541841addf0d8e0e7060ba9e1ffff712bf32809cd4714f4ee6e3d7afdc"
+    },
+    "flake": "e794dcfd6c385d254c5d28e4c0e61c3ded0fcf4548db6ee235167a73be211d55",
+    "machine": [
+      "yujin",
+      "macOS-27.2.1-arm64-arm-64bit-Mach-O",
+      36
+    ],
+    "postgres": "postgres (PostgreSQL) 18.6"
+  },
+  "reference_reused": false,
+  "reference_source": "b8695a0d050c5b0db2f251887d43182da2b47eed",
+  "schema": 1,
+  "status": "inconclusive"
+}

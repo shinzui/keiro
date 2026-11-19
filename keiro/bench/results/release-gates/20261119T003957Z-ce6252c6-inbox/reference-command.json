@@ -1,0 +1,31 @@
+{
+  "command": [
+    "/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/c0f45f8a10f29541c34e09126e458f5bfffaea4d26f9f762dbaddd3b3c3cd55c/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench",
+    "-p",
+    "inbox",
+    "-j1",
+    "--time-mode",
+    "wall",
+    "--hide-progress",
+    "--stdev",
+    "5",
+    "--timeout",
+    "10s",
+    "--csv",
+    "/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/c0f45f8a10f29541c34e09126e458f5bfffaea4d26f9f762dbaddd3b3c3cd55c/samples-e4b1687535cb12deea883be0cf2de5a6c8077a75473a60db8750b64c6cf86629/reference.csv",
+    "+RTS",
+    "-N2",
+    "-RTS"
+  ],
+  "cwd": "/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/c0f45f8a10f29541c34e09126e458f5bfffaea4d26f9f762dbaddd3b3c3cd55c/keiro",
+  "finished": 1795051754.882386,
+  "load_average": [
+    5.9501953125,
+    6.77197265625,
+    6.5625
+  ],
+  "recoverable": false,
+  "started": 1795051488.474625,
+  "status": 0,
+  "timeout_only": false
+}

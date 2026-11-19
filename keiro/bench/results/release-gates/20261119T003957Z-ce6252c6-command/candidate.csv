@@ -1,0 +1,22 @@
+Name,Mean (ps),2*Stdev (ps)
+All.tracing.command.append-distinct-streams,19084993750,2115585838
+All.tracing.command.append-distinct-streams/tracer,18664068750,1177373642
+All.tracing.command.append-one-stream,68448775000,6538598176
+All.tracing.command.append-one-stream/tracer,70506025000,5821379372
+All.tracing.command.append-batch,1937933007,78276354
+All.tracing.command.append-batch/tracer,1899292968,133343022
+All.command.legacy.accepted-1,176516455,13374698
+All.command.control.accepted-1,183961987,13682704
+All.command.domain-warmup.accepted-1,176059765,15048038
+All.command.domain.accepted-1,179966552,10419334
+All.command.legacy.accepted-large,1887195312,111908214
+All.command.domain.accepted-large,1894771875,161884332
+All.command.legacy.no-op,20155688,1078618
+All.command.domain.rejected,20093151,1568304
+All.command.domain.no-op,20083602,1271436
+All.command.domain.router-fanout.10,2601898437,246840940
+All.command.domain.router-fanout.100,26253287500,2143494762
+All.command.domain.router-fanout.1000,283055250000,51262976418
+All.command.domain.process-manager-fanout.10,2837771875,145033464
+All.command.domain.process-manager-fanout.100,27001943750,1638562662
+All.command.domain.process-manager-fanout.1000,253808225000,9069827126

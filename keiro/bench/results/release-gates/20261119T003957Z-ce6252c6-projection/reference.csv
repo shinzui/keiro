@@ -1,0 +1,13 @@
+Name,Mean (ps),2*Stdev (ps)
+All.projection.inline.legacy.one-target,544771582,184033634
+All.projection.inline.versioned.one-target,544334765,180392600
+All.projection.inline.legacy.three-target,549538867,135703122
+All.projection.inline.versioned.three-target,507172753,36230414
+All.projection.inline.legacy.three-groups,431675390,10938170
+All.projection.inline.versioned.three-groups,554882714,216923486
+All.projection.inline.legacy.many-revisions,297602685,40475450
+All.projection.inline.versioned.many-revisions,304807031,20132036
+All.projection.inline.legacy.mixed-delivery,353050292,49926112
+All.projection.inline.versioned.mixed-delivery,334531054,29044426
+All.projection.async.legacy.mixed-delivery,115289404,8601218
+All.projection.async.versioned.mixed-delivery,137743310,7220052

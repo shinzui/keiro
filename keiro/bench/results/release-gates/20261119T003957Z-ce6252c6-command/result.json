@@ -1,0 +1,145 @@
+{
+  "candidate_sha256": "f5a0ae16e3ee10df14e923c9fff0d3dc6f2b48b4b184a40bd8e7b9e2da4e30f7",
+  "cases": {
+    "All.command.control.accepted-1": {
+      "historical_ratio": 1.2337628128683504,
+      "lower": 0.8251735026911028,
+      "ratio": 0.996267244231145,
+      "status": "passed",
+      "upper": 1.2129403164495014
+    },
+    "All.command.domain-warmup.accepted-1": {
+      "historical_ratio": 1.1286267479498675,
+      "lower": 0.8006262639215161,
+      "ratio": 0.9133192429037137,
+      "status": "passed",
+      "upper": 1.0362018697783943
+    },
+    "All.command.domain.accepted-1": {
+      "historical_ratio": 1.1982667020052367,
+      "lower": 0.6148401211219012,
+      "ratio": 0.7810992834317343,
+      "status": "passed",
+      "upper": 1.0288623609702738
+    },
+    "All.command.domain.accepted-large": {
+      "historical_ratio": 1.2630924394443979,
+      "lower": 0.7326288686966097,
+      "ratio": 0.8687295989393103,
+      "status": "passed",
+      "upper": 1.0299417487707896
+    },
+    "All.command.domain.no-op": {
+      "historical_ratio": 1.2275611896430754,
+      "lower": 0.8157282571767475,
+      "ratio": 0.9368711103556118,
+      "status": "passed",
+      "upper": 1.077885478644656
+    },
+    "All.command.domain.process-manager-fanout.10": {
+      "historical_ratio": 1.3547491492602555,
+      "lower": 1.019049360233744,
+      "ratio": 1.1696823678738477,
+      "status": "passed",
+      "upper": 1.3498035299269435
+    },
+    "All.command.domain.process-manager-fanout.100": {
+      "historical_ratio": 1.3145925087649424,
+      "lower": 0.993690773648851,
+      "ratio": 1.0982750696286776,
+      "status": "passed",
+      "upper": 1.2111620707309656
+    },
+    "All.command.domain.process-manager-fanout.1000": {
+      "historical_ratio": 1.2414911939947593,
+      "lower": 0.9152896538183446,
+      "ratio": 1.0381209760311443,
+      "status": "passed",
+      "upper": 1.1863413974053492
+    },
+    "All.command.domain.rejected": {
+      "historical_ratio": 1.2262586801105546,
+      "lower": 0.47570207979694173,
+      "ratio": 0.8389200445856371,
+      "status": "passed",
+      "upper": 2.417491350459912
+    },
+    "All.command.domain.router-fanout.10": {
+      "historical_ratio": 1.2093446669328298,
+      "lower": 0.8583058542155173,
+      "ratio": 0.9898842726092477,
+      "status": "passed",
+      "upper": 1.133542002797029
+    },
+    "All.command.domain.router-fanout.100": {
+      "historical_ratio": 1.2047458749626818,
+      "lower": 0.905528240614513,
+      "ratio": 1.0578000212540815,
+      "status": "passed",
+      "upper": 1.2339768484147708
+    },
+    "All.command.domain.router-fanout.1000": {
+      "historical_ratio": 1.320261024986435,
+      "lower": 0.8464367524240021,
+      "ratio": 1.0943987964736306,
+      "status": "passed",
+      "upper": 1.3733359667327674
+    },
+    "All.command.legacy.accepted-1": {
+      "historical_ratio": 1.1721602277728638,
+      "lower": 0.8584592034575759,
+      "ratio": 0.9982741082072368,
+      "status": "passed",
+      "upper": 1.160682145423415
+    },
+    "All.command.legacy.accepted-large": {
+      "historical_ratio": 1.2504561850686324,
+      "lower": 0.7509445612868098,
+      "ratio": 0.8780434786603895,
+      "status": "passed",
+      "upper": 1.0333605379966833
+    },
+    "All.command.legacy.no-op": {
+      "historical_ratio": 1.2366615070815246,
+      "lower": 0.7544728165750706,
+      "ratio": 0.851877883891761,
+      "status": "passed",
+      "upper": 0.9636492454427453
+    }
+  },
+  "ceiling": 1.25,
+  "finished": 1795052198.3799958,
+  "group": "command",
+  "load_average": [
+    5.0263671875,
+    6.591796875,
+    6.74560546875
+  ],
+  "measurement_environment": {
+    "cabal": "3.16.1.0",
+    "compiler": "[(\"Project name\",\"The Glorious Glasgow Haskell Compilation System\")\n ,(\"C compiler command\",\"/nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc\")\n ,(\"C compiler flags\",\"--target=arm64-apple-darwin  -Qunused-arguments\")\n ,(\"C compiler link flags\",\"--target=arm64-apple-darwin   -Wl,-no_fixup_chains -Wl,-no_warn_duplicate_libraries\")\n ,(\"C compiler supports -no-pie\",\"NO\")\n ,(\"C++ compiler command\",\"/nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/c++\")\n ,(\"C++ compiler flags\",\"--target=arm64-apple-darwin \")\n ,(\"C-- CPP command\",\"/nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc\")\n ,(\"C-- CPP flags\",\"-E\")\n ,(\"C-- CPP supports -g0\",\"YES\")\n ,(\"CPP command\",\"/nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc\")\n ,(\"CPP flags\",\"-E\")\n ,(\"Haskell CPP command\",\"/nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc\")\n ,(\"Haskell CPP flags\",\"-E -undef -traditional -Wno-invalid-pp-token -Wno-unicode -Wno-trigraphs\")\n ,(\"JavaScript CPP command\",\"/nix/store/zb4dn54dd83q4vch99hy18kg0n8p9nwb-clang-wrapper-21.1.8/bin/cc\")\n ,(\"JavaScript CPP flags\",\"-E -CC -Wno-unicode -nostdinc\")\n ,(\"LLVM llc command\",\"llc\")\n ,(\"LLVM llvm-as command\",\"clang\")\n ,(\"LLVM opt command\",\"opt\")\n ,(\"LLVM target\",\"arm64-apple-darwin\")\n ,(\"Leading underscore\",\"YES\")\n ,(\"Merge objects command\",\"/nix/store/g06apskfgai9pcp84cn1ig4b7l1rasjx-cctools-binutils-darwin-wrapper-1010.6/bin/ld\")\n ,(\"Merge objects flags\",\"-r\")\n ,(\"Merge objects supports response files\",\"YES\")\n ,(\"RTS expects libdw\",\"NO\")\n ,(\"RTS ways\",\"v thr thr_debug thr_debug_p thr_debug_p_dyn thr_debug_dyn thr_p thr_p_dyn thr_dyn debug debug_p debug_p_dyn debug_dyn p p_dyn dyn\")\n ,(\"Relative Global Package DB\",\"package.conf.d\")\n ,(\"Support SMP\",\"YES\")\n ,(\"Tables next to code\",\"YES\")\n ,(\"Unregisterised\",\"NO\")\n ,(\"Use LibFFI\",\"YES\")\n ,(\"Use inplace MinGW toolchain\",\"NO\")\n ,(\"Use interpreter\",\"YES\")\n ,(\"ar command\",\"/nix/store/g06apskfgai9pcp84cn1ig4b7l1rasjx-cctools-binutils-darwin-wrapper-1010.6/bin/ar\")\n ,(\"ar flags\",\"qcls\")\n ,(\"ar supports -L\",\"NO\")\n ,(\"ar supports at file\",\"YES\")\n ,(\"cross compiling\",\"NO\")\n ,(\"install_name_tool command\",\"/nix/store/4czi5s6rqvdk060p98mzp6cihxq13chs-cctools-binutils-darwin-1010.6/bin/install_name_tool\")\n ,(\"ld is GNU ld\",\"NO\")\n ,(\"ld supports compact unwind\",\"YES\")\n ,(\"ld supports filelist\",\"YES\")\n ,(\"ld supports single module\",\"YES\")\n ,(\"otool command\",\"/nix/store/4czi5s6rqvdk060p98mzp6cihxq13chs-cctools-binutils-darwin-1010.6/bin/otool\")\n ,(\"ranlib command\",\"/nix/store/g06apskfgai9pcp84cn1ig4b7l1rasjx-cctools-binutils-darwin-wrapper-1010.6/bin/ranlib\")\n ,(\"target RTS linker only supports shared libraries\",\"NO\")\n ,(\"target arch\",\"ArchAArch64\")\n ,(\"target has .ident directive\",\"YES\")\n ,(\"target has GNU nonexec stack\",\"NO\")\n ,(\"target has libm\",\"YES\")\n ,(\"target has subsections via symbols\",\"NO\")\n ,(\"target os\",\"OSDarwin\")\n ,(\"target platform string\",\"aarch64-apple-darwin\")\n ,(\"target word big endian\",\"NO\")\n ,(\"target word size\",\"8\")\n ,(\"unlit command\",\"/nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/lib/../bin/unlit\")\n ,(\"windres command\",\"/bin/false\")\n ,(\"Project version\",\"9.12.4\")\n ,(\"Project Git commit id\",\"44c6796f535d60861fa2510025ec79f27696a15e\")\n ,(\"Project Version Int\",\"912\")\n ,(\"Project Patch Level\",\"4\")\n ,(\"Project Patch Level1\",\"4\")\n ,(\"Project Patch Level2\",\"0\")\n ,(\"Project Unit Id\",\"ghc-9.12.4-8bff\")\n ,(\"Booter version\",\"9.10.3\")\n ,(\"Stage\",\"2\")\n ,(\"Build platform\",\"aarch64-apple-darwin\")\n ,(\"Host platform\",\"aarch64-apple-darwin\")\n ,(\"Target platform\",\"aarch64-apple-darwin\")\n ,(\"Have interpreter\",\"YES\")\n ,(\"Object splitting supported\",\"NO\")\n ,(\"Have native code generator\",\"YES\")\n ,(\"target has RTS linker\",\"YES\")\n ,(\"Target default backend\",\"native code generator\")\n ,(\"Support dynamic-too\",\"YES\")\n ,(\"Support parallel --make\",\"YES\")\n ,(\"Support reexported-modules\",\"YES\")\n ,(\"Support thinning and renaming package flags\",\"YES\")\n ,(\"Support Backpack\",\"YES\")\n ,(\"Requires unified installed package IDs\",\"YES\")\n ,(\"Uses package keys\",\"YES\")\n ,(\"Uses unit IDs\",\"YES\")\n ,(\"GHC Dynamic\",\"YES\")\n ,(\"GHC Profiled\",\"NO\")\n ,(\"Debug on\",\"NO\")\n ,(\"LibDir\",\"/nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/lib\")\n ,(\"Global Package DB\",\"/nix/store/g1qpr9sf56sr9znrqk05wxqrbgnnyanj-ghc-9.12.4/lib/ghc-9.12.4/lib/package.conf.d\")\n ]",
+    "config": "9bd8135e7f9c035ed8fd8290f8fedcf2fddd9ee2c62abacb53e96432af66e4ae",
+    "environment": {
+      "IN_NIX_SHELL": "5a8c729370cf99d111bae012ee5600ac52974d80c3c39c5cf2a1abf6bb3dc341",
+      "LANG": "7f3b359fe6d3eed101e3ea689e7da3976b6b85aa617be90c66cb8d8aa39e07a0",
+      "LD_DYLD_PATH": "d865cdb1c3d8dfb625287461eb543af821116467d15bb191aa65762d3a58e7d7",
+      "PATH": "bcc0940a666445ba81224bd667243599ad2216e436cc644b4c9e9cc361b7e834",
+      "PGDATA": "754f69cf7b8676429201f1b64706d2a2337756b9e9fc10a5ee508b8f68b6b732",
+      "PGDATABASE": "005a0b8c90b314f94c804390969060195bb857db4c07faae810523f0912671eb",
+      "PGHOST": "c4825cfaaa4b992e8035b2eebc5977c1326b1dd9d4e9cad18e628e4dd16e5759",
+      "PGLOG": "62647c483b12a0b5bf81a4a037ccd0a0473451e24e5aafecfe9325611595d148",
+      "PG_CONNECTION_STRING": "9fad79541841addf0d8e0e7060ba9e1ffff712bf32809cd4714f4ee6e3d7afdc"
+    },
+    "flake": "e794dcfd6c385d254c5d28e4c0e61c3ded0fcf4548db6ee235167a73be211d55",
+    "machine": [
+      "yujin",
+      "macOS-27.2.1-arm64-arm-64bit-Mach-O",
+      36
+    ],
+    "postgres": "postgres (PostgreSQL) 18.6"
+  },
+  "reference_reused": false,
+  "reference_source": "b8695a0d050c5b0db2f251887d43182da2b47eed",
+  "schema": 1,
+  "status": "passed"
+}
