@@ -52,6 +52,7 @@ cannot roll them back; version control is the undo.
 | `0.22.0.0` | `0.23.0.0` | `kiroku-upgrade` `0.12.0.0 -> 0.13.0.0` |
 | `0.23.0.0` | `0.24.0.0` | — |
 | `0.24.0.0` | `0.25.0.0` | `shibuya-pgmq-adapter-upgrade` 0.18 → 0.19; `shibuya-kiroku-adapter-upgrade` 0.7.0.1 → 0.8 |
+| `0.25.1.0` | `0.26.0.0` | — |
 
 Gaps between edges are deliberate and legal: they mean no agent intervention was
 needed in that interval. Edges are append-only — an edge stays correct for as

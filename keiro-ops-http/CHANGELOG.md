@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## 0.26.0.0 — 2026-11-18
+
 ### Breaking Changes
 
 - `HostOptions` gains `topology :: Maybe FilePath`; code constructing `HostOptions`

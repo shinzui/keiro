@@ -6,6 +6,8 @@ All notable changes to `keiro-core` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.26.0.0 — 2026-11-18
+
 ### New Features
 
 - `Keiro.Integration.Event.decodeJsonIntegrationEventWith` decodes an envelope's JSON

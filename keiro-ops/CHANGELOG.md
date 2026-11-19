@@ -6,6 +6,8 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.26.0.0 — 2026-11-18
+
 ### Breaking Changes
 
 - `AppHooks` gains `serviceTopology :: Maybe ServiceTopologyDocument`; direct record

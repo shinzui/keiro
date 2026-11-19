@@ -6,6 +6,8 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.26.0.0 — 2026-11-18
+
 ### Breaking Changes
 
 - `Keiro.Dsl.Grammar.ContractType` gains the constructor `COptional`, and
@@ -17,6 +19,12 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   `ContractEnvelopeDiscriminatorSyntax`. There is no compatibility shim: exhaustive
   matches and record construction must handle the new constructors. Generated modules for
   existing sources are byte-identical. (ExecPlan 345, IR-64)
+- `Keiro.Dsl.Grammar.InputDecl` gains the field `source :: Maybe InputSource`; direct
+  record construction must supply it (`Nothing` keeps the previous meaning).
+  `DiagnosticCode` adds `InputSourceUnresolvedIntake` and `InputSourceEventNotAccepted`,
+  and `LanguageFeature` adds `InputSourceSyntax`, so exhaustive matches must handle them.
+- `Keiro.Dsl.DiffReport.Remedy` adds `RemedyDeployKeyWritersFirst` and
+  `RemedyDrainBeforeStricterReader`; exhaustive matches must handle them.
 
 ### New Features
 

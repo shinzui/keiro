@@ -6,6 +6,8 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+## 0.26.0.0 — 2026-11-18
+
 ### New Features
 
 - `Keiro.Inbox.Delegated.delegatedDomainCommand` lets delegated intake acknowledge a typed

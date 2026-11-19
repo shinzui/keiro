@@ -6,12 +6,51 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+## 0.26.0.0 — 2026-11-18
+
+### Breaking Changes
+
+- **keiro-dsl**: `ContractType` gains `COptional`, `ContractNode.discriminator` becomes
+  `ContractDiscriminator`, and `InputDecl` gains `source`. `DiagnosticCode`,
+  `LanguageFeature` and `DiffReport.Remedy` gain constructors. Generated modules for
+  existing sources are byte-identical.
+- **keiro-ops**: `AppHooks` gains `serviceTopology`, and `Keiro.Ops.Command` gains
+  `Topology`.
+- **keiro-ops-http**: `HostOptions` gains `topology :: Maybe FilePath`.
+
 ### New Features
 
 - **keiro-dsl**, **keiro-core**: Integration contracts can mirror events owned by other
   producers: candidate Language 6 adds `Optional <scalar>` contract fields and
   `discriminator from envelope`, and keiro-core adds `decodeJsonIntegrationEventWith`.
-  The keiro-dsl library types change; see the package changelogs. (IR-64)
+  `diff --explain` renders `producer-first` rollouts from the finding's vector. (IR-64)
+- **keiro-dsl**: `keiro-dsl topology` exports a versioned, digest-stamped service
+  topology (`keiro-dsl/service-topology/1` and `/2`) with keiki-verified aggregate
+  machines, stream categories and dispatch dedupe read models. `scaffold --topology-out`
+  writes it atomically and `topology --check` detects a stale committed copy. Candidate
+  Language 6 input sources (`from intake … event …`) export as `feeds` edges.
+- **keiro-ops**, **keiro-ops-http**: Mount a committed topology document through
+  `AppHooks.serviceTopology` or `--topology FILE` and read it with `topology show` /
+  `topology summary` or `GET /topology/show` and `/topology/summary`.
+- **keiro**: `Keiro.Inbox.Delegated.delegatedDomainCommand` lets delegated intake
+  acknowledge a typed `DomainNoOp` with a completed inbox receipt row, keeping accepted
+  decisions on their first-event marker. `Keiro.Inbox.Schema.insertCompletedStrictTx`
+  distinguishes an insert, an existing row and a vanished conflict. (IR-65)
+- **keiro-dsl**: The generated conformance runner accepts `--behavior-complete`, which
+  fails on pending, missing, duplicate or stale behavior keys and failed witnesses.
+
+### Bug Fixes
+
+- **keiro-dsl**: Generated contract encoders for fieldless events no longer fail to
+  compile under `-Wall -Werror`.
+
+### Other Changes
+
+- `keiro-pgmq`, `keiro-migrations` and `keiro-test-support` carry no source changes;
+  their versions and internal dependency bounds align with the shared release.
+- Release tooling: `just verify` runs `release-static` first, the published-consumer
+  proof waits up to 30 minutes for Hackage's index, and `just topology-schema-validate`
+  checks golden topology documents against their JSON Schema.
 
 ## 0.25.1.0 — 2026-11-16
 
