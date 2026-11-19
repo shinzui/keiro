@@ -16,6 +16,8 @@ okf_version: "0.2"
 - [Initial hole harness requires acceptance from empty registers despite history-backed witnesses](10-initial-hole-harness-requires-acceptance-from-empty-registers.md) - DSL 0.20.0.0 falsely fails Rei's valid guarded clear in both generic initial acceptance and forward/replay probes.
 - [Read-model harness imports an inconsistent name for a keyword segment](11-read-model-harness-imports-inconsistent-keyword-segment-name.md) - Keiro DSL accepts a read-model name ending in the snake-case segment type, but its generated definition and harness import disagree on capitalization and fail compilation.
 - [Operator schema verification flags Keiro's own external-read binding view as drift](12-ops-schema-verification-flags-keiro-managed-binding-view.md) - keiro-ops compares the live keiro schema against a migrations-only snapshot, so the binding view Keiro creates for every all-rows external-read contract is reported as drift and every mutating operator command refuses without --allow-schema-drift.
+- [A versioned-rebuild cutover deadline can surface as an untyped statement timeout](13-versioned-cutover-deadline-surfaces-as-statement-timeout.md) - Under load, resuming a versioned rebuild whose target relations are held past the cutover lock deadline returned UnexpectedServerError 57014 instead of VersionedCutoverDeadlineExceeded.
+- [An untraced timer reschedule clears the stored trace context](14-untraced-timer-reschedule-clears-stored-trace-context.md) - scheduleTimerTx re-arms a scheduled timer with trace columns taken unconditionally from the new request, so an untraced reschedule clears the creation context and the fire span is unlinked.
 
 ## Status and plan coverage
 
@@ -40,6 +42,8 @@ steps in plans 299, 300, and 301 are still unchecked.
 | [BUG-10](10-initial-hole-harness-requires-acceptance-from-empty-registers.md) | `fixed` | [309](../plans/309-prove-hole-owned-initial-edges-through-history-backed-witnesses-in-generated-harnesses-to-fix-bug-10.md) | Completed; history-backed initial-hole acceptance and persisted-codec replay pass aggregate and whole-service proofs, all eight witness mutations fail by name, and the full verification gate passes. Fixed version: `unreleased`. |
 | [BUG-11](11-read-model-harness-imports-inconsistent-keyword-segment-name.md) | `fixed` | [310](../plans/310-derive-generated-declaration-stems-from-whole-logical-names-to-fix-bug-11.md) | Implemented; keyword-segment conformance suite compiles and the full verification gate passes. Fixed version: `unreleased`. |
 | [BUG-12](12-ops-schema-verification-flags-keiro-managed-binding-view.md) | `fixed` | [311](../plans/311-recognise-runtime-managed-read-objects-in-schema-verification-to-fix-bug-12.md) | Registry-aware verification implemented; runtime, migration, operator, CLI, and full verification checks pass. `fixedVersion: unreleased`. [Original reproduction](evidence/BUG-12-master-binding-view-drift.txt). |
+| [BUG-13](13-versioned-cutover-deadline-surfaces-as-statement-timeout.md) | `confirmed` | [348](../plans/348-bound-versioned-cutover-lock-waits-without-leaking-transaction-timeouts-to-fix-bug-13-and-ir-47.md) | Unimplemented. The leaked transaction-local timeouts and both escape paths for 57014 reproduce on the 0029 helpers; the gate failure under load was not re-run. Same root cause as IR-47. [Owner reproduction](evidence/BUG-13-leaked-cutover-timeouts.txt). |
+| [BUG-14](14-untraced-timer-reschedule-clears-stored-trace-context.md) | `confirmed` | [349](../plans/349-preserve-stored-timer-trace-context-across-untraced-reschedules-to-fix-bug-14.md) | Unimplemented. The statement on master clears both trace columns on an untraced re-arm on PostgreSQL 18.6; the candidate statement keeps the pair. [Reproduction](evidence/BUG-14-untraced-reschedule-clears-trace-context.txt). |
 
 BUG-10 was added on 2026-10-13 after the historical audit above. Its two failing
 assertions share one reproduction. Later that day the owning repository validated the
@@ -58,3 +62,8 @@ BUG-12 was merged from GitHub PR #7 on 2026-10-13. The owning repository confirm
 cause from master source the same day and wrote plan 311. The compiled owner fixture
 reproduced the exact binding-view drift on 2026-10-14. Registry-aware verification
 and the full gate now pass; status is `fixed` with `fixedVersion: unreleased`.
+
+BUG-13 and BUG-14 were reported from this repository on 2026-11-18 and 2026-11-19. The
+owning repository validated both on 2026-11-19, set `confirmed`, and wrote plans 348 and
+349. BUG-13's confirmation covers the defect in the helpers, reproduced with the
+migration SQL on a scratch database; the intermittent gate failure was not re-run.

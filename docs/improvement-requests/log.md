@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-19
+* **Update**: IR-47 is tracked by ExecPlan 348 together with BUG-13. The unexplained overshoot is explained: lock_timeout restarts per lock wait, and only the statement_timeout leaked by the promotion-lock helper held the attempt to its deadline. Status remains accepted until the plan is implemented.
+
 ## 2026-11-18
 
 * **Completion**: IR-65 completed under ExecPlan 344: Keiro.Inbox.Delegated.delegatedDomainCommand acknowledges a replay-stable typed no-op with a completed inbox row under the reserved marker-scoped key, rechecks the marker after a no-op or rejection, never acknowledges rejections, and is proved through a generated delegated intake in keiro-dsl-conformance-intake-delegated-noop.

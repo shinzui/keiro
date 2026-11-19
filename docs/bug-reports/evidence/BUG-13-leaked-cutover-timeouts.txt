@@ -1,0 +1,197 @@
+BUG-13 owner reproduction: the three lock helpers from keiro-migrations/migrations/0029.sql (lines 72-214 at a010cea1, loaded verbatim as helpers.sql) against scratch tables shaped for their predicates, on PostgreSQL 18.6 (aarch64-darwin) in the project Nix shell, 2026-11-19. psql, simple query protocol, idle machine.
+The gate failure itself was not re-run under load and its failing statement was not captured. These cases show the defect that makes it possible and the two ways a 57014 escapes the helpers' handlers.
+Cases 1, 2 and 5: the helpers leave transaction-local statement_timeout and lock_timeout set, so later top-level statements are cancelled outside any handler.
+Cases 3 and 4: the relation-lock statement runs under the timeout leaked by the promotion-lock helper. That timer expires later than the lock wait by the time spent between the two helpers; if the statement is still running then, it is cancelled outside the handler. locks_then_tail is a test scaffold that calls the real helper and then keeps the statement running.
+Cases 6 and 7: lock_timeout restarts for each lock wait, so the helper alone overshoots a 500 ms budget on two contended relations; only the leaked statement_timeout from the promotion-lock helper holds the attempt to the deadline. This is the unexplained overshoot recorded in IR-47.
+
+== Case 1: the promotion-lock helper leaves both timeouts set for the rest of the transaction
+BEGIN
+ promotion_lock 
+----------------
+ locked
+(1 row)
+
+ statement_timeout | lock_timeout 
+-------------------+--------------
+ 100ms             | 100ms
+(1 row)
+
+ROLLBACK
+
+== Case 2: a later top-level statement slower than the leaked timeout is cancelled outside any handler
+BEGIN
+ promotion_lock 
+----------------
+ locked
+(1 row)
+
+psql:bug13-evidence.sql:30: ERROR:  57014: canceling statement due to statement timeout
+LOCATION:  ProcessInterrupts, postgres.c:3446
+ROLLBACK
+
+== Case 3: t1 is held by another session (the spec fault). 20 ms of reads between the helpers, then a 50 ms tail after the lock wait gives up, in the relation-lock statement
+BEGIN
+ promotion_lock 
+----------------
+ locked
+(1 row)
+
+psql:bug13-evidence.sql:40: ERROR:  57014: canceling statement due to statement timeout
+CONTEXT:  SQL statement "SELECT pg_sleep(tail)"
+PL/pgSQL function locks_then_tail(bigint[],timestamp with time zone,double precision) line 5 at PERFORM
+LOCATION:  ProcessInterrupts, postgres.c:3446
+ROLLBACK
+
+== Case 4: same fault, 20 ms of reads, 5 ms tail: the typed FALSE is returned
+BEGIN
+ promotion_lock 
+----------------
+ locked
+(1 row)
+
+ relations_locked 
+------------------
+ f
+(1 row)
+
+ROLLBACK
+
+== Case 5: success path. Locks won 90 ms into a 100 ms budget leave later promotion statements a few milliseconds each
+BEGIN
+ relations_locked 
+------------------
+ t
+(1 row)
+
+ statement_timeout 
+-------------------
+ 8ms
+(1 row)
+
+psql:bug13-evidence.sql:58: ERROR:  57014: canceling statement due to statement timeout
+LOCATION:  ProcessInterrupts, postgres.c:3446
+ROLLBACK
+
+== Case 6: relation helper alone, 500 ms budget, t1 held about 280 ms into the attempt and t2 held 3 s
+BEGIN
+ relations_locked 
+------------------
+ f
+(1 row)
+
+ elapsed_ms_for_500ms_budget 
+-----------------------------
+                         795
+(1 row)
+
+ROLLBACK
+
+== Case 7: same contention, preceded by the promotion-lock helper as in promoteVersionedRebuildTx
+BEGIN
+ promotion_lock 
+----------------
+ locked
+(1 row)
+
+ relations_locked 
+------------------
+ f
+(1 row)
+
+ elapsed_ms_for_500ms_budget 
+-----------------------------
+                         501
+(1 row)
+
+ROLLBACK
+                                         version                                         
+-----------------------------------------------------------------------------------------
+ PostgreSQL 18.6 on aarch64-apple-darwin25.6.0, compiled by clang version 21.1.8, 64-bit
+(1 row)
+
+
+
+Script (psql -X -v helpers=helpers.sql -f bug13-evidence.sql):
+
+\set VERBOSITY verbose
+\pset pager off
+CREATE SCHEMA keiro;
+CREATE TABLE keiro.keiro_projection_rebuild_groups (group_id text PRIMARY KEY, status text, active_run_id text, writes_allowed boolean, updated_at timestamptz);
+CREATE TABLE keiro.keiro_projection_rebuild_runs (run_id text PRIMARY KEY, group_id text, contract_fingerprint text, status text, promotion_prepared_at timestamptz);
+CREATE TABLE keiro.keiro_projection_rebuild_sources (run_id text, exhausted_through bigint, target_position bigint);
+CREATE TABLE public.t1 (id int);
+CREATE TABLE public.t2 (id int);
+INSERT INTO keiro.keiro_projection_rebuild_groups VALUES ('g', 'cutover-versioned', 'r', false, now());
+INSERT INTO keiro.keiro_projection_rebuild_runs VALUES ('r', 'g', 'c', 'cutover', now());
+\i :helpers
+-- Test scaffold only: calls the real relation-lock helper, then spends `tail` seconds in the same top-level statement.
+CREATE FUNCTION public.locks_then_tail(oids bigint[], d timestamptz, tail float8) RETURNS boolean LANGUAGE plpgsql AS $$
+DECLARE r boolean;
+BEGIN
+  r := keiro.keiro_try_projection_relation_locks_v1(oids, d);
+  PERFORM pg_sleep(tail);
+  RETURN r;
+END $$;
+\echo
+\echo == Case 1: the promotion-lock helper leaves both timeouts set for the rest of the transaction
+BEGIN;
+SELECT keiro.keiro_try_projection_promotion_lock_v1('r', 'c', clock_timestamp() + interval '100 milliseconds') AS promotion_lock;
+SELECT current_setting('statement_timeout') AS statement_timeout, current_setting('lock_timeout') AS lock_timeout;
+ROLLBACK;
+\echo
+\echo == Case 2: a later top-level statement slower than the leaked timeout is cancelled outside any handler
+BEGIN;
+SELECT keiro.keiro_try_projection_promotion_lock_v1('r', 'c', clock_timestamp() + interval '100 milliseconds') AS promotion_lock;
+SELECT pg_sleep(0.15) AS stands_in_for_a_read_slowed_by_load;
+ROLLBACK;
+\echo
+\echo == Case 3: t1 is held by another session (the spec fault). 20 ms of reads between the helpers, then a 50 ms tail after the lock wait gives up, in the relation-lock statement
+\! psql -X -q -d "$PGDATABASE" -c "BEGIN; LOCK TABLE public.t1 IN ACCESS SHARE MODE; SELECT pg_sleep(1.2);" >/dev/null 2>&1 &
+SELECT pg_sleep(0.3) \gset
+BEGIN;
+SELECT clock_timestamp() + interval '100 milliseconds' AS deadline \gset
+SELECT keiro.keiro_try_projection_promotion_lock_v1('r', 'c', :'deadline') AS promotion_lock;
+SELECT pg_sleep(0.02) \gset
+SELECT public.locks_then_tail(ARRAY['public.t1'::regclass::oid::bigint], :'deadline', 0.05) AS relations_locked;
+ROLLBACK;
+\echo
+\echo == Case 4: same fault, 20 ms of reads, 5 ms tail: the typed FALSE is returned
+BEGIN;
+SELECT clock_timestamp() + interval '100 milliseconds' AS deadline \gset
+SELECT keiro.keiro_try_projection_promotion_lock_v1('r', 'c', :'deadline') AS promotion_lock;
+SELECT pg_sleep(0.02) \gset
+SELECT public.locks_then_tail(ARRAY['public.t1'::regclass::oid::bigint], :'deadline', 0.005) AS relations_locked;
+ROLLBACK;
+SELECT pg_sleep(1.2) \gset
+\echo
+\echo == Case 5: success path. Locks won 90 ms into a 100 ms budget leave later promotion statements a few milliseconds each
+BEGIN;
+SELECT clock_timestamp() + interval '100 milliseconds' AS deadline \gset
+SELECT pg_sleep(0.09) \gset
+SELECT keiro.keiro_try_projection_relation_locks_v1(ARRAY['public.t1'::regclass::oid::bigint], :'deadline') AS relations_locked;
+SELECT current_setting('statement_timeout') AS statement_timeout;
+SELECT pg_sleep(0.05) AS stands_in_for_rename_and_metadata_work;
+ROLLBACK;
+\echo
+\echo == Case 6: relation helper alone, 500 ms budget, t1 held about 280 ms into the attempt and t2 held 3 s
+\! psql -X -q -d "$PGDATABASE" -c "BEGIN; LOCK TABLE public.t1 IN ACCESS SHARE MODE; SELECT pg_sleep(0.58);" >/dev/null 2>&1 &
+\! psql -X -q -d "$PGDATABASE" -c "BEGIN; LOCK TABLE public.t2 IN ACCESS SHARE MODE; SELECT pg_sleep(3);" >/dev/null 2>&1 &
+SELECT pg_sleep(0.3) \gset
+BEGIN;
+SELECT clock_timestamp() AS started, clock_timestamp() + interval '500 milliseconds' AS deadline \gset
+SELECT keiro.keiro_try_projection_relation_locks_v1(ARRAY['public.t1'::regclass::oid::bigint, 'public.t2'::regclass::oid::bigint], :'deadline') AS relations_locked;
+SELECT round(extract(epoch FROM clock_timestamp() - :'started'::timestamptz) * 1000) AS elapsed_ms_for_500ms_budget;
+ROLLBACK;
+SELECT pg_sleep(2.5) \gset
+\echo
+\echo == Case 7: same contention, preceded by the promotion-lock helper as in promoteVersionedRebuildTx
+\! psql -X -q -d "$PGDATABASE" -c "BEGIN; LOCK TABLE public.t1 IN ACCESS SHARE MODE; SELECT pg_sleep(0.58);" >/dev/null 2>&1 &
+\! psql -X -q -d "$PGDATABASE" -c "BEGIN; LOCK TABLE public.t2 IN ACCESS SHARE MODE; SELECT pg_sleep(3);" >/dev/null 2>&1 &
+SELECT pg_sleep(0.3) \gset
+BEGIN;
+SELECT clock_timestamp() AS started, clock_timestamp() + interval '500 milliseconds' AS deadline \gset
+SELECT keiro.keiro_try_projection_promotion_lock_v1('r', 'c', :'deadline') AS promotion_lock;
+SELECT keiro.keiro_try_projection_relation_locks_v1(ARRAY['public.t1'::regclass::oid::bigint, 'public.t2'::regclass::oid::bigint], :'deadline') AS relations_locked;
+SELECT round(extract(epoch FROM clock_timestamp() - :'started'::timestamptz) * 1000) AS elapsed_ms_for_500ms_budget;
+ROLLBACK;
+SELECT version();

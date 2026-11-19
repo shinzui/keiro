@@ -6,7 +6,7 @@ generated:
   by: process:claude-code
   at: "2026-11-19T02:28:18Z"
 bugId: BUG-14
-status: reported
+status: confirmed
 severity: degraded
 origin: mori://shinzui/keiro-runtime-patterns
 affects: mori://shinzui/keiro/packages/keiro
@@ -93,3 +93,16 @@ schedules a traced timer, re-arms it untraced, fires it, and expects the
 
 If replacing the context with NULL is intended, document it next to
 `scheduleTimerTx` and in the operations guide's timer tracing paragraph.
+
+## Owner validation
+
+Confirmed on 2026-11-19 by the owning repository. `scheduleTimerStmt` on master
+(`a010cea1`) is the statement quoted above, and re-running it on PostgreSQL 18.6 leaves
+both trace columns NULL after an untraced re-arm. The candidate statement from "Possible
+fix" keeps the pair on an untraced re-arm and replaces it, clearing the old `tracestate`,
+on a traced one. Both transcripts are appended to
+[evidence/BUG-14-untraced-reschedule-clears-trace-context.txt](evidence/BUG-14-untraced-reschedule-clears-trace-context.txt).
+The Haskell API path was not run; the first milestone of
+[ExecPlan 349](../plans/349-preserve-stored-timer-trace-context-across-untraced-reschedules-to-fix-bug-14.md)
+adds that failing example. Clearing the context is not intended: the operations guide
+says a supplied context wins and says nothing that lets an absent one erase it.

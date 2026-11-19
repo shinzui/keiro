@@ -6,7 +6,7 @@ generated:
   by: process:claude-code
   at: "2026-11-18T23:05:35Z"
 bugId: BUG-13
-status: reported
+status: confirmed
 severity: degraded
 origin: mori://shinzui/keiro
 affects: mori://shinzui/keiro
@@ -52,7 +52,7 @@ expected: Right (Left (VersionedCutoverDeadlineExceeded (RebuildRunId "versioned
  but got: Left (UnexpectedServerError "57014" "canceling statement due to statement timeout")
 ```
 
-## Suspected mechanism (not yet confirmed)
+## Suspected mechanism (confirmed in part, see Owner validation)
 
 The three lock helpers in `keiro-migrations/migrations/0029.sql`
 (`keiro_try_projection_cutover_fence_v1`, `keiro_try_projection_promotion_lock_v1`,
@@ -82,3 +82,28 @@ which statement raised 57014.
 - Or restore `statement_timeout` after each helper's `LOCK` statement, so that only the
   lock wait is bounded by the deadline and later statements check the deadline
   explicitly.
+
+## Owner validation
+
+Confirmed on 2026-11-19 by the owning repository. The three helpers from migration
+`0029` were loaded verbatim into a scratch database on PostgreSQL 18.6 and exercised
+with `psql`; the script and transcript are in
+[evidence/BUG-13-leaked-cutover-timeouts.txt](evidence/BUG-13-leaked-cutover-timeouts.txt).
+
+- Each helper leaves `statement_timeout` and `lock_timeout` set for the rest of the
+  transaction. A later top-level statement that outlasts the leaked value is cancelled
+  with 57014 outside any handler.
+- The relation-lock statement runs under the timeout leaked by the promotion-lock
+  helper. That timer expires later than the lock wait by the time spent between the two
+  helpers. If the statement is still running then, it is cancelled after its handler
+  has returned.
+- The same leak applies after the locks are won, so the renames and metadata updates of
+  a successful promotion can be cancelled too. This is the defect already recorded as
+  IR-47 (`../improvement-requests/bound-the-versioned-cutover-budget-to-its-guarded-statements.md`).
+
+The gate failure was not re-run under load, and the statement that raised 57014 in that
+run was not captured, so which of the first two paths occurred there is not known. The
+second "possible fix" above is not sufficient as written: restoring `statement_timeout`
+alone lets two contended relations overshoot the budget, because `lock_timeout` restarts
+for each lock wait. [ExecPlan 348](../plans/348-bound-versioned-cutover-lock-waits-without-leaking-transaction-timeouts-to-fix-bug-13-and-ir-47.md)
+plans the repair.

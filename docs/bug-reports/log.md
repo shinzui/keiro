@@ -1,6 +1,12 @@
 # Bundle Update Log
 
 ## 2026-11-19
+
+* **Update**: BUG-14 confirmed and tracked by ExecPlan 349: scheduleTimerStmt on master clears both trace columns on an untraced re-arm on PostgreSQL 18.6; the candidate statement keeps the stored pair and replaces it on a traced re-arm; transcript appended to the evidence file.
+
+
+* **Update**: BUG-13 confirmed and tracked by ExecPlan 348: the 0029 lock helpers leave transaction-local statement_timeout and lock_timeout set, later statements and the relation-lock statement can be cancelled outside the handlers, and the leak is what holds a two-relation attempt to its deadline; evidence retained. The gate failure under load was not re-run. Same root cause as IR-47.
+
 * **Addition**: BUG-14 records that scheduleTimerTx re-arms a scheduled timer with traceparent/tracestate taken unconditionally from the new request, so an untraced reschedule clears the stored creation context and the fire span is unlinked; SQL reproduced on PostgreSQL 17.11, evidence retained.
 
 ## 2026-11-18

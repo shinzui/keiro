@@ -6,10 +6,11 @@ description: >-
   restored, so it silently becomes a statement timeout for the rest of the promotion
   transaction. A first attempt to restore it broke a deadline guarantee, so the correct fix
   needs the cutover deadline semantics established first.
-timestamp: 2026-11-04T05:28:05Z
+timestamp: 2026-11-19T02:54:37Z
 requestId: IR-47
 status: accepted
 origin: mori://shinzui/keiro
+plan: docs/plans/348-bound-versioned-cutover-lock-waits-without-leaking-transaction-timeouts-to-fix-bug-13-and-ir-47.md
 reviews:
   - kind: model
     reviewer: claude-code-author
@@ -33,9 +34,12 @@ reviews:
 
 ## Status
 
-Accepted; no implementing ExecPlan exists. The timeout restoration and shared-deadline
-regression described below remain unresolved. Acceptance does not indicate that the
-reverted migration shipped.
+Accepted; [ExecPlan 348](../plans/348-bound-versioned-cutover-lock-waits-without-leaking-transaction-timeouts-to-fix-bug-13-and-ir-47.md)
+plans the repair and is not yet implemented. The same leak is reported as BUG-13. The
+overshoot described below is now explained: `lock_timeout` restarts for each lock wait,
+and the attempt was held to its deadline only by the `statement_timeout` leaked from the
+promotion-lock helper (see `../bug-reports/evidence/BUG-13-leaked-cutover-timeouts.txt`,
+cases 6 and 7). Acceptance does not indicate that the reverted migration shipped.
 
 ## What is wrong
 
