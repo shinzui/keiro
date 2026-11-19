@@ -1975,6 +1975,7 @@ main = hspec $ do
             "hospital-surge-reactions.keiro",
             "id-admission-domains.keiro",
             "id-domain-migration-v3.keiro",
+            "intake-delegated-noop.keiro",
             "intake-delegated.keiro",
             "ir50-removal-new.keiro",
             "ir50-removal-old.keiro",

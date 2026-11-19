@@ -3961,7 +3961,7 @@ validateIntake languageContract i = concat [completeness, duplicateRows, inversi
       [ mkErr il DelegatedInboxDedupeOnlyPersistence $
           "intake '"
             <> (.name) i
-            <> "' delegates idempotence to its downstream state machine, so 'persist = dedupe-only' describes inbox storage that does not exist; remove the persist clause"
+            <> "' delegates idempotence to its downstream state machine, so the intake owns no inbox storage for 'persist = dedupe-only' to describe; a typed no-op receipt row's persistence is chosen by the handler through DelegatedNoOpReceipt; remove the persist clause"
       | (.idempotence) i == IdemDelegated,
         (.persist) i == InkPersistDedupeOnly
       ]

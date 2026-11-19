@@ -120,6 +120,17 @@ This plan implements improvement request IR-65,
   to an already-linked component, Cabal did not relink, and the old binary failed the same
   way until it was deleted. Found 2026-11-18.
 
+- `keiro-dsl-test` pins the list of fixtures outside published Language 4 ("keeps only the
+  named source-version and candidate fixtures outside published Language 4"), so a new
+  Language 6 fixture must be added to that list in `keiro-dsl/test/Main.hs`. Found
+  2026-11-18 when the first `cabal test keiro-dsl:tests` run failed only on that example.
+
+- The plan's suggested contract name for the motivating case could not be used: `dispatch`
+  is a reserved word in `.keiro` sources, and an outcome-enabled aggregate requires a
+  `regs` block before `states`. The fixture therefore declares `context delivery-outcomes`,
+  `contract courier`, and one `finalOutcome` register written on the accepted edge.
+  `.keiro` comments use `#`, not `--`. Found 2026-11-18.
+
 
 ## Decision Log
 

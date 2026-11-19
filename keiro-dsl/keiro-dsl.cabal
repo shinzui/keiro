@@ -1500,6 +1500,51 @@ test-suite keiro-dsl-conformance-intake-delegated
     text >=2.1 && <2.2,
     time >=1.12 && <1.15,
 
+-- IR-65 delegated typed no-op: a generated delegated intake feeds an
+-- outcome-enabled aggregate through Keiro.Inbox.Delegated.delegatedDomainCommand
+-- against PostgreSQL, acknowledging a typed no-op with a completed inbox row.
+test-suite keiro-dsl-conformance-intake-delegated-noop
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-intake-delegated-noop
+  main-is: Main.hs
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
+  other-modules:
+    DeliveryOutcomes.DeliveryOutcomeInbox.DelegatedIntegration
+    DeliveryOutcomes.DeliveryStatus.BehaviorHoles
+    Generated.DeliveryOutcomes.BehaviorSourceMap
+    Generated.DeliveryOutcomes.Courier.Contract
+    Generated.DeliveryOutcomes.DeliveryOutcomeInbox.Inbox
+    Generated.DeliveryOutcomes.DeliveryStatus.BehaviorContract
+    Generated.DeliveryOutcomes.DeliveryStatus.Codec
+    Generated.DeliveryOutcomes.DeliveryStatus.Domain
+    Generated.DeliveryOutcomes.DeliveryStatus.EventStream
+    Generated.DeliveryOutcomes.DeliveryStatus.Harness
+    Generated.DeliveryOutcomes.DeliveryStatus.Projection
+    Generated.DeliveryOutcomes.DeliveryStatus.Transducer
+    Generated.DeliveryOutcomes.Inspection
+    Generated.DeliveryOutcomes.Nominals
+    Generated.DeliveryOutcomes.ReplayAudit
+
+  build-depends:
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    bytestring >=0.12 && <0.13,
+    containers >=0.6 && <0.8,
+    effectful-core,
+    keiki >=0.9 && <0.10,
+    keiro,
+    keiro-core,
+    keiro-test-support,
+    kiroku-store,
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15,
+    vector,
+
 -- EP-4 M5 full-service conformance: a complete integration service — scaffolded
 -- inbox dedupe + a filled inbox transaction runner and outbox IntegrationProducer
 -- — compiled against the live keiro runtime (Inbox / Outbox / Kiroku.Store).

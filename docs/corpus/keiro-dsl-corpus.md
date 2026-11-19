@@ -112,6 +112,7 @@ machine-checked fixture set contains 357 `.keiro` files as of 2026-10-14.
 | `test/fixtures/intake-topic-mismatch.keiro` | negative intake event/topic affinity |
 | `test/fixtures/intake.keiro` | valid contract and inbox intake vertical |
 | `test/fixtures/intake-delegated.keiro` | candidate Language-6 delegated intake and generated no-Store runner |
+| `test/fixtures/intake-delegated-noop.keiro` | candidate Language-6 delegated intake plus an outcome-enabled aggregate whose command has a typed no-op edge |
 | `test/fixtures/mapped-workqueue.keiro` | stable Language-5 mapped workqueue payload with nested structural, opaque, nullable, required-key, and explicit Json coverage |
 | `test/fixtures/mapped-readmodel.keiro` | stable Language-5 typed read-model input/result contract with direct, nested, shared, and unused mapped declarations |
 | `test/fixtures/mapped-readmodel-workspace/service.keiro-workspace` | two-member Language-5 workspace proving cross-member query-contract type resolution and ownership |
@@ -230,6 +231,7 @@ the stable Language-5 feature lanes and form the primary product baseline.
 | `test/conformance-intake-runtime/` (`keiro-dsl-conformance-intake-runtime`) | generated inbox disposition/dedupe policy compiles against live inbox types |
 | `test/conformance-intake-full/` (`keiro-dsl-conformance-intake-full`) | filled inbox transaction and outbox producer compile as a full integration service |
 | `test/conformance-intake-delegated/` (`keiro-dsl-conformance-intake-delegated`) | candidate generated runner, deterministic command receipt, and live fresh/duplicate delivery compile and execute |
+| `test/conformance-intake-delegated-noop/` (`keiro-dsl-conformance-intake-delegated-noop`) | generated delegated runner drives `delegatedDomainCommand` against PostgreSQL: accepted marker receipt, typed no-op inbox-row receipt, duplicate redelivery, and the untyped adapter's refusal of the same silent edge |
 | `test/conformance-publisher-runtime/` (`keiro-dsl-conformance-publisher-runtime`) | generated publisher ordering/backoff compiles against live outbox types |
 | `test/conformance-queue/` (`keiro-dsl-conformance-queue`) | generated workqueue payload codec round-trips |
 | `test/conformance-queue-runtime/` (`keiro-dsl-conformance-queue-runtime`) | queue naming parity, ordering/provisioning, retry policy, and dispositions compile against live PGMQ |

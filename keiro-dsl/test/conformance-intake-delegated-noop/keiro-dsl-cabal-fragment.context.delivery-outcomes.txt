@@ -1,0 +1,36 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/intake-delegated-noop.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+
+other-modules:
+    DeliveryOutcomes.DeliveryStatus.BehaviorHoles
+    Generated.DeliveryOutcomes.BehaviorSourceMap
+    Generated.DeliveryOutcomes.Courier.Contract
+    Generated.DeliveryOutcomes.DeliveryOutcomeInbox.Inbox
+    Generated.DeliveryOutcomes.DeliveryStatus.BehaviorContract
+    Generated.DeliveryOutcomes.DeliveryStatus.Codec
+    Generated.DeliveryOutcomes.DeliveryStatus.Domain
+    Generated.DeliveryOutcomes.DeliveryStatus.EventStream
+    Generated.DeliveryOutcomes.DeliveryStatus.Harness
+    Generated.DeliveryOutcomes.DeliveryStatus.Projection
+    Generated.DeliveryOutcomes.DeliveryStatus.Transducer
+    Generated.DeliveryOutcomes.Inspection
+    Generated.DeliveryOutcomes.Nominals
+    Generated.DeliveryOutcomes.ReplayAudit
+
+build-depends:
+    , aeson
+    , base
+    , effectful-core
+    , keiki
+    , keiro
+    , keiro-core
+    , text

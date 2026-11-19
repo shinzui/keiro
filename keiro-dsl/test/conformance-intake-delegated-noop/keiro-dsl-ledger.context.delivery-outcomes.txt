@@ -1,0 +1,40 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/intake-delegated-noop.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":6,"effectiveLanguageVersion":6,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"candidate","languageVersion":6,"runtimeSemantics":"keiro-dsl/runtime-semantics/5"}
+naming-edition idiomatic-v2
+module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context delivery-outcomes behavior source map","path":"Generated/DeliveryOutcomes/BehaviorSourceMap.hs"}
+module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context delivery-outcomes generated nominal declarations","path":"Generated/DeliveryOutcomes/Nominals.hs"}
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context delivery-outcomes replay-audit assembly","path":"Generated/DeliveryOutcomes/ReplayAudit.hs"}
+module-role {"family":"Inspection","kind":"generated","ownerKind":"context","ownerName":"context delivery-outcomes inspection catalog","path":"Generated/DeliveryOutcomes/Inspection.hs"}
+module-role {"family":"Contract","kind":"generated","ownerKind":"contract","ownerName":"contract courier (line 10)","path":"Generated/DeliveryOutcomes/Courier/Contract.hs"}
+module-role {"family":"Inbox","kind":"generated","ownerKind":"intake","ownerName":"intake deliveryOutcomeInbox (line 20)","path":"Generated/DeliveryOutcomes/DeliveryOutcomeInbox/Inbox.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate DeliveryStatus (line 54)","path":"Generated/DeliveryOutcomes/DeliveryStatus/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate DeliveryStatus (line 54)","path":"Generated/DeliveryOutcomes/DeliveryStatus/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate DeliveryStatus (line 54)","path":"Generated/DeliveryOutcomes/DeliveryStatus/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate DeliveryStatus (line 54)","path":"Generated/DeliveryOutcomes/DeliveryStatus/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses DeliveryStatus (line 54)","path":"DeliveryOutcomes/DeliveryStatus/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate DeliveryStatus (line 54)","path":"Generated/DeliveryOutcomes/DeliveryStatus/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate DeliveryStatus (line 54)","path":"Generated/DeliveryOutcomes/DeliveryStatus/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate DeliveryStatus (line 54)","path":"Generated/DeliveryOutcomes/DeliveryStatus/Harness.hs"}
+generated Generated/DeliveryOutcomes/BehaviorSourceMap.hs
+generated Generated/DeliveryOutcomes/Nominals.hs
+generated Generated/DeliveryOutcomes/ReplayAudit.hs
+generated Generated/DeliveryOutcomes/Inspection.hs
+generated Generated/DeliveryOutcomes/Courier/Contract.hs
+generated Generated/DeliveryOutcomes/DeliveryOutcomeInbox/Inbox.hs
+generated Generated/DeliveryOutcomes/DeliveryStatus/Domain.hs
+generated Generated/DeliveryOutcomes/DeliveryStatus/Codec.hs
+generated Generated/DeliveryOutcomes/DeliveryStatus/Transducer.hs
+generated Generated/DeliveryOutcomes/DeliveryStatus/BehaviorContract.hs
+hole DeliveryOutcomes/DeliveryStatus/BehaviorHoles.hs
+generated Generated/DeliveryOutcomes/DeliveryStatus/EventStream.hs
+generated Generated/DeliveryOutcomes/DeliveryStatus/Projection.hs
+generated Generated/DeliveryOutcomes/DeliveryStatus/Harness.hs
+nominal-equality nominal-equality|name=DeliveryNoOp|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:already-final|owner=generated
+nominal-equality nominal-equality|name=DeliveryRejection|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:never-rejected|owner=generated
+behavior {"aggregate":"DeliveryStatus","command":"RecordOutcome","evidence":"generated-authoritative","key":"behavior-v1-ac132150262d872a","kind":"live-transition","outputs":[{"command":"RecordOutcome","ownership":"generated-command-identity"}],"source":"Pending"}
+behavior {"aggregate":"DeliveryStatus","command":"RecordOutcome","evidence":"generated-authoritative","key":"behavior-v1-ac37ab6d84cb0fa7","kind":"live-transition","outputs":[],"source":"Delivered"}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

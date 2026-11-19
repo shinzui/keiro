@@ -124,6 +124,17 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   difference with matching digests and version says so. Workspace member digests are now
   computed from the bytes the loader parsed, read once and decoded as UTF-8 independent
   of the locale.
+- New conformance proof `keiro-dsl-conformance-intake-delegated-noop`
+  (`test/fixtures/intake-delegated-noop.keiro`): a generated candidate Language 6
+  delegated intake feeds an outcome-enabled aggregate with a typed no-op edge through the
+  hand-written `Keiro.Inbox.Delegated.delegatedDomainCommand` handler against PostgreSQL.
+  It checks the accepted marker receipt, the completed inbox row for a typed no-op, a
+  duplicate redelivery without dispatch, and the untyped adapter's refusal of the same
+  silent edge. The intake grammar and generated runner are unchanged. (ExecPlan 344, IR-65)
+- The `DelegatedInboxDedupeOnlyPersistence` diagnostic now says that the delegated intake
+  owns no inbox storage for `persist = dedupe-only` to describe, and that a typed no-op
+  receipt row's persistence is chosen by the handler through `DelegatedNoOpReceipt`. The
+  rule and its code are unchanged. (ExecPlan 344)
 
 ### Bug Fixes
 
