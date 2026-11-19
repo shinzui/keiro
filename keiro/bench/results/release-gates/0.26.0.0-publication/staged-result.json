@@ -1,0 +1,25 @@
+{
+  "archives": {
+    "keiro-0.26.0.0.tar.gz": "e5a49b8c0a31eb8a3d319a1ca5e13834929691e2740ab3a9479adcd752d84900",
+    "keiro-core-0.26.0.0.tar.gz": "93a80842074d8099452faec680b292cf25ac551fb83f6f4679c847e4e4554549",
+    "keiro-dsl-0.26.0.0.tar.gz": "052ff1b4ca49b3fc83aaaea95985f1cb710c4ab38569e79f78525cd220e87d5c",
+    "keiro-migrations-0.26.0.0.tar.gz": "ad3d9f3a51b86ff61bcc856c044e8bc6165319cd8f2f8aa5d42c8f9863bc2e91",
+    "keiro-ops-0.26.0.0.tar.gz": "52ecd8395a03907be728f15cfcd98133db131da7726c20e31132b775f57e1c0b",
+    "keiro-ops-http-0.26.0.0.tar.gz": "b10bdcdcdf429eee612fb935e190e67a45b2620f3d3fadcbf69dc55c40235733",
+    "keiro-pgmq-0.26.0.0.tar.gz": "f471af6dcaedb42b4e38baca12a94d7f2b17c3d3100b25a5f1f33679876f5613",
+    "keiro-test-support-0.26.0.0.tar.gz": "79b0ab903707a3d69fa2331f447edb926ec1e8ff5b755d991193931d128b25fa"
+  },
+  "finished": 1795055140.75021,
+  "health": {
+    "mutations_enabled": false,
+    "schema_drift": [],
+    "status": "ok"
+  },
+  "log_sha256": "da7b59de9f62179bf71045ccf673ae6fce7041f40348c80bd3562e6884f5c95d",
+  "migrator": "/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.26.0.0/x/keiro-migrate/build/keiro-migrate/keiro-migrate",
+  "mode": "staged",
+  "plan_sha256": "c7e0707b739c543c6c62527759aaccc9db7a6a2dac52ae5dbfae45779d0f24f3",
+  "source": "29de50bf1ca4c7c825584c888e88472d43b790e649165f6af2b5ffa7c17b7155",
+  "status": "passed",
+  "version": "0.26.0.0"
+}

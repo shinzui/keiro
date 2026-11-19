@@ -1,0 +1,10 @@
+{"identity": "e9f0fe705cd84dc4f3764e14e03b6da0a7351fbd4f831f990bf91b78d4077916", "command": ["scripts/bench-regression.sh", "read-model"]}
+##### guard read-model 2026-11-19T01:38:42Z
++ cabal build keiro:bench:keiro-bench
++ /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/c0f45f8a10f29541c34e09126e458f5bfffaea4d26f9f762dbaddd3b3c3cd55c/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.21.0.0/b/keiro-bench/build/keiro-bench/keiro-bench -p read-model -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --csv /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/benchmark-reference/c0f45f8a10f29541c34e09126e458f5bfffaea4d26f9f762dbaddd3b3c3cd55c/samples-deac9a103ca37b11e2d07df202b3e4c575505b93ce6227159bf343557f7bb5cc/reference.csv +RTS -N2 -RTS
++ /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.26.0.0/b/keiro-bench/build/keiro-bench/keiro-bench -p read-model -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --csv /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261119T003957Z-ce6252c6-read-model/candidate.csv --baseline /Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/baseline-read-model.csv +RTS -N2 -RTS
+PERFORMANCE(read-model)=PASSED cases=10 evidence=/Users/shinzui/Keikaku/bokuno/keiro/keiro/bench/results/release-gates/20261119T003957Z-ce6252c6-read-model
+##### guard summary 2026-11-19T01:40:08Z
+GUARD(read-model)=0
+BENCH_REGRESSION=PASSED
+STAGE_EXIT=0
