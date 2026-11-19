@@ -90,16 +90,23 @@ This plan implements improvement request IR-65,
 - [x] Milestone 2: a generated `idempotence delegated` intake drives an aggregate with a
   no-op edge through the new adapter in `keiro-dsl-conformance-intake-delegated-noop`, and
   the DSL diagnostic and corpus are consistent with it (IR-65 AC-3). Completed 2026-11-18
-  (commit `453e0cce`). Evidence: the suite prints five `True` lines (the four planned
+  (commit `311560b0`). Evidence: the suite prints five `True` lines (the four planned
   checks plus "generated intake uses delegated idempotence"). `cabal test keiro-dsl:tests`:
   63 of 64 suites passed on the first run; the one failure was the pinned non-Language-4
   fixture list (see Surprises), whose group then passed with 21 examples and 0 failures.
   `just conformance-corpus-policy` on the committed checkpoint: `corpus: 63 of 63
   invocations selected`, `conformance corpus: ok`. `just record-migration-policy` passes
   after refreshing `keiro-dsl/generated-haskell-edition-idiomatic-v2.md`.
-- [ ] Milestone 3: the guarantee is documented in the user docs, the Haddock, the
+- [x] Milestone 3: the guarantee is documented in the user docs, the Haddock, the
   changelogs, and ADR-43; IR-65 is marked completed; `nix develop -c just verify` passes
-  (IR-65 AC-2).
+  (IR-65 AC-2). Completed 2026-11-18 (commit `99a6b8b3`). Evidence: `okf validate docs/adr
+  --strict ...` reports `OK: 65 concepts`; `just user-documentation-validate` reports
+  `OK: 35 concepts` (user) and `OK: 32 concepts` (guides). `nix develop -c just verify`
+  on the committed tree exited 0 and reached the final `keiro-migrations-test`
+  (`keiro-test` 841 examples, `keiro-dsl-test` 979 examples, `keiro-migrations-test` 42
+  examples, all with 0 failures). Its log also contains `recipe _verify failed` lines.
+  These are fixture output from the release-workflow script's own unit tests, which
+  simulate gate failures and report `Ran 28 tests ... OK`.
 
 
 ## Surprises & Discoveries
@@ -223,7 +230,50 @@ This plan implements improvement request IR-65,
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-11-18 in three commits: `1f8daf9b` (runtime adapter and tests), `311560b0`
+(DSL fixture and conformance proof) and `99a6b8b3` (documentation, the ADR-43 amendment
+and IR-65 closure). All three IR-65 acceptance criteria hold.
+
+- AC-1: `delegatedDomainCommand` acknowledges a replay-stable typed no-op with one
+  completed inbox row. A redelivery is a duplicate without dispatch. Replay after
+  retention re-evaluates the command and commits a new row. The untyped zero-event path
+  is unchanged and still refused.
+- AC-2: the guarantee is stated in the Haddock, `docs/user/inbox.md` ("Typed no-op
+  receipts"), the integration-events guidance, the Kafka guide and ADR-43.
+- AC-3: a generated `idempotence delegated` intake drives an outcome-enabled aggregate's
+  `outcome no-op` edge through the adapter against PostgreSQL. No new syntax was needed.
+
+The public interface matches Interfaces and Dependencies without renames. The unnamed
+strict insert helper became `Keiro.Inbox.Schema.insertCompletedStrictTx`, returning
+`CompletedInsert` (`CompletedInserted`, `CompletedExisting`,
+`CompletedConflictVanished`).
+
+None of the guarantees listed in Validation and Acceptance weakened:
+
+- Existing adapters: the diff of `keiro/src/Keiro/Inbox/Delegated.hs` adds code only after
+  `delegatedFromPMCommand` and leaves `delegatedCommand`, `delegatedFromPMCommand` and
+  `delegatedEventId` untouched. Their tests and the identity-vector test pass with
+  unedited bodies.
+- Table mode: `tryInsertCompletedTx` runs the same two statements in the same order.
+  The `Keiro.Inbox` tests pass, the trigger test shows it still returns `Right ()` on a
+  vanished conflict, and the inbox benchmark guard passed all 38 cases against the
+  committed baseline.
+- Persisted identity: the new no-op row key is pinned by a vector test. No event, codec,
+  schema or migration changed, and the corpus gate shows the existing generated corpus
+  is identical.
+
+Lessons:
+
+- The deterministic race tests were worth their setup. A mutation that always misses the
+  post-decision marker recheck is caught by exactly the two competing-marker tests, and
+  nothing else exercises that path.
+- The checkpoint workflow for a new DSL conformance suite has two traps: scaffold ledgers
+  are gitignored and must be force-added, and the pinned non-Language-4 fixture list
+  must be extended. Both are recorded in Surprises & Discoveries.
+
+Durable context: the decision is distilled into the dated "Typed no-op receipts" section
+of ADR-43. No other ADR needed a change. ADR-29's statement that a silent decision has
+no append transaction still holds, because the receipt commits in its own transaction.
 
 
 ## Context and Orientation
