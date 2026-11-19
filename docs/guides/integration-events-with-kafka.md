@@ -7,7 +7,7 @@ tags: [keiro, integration-events, kafka, guide]
 generated:
   by: human:nadeem
   at: 2026-07-24T13:06:07Z
-timestamp: 2026-11-14T23:17:22Z
+timestamp: 2026-11-18T22:00:00Z
 ---
 
 # Integration Events With Kafka
@@ -194,6 +194,40 @@ that append. Keep the consumer name, source, target naming, operation name, and
 marker event for the full replay horizon. Renaming any input changes receipt
 identity. Drain in-flight deliveries and establish a cutover boundary before
 switching either direction between table and delegated intake.
+
+When the downstream command is sometimes a legitimate no-op (a delivery status
+that never moves backwards, say), declare the silent edge with
+`outcome no-op ...` on an outcome-enabled aggregate and use
+`delegatedDomainCommand` instead:
+
+```haskell
+runInboxIntake metrics event (Just kafkaRef) $ \dedupe delivered -> do
+  let target = deliveryTarget delivered
+      receipt =
+        DelegatedNoOpReceipt
+          { consumer = "reputation-delivery-intake",
+            operation = "record-outcome",
+            dedupeKey = dedupe,
+            event = delivered,
+            kafka = Just kafkaRef,
+            persistence = PersistFullEnvelope
+          }
+  outcome <- delegatedDomainCommand receipt defaultRunCommandOptions (streamName target) $ \prepared ->
+    runDomainCommand prepared deliveryStatusDomainCommandHandler target (recordOutcome delivered)
+  case outcome of
+    Right delegated -> pure delegated
+    -- A typed rejection, failure, or lost receipt is never acknowledged.
+    Left err -> throwError (DeliveryRefused err)
+```
+
+An accepted outcome is still acknowledged by its marker event. A typed no-op is
+acknowledged only after the adapter commits a completed `keiro.keiro_inbox` row
+under the reserved key `delegatedNoOpReceiptKey marker`, so the consuming role
+needs `SELECT` and `INSERT` on that table. Use it only when every no-op the
+command can return for the delivery stays a no-op in every later state, and keep
+inbox retention beyond the redelivery horizon. The full guarantee is in
+[Idempotent Inbox](../user/inbox.md#typed-no-op-receipts), and
+`keiro-dsl/test/conformance-intake-delegated-noop/` is a compiled example.
 
 Delegated retries use caller-supplied one-based attempt context; Kafka offsets
 and metrics are not durable attempt counters. The batch wrapper preserves input

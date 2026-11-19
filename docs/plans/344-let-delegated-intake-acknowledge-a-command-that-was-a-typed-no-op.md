@@ -87,9 +87,16 @@ This plan implements improvement request IR-65,
   `just bench-regression inbox`: `PERFORMANCE(inbox)=PASSED cases=38`,
   `BENCH_REGRESSION=PASSED`. `just record-migration-policy` passed unchanged at this
   boundary.
-- [ ] Milestone 2: a generated `idempotence delegated` intake drives an aggregate with a
+- [x] Milestone 2: a generated `idempotence delegated` intake drives an aggregate with a
   no-op edge through the new adapter in `keiro-dsl-conformance-intake-delegated-noop`, and
-  the DSL diagnostic and corpus are consistent with it (IR-65 AC-3).
+  the DSL diagnostic and corpus are consistent with it (IR-65 AC-3). Completed 2026-11-18
+  (commit `453e0cce`). Evidence: the suite prints five `True` lines (the four planned
+  checks plus "generated intake uses delegated idempotence"). `cabal test keiro-dsl:tests`:
+  63 of 64 suites passed on the first run; the one failure was the pinned non-Language-4
+  fixture list (see Surprises), whose group then passed with 21 examples and 0 failures.
+  `just conformance-corpus-policy` on the committed checkpoint: `corpus: 63 of 63
+  invocations selected`, `conformance corpus: ok`. `just record-migration-policy` passes
+  after refreshing `keiro-dsl/generated-haskell-edition-idiomatic-v2.md`.
 - [ ] Milestone 3: the guarantee is documented in the user docs, the Haddock, the
   changelogs, and ADR-43; IR-65 is marked completed; `nix develop -c just verify` passes
   (IR-65 AC-2).
@@ -124,6 +131,13 @@ This plan implements improvement request IR-65,
   named source-version and candidate fixtures outside published Language 4"), so a new
   Language 6 fixture must be added to that list in `keiro-dsl/test/Main.hs`. Found
   2026-11-18 when the first `cabal test keiro-dsl:tests` run failed only on that example.
+
+- Scaffold ledgers are gitignored (`.gitignore`: `keiro-dsl-ledger.*.txt`), so `git add` of
+  the new conformance directory silently skipped `keiro-dsl-ledger.context.delivery-outcomes.txt`.
+  The corpus gate then reported "compiles generated Haskell ... but no plan entry
+  regenerates it; its scaffold ledger is missing or untracked". Existing suites force-add
+  their ledger and Cabal fragment, so this plan force-added both with `git add -f`.
+  Found 2026-11-18.
 
 - The plan's suggested contract name for the motivating case could not be used: `dispatch`
   is a reserved word in `.keiro` sources, and an outcome-enabled aggregate requires a

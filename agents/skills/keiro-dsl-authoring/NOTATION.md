@@ -551,8 +551,11 @@ machine instead of the inbox table:
 ```
 
 It generates the typed `runInboxIntake` wrapper over `runInboxDelegated` and cannot be combined
-with `persist = dedupe-only` (`DelegatedInboxDedupeOnlyPersistence`), because delegated mode
-writes no inbox rows. Moving between `table` and `delegated` is a persisted-identity break
+with `persist = dedupe-only` (`DelegatedInboxDedupeOnlyPersistence`), because the intake owns
+no inbox storage in delegated mode. The only row delegated mode writes is handler-owned: a
+handler that runs an outcome-enabled command through `delegatedDomainCommand` records a
+completed row as the receipt for a replay-stable typed no-op, with persistence chosen in its
+`DelegatedNoOpReceipt`. Moving between `table` and `delegated` is a persisted-identity break
 (`IntakeIdempotenceModeChanged`) that needs an explicit cutover.
 
 Contract fields may name a declared `id` directly instead of `typeid "prefix"`, as in

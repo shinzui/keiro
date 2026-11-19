@@ -6,9 +6,9 @@ description: >-
   run a Keiro command at all. So an intake whose command is legitimately a no-op on some
   deliveries can use neither runner. It has to run the command and then record the inbox receipt
   in a separate step.
-timestamp: 2026-11-18T16:40:00Z
+timestamp: 2026-11-18T23:55:00Z
 requestId: IR-65
-status: accepted
+status: completed
 origin: mori://tan/agent-reputation-service
 plan: docs/plans/344-let-delegated-intake-acknowledge-a-command-that-was-a-typed-no-op.md
 relatedPlans:
@@ -61,8 +61,32 @@ reviews:
 
 ## Status
 
-Accepted. [ExecPlan 344](../plans/344-let-delegated-intake-acknowledge-a-command-that-was-a-typed-no-op.md)
-implements this request; no milestone has been implemented yet.
+Completed on 2026-11-18 by
+[ExecPlan 344](../plans/344-let-delegated-intake-acknowledge-a-command-that-was-a-typed-no-op.md).
+`Keiro.Inbox.Delegated.delegatedDomainCommand` runs one typed domain command. It
+acknowledges an accepted decision by its marker event. It acknowledges a replay-stable
+`DomainNoOp` only after committing a completed inbox row under the reserved key
+`delegatedNoOpReceiptKey marker`.
+
+- AC-1: the `keiro-test` block "Keiro.Inbox delegated typed no-op" covers a first no-op
+  delivery recording one completed row, a redelivery that is a duplicate without dispatch,
+  and replay after a state change and after retention. It also covers accepted commands,
+  typed rejections, concurrent-delivery races, and the strict-insert and privilege paths.
+  The unedited test "rejects zero-event commands and unconfirmed duplicate errors" still
+  passes and shows that an untyped zero-event success is `DelegatedCommandWithoutReceipt`.
+- AC-2: the guarantee and the caller obligations are stated in the
+  `delegatedDomainCommand` Haddock, in `docs/user/inbox.md` ("Typed no-op receipts") and
+  in an amendment to ADR-43. The guarantee includes replay stability, SELECT and INSERT
+  privileges, the reserved key prefix and the retention horizon.
+- AC-3: an `intake` declaration names no command, so the request is met without new
+  syntax. `keiro-dsl-conformance-intake-delegated-noop` scaffolds a delegated intake and
+  an outcome-enabled aggregate with an `outcome no-op` edge from
+  `keiro-dsl/test/fixtures/intake-delegated-noop.keiro`. It drives the generated
+  `runInboxIntake` through the new adapter against PostgreSQL and passes the AC-1
+  scenarios.
+
+The typed no-op is the existing `DomainNoOp` of ADR-29, so this request shares no new
+type with IR-51.
 
 ## Problem
 

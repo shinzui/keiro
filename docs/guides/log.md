@@ -1,5 +1,8 @@
 # Keiro Guides Log
 
+## 2026-11-18
+* **Update**: Integration Events With Kafka: add a delegated typed no-op example with delegatedDomainCommand (plan 344).
+
 ## 2026-11-17
 * **Update**: Document serving the committed service topology at /topology/show and /topology/summary, in code and with --topology FILE (plan 342).
 

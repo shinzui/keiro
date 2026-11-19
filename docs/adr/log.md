@@ -2,6 +2,9 @@
 
 ## 2026-11-18
 
+* **Update**: ADR-43: delegatedDomainCommand acknowledges a replay-stable typed no-op with a completed inbox row under a marker-scoped reserved key, rechecks the marker after a no-op or rejection, and never acknowledges rejections or lost receipts (plan 344).
+
+
 * **Update**: ADR-65: Optional to required with an equal-prefix literal/declared move is also producer-first (plan 345 M5 review).
 
 

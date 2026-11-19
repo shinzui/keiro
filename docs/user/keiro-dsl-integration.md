@@ -310,8 +310,16 @@ idempotence delegated
 The `idempotence` clause is optional, and omission means `table` in every
 language. `delegated` requires Language 6 and generates the typed
 `runInboxIntake` wrapper over `runInboxDelegated`. It must not be combined with
-`persist = dedupe-only`, because delegated mode writes no inbox storage; the
-validator reports `DelegatedInboxDedupeOnlyPersistence`.
+`persist = dedupe-only`, because the intake declaration owns no inbox storage in
+delegated mode; the validator reports `DelegatedInboxDedupeOnlyPersistence`. The
+one inbox row delegated mode can write belongs to the handler: when the handler
+runs an outcome-enabled aggregate's command through
+`Keiro.Inbox.Delegated.delegatedDomainCommand` and the command returns a
+replay-stable `outcome no-op`, the adapter commits a completed row as that
+delivery's receipt, with the persistence the handler passes in
+`DelegatedNoOpReceipt`. The intake syntax is unchanged; see
+[Idempotent Inbox](inbox.md#typed-no-op-receipts) and the compiled example
+`keiro-dsl/test/conformance-intake-delegated-noop/`.
 
 `persist` is optional and defaults to `full-envelope`. Use `dedupe-only` only
 when a successfully processed payload is re-fetchable or no longer valuable;

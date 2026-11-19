@@ -2,6 +2,9 @@
 
 ## 2026-11-18
 
+* **Update**: DOC-10, DOC-11, DOC-29, and the API reference: document delegatedDomainCommand, its typed no-op inbox-row receipt, caller obligations, SELECT/INSERT privileges, the reserved key prefix and the retention horizon (plan 344).
+
+
 * **Update**: DOC-29: the rollout column names the vector's rollout entry, and the Optional-to-required row covers equal-prefix literal/declared moves (plan 345 M5 review).
 
 

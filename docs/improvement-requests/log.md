@@ -2,6 +2,8 @@
 
 ## 2026-11-18
 
+* **Completion**: IR-65 completed under ExecPlan 344: Keiro.Inbox.Delegated.delegatedDomainCommand acknowledges a replay-stable typed no-op with a completed inbox row under the reserved marker-scoped key, rechecks the marker after a no-op or rejection, never acknowledges rejections, and is proved through a generated delegated intake in keiro-dsl-conformance-intake-delegated-noop.
+
 * **Update**: IR-64 completed by ExecPlan 345: Optional contract fields and `discriminator from envelope` in candidate Language 6, with `decodeJsonIntegrationEventWith` in keiro-core (ADR-65). Ships in the next keiro-dsl and keiro-core release.
 
 

@@ -1,7 +1,7 @@
 ---
 type: Reference
 title: API Reference
-timestamp: 2026-11-17T21:10:00Z
+timestamp: 2026-11-18T22:00:00Z
 description: Map Keiro's public modules and their user-facing interfaces.
 docId: DOC-2
 tags: [keiro, api, modules, reference]
@@ -1000,7 +1000,12 @@ wrappers `runInboxDelegated`, `runInboxDelegatedWithRetries`, and
 `runInboxDelegatedBatch`, whose handlers return `DelegatedOutcome` and write no
 inbox row. `Keiro.Inbox.Delegated` exports the safe handler adapters
 `delegatedEventId`, `DelegatedCommandError (..)`, `delegatedCommand`, and
-`delegatedFromPMCommand`. `Keiro.Inbox.Kafka` adds the Kafka consumer adapter.
+`delegatedFromPMCommand`, plus the typed no-op adapter `delegatedDomainCommand`
+with `delegatedNoOpReceiptKey`, `DelegatedNoOpReceipt (..)`,
+`DelegatedDomainResult (..)`, and `DelegatedDomainCommandError (..)`; it writes a
+completed inbox row only to acknowledge a replay-stable typed no-op.
+`Keiro.Inbox.Schema` additionally exports `insertCompletedStrictTx` and
+`CompletedInsert (..)`. `Keiro.Inbox.Kafka` adds the Kafka consumer adapter.
 
 Use it to deduplicate inbound integration events by `(source, dedupe_key)`. See
 [Idempotent Inbox](inbox.md#delegated-idempotence) for when the downstream

@@ -7,7 +7,7 @@ tags: [keiro, integration-events, messaging]
 generated:
   by: anthropic-claude-code/claude-opus-5-5
   at: 2026-11-18T18:28:55Z
-timestamp: 2026-11-18T18:28:55Z
+timestamp: 2026-11-18T22:00:00Z
 ---
 
 # Integration Events
@@ -182,13 +182,26 @@ dispatch, assigns it to the first event of the atomic append, and accepts only a
 positive append or a confirmed replay. Failed commands, unrelated global event
 ID collisions, and successful commands that append no event remain failures.
 
-Delegated intake creates no inbox row. It therefore has no inbox backlog,
-failed-row, retention, or dead-letter inspection surface. The caller owns
-durable attempt accounting across restarts and rebalances. Before acknowledging
-a terminal failure, durably publish or store the dead-letter record; the
-delegated wrappers do not write one. Keep table intake for silent commands,
-non-atomic side effects, general workflow bodies, and multi-command reactions
-without one atomic receipt.
+Delegated intake creates no inbox row, with one exception described below. It
+therefore has no inbox backlog, failed-row, retention, or dead-letter inspection
+surface. The caller owns durable attempt accounting across restarts and
+rebalances. Before acknowledging a terminal failure, durably publish or store the
+dead-letter record; the delegated wrappers do not write one. Keep table intake for
+untyped silent commands, non-atomic side effects, general workflow bodies, and
+multi-command reactions without one atomic receipt.
+
+The exception is a typed no-op. `delegatedDomainCommand` runs one typed domain
+command. When it returns `DomainNoOp` and the caller guarantees the no-op is
+replay-stable, the adapter commits a completed `keiro.keiro_inbox` row as the
+receipt. The row is keyed by the envelope source and
+`delegatedNoOpReceiptKey marker` (`keiro/inbox-delegated-noop/1:<marker>`). Reserve
+that prefix among every inbox writer for the source. The executing role then needs
+`SELECT` on `keiro.keiro_inbox` for every marker miss and `INSERT` for every no-op.
+These rows are ordinary completed rows, so `garbageCollectCompleted` sets their
+replay horizon: after a row is removed, a redelivered no-op is evaluated again and
+must still append nothing. Typed rejections and untyped silent successes are never
+acknowledged. The full guarantee is in
+[Idempotent Inbox](inbox.md#typed-no-op-receipts).
 
 The benchmark evidence in `keiro/bench/results/delegated-inbox-v1/` shows why
 this is a correctness and workload choice. Delegation substantially reduces

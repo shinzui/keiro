@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Delegated inbox intake uses a downstream event receipt
 description: A consumer may omit its inbox row only when one deterministic downstream event receipt covers the complete atomic operation.
-timestamp: 2026-09-15T20:23:47Z
+timestamp: 2026-11-18T23:50:00Z
 docId: ADR-43
 status: Accepted
 date: 2026-09-15
@@ -87,3 +87,52 @@ zero-event command as completion was rejected because neither records the
 complete protected effect. A mode flag on the table transaction API was
 rejected because table handlers and delegated effectful handlers have different
 transaction ownership and constraints.
+
+## Typed no-op receipts (2026-11-18)
+
+[ADR-29](0029-typed-domain-decisions-are-successful-additive-command-outcomes.md)
+lets a domain command return `DomainNoOp` from a declared silent edge. That
+decision opens no append transaction and leaves no marker, so it cannot satisfy
+the event receipt above. `Keiro.Inbox.Delegated.delegatedDomainCommand` adds a
+bounded exception for that case. `delegatedCommand`, `delegatedFromPMCommand`,
+and the marker recipe are unchanged, and an untyped zero-event success is still
+refused with `DelegatedCommandWithoutReceipt`.
+
+The adapter runs one typed domain command. An accepted decision is acknowledged
+by its marker exactly as above. A typed no-op qualifies only when the caller
+guarantees it is replay-stable: replaying that delivery remains a no-op in every
+later reachable state, including after a crash or after the receipt is removed
+by retention. The adapter cannot infer that property from the no-op value. A
+qualifying no-op is acknowledged only after the adapter commits a completed
+`keiro_inbox` row as the receipt. The row is written in its own transaction
+after the decision, as ADR-29 requires, and the adapter acknowledges only when
+that transaction reports an insert by this attempt and commits.
+
+The row's key is the envelope source and
+`keiro/inbox-delegated-noop/1:<marker UUID>`, derived from the same marker as
+the accepted path. The receipt is therefore scoped by consumer, target, and
+operation and never coincides with a table-intake row for the raw dedupe key.
+The prefix and marker inputs are persisted replay identity, pinned by a vector
+test. Adopters reserve the prefix among every inbox writer for the source.
+
+After a preflight marker miss, the adapter looks up the row before dispatch. A
+completed row is a duplicate and skips hydration, and a processing or failed row
+is refused. After a no-op or a typed rejection, it rechecks the marker. A hit is
+a duplicate, because a concurrent delivery of the same message appended the
+marker and this dispatch observed the state it left. Without the recheck, a
+handled delivery could be reported as rejected and dead-lettered. A typed
+rejection is never acknowledged and writes no row, because a rejection may
+become acceptable later. An insert conflict whose row has disappeared before
+lookup (concurrent retention) is reported as a retryable lost receipt, not as
+success. `Keiro.Inbox.Schema.insertCompletedStrictTx` keeps this case distinct.
+Table mode keeps its historical mapping of it to success through
+`tryInsertCompletedTx`.
+
+Consequences: a consumer using the adapter needs `SELECT` on `keiro_inbox` for
+every marker miss and `INSERT` for every no-op, so the earlier statement that
+delegated intake needs no inbox-table privilege holds only for the existing
+adapters. No-op receipts are ordinary completed rows. Inbox retention therefore
+sets their duplicate horizon: once a row is removed, a redelivery is evaluated
+again and must still append nothing. A crash between the silent decision and
+the receipt commit leaves the delivery unacknowledged, and the retry runs the
+command again.

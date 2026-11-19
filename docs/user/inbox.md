@@ -7,7 +7,7 @@ tags: [keiro, inbox, idempotency, reference]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:05:10Z
-timestamp: 2026-10-27T21:15:00Z
+timestamp: 2026-11-18T22:00:00Z
 ---
 
 # Idempotent Inbox
@@ -108,6 +108,64 @@ Both reject failed commands and commands that append no event with
 `DelegatedCommandError`. When to choose delegation, and what inspection surface
 it gives up, is covered in
 [Choosing inbox idempotence ownership](integration-events.md#choosing-inbox-idempotence-ownership).
+
+### Typed no-op receipts
+
+`delegatedDomainCommand` is the third adapter. It is for a command that is
+sometimes a legitimate no-op, for example a delivery status that never moves
+backwards. Its callback runs one typed domain command (`runDomainCommand` or a
+`WithSql` variant) and returns its `DomainCommandOutcome`. A
+`DelegatedNoOpReceipt` names the consumer, operation, dedupe key, delivered
+envelope, Kafka reference and row persistence:
+
+```haskell
+handler dedupe event =
+  delegatedDomainCommand receipt defaultRunCommandOptions (streamName target) (\prepared ->
+    runDomainCommand prepared deliveryHandler target (RecordOutcome outcome))
+    >>= either (throwError . DeliveryRefused) pure
+  where
+    receipt = DelegatedNoOpReceipt
+      { consumer = "reputation", operation = "record-outcome", dedupeKey = dedupe
+      , event, kafka = Nothing, persistence = PersistFullEnvelope }
+```
+
+The guarantee:
+
+- An accepted command commits its deterministic marker
+  (`delegatedEventId consumer source dedupeKey target operation`) as its first
+  event, exactly as with `delegatedCommand`. It writes no inbox row.
+- A typed no-op qualifies only when the caller guarantees that replaying that
+  delivery remains a no-op across every later reachable state. This includes
+  retries after a crash and replays after retention. The callback must use the
+  supplied options and target, run one domain command, and keep every protected
+  effect inside its append. A silent decision performs no side effects.
+- A qualifying no-op is fresh (`DelegatedDomainNoOp`) only after the adapter
+  commits a completed `keiro.keiro_inbox` row at the envelope `source` and the
+  reserved key `delegatedNoOpReceiptKey marker`, which is
+  `keiro/inbox-delegated-noop/1:<marker uuid>`. The key is scoped by consumer,
+  target and operation, so an ordinary table-intake row for the raw message id
+  never answers for it.
+- A matching marker in the target stream or a matching completed row proves a
+  duplicate, and the callback is not invoked. A competing marker takes
+  precedence when dispatch observes the no-op or rejection left by that append:
+  the adapter rechecks the marker after both decisions.
+- A crash after the silent decision and before the receipt commit leaves the
+  delivery unacknowledged, and a retry evaluates the command again. Set
+  retention beyond the required redelivery horizon. Once
+  `garbageCollectCompleted` removes a row, a later replay may report fresh
+  again and must still append nothing.
+- A typed rejection (`DelegatedDomainRejected`), an unconfirmed command
+  failure, an existing non-completed row (`DelegatedNoOpReceiptUnavailable`), a
+  missing receipt after an insert conflict (`DelegatedNoOpReceiptLost`, which
+  is retryable), and an untyped zero-event success provide no basis for
+  acknowledgement. They return `Left`; store and commit failures propagate
+  through the store's error channel. Keep the rejection payload in the typed
+  value and out of logs and telemetry.
+
+A service adopting this handler needs `SELECT` on `keiro.keiro_inbox` for every
+marker miss and `INSERT` for every no-op. Before enabling it, check that no other
+writer for the source can use the `keiro/inbox-delegated-noop/1:` key prefix and
+that no historical rows already occupy it.
 
 ## The Kafka decoder
 
