@@ -5,9 +5,11 @@ recipe, application ops host, and console routing so the selected application's
 Topology and Aggregates pages use the same ops URL. Subsequent DSL changes flow
 through the project's ordinary regeneration and verification commands.
 
-The target needs an authoritative `.keiro` source or `.keiro-workspace` and a
-Keiro toolchain supporting generated inspection catalogs and service topology
-(both are present in Keiro 0.26.0.0). The blueprint can extend an embedded host
+Before editing, the blueprint agent checks that the target resolves **Keiro
+0.26 or newer**. It stops if the version is older or cannot be established.
+The target also needs an authoritative `.keiro` source or `.keiro-workspace` and
+a toolchain supporting generated inspection catalogs and service topology.
+The blueprint can extend an embedded host
 or add an application-specific ops executable. A shared console may live
 outside the service checkout. In that case the run provides the exact target
 entry and route for its owner.

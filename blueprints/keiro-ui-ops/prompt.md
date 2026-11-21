@@ -6,6 +6,30 @@ and browse live instances of its DSL aggregates through the same Keiro ops
 base URL. Use the project's existing regeneration, hosting, and deployment
 conventions. On reruns, verify existing wiring and fill only the gaps.
 
+## Check the Keiro version before editing
+
+Require **Keiro 0.26 or newer** on every run. Resolve the selected service in
+its normal build environment. For Cabal, run `cabal build --dry-run` for its
+actual component with its usual project file and flags. Run this check on the
+resulting plan (adjust the path for a custom build directory):
+
+```sh
+jq -e '
+  [."install-plan"[] | select(."pkg-name" == "keiro") | ."pkg-version"] | unique
+  | if length == 0 then error("keiro is missing from the build plan")
+    elif all(.[]; test("^[0-9]+([.][0-9]+)*$") and
+                  (split(".") | map(tonumber) | . >= [0,26])) then .
+    else error("Keiro 0.26+ required, resolved " + join(", ")) end
+' dist-newstyle/cache/plan.json
+```
+
+For another build system, apply the same numeric version check to the actual
+resolved package for the target. Record the version and its source. A Cabal
+bound such as `>= 0.24` cannot establish which release the service builds.
+If the version is older, missing, or unverifiable, stop before changing
+consumer files and report the prerequisite. Once the runtime passes, verify
+that the actual scaffold tool and ops libraries support the APIs below.
+
 ## Find the service and its host
 
 Identify the service's authoritative DSL entry point, scaffold invocation,
