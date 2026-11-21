@@ -16,6 +16,17 @@ provenance:
       at: 2026-11-21T14:17:20Z
       mode: "update"
       note: "Add topology export under schema id /3 and a workflow benchmark guard as the first milestone; renumber milestones"
+    - model: "gpt-6.2-astra"
+      harness: "codex-cli"
+      at: 2026-11-21T16:16:14Z
+      mode: "update"
+      note: "Apply review findings to workspace and Git loading, recording conformance, frozen grammar, benchmark and topology checks, and recovery."
+  reviews:
+    - model: "gpt-6.2-astra"
+      harness: "codex-cli"
+      at: 2026-11-21T16:15:40Z
+      verdict: "changes-requested"
+      note: "AC-1 needs workspace-aware source attribution and historical reads. AC-3 needs a database-free test entry point and an ordered conformance assertion."
 ---
 
 # Declare workflow fragments from separate packages
@@ -50,7 +61,7 @@ filed by `mori://shinzui/shikigami`. After it:
 4. A *composition* file lists one host and the fragment sources one executable links.
    `keiro-dsl check` on it rejects a label declared twice across the host and the fragments.
 5. `Keiro.Workflow.Recording.recordWorkflow` runs a workflow body with no database and
-   returns the labels it journaled, in order, so a package's unit test can assert that its
+   returns the journal keys it encountered, in order, so a package's unit test can assert that its
    code journals exactly what its fragment declares.
 6. `keiro-dsl topology` exports extension points and fragments under a new schema id,
    `keiro-dsl/service-topology/3`, and `keiro-ops` can mount such a document.
@@ -63,13 +74,13 @@ To see it working after the last milestone, from the repository root:
 ```bash
 nix develop -c cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workflow-fragments/agent.keiro-composition
 nix develop -c cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workflow-fragments/agent-collision.keiro-composition
-nix develop -c cabal test keiro-test --test-options='--match "Workflow recording"'
+nix develop -c cabal test keiro:test:workflow-recording-test
 nix develop -c cabal run -v0 keiro-dsl -- topology keiro-dsl/test/fixtures/topology/workflow-fragments.keiro
 nix develop -c just bench-regression workflow
 ```
 
 The first prints `OK`. The second exits non-zero and names `FragmentLabelCollision` with
-both files. The third passes without the test body touching PostgreSQL. The fourth prints a
+both files. The third runs a standalone test executable with no PostgreSQL fixture. The fourth prints a
 document whose `schema` is `keiro-dsl/service-topology/3`. The fifth ends with
 `GUARD(workflow)=0` and `BENCH_REGRESSION=PASSED`.
 
@@ -81,7 +92,8 @@ document whose `schema` is `keiro-dsl/service-topology/3`. The fifth ends with
 - [ ] Milestone 2: `recordWorkflow` runs a body of two steps and one await with no store and
   returns the three labels in order (IR-61 AC-3); the `workflow` guard still passes.
 - [ ] Milestone 3: candidate Language 6 parses, pretty-prints and validates `extension` body
-  items and `fragment` nodes, and refuses both in Language 5.
+  items and `fragment` nodes. Language 5 rejects the new constructs and still accepts
+  their spellings as ordinary identifiers.
 - [ ] Milestone 4: `keiro-dsl diff` gives a fragment body the same findings as a workflow
   body, attributed to the fragment, and treats a new extension point as additive (IR-61
   AC-2).
@@ -135,9 +147,10 @@ one shaped the design.
   ([ADR-14](../adr/0014-service-workspaces-compose-single-owner-members-under-one-manifest-identity.md)).
   A fragment in another package, possibly another repository, can't be a workspace member.
 
-- No benchmark measures the workflow interpreter, and the guard driver can't simply be
-  pointed at one. `scripts/bench_guard.py` compares every family with one pinned source,
-  `REFERENCE = b8695a0d…`, whose `keiro/bench/Main.hs` has no workflow benchmark. A new
+- The durable-tracing benchmark already runs the interpreter in its snapshot-resume cells
+  (see `keiro/bench/DurableTraceBench.hs`). No release guard covers the four workflow
+  workloads proposed here. `scripts/bench_guard.py` compares every family with one pinned source,
+  `REFERENCE = b8695a0d…`, which predates the new four-case group. A new
   family needs its own reference source: the commit that adds the benchmark.
 
 - A topology schema id is enforced in three places inside this repository: the id selector
@@ -165,8 +178,8 @@ one shaped the design.
 
 - Decision: A fragment names its host by the workflow's stable name string
   (`of "shikigami.agent-run"`), not by the workflow's block identifier.
-  Rationale: The stable name is the journal stream name and the only identity two
-  repositories share. A block identifier is local to one spec.
+  Rationale: The stable name is the workflow-owned part of the journal stream identity.
+  Both repositories can refer to it without sharing a block identifier. A block identifier is local to one spec.
   Date: 2026-11-21
 
 - Decision: A fragment carries a block identifier and a stable `name "…"`, as a workflow
@@ -266,7 +279,7 @@ one shaped the design.
   runtime edit. The five existing families keep their reference and the 1.25 ceiling is
   unchanged.
   Rationale: The user asked for benchmarks on 2026-11-21, after this plan had to say that
-  nothing measured the workflow path. The existing reference source has no workflow
+  no release guard measured these workflow workloads. The existing reference source has no workflow
   benchmark, so the family can't share it. Pinning the pre-change commit makes the guard
   measure exactly this plan's runtime change, and every later one.
   [ADR-58](../adr/0058-benchmark-release-gates-require-isolated-fixed-workloads-and-attributed-baselines.md)
@@ -339,7 +352,7 @@ workflow AgentRun
 ```
 
 `AgentRun` is the *block identifier*. `"shikigami.agent-run"` is the *stable name*, which
-names the journal stream. Each line under `body` is a *body item*, a constructor of
+combines with the workflow instance id and generation to identify its journal. Each line under `body` is a *body item*, a constructor of
 `WfBodyItem` in `keiro-dsl/src/Keiro/Dsl/Grammar.hs`: `WfStep`, `WfAwait`, `WfSleep`,
 `WfChild`, `WfPatch`, `WfContinueAsNew`. Result type names after `->` are compared as text
 and are not resolved against declarations.
@@ -421,8 +434,8 @@ module registered in `keiro-dsl/test/Main.hs` and in the `keiro-dsl-test` stanza
 `keiro-dsl/keiro-dsl.cabal`), the workflow diff cases near "classifies workflow relabeling
 and appends as WorkflowBodyChanged" in `keiro-dsl/test/Main.hs`,
 `keiro-dsl/test/diff-test.sh`, and the suite `keiro-dsl/test/conformance-workflow-full/`.
-`keiro/test/WorkflowInspectionSpec.hs` shows how a spec module is registered in
-`keiro/test/Main.hs` and `keiro/keiro.cabal`.
+`keiro/test/Main.hs` wraps the existing runtime suite in a migrated database fixture.
+Milestone 2 gives the recorder its own test entry point.
 
 ### The consumer
 
@@ -477,16 +490,18 @@ commit becomes the fixed point every later runtime change is compared with. At t
 
 Add `keiro/bench/WorkflowBench.hs`, listed in the `keiro-bench` stanza of
 `keiro/keiro.cabal`, and add its group to the list `defaultMain` receives in
-`keiro/bench/Main.hs`. The group is named `workflow`, uses a store acquired the way the
-neighbouring groups acquire theirs, and runs with default `WorkflowRunOptions` (no tracer,
-no metrics, no snapshots). Its cases are fixed workloads, each asserting its own result
+`keiro/bench/Main.hs`. Name the group `workflow`. Follow `selectedDurableBenchmarks` to
+acquire a private migrated store only when the group is selected. Use default run options
+except for the active patch in the patch case. Its cases are fixed workloads, each asserting its own result
 inside the benchmark action so a broken run fails instead of timing nonsense:
 
 - `workflow.fresh.steps-16`: a new workflow id each iteration runs sixteen trivial steps to
   `Completed`. This measures the miss path: sixteen journal appends and the completion
   marker.
 - `workflow.replay.steps-16`: one workflow completed during setup is run again each
-  iteration. This measures journal load and the hit path, with no append.
+  iteration. This measures journal load, all sixteen hits and the idempotent completion attempt.
+  Assert the expected result and make a replayed step action fail if executed. The journal
+  gains no rows.
 - `workflow.suspend.await-1`: a new workflow id each iteration runs one step and one
   `awaitStep` with a no-op arming action and ends `Suspended`.
 - `workflow.patch.steps-4`: a new workflow id each iteration runs with one active patch,
@@ -495,11 +510,16 @@ inside the benchmark action so a broken run fails instead of timing nonsense:
 Use raw `step`, `awaitStep` and `patch` from `Keiro.Workflow`, not the sleep, awakeable or
 child helpers, so the cases measure the interpreter and not the wake-source tables.
 
-Record `keiro/bench/baseline-workflow.csv` on a quiet machine with the options
-`scripts/bench_guard.py` passes in `measure`, in the three-column format of
-`keiro/bench/baseline-command.csv`. Commit the benchmark and the CSV together and note the
-commit's full hash. This is the *workflow reference commit*. It must contain no change
-under `keiro/src/`.
+Follow ADR-58 when recording `keiro/bench/baseline-workflow.csv`. Take five complete
+serial samples on a quiet machine. For each of the four case names, take the median of
+the five means and the median of the five spreads in the three-column format of
+`keiro/bench/baseline-command.csv`. Preserve the raw CSVs and a README under
+`keiro/bench/results/workflow-v1/` with the machine, compiler, RTS flags, database
+settings, workload and aggregation rule. Bound retained streams and rows in the fresh-ID
+cases, measure that bound during calibration and fail a sample that exceeds it. Keep
+fixture cleanup outside the timed action. Commit the benchmark, raw evidence and CSV
+together. This first commit is the *workflow reference commit*. Verify its diff under
+`keiro/src/` is empty, then use its full hash in the second commit.
 
 In a second commit, wire the guard:
 
@@ -545,24 +565,31 @@ seeded from the options, and a list of labels in encounter order:
 - `Await`: if the key is in the map, decode and return it. Otherwise end the recording as
   suspended on that key. Never run the arming action.
 - `Patch`: the key is `patchStepName pid`. If absent, the decision is membership of the
-  options' active patch set; store it.
+  options' active patch set supplied for this simulated generation. On a hit decode the
+  stored Boolean. The preload represents individual decisions and the options supply the
+  effective patch set. The recorder does not simulate durable generation initialization.
 - `FreshOrdinal`: a per-namespace counter from zero, as in the durable interpreter.
 - `CurrentWorkflow` and `CurrentRunGeneration`: from the options. `CurrentWorkflowTracer`:
   `Nothing`.
 - `ContinueAsNew`: end the recording as continued, carrying the encoded seed.
 
 Record a label for every `Step`, `Await` and `Patch` encountered, marked `replayed` when the
-key was already in the map. A decode failure throws the same `WorkflowStepDecodeError` the
-durable interpreter throws. The function needs no `Store`, no `Error StoreError` and no
+key was already in the map at entry. Append the encounter before entering a fresh step
+action so nested operations follow their caller in the trace. A decode failure throws
+the durable interpreter's `WorkflowStepDecodeError`. The function needs no `Store`, no `Error StoreError` and no
 `IOE` constraint.
 
-Add `keiro/test/WorkflowRecordingSpec.hs` under a top-level `describe "Workflow recording"`,
-registered in `keiro/test/Main.hs` and `keiro/keiro.cabal`. Run every body with
-`runPureEff` so the type proves no store is involved. Cases: two steps and one preloaded
-await return three labels in order and complete; the same body with no preloaded value
-returns two labels and suspends on the await; a repeated step key runs its action once; an
-active and an inactive patch record `patch:<id>` and return `True` and `False`; a preloaded
-step does not run its action; `continueAsNew` ends as continued.
+Add the Cabal test component `workflow-recording-test` in `keiro/keiro.cabal` with
+`keiro/test/recording/Main.hs` as its own Hspec entry point. The existing `keiro-test`
+enters `withMigratedSuite` before Hspec selects any example. Use `runPureEff` in the new
+component. Run a step `first`, an await `review`, then a step `last`. With a preloaded
+review, assert completion and all three keys in that order. Without it, assert suspension
+and the two encounters `first`, `review`. The unresolved await produces a label even though
+no result was stored. Make its arming action fail if called. Also assert that a repeated
+step executes once and records both encounters and a preloaded step skips its action.
+Check active and inactive patches, then preload the opposite decision and verify replay
+returns it. A malformed stored value must raise `WorkflowStepDecodeError`, and continuation
+must preserve the encoded seed.
 
 Add a `keiro/CHANGELOG.md` entry under `[Unreleased]`, and a short section in
 `docs/user/durable-workflows.md` stating what the recorder does not model: arming actions,
@@ -601,8 +628,14 @@ data FragmentNode = FragmentNode
 ```
 
 In `keiro-dsl/src/Keiro/Dsl/Parser/Workflow.hs`, lift `pWfBodyItem` to the top level so
-both parsers share it, pass the `FrontendContext` in, and gate the new spellings with the
-helper `pOptionalInputSource` uses. The surface syntax is:
+both parsers share it. Pass in `FrontendContext`, consume each new keyword with its
+source span, and call `requireLanguageFeatureAt` at that span. Every successful
+alternative under `many` must consume input. Keep the new words out of the global
+`reservedWords` list in `Parser/Core.hs`, which also governs frozen languages. Test a
+fragment immediately after a query operation whose result is a multi-word type. The
+current `pTypeExpr = some ident` can swallow a following block header. Recognize the
+candidate fragment declaration boundary there while preserving valid predecessor type
+expressions and identifiers such as `fragment` and `extension`. The surface syntax is:
 
 ```text
 workflow AgentRun
@@ -629,7 +662,7 @@ fragment ExamplesFlows
 `extension <point>` takes an optional `prefixed`. The fragment's `name` uses the wire-word
 spelling of a step label. Register `pFragment` in
 `keiro-dsl/src/Keiro/Dsl/Parser/Document.hs`. Add both to
-`keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs` so `pretty` output parses back to the same `Spec`.
+`keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs` so `pretty` output preserves the declaration after reparsing and printing again.
 
 In `keiro-dsl/src/Keiro/Dsl/Validate.hs` add these codes to `DiagnosticCode` and to its
 classification table, and wherever the repository lists codes (search for an existing code
@@ -642,7 +675,7 @@ such as `WorkflowPatchDuplicate` under `docs/`, `keiro-dsl/test/` and `scripts/`
 - `FragmentHostUnresolved`: used by composition check in Milestone 5.
 - `FragmentExtensionPointUnresolved`: the host has no extension point of that name.
 - `FragmentLabelCollision`: a fragment label is declared by the host body or by another
-  fragment of the same host.
+  fragment of the same host. Walk nested patch items when collecting labels and patch ids.
 - `FragmentPatchCollision`: the same for patch ids.
 - `FragmentLabelPrefixRequired`: the point is `prefixed` and a label or patch id does not
   start with `<fragment stable name>-`.
@@ -650,11 +683,15 @@ such as `WorkflowPatchDuplicate` under `docs/`, `keiro-dsl/test/` and `scripts/`
 Reuse `WorkflowDuplicateLabel`, `WorkflowPatchDuplicate`, `WorkflowPatchIdInvalid` and
 `WorkflowSleepDelayUnresolved` for the same faults inside one fragment.
 
-Split validation into two functions so Milestone 5 can reuse the second. `validateFragment
-:: FragmentNode -> [Diagnostic]` holds the rules that need no host. `validateFragmentsAgainstHost
-:: WorkflowNode -> [FragmentNode] -> [Diagnostic]` holds point existence, collisions across
-the host body and every fragment of that host, the prefix rule, and `sleep` delay fields
-against the host's input fields. Labels are unique per workflow, across all its extension
+Separate fragment-local validation from rules over multiple declarations.
+`validateFragment` checks one body. Group fragments by host and stable name to detect
+`FragmentDuplicateName` even in a pack with no host. Run the same uniqueness rule across
+selected units in a composition. `validateFragmentsAgainstHost` checks point existence,
+label and patch collisions, prefixes, and sleep fields. Give shared rules an origin for
+each declaration and return that origin on every primary and related location. In a
+single spec the adapter projects those locations to the line-only `Diagnostic`. A
+composition retains the owning unit for each location. Keeping the rules independent of
+`WorkspaceSpec` also avoids an import cycle from `Validate` back to `Workspace`. Labels are unique per workflow, across all its extension
 points, because they share one journal. `validateService` runs the second function for each
 workflow whose stable name some fragment in the same spec names. A fragment whose host is
 not in the spec passes on local rules alone.
@@ -668,14 +705,16 @@ fragment yields no node and no edge, so no existing golden changes. In
 reason "classified in the next milestone", so this milestone compiles on its own.
 
 Add fixtures under `keiro-dsl/test/fixtures/workflow-fragments/`: `host/agent-run.keiro`
-(the workflow above, with field types copied from `keiro-dsl/test/fixtures/workflow.keiro`),
+(the workflow above, under `language keiro-dsl 6` and `context fixture-agent`),
 `pack-a/examples.keiro` (the fragment above under `context examples-pack`),
 `pack-b/reports.keiro` (a second fragment named `reports`), `in-spec.keiro` (host and
 fragment in one file), and one negative file per new code that a single spec can trigger.
 Add `keiro-dsl/test/Keiro/Dsl/WorkflowFragmentSpec.hs` and register it as
 `InputSourceSpec.hs` is registered. Assert that each positive fixture checks clean, each
-negative fixture yields exactly its code on the expected line, `pretty` round-trips, and a
-Language 5 copy fails with `LanguageFeatureRequiresVersion`.
+negative fixture yields exactly its code on the expected line, `pretty` round-trips
+modulo source locations, and a
+Language 5 copy of each new construct fails with `LanguageFeatureRequiresVersion` at
+its keyword. Include a Language 5 positive fixture using the new words as identifiers.
 
 ### Milestone 4: classify fragment changes in `diff`
 
@@ -700,22 +739,31 @@ Replace the out-of-scope family with a real one that pairs fragments by block id
 - Matched, `host` differs: breaking `WorkflowBodyChanged`, the labels now journal in
   another workflow.
 - Matched, `point` differs: breaking `WorkflowBodyChanged`, the same as a reorder.
-- Matched, stable name differs: advisory.
+- Matched, stable name differs: advisory `FragmentStableNameChanged`. Preserve any
+  independent finding for a changed label in its body.
 
-Because the node of each finding is the fragment's block identifier,
-`keiro-dsl/src/Keiro/Dsl/WorkspaceDiff.hs` already cites the fragment's file on the
-`declared:` line. Confirm that with a test rather than changing it.
+Register the new evolution codes as `DiffDiagnostic` in
+`keiro-dsl/src/Keiro/Dsl/Validate.hs`, including `CompositionMembershipChanged` when
+it is added in Milestone 5.
+
+In `keiro-dsl/src/Keiro/Dsl/WorkspaceDiff.hs`, qualify the ownership lookup for a
+fragment finding by node kind and block identifier. The existing lookup searches for the
+first matching name across kinds. Test a workspace with a fragment and another allowed
+declaration of the same name in different members. The `declared:` line must identify
+the fragment for both an edit and a removal.
 
 Extend `WorkflowFragmentSpec.hs` with old and new sources built from the fixtures. For each
 of rename, remove, reorder, retype and add of one step in `ExamplesFlows`: the findings
 contain a breaking `WorkflowBodyChanged` whose node is `ExamplesFlows`, the same code the
-same edit yields when applied to the host body, and no finding whose node is `AgentRun` or
-the second fragment. Also assert: a change wrapped in a new `patch` is additive
-`WorkflowEvolutionGuardAdded`; a removed patch is `WorkflowPatchRemoved`; adding
-`extension flows` to a host is additive and nothing else; removing it is breaking; a new
-fragment node is additive; a deleted one is breaking. Extend `keiro-dsl/test/diff-test.sh`
-with one case that renames a fragment step in a temporary git repository and expects a
-non-zero exit.
+same edit yields when applied to the host body. Assert the host and sibling fragment have
+no findings. A new patch containing the entire change yields `WorkflowEvolutionGuardAdded`
+and a removed patch yields `WorkflowPatchRemoved`. Adding only an extension point is
+additive. Removing it or moving it across an existing step is breaking. A rule-only
+change is advisory. Adding a point alongside an unguarded step must still report the
+breaking body edit. Adding a fragment node is additive and deleting one is breaking.
+Extend `keiro-dsl/test/diff-test.sh` with a single-file rename in a temporary Git
+repository. Assert a nonzero exit and the fragment's name and `WorkflowBodyChanged`
+code in the output so an input error cannot satisfy the test.
 
 ### Milestone 5: compose a host with fragments from other directories
 
@@ -728,7 +776,7 @@ comments:
 ```text
 # The agent executable's composition.
 composition fixture-agent
-host host/agent-run.keiro
+host host/service.keiro-workspace
 fragments pack-a/examples.keiro
 fragments pack-b/reports.keiro
 ```
@@ -739,24 +787,37 @@ is relative to the composition file's directory, may contain `..`, may not be ab
 names a `.keiro` file or a `.keiro-workspace` manifest. The extension is
 `.keiro-composition`, tested case-insensitively as `isWorkspacePath` does.
 
-Loading reads each unit through the existing single-file and workspace loaders with a
-`ContentSource`, so the same code serves the working tree and a git ref. A unit that fails
-its own check is reported with its own diagnostics and paths, and composition validation
-does not run.
+Add `host/service.keiro-workspace` to the fixtures, with `service fixture-agent` and
+`spec agent-run.keiro` on separate lines. Use this workspace for the AC-1 command. Include
+a child declaration in a pack and check that its label collides with a host step of the
+same spelling. Keep a loose-file host case for the other supported input form.
+
+Root each unit's `ContentSource` at that unit's directory, on both the working and
+historical sides. `loadWorkspace` reads its manifest by basename and requests members
+relative to that manifest. For a loose file use `parseSourceDocument` and
+`oneMemberParsedDocumentWorkspace` to retain its declared language and source index.
+Report unit-check failures with their original diagnostics and paths. Run composition
+validation only after all selected units pass.
 
 Validation gathers every workflow of the host unit and every fragment of every unit,
 including the host unit. A fragment whose host stable name is not a workflow of the host
 unit is `FragmentHostUnresolved`. For each host workflow it runs
 `validateFragmentsAgainstHost` from Milestone 3. Each diagnostic carries the file and line
 of the offending item and, for a collision, a second location for the other declaration,
-rendered in the shape workspace diagnostics use:
+rendered in the shape workspace diagnostics use. Resolve each item's merged line with
+`resolveWorkspaceLine` on its own unit, then prefix the member path with that unit's
+directory. Use the same directory when qualifying `WorkspaceChange` declaration and use
+sites for CLI diff output, including sites from removed files. Test two declarations on
+the same local line in different units so line numbers alone cannot identify an owner.
 
 ```text
 keiro-dsl/test/fixtures/workflow-fragments/pack-b/reports-collision.keiro:7: error[FragmentLabelCollision]: ...
   keiro-dsl/test/fixtures/workflow-fragments/pack-a/examples.keiro:6: note: also declared here
 ```
 
-Diff compares two loaded compositions. A unit present on both sides is diffed with
+Run composition validation before returning a successful CLI diff verdict. For example,
+adding a colliding pack must fail even though adding a valid pack yields only an advisory.
+Compare two loaded compositions as follows. A unit present on both sides is diffed with
 `diffWorkspaces`, treating a single file as a one-member workspace. A fragment unit present
 on one side only yields one advisory `CompositionMembershipChanged` and no finding about
 its contents. A changed `host` path is an advisory of the same code and the two hosts are
@@ -767,10 +828,18 @@ diagnostics and `OK`, with the usual exit status. `diff --since <ref>` resolves 
 path against the git repository of the composition file. If any unit is outside it, exit
 non-zero with a message that names the unit and says to run `diff` on each unit in its own
 repository and `check` on the composition. If the composition file does not exist at the
-ref, build the old side from the current unit list at the ref, and treat a unit missing
-there as absent. Output uses `renderWorkspaceFinding`, and the exit status follows the
-existing gate rules, including `--gate`, `--explain` and `--deny-codes`. Options that are
-defined per service (`--report-out`, `--replay-impact-out`, `--emit-goldens`, the coverage
+ref, first verify the ref resolves to a commit. Probe the current unit paths in that
+commit to build an adoption baseline. A missing host at adoption is an empty host baseline.
+A missing fragment unit is absent. A malformed historical file, an unreadable blob or a
+missing member of an existing workspace is a hard error. When the old composition exists,
+load its own list and require all listed units. Resolve `..` relative to the owning
+manifest on each side before forming repo-relative Git paths. Reject paths that leave
+the repository. Read the historical side only from the commit tree, including files
+deleted from today's checkout. A nested
+repository is a separate history even if its working directory is below this repository.
+
+Render output with `renderWorkspaceFinding` and support `--explain`. Apply the existing
+`--gate` and `--deny-codes` exit rules. Options that are defined per service (`--report-out`, `--replay-impact-out`, `--emit-goldens`, the coverage
 options, and `check`'s report options) are refused on a composition with a message saying
 to run them on each unit. Other subcommands, including `topology`, refuse a composition
 file by name.
@@ -779,11 +848,17 @@ Add fixtures `agent.keiro-composition` (host plus both packs),
 `agent-collision.keiro-composition` (uses `pack-b/reports-collision.keiro`, which declares
 a label of pack A), `agent-host-collision.keiro-composition` (a fragment declaring
 `open-session`), `agent-unprefixed.keiro-composition`, `agent-missing-point.keiro-composition`
-and `agent-unresolved-host.keiro-composition`. Test the parser, loading, each diagnostic
-with both locations, and the diff rules in `WorkflowFragmentSpec.hs` with in-memory content
-sources. Extend `keiro-dsl/test/diff-test.sh` with a composition whose units live in one
-temporary repository: renaming a step in pack A fails and cites `pack-a/examples.keiro`;
-deleting the `fragments pack-b/…` line passes with one advisory.
+and `agent-unresolved-host.keiro-composition`. Use an open point for isolated collision
+cases so the prefix rule cannot account for their failure. Exercise the prefix rule in
+`agent-unprefixed.keiro-composition`. Test the parser, loading, diagnostic codes, both
+source locations for collisions, and the diff rules in `WorkflowFragmentSpec.hs` with
+in-memory content sources. Extend `keiro-dsl/test/diff-test.sh` with a composition whose units live in one
+temporary repository. Place the composition in a subdirectory and reference sibling units
+with `..`. Renaming a step in pack A must fail with `WorkflowBodyChanged` and cite that
+pack. Dropping pack B and removing its file from the working tree must yield one advisory.
+Also exercise first adoption with a pre-existing edited pack, an invalid ref, and a pack
+in a second Git repository. The last composition must pass `check` and give the per-unit
+guidance on `diff --since`. Run the script again after adding the Milestone 5 cases.
 
 ### Milestone 6: generated fragment facts and an end-to-end proof
 
@@ -804,9 +879,16 @@ out of the service conformance facade in `keiro-dsl/src/Keiro/Dsl/ServiceHarness
 Add the suite `keiro-dsl/test/conformance-workflow-fragment/` following
 `keiro-dsl/test/README.md`: scaffold `pack-a/examples.keiro` into it, and write a `Main.hs`
 with a hand-written body for the fragment that runs under
-`Keiro.Workflow.Recording.recordWorkflow`. It asserts that the recorded step keys equal
-`steps`, that the recorded `patch:` keys equal `patches` with the prefix added, and that a
-deliberately misnamed step makes the comparison fail. Add its Cabal stanza and its entry in
+`Keiro.Workflow.Recording.recordWorkflow`. Give that body literal labels independent of the
+generated facts. Preload the raw `examples-review` await and enable `examples-audit-v1`.
+Assert completion and compare the full ordered list of `(kind, key)` encounters, including
+the nested step, with the generated `body` facts in declaration order. For this all-active fixture,
+flatten the existing body tags at patch parentheses and commas, keeping the patch tag
+before its nested tags. Convert a `step:L` or `await:L` tag to its kind and raw key `L`,
+and a `patch:P` tag to the patch kind and raw key `patch:P`. This checks the order across
+kinds directly from the declaration. The expected order is classify, review, patch
+decision, audit. Use a negative case that swaps the step and await and one that renames a step. Both must fail
+the comparison even when the per-kind counts match. Add its Cabal stanza and its entry in
 `keiro-dsl/test/conformance-baseline.json`.
 
 ### Milestone 7: export extension points and fragments in the service topology
@@ -845,8 +927,8 @@ document containing an `extension` step. Follow the naming the existing examples
 Extend `keiro-dsl/test/Keiro/Dsl/TopologySpec.hs`: the two new goldens match; a host with
 an extension point and no fragment is `/3`; a document with a `feeds` edge and a fragment
 is `/3` and keeps the edge; every pre-existing golden is unchanged and keeps its id; and
-the document is invariant under reordering declarations, as the existing invariance test
-states it.
+reordering top-level declarations preserves topology after excluding member digests
+and node lines, as the existing invariance test does.
 
 In `keiro-ops/src/Keiro/Ops/Topology.hs` add the `/3` entry to the vocabulary table: the
 `/2` kinds plus `workflow-fragment`, and the `/2` relations plus `extends`. Extend
@@ -915,15 +997,22 @@ nix develop -c cabal build all --enable-tests --enable-benchmarks
 Milestone 1. Run benchmarks on a quiet machine, with no compiler or test suite alongside:
 
 ```bash
-nix develop -c cabal bench keiro-bench --benchmark-options="-p workflow -j1 --time-mode wall --hide-progress +RTS -N2 -RTS"
-# Record keiro/bench/baseline-workflow.csv, commit benchmark and CSV, then:
+(
+set -e
+mkdir -p keiro/bench/results/workflow-v1
+for sample in 1 2 3 4 5; do
+  csv="$PWD/keiro/bench/results/workflow-v1/sample-$sample.csv"
+  nix develop -c cabal bench keiro-bench --benchmark-options="-p workflow -j1 --time-mode wall --hide-progress --stdev 5 --timeout 10s --csv $csv +RTS -N2 -RTS"
+done
+)
+# Aggregate only five successful runs with all four names. Commit the benchmark and evidence, then:
 git rev-parse HEAD
 git diff --stat HEAD~1 -- keiro/src
 # Wire the guard with that hash, then:
 nix develop -c python3 -m unittest discover -s scripts/tests -p test_bench_guard.py
 nix develop -c python3 -m unittest discover -s scripts/tests -p 'test_release*.py'
 nix develop -c just bench-regression workflow
-okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
+nix develop -c okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
 ```
 
 Expected: the benchmark lists four `workflow.` cases; `git diff --stat` prints nothing; the
@@ -934,13 +1023,16 @@ GUARD(workflow)=0
 BENCH_REGRESSION=PASSED
 ```
 
-Exit status 2 and `BENCH_REGRESSION=INCONCLUSIVE` mean the machine was too noisy. Rerun on
-a quiet machine; do not loosen a threshold.
+Exit status 2 and `BENCH_REGRESSION=INCONCLUSIVE` mean the samples did not establish
+a verdict. Inspect the per-case results for timeouts, spread or conflicting confirmations.
+Address the cause before another run.
 
 Milestone 2:
 
 ```bash
-nix develop -c cabal test keiro-test --test-options='--match "Workflow recording"' --test-show-details=direct
+nix develop -c cabal test keiro:test:workflow-recording-test --test-show-details=direct
+nix develop -c cabal test keiro:test:keiro-test
+nix develop -c just replay-compatibility
 git diff --stat -- keiro/src/Keiro/Workflow.hs
 nix develop -c just bench-regression workflow
 ```
@@ -970,6 +1062,7 @@ Milestone 5:
 ```bash
 nix develop -c cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workflow-fragments/agent.keiro-composition
 nix develop -c cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workflow-fragments/agent-collision.keiro-composition
+nix develop -c bash keiro-dsl/test/diff-test.sh
 ```
 
 Expected: the first prints `OK`. The second exits 1 with a `FragmentLabelCollision` line
@@ -996,26 +1089,27 @@ Milestone 7:
 nix develop -c cabal run -v0 keiro-dsl -- topology keiro-dsl/test/fixtures/topology/workflow-fragments.keiro
 nix develop -c cabal test keiro-dsl:test:keiro-dsl-test --test-show-details=direct
 nix develop -c just topology-schema-validate
-nix develop -c cabal test keiro-ops-test keiro-ops-http-test
+nix develop -c env KEIRO_TOPOLOGY_FIXTURES="$PWD/keiro-dsl/test/fixtures/topology" cabal test keiro-ops-test keiro-ops-http-test --test-show-details=direct
 git status --short -- keiro-dsl/test/fixtures/topology docs/user/schemas
-okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
+nix develop -c okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
 ```
 
 Expected: the document's `schema` is `keiro-dsl/service-topology/3` and it contains a
-`workflow-fragment` node, an `extends` edge and a step with `form` `extension`. The suites
-and the schema gate exit zero. `git status` lists only new files: the `/3` schema, the two
-new sources with their goldens, and the new examples. A modified existing golden or schema
-is a defect.
+`workflow-fragment` node, an `extends` edge and a step with `form` `extension`. The
+suites and schema gate exit zero, including the mount and HTTP byte assertions.
+Alongside the new schema and fixtures, expect the edit to `docs/user/schemas/index.md`.
+Existing golden documents and the published schema files retain their bytes.
 
 Milestone 8:
 
 ```bash
-okf id next docs/adr --profile docs/adr/profile.dhall ADR
-okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
-okf validate docs/improvement-requests --profile mori/improvement-requests-profile.dhall --profile-enforce --log-enforce
+nix develop -c okf id next docs/adr --profile docs/adr/profile.dhall ADR
+nix develop -c okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
+nix develop -c okf validate docs/improvement-requests --profile mori/improvement-requests-profile.dhall --profile-enforce --log-enforce
 nix develop -c just user-documentation-validate
 nix develop -c just dsl-api-boundaries
 nix develop -c just verify
+nix develop -c just bench-regression
 ```
 
 `just verify` stops at the first failure, so read its exit status, not only its last lines.
@@ -1038,8 +1132,8 @@ Intention: intention_01m7z470rse23bcq287t5xzvg7
 
 IR-61's criteria map to observable checks.
 
-AC-1, declare and compose without editing the host. `agent.keiro-composition` names a host
-in `host/` and fragments in `pack-a/` and `pack-b/`; no file under `host/` mentions either
+AC-1, declare and compose without editing the host workspace. `agent.keiro-composition`
+names `host/service.keiro-workspace` and fragments in `pack-a/` and `pack-b/`; no file under `host/` mentions either
 pack. `check` on it prints `OK`. `check` on `agent-collision.keiro-composition` and on
 `agent-host-collision.keiro-composition` exits non-zero with `FragmentLabelCollision`,
 naming both declarations.
@@ -1049,7 +1143,7 @@ same edit to a host body and assert equal code and severity, with the fragment's
 identifier as the node and no finding for the host or the other fragment. The Milestone 5
 script shows the `declared:` line citing the fragment's file.
 
-AC-3, labels without PostgreSQL. `WorkflowRecordingSpec` runs a body with two steps and one
+AC-3, labels without PostgreSQL. The standalone `workflow-recording-test` runs a body with two steps and one
 await in `runPureEff` and asserts the three keys in order.
 
 Topology. `keiro-dsl topology` on `workflow-fragments.keiro` prints a `/3` document with the
@@ -1091,7 +1185,7 @@ body between them. If the two disagree about what a label is, that suite fails f
 - Generated bytes. Corpus regeneration in Milestone 6 changes no existing committed file.
   `WorkflowFacts.body` changes only for a workflow that declares an extension point.
 - Fold identity and snapshots. Aggregate fold fingerprints and snapshot discriminators are
-  not touched. Evidence: unchanged fold and snapshot suites in `keiro-dsl:tests`, and the
+  not touched. Evidence: existing fold and snapshot tests in `keiro-dsl`, and the
   no-change corpus regeneration.
 - Topology bytes. Every existing golden keeps its bytes and its schema id, and the `/1` and
   `/2` schema files are not edited. Only a document with a fragment or an extension point
@@ -1101,7 +1195,7 @@ body between them. If the two disagree about what a label is, that suite fails f
   vocabulary. Evidence: `keiro-ops/test/TopologySpec.hs`, including the refused `/2`
   document carrying a `workflow-fragment` node.
 - Frozen languages. Languages 1 to 5 accept and reject the same sources as before.
-  Evidence: the Language 5 negative fixtures.
+  Evidence: Language 5 positive identifier and negative feature fixtures.
 
 Milestones 1, 6 and 7 go beyond the IR's three criteria. Milestone 6 was the author's
 addition; Milestones 1 and 7 were requested by the user. See the Decision Log.
@@ -1109,24 +1203,28 @@ addition; Milestones 1 and 7 were requested by the user. See the Decision Log.
 
 ## Idempotence and Recovery
 
-Every step is an edit to tracked files or a read-only command, so all can be repeated.
+Builds, benchmarks and generators write local outputs. Capture the working-tree status
+before regeneration and retain the two benchmark commits in order.
 Milestones are ordered so the tree builds after each: Milestone 3 gives the new node an
 out-of-scope diff family, no scaffold output and no topology output, and later milestones
 replace those.
 
 The workflow reference commit is immutable once the guard names it. If the benchmark needs
 a correction after that, do not amend or rebase the commit: make the correction in a new
-commit, point the `workflow` reference at a commit that contains the corrected benchmark
-and still predates every `keiro/src/` change of this plan, and re-record the CSV. If no
-such commit exists any more, record in the Decision Log that the reference now includes
-Milestone 2, and what was measured instead.
+commit and re-record the five samples against the original runtime. If Milestone 2 has
+already landed, use a separate worktree at the original reference to apply only the
+benchmark correction. Retain the new reference commit in project history, verify its
+`keiro/src/` tree matches the original reference, and then update the pin and evidence.
+A slower candidate alone never justifies a new baseline.
 
 A reference build lives under `dist-newstyle/benchmark-reference` and is checksum-verified.
 If the guard reports a cache integrity failure, delete that one cache directory and rerun.
 
 Scaffolding into `keiro-dsl/test/conformance-workflow-fragment` is safe to rerun. If corpus
 regeneration changes files outside that directory, a shared emitter changed by accident:
-revert with `git checkout -- keiro-dsl/test` and find the cause before continuing.
+inspect the focused diff against the pre-run status. Fix the emitter or provenance, rerun
+the focused regeneration, then repeat the corpus check from the committed baseline.
+Preserve pre-existing work throughout recovery.
 
 `keiro-dsl/test/diff-test.sh` builds its repositories under a temporary directory; follow
 its existing cleanup. Do not run `git` commands that rewrite this repository's history.
@@ -1218,8 +1316,9 @@ checkComposition :: Composition -> [CompositionDiagnostic]
 diffCompositions :: Composition -> Composition -> Either FoldSurfaceError [WorkspaceChange]
 ```
 
-A `Composition` holds the manifest and each unit as a `WorkspaceSpec` keyed by its path.
-`ContentSource`, `WorkspaceSpec` and `oneMemberWorkspace` come from
+A `Composition` holds the manifest and each unit as a `WorkspaceSpec` keyed by its normalized
+path and role. A historical adoption baseline may have an empty host.
+`ContentSource`, `WorkspaceSpec` and `oneMemberParsedDocumentWorkspace` come from
 `Keiro.Dsl.Workspace`; `WorkspaceChange` comes from `Keiro.Dsl.DiffReport`.
 
 The generated `FragmentFacts` module exports a record `FragmentFacts` with fields `name`,
@@ -1254,3 +1353,8 @@ The `workflow` family's case names are `All.workflow.fresh.steps-16`,
   reference the runtime change is measured against, with ADR-58 amended. The earlier
   milestones were renumbered 2 to 6 and documentation became Milestone 8. The performance
   guarantee now names a measuring gate instead of relying on unchanged code.
+
+- 2026-11-21: Review traced IR-61 through the CLI, the workspace loaders and the runtime
+  test entry point. The revised milestones specify a host workspace, historical paths, two-file
+  citations and an ordered recorder trace in a database-free component.
+  The benchmark, topology and recovery commands were aligned with their existing drivers.
