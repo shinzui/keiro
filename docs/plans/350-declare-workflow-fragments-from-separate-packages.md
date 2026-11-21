@@ -255,7 +255,10 @@ one shaped the design.
 - Decision: keiro-ui is not changed by this plan. `mori://shinzui/keiro-ui` rejects a `/3`
   document until it learns the id, which is the fail-closed behavior ADR-62 specifies.
   Rationale: It is another repository. No service it displays today declares a fragment.
-  Milestone 8 records the handoff.
+  The console's side is planned in
+  `mori://shinzui/keiro-ui/plans/31-show-workflow-fragments-and-extension-points-from-service-topology-schema-3`,
+  which starts once Milestone 7 here is implemented and copies this plan's two `/3` golden
+  documents. Milestone 8 records the handoff.
   Date: 2026-11-21
 
 - Decision: Add a `workflow` benchmark family and make it the seventh release guard, with
@@ -878,7 +881,11 @@ topology vocabulary and to ADR-58 for the workflow guard.
 
 State the keiro-ui handoff in Outcomes & Retrospective and in the IR log entry:
 `mori://shinzui/keiro-ui` must accept `keiro-dsl/service-topology/3` before it can show a
-service that declares an extension point or a fragment. Do not edit that repository.
+service that declares an extension point or a fragment. Do not edit that repository. Its
+plan is
+`mori://shinzui/keiro-ui/plans/31-show-workflow-fragments-and-extension-points-from-service-topology-schema-3`.
+That plan assumes the vocabulary and golden file names of Milestone 7; if either changed
+during implementation, say so in the handoff.
 
 Set `status: completed` and `plan:` in
 `docs/improvement-requests/declare-workflow-fragments-from-separate-packages.md`, advance
