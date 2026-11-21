@@ -6,6 +6,9 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+- Add the `keiro-ui-ops` Seihou blueprint for mounting DSL-generated aggregate
+  inspectors and service topology at a consumer's keiro-ui inspection URL.
+
 ## 0.26.0.0 — 2026-11-18
 
 ### Breaking Changes

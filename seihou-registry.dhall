@@ -39,6 +39,13 @@
         "Audit and remediate domain scalars, identity authority, and owned decoders with exhaustive source-bound classification and behavioral acceptance."
     , tags = [ "haskell", "domain-modeling", "identity", "decoding", "audit" ]
     }
+  , { name = "keiro-ui-ops"
+    , version = Some "0.1.0"
+    , path = "blueprints/keiro-ui-ops"
+    , description = Some
+        "Connect keiro-ui to application ops with DSL-generated aggregate inspectors and a checked service topology."
+    , tags = [ "haskell", "keiro", "keiro-ui", "operations", "topology" ]
+    }
   ]
 , prompts =
   [] : List

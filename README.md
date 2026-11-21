@@ -176,6 +176,7 @@ individual demos and embedded operations commands.
 - Operations transports: [HTTP](docs/guides/serve-keiro-ops-over-http.md),
   [WebSocket feeds](docs/guides/stream-keiro-inspection-views.md), and
   [composition](docs/guides/compose-runtime-inspection-surfaces.md).
+- To connect a service to keiro-ui, run the [Keiro UI ops blueprint](blueprints/keiro-ui-ops/README.md).
 - Motivation and comparison to adjacent systems: [`docs/why-keiro.md`](docs/why-keiro.md).
 - Profile-governed design research starts at
   [`docs/research/index.md`](docs/research/index.md); implementation plans live
