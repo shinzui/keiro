@@ -129,6 +129,17 @@ following through the configured browser-visible ops base, including its prefix:
   `id` in `GET /aggregate/show?name=…&id=…` and verify the folded state.
   An empty service can verify discovery and an empty page. Record instance
   hydration as unexercised until a fixture supplies a row.
+- If the service has a historical or overridden aggregate inspector, run a
+  second list-and-show proof for a representative overridden family. Seed with
+  the original writer or restore a pre-adoption fixture that exercises its
+  stored category, codec, membership filter or register display. Capture the
+  old host's list membership and show response when replacing an existing
+  mount. Follow the topology node's `details.category` through the new host
+  and compare the lookup name, returned `aggregate_id`, physical stream,
+  stream version, folded state and any named registers the application
+  exposes. A passing generated-writer read leaves this historical path
+  unverified. For a generated-only service, confirm there are no overrides
+  to exercise and keep the single-family proof.
 
 Report the DSL entry point, regeneration and freshness commands, topology
 artifact, host startup command, console URL, ops base, and checks actually run.

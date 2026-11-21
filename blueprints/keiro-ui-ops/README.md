@@ -14,6 +14,11 @@ or add an application-specific ops executable. A shared console may live
 outside the service checkout. In that case the run provides the exact target
 entry and route for its owner.
 
+The acceptance check exercises a generated writer. When the service has a
+historical or overridden inspector, also seed a representative historical
+stream and compare its list membership and folded state through the topology
+selector. A generated-only service uses one seeded family.
+
 From the consumer root, run against this checkout before publication:
 
 ```sh
