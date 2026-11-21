@@ -10,6 +10,12 @@ provenance:
     model: "claude-fable-5-2"
     harness: "claude-code"
     at: 2026-11-19T02:49:05Z
+  revisions:
+    - model: "gpt-6.2-astra"
+      harness: "codex-cli"
+      at: 2026-11-21T15:29:11Z
+      mode: "update"
+      note: "Separate the untraced regression from the traced control and specify row, span and rollback evidence."
 ---
 
 # Preserve stored timer trace context across untraced reschedules to fix BUG-14
@@ -48,10 +54,10 @@ and passes after it.
 ## Progress
 
 - [ ] Milestone 1: a new `DurableTracingSpec` example fails on the current statement,
-  showing the fired row with no trace context after an untraced re-arm. BUG-14 moves to
-  `in-progress`.
+  showing the fired row with no trace context after an untraced re-arm. The traced
+  replacement control passes, and BUG-14 moves to `in-progress`.
 - [ ] Milestone 2: `scheduleTimerStmt` keeps the stored pair on an untraced re-arm and
-  replaces it as a pair on a traced one. The new example and the whole `keiro-test` suite
+  replaces it as a pair on a traced one. Both examples and the whole `keiro-test` suite
   pass.
 - [ ] Milestone 3: Haddock, the operations guide, ADR-60 and the changelog state the
   re-arm rule. BUG-14 is `fixed` with `fixedVersion: unreleased`, and
@@ -139,7 +145,7 @@ The tests are in `keiro/test/DurableTracingSpec.hs`, part of the `keiro-test` su
 declared in `keiro/keiro.cabal`. The example "deduplicates first-event sleep as wake and
 leaves legacy timers unlinked" already schedules a timer with `Timer.scheduleTimerTx`,
 fires it with `Timer.runTimerWorkerWith`, finds the span with the local helper `named`,
-and checks links with `assertLinks`. Use it as the model for the new example.
+and checks links with `assertLinks`. Use it as the model for both new examples.
 
 The documented behaviour is in `docs/user/operations.md` (the paragraph beginning "Timers
 persist creation context outside their opaque payload", near line 535) and in
@@ -159,30 +165,41 @@ the pair and replaced it on a traced re-arm. The transcript is in
 
 ## Plan of Work
 
-### Milestone 1: a failing example
+### Milestone 1: reproduce the loss and establish the traced control
 
-Add one example to the `durable tracing` group in `keiro/test/DurableTracingSpec.hs`,
-named "keeps a scheduled timer's creation context across an untraced re-arm and replaces
-it as a pair when one is supplied". It uses the same `withRecorder` and `runStore`
-helpers as its neighbours and two timers with distinct ids and distinct
-`processManagerName` values, so their fire spans have different names.
+Add two independently runnable examples to the `durable tracing` group in
+`keiro/test/DurableTracingSpec.hs`. Each example gets a fresh database from
+`withFreshResourceStore`, so each can use `Timer.TimerId UUID.nil`. Import the
+`TraceContext` constructor from `Keiro.Integration.Event`. Use a known source context
+with traceparent `00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01`
+and tracestate `Just "vendor=a"`.
 
-For the first timer, schedule a `Timer.TimerRequest` whose `traceContext` is `Just` a
-context with a valid `traceparent` (for example
-`00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01`) and `tracestate`
-`vendor=a`, with a `fireAt` in the past. Schedule the same timer id again with
-`traceContext = Nothing`, a different past `fireAt` and a different payload. Fire it with
-`Timer.runTimerWorkerWith Nothing (Timer.defaultTimerWorkerOptions & #tracer .~ Just tracer)`.
-Expect the returned row to carry the second `fireAt` and payload and the first trace
-context, and expect the `timer fire <manager>` span to have exactly one link whose trace
-id and span id are those of the first `traceparent`.
+1. Name the regression "keeps the creation link across an untraced timer re-arm".
+   Schedule the traced request, then schedule the same id with `traceContext = Nothing`.
+   Give the second request a different manager, correlation id, fire time and JSON
+   payload. Use fixed whole-second UTC times for both requests and a worker cutoff
+   after both times so exact equality survives the database round trip.
+2. Name the control "replaces the creation link across a traced timer re-arm".
+   Schedule the traced request, then re-arm it with traceparent
+   `00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01` and no tracestate.
+   This catches a repair that preserves the first link forever or merges tracestate
+   independently of traceparent.
 
-For the second timer, schedule it with the same first context, re-arm it with a
-different context that has a `traceparent` and no `tracestate`, fire it, and expect the
-returned row's context to be the second one with `tracestate` absent.
+In each example call `runStore (Store.runTransaction (Timer.scheduleTimerTx request))`
+for each write and expect `Right ()`. Use `withRecorder` and run the worker as in the
+legacy example, passing `Nothing` for metrics, options with `#tracer .~ Just tracer`,
+the cutoff, and `const (pure Nothing)` as the fire action. Match `Right (Just fired)`.
+Assert the complete `fired ^. #traceContext` against the expected request context
+(original for the regression, replacement for the control). In the regression also
+assert that the returned manager, correlation id, fire time and payload match the
+second request. Read the exported span with `named` using the re-armed manager name
+in `timer fire <manager>`. Convert the expected request context with
+`Telemetry.creationLinkFromTraceContext`, fail the example if conversion yields
+`Nothing`, and use `assertLinks fire [(Nothing, linkContext link)]` to check the
+exact single creation link.
 
-Run the example. The first half must fail on the current code, with the fired row's
-`traceContext` equal to `Nothing`. Then set BUG-14's `status` to `in-progress` in
+Run both examples on the current statement. The untraced regression must fail with
+`Nothing` in the fired row and the traced control must pass. Then set BUG-14's `status` to `in-progress` in
 `docs/bug-reports/14-untraced-timer-reschedule-clears-stored-trace-context.md`, update
 its row in `docs/bug-reports/index.md`, and add a line to `docs/bug-reports/log.md`.
 
@@ -227,10 +244,11 @@ Run the durable tracing examples:
 
 ```bash
 nix develop -c cabal test keiro:test:keiro-test --test-show-details=direct \
-  --test-options='--match "/durable tracing/"'
+  --test-option=--match --test-option='/durable tracing/'
 ```
 
-Before Milestone 2 the new example fails with an expectation of this shape:
+Before Milestone 2, confirm that both new example names appear in the output. The
+traced control passes and the untraced regression reports a failure of this shape:
 
 ```text
   expected: Just (TraceContext {traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", tracestate = Just "vendor=a"})
@@ -253,9 +271,9 @@ nix develop -c just verify
 
 The change is accepted when all of the following hold.
 
-The new example fails before the statement change and passes after it, and it checks
-three things: the stored context survives an untraced re-arm, the fire span links to
-that context, and a traced re-arm replaces `traceparent` and `tracestate` together.
+Record the untraced regression failing before the SQL edit and passing afterwards.
+The traced control must pass on both runs. Each example checks the complete stored
+pair and the identity and count of links on its fire span.
 
 The existing example "deduplicates first-event sleep as wake and leaves legacy timers
 unlinked" still passes. It proves that a timer never given a context still fires with an
@@ -263,17 +281,19 @@ unlinked span.
 
 No other guarantee changes, and this must be stated with evidence when the plan is
 closed. The re-arm still updates `fire_at`, `payload`, `process_manager_name` and
-`correlation_id`, which the new example checks through the returned row. A timer that is
+`correlation_id`, which the untraced regression checks through the returned row. A timer that is
 `firing`, `fired`, `cancelled` or `dead` is still not resurrected, because the `WHERE`
-guard is untouched; the existing timer examples in the `keiro-test` suite cover this.
+guard restricts conflict updates to scheduled rows. Verify that predicate in the SQL
+diff. The lifecycle examples in `keiro/test/Main.hs` exercise claiming, cancellation
+and dead-lettering through their respective operations.
 Replay and wake identity are unaffected, because the trace columns are advisory (ADR-59)
 and no code reads them to decide behaviour.
 
-There is no performance regression to measure. The statement is still one upsert on the
+Check the SQL diff for the scheduling cost that this plan can verify. The statement
+remains one upsert on the
 primary key with the same parameters, round trips and locks; the new expressions read
 two columns of the row the update already holds. The `keiro-bench` release-gate guards do
-not cover timer scheduling, so the evidence for this claim is the unchanged statement
-shape, not a benchmark.
+not cover timer scheduling, so record statement shape as the available cost evidence.
 
 Binaries built before this fix still clear the context when they re-arm a timer. During
 a rolling deployment the stored context is safe only from schedulers that carry the fix.
@@ -284,8 +304,9 @@ Say so in the changelog entry.
 
 Every step is an ordinary source or documentation edit and can be repeated. The tests
 create their own databases through the fixture in `Keiro.Test.Postgres` and leave nothing
-behind. No migration or stored data changes, so reverting the commit restores the old
-behaviour completely.
+behind. Reverting the statement restores the old behaviour for future re-arms. Deploying
+the fix preserves context still present in a row. Recovering a pair cleared before
+deployment requires a subsequent request that supplies it.
 
 
 ## Interfaces and Dependencies
@@ -303,3 +324,7 @@ Commits made under this plan carry both trailers:
 ExecPlan: docs/plans/349-preserve-stored-timer-trace-context-across-untraced-reschedules-to-fix-bug-14.md
 Intention: intention_01m7rva7n0eyjr2gj8fa860bb6
 ```
+
+Revision (2026-11-21). Split preservation and replacement into independent examples,
+made the re-armed field assertions explicit, and aligned lifecycle and recovery
+claims with the SQL predicate and stored data.
