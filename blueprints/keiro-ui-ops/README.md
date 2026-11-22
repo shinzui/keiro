@@ -1,9 +1,9 @@
 # Connect a Keiro service to keiro-ui
 
 Run `keiro-ui-ops` in the consumer checkout. It edits the service's scaffold
-recipe, application ops host, and console routing so the selected application's
-Topology and Aggregates pages use the same ops URL. Subsequent DSL changes flow
-through the project's ordinary regeneration and verification commands.
+recipe, application operator host, worker inspection and console routing for
+the selected application. Subsequent DSL changes flow through the project's
+ordinary regeneration and verification commands.
 
 Before editing, the blueprint agent checks that the target resolves **Keiro
 0.26 or newer**. It stops if the version is older or cannot be established.
@@ -18,6 +18,12 @@ The acceptance check exercises a generated writer. When the service has a
 historical or overridden inspector, also seed a representative historical
 stream and compare its list membership and folded state through the topology
 selector. A generated-only service uses one seeded family.
+
+Check the deployed browser's map, aggregate and process-manager drill-downs.
+For each runtime in use, connect the application's Kiroku stream browser,
+PGMQ queue inspector and Shibuya worker inspector. The browser proof reads
+raw events, queue rows and live processors through the configured gateway
+and exercises the applicable WebSocket upgrades.
 
 From the consumer root, run against this checkout before publication:
 
