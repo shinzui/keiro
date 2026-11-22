@@ -190,9 +190,11 @@ following through the configured browser-visible ops base, including its prefix:
   Exercise an existing or seeded instance. A mounted empty list proves
   discovery only.
 - Open **Queues** and **Processors** for the same target when those runtimes
-  are in use. Verify real queue rows and the selected worker's processor
-  rows. A placeholder, successful health probe or configured URL does not
-  prove the inspection path.
+  are in use. Verify real queue rows. In the browser, compare each worker's
+  visible processors with its own supervisor inventory. For a multi-worker
+  target, switch to every deployed worker with the console's selector.
+  Verify each worker's HTTP inspection response and WebSocket upgrade
+  through its configured base URL. Record the worker IDs and observed rows.
 
 Report the DSL entry point, regeneration and freshness commands, topology
 artifact, host and worker startup commands, console URL, all applicable base

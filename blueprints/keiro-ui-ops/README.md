@@ -22,8 +22,9 @@ selector. A generated-only service uses one seeded family.
 Check the deployed browser's map, aggregate and process-manager drill-downs.
 For each runtime in use, connect the application's Kiroku stream browser,
 PGMQ queue inspector and Shibuya worker inspector. The browser proof reads
-raw events, queue rows and live processors through the configured gateway
-and exercises the applicable WebSocket upgrades.
+raw events and queue rows through the configured gateway. Switch through each
+deployed worker in the console and verify its own live processor rows and
+WebSocket upgrade.
 
 From the consumer root, run against this checkout before publication:
 
