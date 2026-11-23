@@ -1,6 +1,6 @@
 # domain-scalar-identity-decoder-audit
 
-**Version:** `0.1.0`. **Kind:** runnable Seihou blueprint.
+**Version:** `0.2.0`. **Kind:** runnable Seihou blueprint.
 
 Apply the domain audit completed in
 [Shikigami plan 108](mori://shinzui/shikigami/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit)
@@ -38,6 +38,15 @@ An optional initial prompt can identify an existing audit or narrow the requeste
 scope. A scoped run must report its scope and cannot claim repository-wide
 completion. Reruns reconcile existing evidence against current source and resume
 unfinished work. Seihou's run receipt is not evidence that the audit passed.
+
+For a staged adoption, record the verified classification baseline before
+source remediation. Resume the same audit to resolve findings and qualify the
+final source. The default remains `all`.
+
+```sh
+seihou agent run domain-scalar-identity-decoder-audit --no-baseline --var audit.stage=classification
+seihou agent run domain-scalar-identity-decoder-audit --no-baseline --var audit.stage=all
+```
 
 The three acceptance stages remain separate: complete classification may contain
 known findings; remediation requires none unresolved; final acceptance additionally

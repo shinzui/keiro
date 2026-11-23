@@ -32,8 +32,15 @@
       , "migration"
       ]
     }
-  , { name = "domain-scalar-identity-decoder-audit"
+  , { name = "keiro-adoption"
     , version = Some "0.1.0"
+    , path = "blueprints/keiro-adoption"
+    , description = Some
+        "Qualify a Keiro 0.26+ cohort, plan project-specific runtime and DSL adoption, and run the domain audit through staged acceptance."
+    , tags = [ "haskell", "keiro", "adoption", "migration", "domain-modeling" ]
+    }
+  , { name = "domain-scalar-identity-decoder-audit"
+    , version = Some "0.2.0"
     , path = "blueprints/domain-scalar-identity-decoder-audit"
     , description = Some
         "Audit and remediate domain scalars, identity authority, and owned decoders with exhaustive source-bound classification and behavioral acceptance."

@@ -1,10 +1,15 @@
 # Complete the domain scalar, identity, and decoder audit
 
-Audit and implement the necessary fixes in the current target repository. Carry
-the work through classification, remediation, and acceptance; an inventory or
-proposed plan alone is not completion. Follow repository instructions and the
-user's scope. Preserve unrelated changes and use the current branch unless asked
-otherwise. Do not upgrade dependencies as a prerequisite to this audit.
+Selected audit stage is `{{audit.stage}}`. Follow repository instructions and
+the user's scope. Preserve unrelated changes and use the current branch unless
+asked otherwise. Do not upgrade dependencies as a prerequisite to this audit.
+
+- `classification` ends after verified Stage 1. You may write census tools,
+  evidence, and planning artifacts. Leave production refactors and remediation
+  for a later run. Report the classification baseline as the completed scope.
+- `all` completes or verifies Stage 1, then remediates and accepts the final
+  source through Stages 2 and 3.
+- Stop if the selected value is unsupported.
 
 This reusable procedure derives from
 mori://shinzui/shikigami/plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.
@@ -86,6 +91,11 @@ coverage totals separately from violation totals. Stage 1 passes with all curren
 keys reviewed, no pending entries, fresh evidence, and passing coverage controls;
 known violations may remain. Do not rebuild for classification-only edits unless
 the source/build evidence has actually become stale.
+
+When the selected stage is `classification`, return the reviewed census and
+ledger, source checkpoint, coverage and violation totals, and any remaining
+blockers. End this run here. When the selected stage is `all`, preserve any
+accepted baseline and reconcile its handoffs before continuing.
 
 ## Stage 2: Resolve concrete findings in cohesive concept batches
 
