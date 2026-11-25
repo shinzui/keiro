@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-25
+* **Update**: IR-66 is rescoped from an opaque checked representation to a package-internal visibility rule for consumer ID bindings, with a scaffolder check and a corrected exactness note. Kotei already follows the rule; the representation change is deferred.
 * **Addition**: IR-66 requests an opaque checked TypeID representation for consumer bindings, following Danwa’s construction-boundary fix.
 
 ## 2026-11-19
