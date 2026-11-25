@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-25
+* **Addition**: IR-66 requests an opaque checked TypeID representation for consumer bindings, following Danwa’s construction-boundary fix.
+
 ## 2026-11-19
 * **Update**: IR-47 is tracked by ExecPlan 348 together with BUG-13. The unexplained overshoot is explained: lock_timeout restarts per lock wait, and only the statement_timeout leaked by the promotion-lock helper held the attempt to its deadline. Status remains accepted until the plan is implemented.
 
